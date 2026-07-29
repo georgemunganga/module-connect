@@ -9,16 +9,45 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SpeakUpRouteImport } from './routes/speak-up'
 import { Route as SetupRouteImport } from './routes/setup'
+import { Route as HelpRouteImport } from './routes/help'
+import { Route as ConfigurationRouteImport } from './routes/configuration'
+import { Route as ApprovalsRouteImport } from './routes/approvals'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkersIndexRouteImport } from './routes/workers.index'
+import { Route as RequestsIndexRouteImport } from './routes/requests.index'
+import { Route as PayslipsIndexRouteImport } from './routes/payslips.index'
 import { Route as LeaveIndexRouteImport } from './routes/leave.index'
+import { Route as AttendanceIndexRouteImport } from './routes/attendance.index'
 import { Route as WorkersIdRouteImport } from './routes/workers.$id'
+import { Route as RequestsNewRouteImport } from './routes/requests.new'
 import { Route as LeaveNewRouteImport } from './routes/leave.new'
+import { Route as LeaveIdRouteImport } from './routes/leave.$id'
 
+const SpeakUpRoute = SpeakUpRouteImport.update({
+  id: '/speak-up',
+  path: '/speak-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfigurationRoute = ConfigurationRouteImport.update({
+  id: '/configuration',
+  path: '/configuration',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApprovalsRoute = ApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -31,9 +60,24 @@ const WorkersIndexRoute = WorkersIndexRouteImport.update({
   path: '/workers/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RequestsIndexRoute = RequestsIndexRouteImport.update({
+  id: '/requests/',
+  path: '/requests/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PayslipsIndexRoute = PayslipsIndexRouteImport.update({
+  id: '/payslips/',
+  path: '/payslips/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeaveIndexRoute = LeaveIndexRouteImport.update({
   id: '/leave/',
   path: '/leave/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AttendanceIndexRoute = AttendanceIndexRouteImport.update({
+  id: '/attendance/',
+  path: '/attendance/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WorkersIdRoute = WorkersIdRouteImport.update({
@@ -41,74 +85,181 @@ const WorkersIdRoute = WorkersIdRouteImport.update({
   path: '/workers/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RequestsNewRoute = RequestsNewRouteImport.update({
+  id: '/requests/new',
+  path: '/requests/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeaveNewRoute = LeaveNewRouteImport.update({
   id: '/leave/new',
   path: '/leave/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeaveIdRoute = LeaveIdRouteImport.update({
+  id: '/leave/$id',
+  path: '/leave/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/approvals': typeof ApprovalsRoute
+  '/configuration': typeof ConfigurationRoute
+  '/help': typeof HelpRoute
   '/setup': typeof SetupRoute
+  '/speak-up': typeof SpeakUpRoute
+  '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
+  '/attendance/': typeof AttendanceIndexRoute
   '/leave/': typeof LeaveIndexRoute
+  '/payslips/': typeof PayslipsIndexRoute
+  '/requests/': typeof RequestsIndexRoute
   '/workers/': typeof WorkersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/approvals': typeof ApprovalsRoute
+  '/configuration': typeof ConfigurationRoute
+  '/help': typeof HelpRoute
   '/setup': typeof SetupRoute
+  '/speak-up': typeof SpeakUpRoute
+  '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
+  '/attendance': typeof AttendanceIndexRoute
   '/leave': typeof LeaveIndexRoute
+  '/payslips': typeof PayslipsIndexRoute
+  '/requests': typeof RequestsIndexRoute
   '/workers': typeof WorkersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/approvals': typeof ApprovalsRoute
+  '/configuration': typeof ConfigurationRoute
+  '/help': typeof HelpRoute
   '/setup': typeof SetupRoute
+  '/speak-up': typeof SpeakUpRoute
+  '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
+  '/attendance/': typeof AttendanceIndexRoute
   '/leave/': typeof LeaveIndexRoute
+  '/payslips/': typeof PayslipsIndexRoute
+  '/requests/': typeof RequestsIndexRoute
   '/workers/': typeof WorkersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/approvals'
+    | '/configuration'
+    | '/help'
     | '/setup'
+    | '/speak-up'
+    | '/leave/$id'
     | '/leave/new'
+    | '/requests/new'
     | '/workers/$id'
+    | '/attendance/'
     | '/leave/'
+    | '/payslips/'
+    | '/requests/'
     | '/workers/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/setup' | '/leave/new' | '/workers/$id' | '/leave' | '/workers'
+  to:
+    | '/'
+    | '/approvals'
+    | '/configuration'
+    | '/help'
+    | '/setup'
+    | '/speak-up'
+    | '/leave/$id'
+    | '/leave/new'
+    | '/requests/new'
+    | '/workers/$id'
+    | '/attendance'
+    | '/leave'
+    | '/payslips'
+    | '/requests'
+    | '/workers'
   id:
     | '__root__'
     | '/'
+    | '/approvals'
+    | '/configuration'
+    | '/help'
     | '/setup'
+    | '/speak-up'
+    | '/leave/$id'
     | '/leave/new'
+    | '/requests/new'
     | '/workers/$id'
+    | '/attendance/'
     | '/leave/'
+    | '/payslips/'
+    | '/requests/'
     | '/workers/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApprovalsRoute: typeof ApprovalsRoute
+  ConfigurationRoute: typeof ConfigurationRoute
+  HelpRoute: typeof HelpRoute
   SetupRoute: typeof SetupRoute
+  SpeakUpRoute: typeof SpeakUpRoute
+  LeaveIdRoute: typeof LeaveIdRoute
   LeaveNewRoute: typeof LeaveNewRoute
+  RequestsNewRoute: typeof RequestsNewRoute
   WorkersIdRoute: typeof WorkersIdRoute
+  AttendanceIndexRoute: typeof AttendanceIndexRoute
   LeaveIndexRoute: typeof LeaveIndexRoute
+  PayslipsIndexRoute: typeof PayslipsIndexRoute
+  RequestsIndexRoute: typeof RequestsIndexRoute
   WorkersIndexRoute: typeof WorkersIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/speak-up': {
+      id: '/speak-up'
+      path: '/speak-up'
+      fullPath: '/speak-up'
+      preLoaderRoute: typeof SpeakUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/setup': {
       id: '/setup'
       path: '/setup'
       fullPath: '/setup'
       preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/configuration': {
+      id: '/configuration'
+      path: '/configuration'
+      fullPath: '/configuration'
+      preLoaderRoute: typeof ConfigurationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/approvals': {
+      id: '/approvals'
+      path: '/approvals'
+      fullPath: '/approvals'
+      preLoaderRoute: typeof ApprovalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -125,11 +276,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/requests/': {
+      id: '/requests/'
+      path: '/requests'
+      fullPath: '/requests/'
+      preLoaderRoute: typeof RequestsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/payslips/': {
+      id: '/payslips/'
+      path: '/payslips'
+      fullPath: '/payslips/'
+      preLoaderRoute: typeof PayslipsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leave/': {
       id: '/leave/'
       path: '/leave'
       fullPath: '/leave/'
       preLoaderRoute: typeof LeaveIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/attendance/': {
+      id: '/attendance/'
+      path: '/attendance'
+      fullPath: '/attendance/'
+      preLoaderRoute: typeof AttendanceIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/workers/$id': {
@@ -139,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/requests/new': {
+      id: '/requests/new'
+      path: '/requests/new'
+      fullPath: '/requests/new'
+      preLoaderRoute: typeof RequestsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leave/new': {
       id: '/leave/new'
       path: '/leave/new'
@@ -146,15 +325,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeaveNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/leave/$id': {
+      id: '/leave/$id'
+      path: '/leave/$id'
+      fullPath: '/leave/$id'
+      preLoaderRoute: typeof LeaveIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApprovalsRoute: ApprovalsRoute,
+  ConfigurationRoute: ConfigurationRoute,
+  HelpRoute: HelpRoute,
   SetupRoute: SetupRoute,
+  SpeakUpRoute: SpeakUpRoute,
+  LeaveIdRoute: LeaveIdRoute,
   LeaveNewRoute: LeaveNewRoute,
+  RequestsNewRoute: RequestsNewRoute,
   WorkersIdRoute: WorkersIdRoute,
+  AttendanceIndexRoute: AttendanceIndexRoute,
   LeaveIndexRoute: LeaveIndexRoute,
+  PayslipsIndexRoute: PayslipsIndexRoute,
+  RequestsIndexRoute: RequestsIndexRoute,
   WorkersIndexRoute: WorkersIndexRoute,
 }
 export const routeTree = rootRouteImport
