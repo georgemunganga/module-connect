@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkersIndexRouteImport } from './routes/workers.index'
+import { Route as LeaveIndexRouteImport } from './routes/leave.index'
 import { Route as WorkersIdRouteImport } from './routes/workers.$id'
+import { Route as LeaveNewRouteImport } from './routes/leave.new'
 
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
@@ -29,43 +31,74 @@ const WorkersIndexRoute = WorkersIndexRouteImport.update({
   path: '/workers/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeaveIndexRoute = LeaveIndexRouteImport.update({
+  id: '/leave/',
+  path: '/leave/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WorkersIdRoute = WorkersIdRouteImport.update({
   id: '/workers/$id',
   path: '/workers/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeaveNewRoute = LeaveNewRouteImport.update({
+  id: '/leave/new',
+  path: '/leave/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/setup': typeof SetupRoute
+  '/leave/new': typeof LeaveNewRoute
   '/workers/$id': typeof WorkersIdRoute
+  '/leave/': typeof LeaveIndexRoute
   '/workers/': typeof WorkersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/setup': typeof SetupRoute
+  '/leave/new': typeof LeaveNewRoute
   '/workers/$id': typeof WorkersIdRoute
+  '/leave': typeof LeaveIndexRoute
   '/workers': typeof WorkersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/setup': typeof SetupRoute
+  '/leave/new': typeof LeaveNewRoute
   '/workers/$id': typeof WorkersIdRoute
+  '/leave/': typeof LeaveIndexRoute
   '/workers/': typeof WorkersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/setup' | '/workers/$id' | '/workers/'
+  fullPaths:
+    | '/'
+    | '/setup'
+    | '/leave/new'
+    | '/workers/$id'
+    | '/leave/'
+    | '/workers/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/setup' | '/workers/$id' | '/workers'
-  id: '__root__' | '/' | '/setup' | '/workers/$id' | '/workers/'
+  to: '/' | '/setup' | '/leave/new' | '/workers/$id' | '/leave' | '/workers'
+  id:
+    | '__root__'
+    | '/'
+    | '/setup'
+    | '/leave/new'
+    | '/workers/$id'
+    | '/leave/'
+    | '/workers/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SetupRoute: typeof SetupRoute
+  LeaveNewRoute: typeof LeaveNewRoute
   WorkersIdRoute: typeof WorkersIdRoute
+  LeaveIndexRoute: typeof LeaveIndexRoute
   WorkersIndexRoute: typeof WorkersIndexRoute
 }
 
@@ -92,11 +125,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/leave/': {
+      id: '/leave/'
+      path: '/leave'
+      fullPath: '/leave/'
+      preLoaderRoute: typeof LeaveIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/workers/$id': {
       id: '/workers/$id'
       path: '/workers/$id'
       fullPath: '/workers/$id'
       preLoaderRoute: typeof WorkersIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leave/new': {
+      id: '/leave/new'
+      path: '/leave/new'
+      fullPath: '/leave/new'
+      preLoaderRoute: typeof LeaveNewRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -105,7 +152,9 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SetupRoute: SetupRoute,
+  LeaveNewRoute: LeaveNewRoute,
   WorkersIdRoute: WorkersIdRoute,
+  LeaveIndexRoute: LeaveIndexRoute,
   WorkersIndexRoute: WorkersIndexRoute,
 }
 export const routeTree = rootRouteImport
