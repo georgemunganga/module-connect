@@ -51,9 +51,9 @@ function LeaveDetail() {
             >
               <ApprovalPanel
                 decisionSummary={`Approve ${r.days} days of ${r.type.toLowerCase()} leave for ${w?.fullName ?? "this worker"}.`}
-                checks={r.policyChecks}
+                policy={r.policy}
                 conflicts={r.conflicts}
-                evidence={r.evidence}
+                onDecision={() => undefined}
               />
             </RecordDetail>
           );
