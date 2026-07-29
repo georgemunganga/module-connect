@@ -19,7 +19,7 @@ function Page() {
   return (
     <AppShell>
       <PageHeader eyebrow="HRM" title="HR requests" description="Raise and track HR cases: letters, data changes and queries." />
-      <EmptyState title="Nothing here yet" description="This screen is part of the next build slice. The shell, navigation and component library it will use are already in place." />
+      <EmptyState title="Nothing here yet" body="This screen is part of the next build slice. The shell, navigation and component library it will use are already in place." />
     </AppShell>
   );
 }

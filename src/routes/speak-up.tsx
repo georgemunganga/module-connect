@@ -19,7 +19,7 @@ function Page() {
   return (
     <AppShell>
       <PageHeader eyebrow="HRM" title="Protected disclosure" description="Raise a concern anonymously. No account required and minimal metadata is stored." />
-      <EmptyState title="Nothing here yet" description="This screen is part of the next build slice. The shell, navigation and component library it will use are already in place." />
+      <EmptyState title="Nothing here yet" body="This screen is part of the next build slice. The shell, navigation and component library it will use are already in place." />
     </AppShell>
   );
 }

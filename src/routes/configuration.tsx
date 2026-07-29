@@ -19,7 +19,7 @@ function Page() {
   return (
     <AppShell>
       <PageHeader eyebrow="HRM" title="Configuration" description="The single entry point for business setup, process design, security and technical settings." />
-      <EmptyState title="Nothing here yet" description="This screen is part of the next build slice. The shell, navigation and component library it will use are already in place." />
+      <EmptyState title="Nothing here yet" body="This screen is part of the next build slice. The shell, navigation and component library it will use are already in place." />
     </AppShell>
   );
 }
