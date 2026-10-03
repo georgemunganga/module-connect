@@ -194,7 +194,7 @@ const queueItems: ProcWorkItem[] = [
     overdue: true,
     to: "/procurement/requests/$id",
     params: { id: "PR-2026-1035" },
-    roles: ["manager", "hr_ops", "hr_admin"],
+    roles: ["manager", "buyer", "proc_admin"],
   },
   {
     id: "q2",
@@ -204,7 +204,7 @@ const queueItems: ProcWorkItem[] = [
     due: "Due 8 Oct",
     to: "/procurement/requests/$id",
     params: { id: "PR-2026-1042" },
-    roles: ["manager", "hr_admin"],
+    roles: ["manager", "proc_admin"],
   },
   {
     id: "q3",
@@ -214,7 +214,7 @@ const queueItems: ProcWorkItem[] = [
     due: "Due 6 Oct",
     to: "/procurement/requests/$id",
     params: { id: "PR-2026-1043" },
-    roles: ["hr_ops", "hr_admin"],
+    roles: ["buyer", "proc_admin"],
   },
   {
     id: "q4",
@@ -224,7 +224,7 @@ const queueItems: ProcWorkItem[] = [
     due: "Due 10 Oct",
     to: "/procurement/requests/$id",
     params: { id: "PR-2026-1038" },
-    roles: ["hr_ops"],
+    roles: ["buyer"],
   },
   {
     id: "q5",
@@ -233,7 +233,7 @@ const queueItems: ProcWorkItem[] = [
     context: "On hold since 12 Sep · prepayment terms under negotiation",
     due: "Review 12 Oct",
     to: "/procurement/suppliers",
-    roles: ["hr_admin"],
+    roles: ["supplier_steward", "proc_admin"],
   },
 ];
 

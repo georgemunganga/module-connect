@@ -15,6 +15,13 @@ export const workspaces: Workspace[] = [
   { id: "hr_ops", label: "HR operations", description: "Workers, cases and records" },
   { id: "payroll", label: "Payroll", description: "Pay runs, payslips and calculations" },
   { id: "hr_admin", label: "HR admin", description: "Configuration, roles and policies" },
+  { id: "buyer", label: "Buyer", description: "Sourcing, purchase orders and suppliers" },
+  { id: "supplier_steward", label: "Supplier steward", description: "Supplier onboarding, risk and performance" },
+  { id: "receiver", label: "Receiver", description: "Goods receipt, inspection and returns" },
+  { id: "ap_processor", label: "AP processor", description: "Invoice matching and AP handoff" },
+  { id: "proc_admin", label: "Procurement admin", description: "Procurement configuration and policy" },
+  { id: "auditor", label: "Auditor", description: "Read-only search and activity reconstruction" },
+  { id: "supplier_user", label: "Supplier user", description: "Supplier portal: bids, orders and invoices" },
 ];
 
 export const entities: Entity[] = [
