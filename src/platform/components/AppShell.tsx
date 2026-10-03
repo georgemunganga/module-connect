@@ -204,10 +204,16 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, setRole, entityId, setEntityId, branch, setBranch, theme, toggleTheme } = useApp();
+  const { role, setRole, entityId, setEntityId, branch, setBranch, theme, toggleTheme, moduleId, setModuleId } = useApp();
+  const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const entity = entities.find((e) => e.id === entityId)!;
   const unread = notifications.filter((n) => n.unread).length;
+
+  const switchModule = (id: ModuleId) => {
+    setModuleId(id);
+    navigate({ to: moduleRegistry[id].home });
+  };
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -255,10 +261,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuLabel>Modules</DropdownMenuLabel>
-              {modules.map((m) => (
-                <DropdownMenuItem key={m.id} disabled={!m.available}>
-                  {m.label}
-                  {!m.available ? <span className="ml-auto text-xs text-muted-foreground">Not enabled</span> : null}
+              {(Object.keys(moduleRegistry) as ModuleId[]).map((id) => (
+                <DropdownMenuItem
+                  key={id}
+                  onSelect={() => switchModule(id)}
+                  aria-current={id === moduleId ? "true" : undefined}
+                >
+                  {moduleRegistry[id].def.name}
+                  {id === moduleId ? <span className="ml-auto text-xs text-muted-foreground">Current</span> : null}
+                </DropdownMenuItem>
+              ))}
+              {comingSoon.map((label) => (
+                <DropdownMenuItem key={label} disabled>
+                  {label}
+                  <span className="ml-auto text-xs text-muted-foreground">Not enabled</span>
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
