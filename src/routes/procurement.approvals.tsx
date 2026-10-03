@@ -7,7 +7,7 @@ import { slaLabel } from "@/modules/procurement/approvals";
 import type { ApprovalTask, TaskState } from "@/modules/procurement/approvals";
 import { money } from "@/modules/procurement/catalog";
 import { useProcurement } from "@/modules/procurement/store";
-import { sameEntity } from "@/modules/procurement/access";
+import { sameEntity, demoManagerForEntity } from "@/modules/procurement/access";
 import { useApp } from "@/platform/app-context";
 import { RestrictedState } from "@/platform/components/States";
 
@@ -36,7 +36,7 @@ const inTab = (t: ApprovalTask, tab: TaskState) =>
 function ApprovalsPage() {
   const { tab = "Assigned" } = Route.useSearch();
   const { role, entityId } = useApp();
-  const approvals = useProcurement().approvals.filter((task) => sameEntity(task.recordEntity, entityId));
+  const approvals = useProcurement().approvals.filter((task) => sameEntity(task.recordEntity, entityId) && (role !== "manager" || task.assignee === demoManagerForEntity(task.recordEntity)) && (role !== "buyer" || task.stages.some((stage) => stage.current && stage.name.includes("Procurement"))));
   const rows = approvals.filter((t) => inTab(t, tab));
   if (!["manager", "buyer", "proc_admin"].includes(role)) return <AppShell><RestrictedState /></AppShell>;
   return (

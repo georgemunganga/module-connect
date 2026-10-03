@@ -17,6 +17,7 @@ import {
   invoiceTotal,
   matchInvoice,
   reviseInvoice,
+  updatePayables,
   usePayables,
   type Invoice,
   type IntakeSource,
@@ -361,7 +362,7 @@ export function InvoiceCreate() {
 
 function Timeline({ invoice }: { invoice: Invoice }) {
   return (
-    <section className="rounded-xl border bg-surface p-5">
+    <section className="min-w-0 rounded-xl border bg-surface p-5">
       <h2 className="mb-3 font-semibold">Activity & audit</h2>
       <ol className="space-y-3">
         {invoice.timeline
@@ -621,12 +622,11 @@ export function InvoiceDetail({ id }: { id: string }) {
               </div>
             )}
             <div className="mt-3">
-              <Label htmlFor="reason">Reason for correction or AP rejection</Label>
+              <Label htmlFor="reason">Reason for correction, AP rejection, or credit review</Label>
               <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Correction creates a new invoice version; source quantity evidence remains in
-              activity.
+              Correction requests preserve this invoice. A supplier replacement is a separate linked record.
             </p>
           </section>
           <section className="rounded-xl border bg-surface p-5">
@@ -677,21 +677,17 @@ export function InvoiceDetail({ id }: { id: string }) {
         )}
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <Timeline invoice={invoice} />
-          <section className="rounded-xl border bg-surface p-5">
+          <section className="min-w-0 rounded-xl border bg-surface p-5">
             <h2 className="font-semibold">Commercial credits</h2>
             {(state.credits ?? [])
               .filter((credit) => credit.invoiceId === id)
               .map((credit) => (
-                <p key={credit.id} className="mt-2 rounded-lg border p-3 text-sm">
-                  {credit.id} · {money(credit.amount, credit.currency)} · {credit.status}
-                  <br />
-                  {credit.reason}
-                </p>
+                <div key={credit.id} className="mt-2 rounded-lg border p-3 text-sm"><p>{credit.id} · {money(credit.amount, credit.currency)} · {credit.status}</p><p>{credit.reason}</p>{credit.documentRef ? <p className="text-xs text-muted-foreground">Document {credit.documentRef} · submitted by {credit.submittedBy}</p> : null}{credit.status === "Commercial review" && ["buyer", "proc_admin"].includes(role) ? <Button size="sm" variant="outline" className="mt-2" onClick={() => { if (!reason.trim()) return setMessage("A commercial review reason is required before handoff."); updatePayables((current) => ({ ...current, credits: (current.credits ?? []).map((entry) => entry.id === credit.id ? { ...entry, status: "Sent to Finance" as const } : entry), invoices: current.invoices.map((entry) => entry.id === id ? { ...entry, timeline: [...entry.timeline, { at: new Date().toISOString(), actor: "Procurement reviewer", action: `Credit ${credit.id} reviewed for Finance`, reason: reason.trim() }] } : entry) })); setMessage(`${credit.id} marked for Finance review. No accounting entry was posted.`); setReason(""); }}>Approve commercial handoff</Button> : null}</div>
               ))}
             {canAct && (
               <Button
                 variant="outline"
-                className="mt-3"
+                className="mt-3 h-auto max-w-full whitespace-normal text-left"
                 onClick={() => {
                   const amount = invoice.lines.reduce(
                     (sum, line) =>
@@ -718,7 +714,7 @@ export function InvoiceDetail({ id }: { id: string }) {
               Finance owns supplier balances, posting, refunds and cash application.
             </p>
           </section>
-          <section className="rounded-xl border bg-surface p-5">
+          <section className="min-w-0 rounded-xl border bg-surface p-5">
             <h2 className="font-semibold">Record collaboration</h2>
             <div className="mt-3 space-y-2">
               {(state.comments[id] ?? []).map((c, n) => (

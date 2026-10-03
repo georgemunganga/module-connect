@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useProcurement, saveProcurement, routeLine, decideApproval } from "@/modules/procurement/store";
-import { requestVisible } from "@/modules/procurement/access";
+import { useCommercial } from "@/modules/procurement/commercial/store";
+import { requestVisible, demoManagerForEntity, sameEntity } from "@/modules/procurement/access";
 import { deriveProgress, remaining } from "@/modules/procurement/requisition";
 import type { LineRoute, ReqLine } from "@/modules/procurement/requisition";
 import { useApp } from "@/platform/app-context";
@@ -43,8 +44,9 @@ function RequestDetail() {
 }
 
 function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseRequest }) {
-  const { role } = useApp();
-  const { metadata, approvals } = useProcurement();
+  const { role, entityId } = useApp();
+  const { metadata, approvals, suppliers } = useProcurement();
+  const receipts = useCommercial().receipts;
   const taskForRequest = approvals.find((task) => task.recordId === r.id && task.state !== "Completed");
   const meta = metadata[r.id];
   const lines = meta?.lines ?? [];
@@ -54,7 +56,7 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
 
   const money = new Intl.NumberFormat("en", { style: "currency", currency: r.currency, maximumFractionDigits: 0 });
   const isBuyer = BUYERS.includes(role);
-  const isApprover = APPROVERS.includes(role);
+  const isApprover = APPROVERS.includes(role) && (role === "proc_admin" || Boolean(taskForRequest && taskForRequest.assignee === demoManagerForEntity(taskForRequest.recordEntity)));
   const isRequester = ["employee", "manager", "hr_ops", "payroll", "hr_admin"].includes(role);
   const progress = deriveProgress(lines);
   const changeRequest = (patch: Partial<typeof r>, event: string, reason?: string) => saveProcurement((state) => ({ ...state, requests: state.requests.map((item) => item.id === r.id ? { ...item, ...patch, timeline: [{ id: crypto.randomUUID(), at: now(), actor: "You (demo)", event, reason }, ...item.timeline] } : item) }));
@@ -93,6 +95,9 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
         { label: "Supplier", value: r.supplierId ? "Preference on file — verify before ordering" : "Not selected" },
         { label: "Total requested", value: money.format(r.amount) },
         { label: "Needed by", value: r.neededBy },
+        { label: "Deliver to", value: meta?.deliverTo ?? "Not recorded on seed request" },
+        { label: "Cost centre", value: meta?.costCentre ?? "Not recorded on seed request" },
+        { label: "Project", value: meta?.project || "Not linked" },
         { label: "Version", value: meta?.versions.length ? `v${meta.versions[0].version}` : "Draft" },
         { label: "Indicative budget", value: meta?.budgetBalance ? `${money.format(meta.budgetBalance.available)} — not reserved` : "Not checked" },
       ]}
@@ -112,6 +117,8 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
 
       {notice ? <p role="alert" className="flex gap-2 rounded-md border border-danger/40 bg-danger-soft p-3 text-sm"><AlertTriangle className="size-4 shrink-0 text-danger" aria-hidden />{notice}</p> : null}
 
+      {meta?.evidence?.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Supporting evidence references</h2><ul className="mt-2 list-disc pl-5 text-sm">{meta.evidence.map((reference) => <li key={reference}>{reference} · demo reference, no uploaded file</li>)}</ul></section> : null}
+
       <section aria-labelledby="lines-h" className="rounded-lg border bg-surface p-4">
         <h2 id="lines-h" className="text-sm font-semibold">Lines</h2>
         <p className="text-xs text-muted-foreground">Approved, ordered and received are separate facts. Header progress is worked out from these lines.</p>
@@ -128,7 +135,7 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
                     <span className="block text-xs text-muted-foreground">{money.format(l.unitPrice)} each · {money.format(l.qty * l.unitPrice)}</span>
                     {l.splitNote ? <span className="block text-xs">{l.splitNote}</span> : null}
                     {l.cancelledQty ? <span className="block text-xs text-muted-foreground">{l.cancelledQty} cancelled (remainder)</span> : null}
-                    {l.related.length ? <span className="mt-1 flex flex-wrap gap-1">{l.related.map((x) => x.kind === "RFQ" ? <Link key={x.ref} to="/procurement/sourcing/$id" params={{ id: x.ref }} className="rounded border px-1.5 text-xs text-primary underline">RFQ {x.ref}</Link> : x.kind === "PO" && !x.ref.includes("DRAFT") ? <Link key={x.ref} to="/procurement/orders/$id" params={{ id: x.ref }} className="rounded border px-1.5 text-xs text-primary underline">PO {x.ref}</Link> : <span key={x.ref} className="rounded border px-1.5 text-xs">{x.kind} {x.ref} {x.ref.includes("DRAFT") ? "· draft" : ""}</span>)}</span> : null}
+                    {l.related.length ? <span className="mt-1 flex flex-wrap gap-1">{l.related.map((x) => x.kind === "RFQ" ? <Link key={x.ref} to="/procurement/sourcing/$id" params={{ id: x.ref }} className="rounded border px-1.5 text-xs text-primary underline">RFQ {x.ref}</Link> : x.kind === "PO" && !x.ref.includes("DRAFT") ? <Link key={x.ref} to="/procurement/orders/$id" params={{ id: x.ref }} className="rounded border px-1.5 text-xs text-primary underline">PO {x.ref}</Link> : x.kind === "Receipt" && receipts.some((receipt) => receipt.id === x.ref) ? <Link key={x.ref} to="/procurement/receiving/$id" params={{ id: receipts.find((receipt) => receipt.id === x.ref)!.poId }} className="rounded border px-1.5 text-xs text-primary underline">Receipt {x.ref}</Link> : <span key={x.ref} className="rounded border px-1.5 text-xs">{x.kind} {x.ref} {x.ref.includes("DRAFT") ? "· draft" : ""}</span>)}</span> : null}
                     {l.lockedBy ? <span className="mt-1 flex items-center gap-1 text-xs text-warning"><AlertTriangle className="size-3" aria-hidden />{l.lockedBy} is converting this line</span> : null}
                   </td>
                   <td className="py-2 pr-3"><StatusBadge status={l.approval} /></td>
@@ -146,6 +153,8 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
                           disabled={status !== "Approved" || l.approval !== "Approved" || remaining(l) === 0} onChange={(e) => updateLine(l.id, { route: e.target.value as LineRoute }, `Line route selected: ${e.target.value}`)}>
                           <option disabled>Unassigned</option>{ROUTES.map((x) => <option key={x}>{x}</option>)}
                         </select>
+                        <Label htmlFor={`supplier-${l.id}`} className="sr-only">Supplier for {l.description}</Label>
+                        <select id={`supplier-${l.id}`} className="mt-1 h-8 max-w-40 rounded-md border bg-background px-2 text-xs" value={l.preferredSupplier ?? ""} disabled={status !== "Approved" || l.approval !== "Approved" || l.orderedQty > 0 || l.allocatedQty > 0} onChange={(event) => updateLine(l.id, { preferredSupplier: event.target.value || undefined }, `Supplier preference set for ${l.description}: ${event.target.value || "none"}`)}><option value="">Choose active supplier</option>{suppliers.filter((supplier) => supplier.status === "Active" && sameEntity(supplier.country, entityId)).map((supplier) => <option key={supplier.id}>{supplier.name}</option>)}</select>
                       </>
                     ) : l.route}
                   </td>

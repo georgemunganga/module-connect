@@ -28,6 +28,10 @@ export interface ReqLine {
 
 export interface ReqMeta {
   entity: string;
+  deliverTo?: string;
+  costCentre?: string;
+  project?: string;
+  evidence?: string[];
   category: string;
   exceptions: string[];
   budgetBalance?: { available: number; note: string };

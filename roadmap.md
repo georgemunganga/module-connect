@@ -23,4 +23,4 @@ Milestones below mark **screen-group coverage in the browser-local prototype**, 
 - [x] 18 — Responsive layout, keyboard labels, and recovery states pass
 - [x] 19 — Final browser demo journeys across requisition, sourcing, purchasing, receipt, and invoice
 
-The connected three-line end-to-end scenario, several exception variants, full evaluator/award coverage, and route-by-route accessibility/recovery verification are still open. Production integrations and server-side authorization remain separate implementation work.
+The connected three-line end-to-end scenario has passed in the browser-local demo. Several exception variants, full evaluator/award coverage, and route-by-route accessibility/recovery verification remain open. Production integrations and server-side authorization remain separate implementation work.

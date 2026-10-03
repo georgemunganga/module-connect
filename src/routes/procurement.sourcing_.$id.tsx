@@ -12,7 +12,7 @@ import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { money } from "@/modules/procurement/catalog";
 import { useProcurement, saveProcurement } from "@/modules/procurement/store";
-import { useCommercial } from "@/modules/procurement/commercial/store";
+import { useCommercial, ensureEvaluation, updateCommercial } from "@/modules/procurement/commercial/store";
 import { sourcingRole, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import type { BidReceipt, SourcingEvent } from "@/modules/procurement/sourcing";
@@ -42,7 +42,7 @@ function EventDetail() {
 
   const primary = !isBuyer ? undefined
     : e.state === "Draft" ? <Button onClick={() => setE({ ...e, state: "Pending approval", nextAction: "Procurement lead to approve publication" })}>Send for approval</Button>
-    : e.state === "Pending approval" ? <Button onClick={() => setE({ ...e, state: "Published", opensAt: e.opensAt || nowStr(), nextAction: "Collect responses until closing", invitations: e.invitations.map((invitation) => ({ ...invitation, delivery: "Delivered", at: nowStr(), note: "Visible in local supplier portal demo; no external message sent" })) })}>Approve and publish (demo)</Button>
+    : e.state === "Pending approval" ? <Button onClick={() => { setE({ ...e, state: "Published", opensAt: e.opensAt || nowStr(), nextAction: "Collect responses until closing", invitations: e.invitations.map((invitation) => ({ ...invitation, delivery: "Delivered", at: nowStr(), note: "Visible in local supplier portal demo; no external message sent" })) }); ensureEvaluation(e.id); }}>Approve and publish (demo)</Button>
     : e.state === "Published" ? <Button variant="outline" onClick={() => setAmending(true)}>Issue amendment</Button>
     : e.state === "Closed" && !e.opened ? <Button onClick={() => setE({ ...e, opened: true, openingAuthorisedBy: `You (demo) · ${nowStr()}` })}>Authorise opening</Button>
     : e.state === "Cancelled" ? <Button variant="outline" onClick={() => setE({ ...e, state: "Reopened", nextAction: "Review dates and re-publish" })}>Reopen event</Button>
@@ -99,7 +99,7 @@ function EventDetail() {
               <p className="flex items-center gap-2 text-sm">{e.opened && isBuyer ? <>Opened — {e.openingAuthorisedBy}</> : <><Lock className="size-4" aria-hidden />Sealed. Only receipt details are visible until the authorised opening.</>}</p>
               {isBuyer && ["Published", "Closed"].includes(e.state) ? <Button size="sm" variant="outline" onClick={() => setSurrogate(true)}>Record offline response</Button> : null}
             </div>
-            {surrogate ? <SurrogateForm e={e} onCancel={() => setSurrogate(false)} onDone={(b) => { setSurrogate(false); setE({ ...e, bids: [...e.bids, b] }); }} /> : null}
+            {surrogate ? <SurrogateForm e={e} onCancel={() => setSurrogate(false)} onDone={(b) => { setSurrogate(false); setE({ ...e, bids: [...e.bids, b] }); ensureEvaluation(e.id); updateCommercial((state) => ({ ...state, evaluations: state.evaluations.map((evaluation) => evaluation.eventId === e.id ? { ...evaluation, bids: [...evaluation.bids, { id: b.id, supplier: b.supplier, compliant: null, reason: "", score: null, conflict: false, deliveryCost: 0, tax: 0 }] } : evaluation) })); }} /> : null}
             {e.bids.length ? (
               <div className="overflow-x-auto rounded-lg border bg-surface">
                 <table className="w-full text-sm">

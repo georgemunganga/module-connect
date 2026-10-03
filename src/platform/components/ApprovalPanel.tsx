@@ -100,6 +100,7 @@ export function ApprovalPanel({
             <Button
               key={d}
               type="button"
+              disabled={d === "delegate" && delegates.length === 0}
               variant={decision === d ? "default" : "outline"}
               aria-pressed={decision === d}
               onClick={() => setDecision(d)}

@@ -14,6 +14,7 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { money } from "@/modules/procurement/catalog";
 import { reqMeta, availableToAllocate } from "@/modules/procurement/requisition";
 import { permittedMethods } from "@/modules/procurement/sourcing";
+import { ensureEvaluation } from "@/modules/procurement/commercial/store";
 import type { SourcingMethod } from "@/modules/procurement/sourcing";
 
 export const Route = createFileRoute("/procurement/sourcing_/new")({
@@ -110,6 +111,7 @@ function NewEvent() {
             }) }])),
             sourcing: [{ id: ref, title: chosen.map((x) => x.label).join(", "), method, state: "Pending approval", buyer: "You (demo)", entity: store.metadata[chosen[0].pr].entity, sourceLines: chosen.map((x) => `${x.pr} / ${x.key}`), items: chosen.map((x) => ({ description: x.label, qty: x.qty, unit: "each" })), opensAt: "", closesAt: closes, timeZone: tz, opened: false, eligibility: justification || "Active eligible suppliers", terms: "Demo terms", responseDocuments: [], criteria, invitations: invited.map((supplier) => ({ supplier, delivery: "Not delivered" as const, note: "Pending publication" })), qa: [], bids: [], amendments: [], nextAction: "Procurement lead approval", dueDate: closes.slice(0, 10) }, ...store.sourcing],
           }));
+          ensureEvaluation(ref);
           setDone(ref);
           sessionStorage.removeItem("flow:proc-sourcing-new");
         }}

@@ -44,7 +44,7 @@ export const NoResultsState = (p: { title: string; body: string; action?: ReactN
 
 export const RestrictedState = ({
   title = "You don't have access to this record",
-  body = "This record exists outside your permissions, or it doesn't exist. Ask your HR administrator if you believe this is wrong.",
+  body = "This record exists outside your permissions, or it doesn't exist. Ask your administrator if you believe this is wrong.",
 }: {
   title?: string;
   body?: string;

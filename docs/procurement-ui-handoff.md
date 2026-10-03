@@ -55,7 +55,7 @@ The source records are browser-local demo data. A fresh browser starts from the 
 - Production build, TypeScript check, and semantic ESLint check pass under Node 22.
 - Browser route checks covered buyer, AP, supplier, and procurement-admin views. Internal records are hidden from supplier role; commercial detail screens apply entity scope; the supplier portal pins its demo identity to one supplier.
 - The responsive pass includes phone-width list tables, planning, PO and receiving detail. Wide data tables scroll within their own cards and the side navigation collapses behind the mobile menu.
-- Browser journeys verified approved PR line → direct PO draft → procurement-admin approval → issue → PR ordered quantity, real PO based invoice capture and matching, active framework → draft PO, RFQ evaluation → approved award → draft PO, and supplier portal bid → sealed response → controlled opening → evaluation. No page errors occurred in those journeys.
+- Browser journeys verified a single three-line PR across RFQ, direct PO, and contract release; supplier bid → sealed response → controlled opening → evaluation → award PO; PO issue → supplier acknowledgment → goods receipt → supplier invoice → match → AP handoff → simulated Finance Paid; and source PR quantity reconciliation. No page errors occurred in the final connected run.
 
 ## Remaining production boundaries
 

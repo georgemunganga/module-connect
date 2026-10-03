@@ -26,3 +26,6 @@ export function resetCommercial() { current = structuredClone(seed); if (typeof 
 export function updateCommercial(fn: (state: CommercialState) => CommercialState) { hydrate(); current = fn(current); if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(current)); listeners.forEach(x => x()); }
 export function useCommercial() { const [state, setState] = useState<CommercialState>(seed); useEffect(() => { hydrate(); setState(current); const listener = () => setState(current); listeners.add(listener); return () => { listeners.delete(listener); }; }, []); return state; }
 export function nextId(prefix: string, n: number) { return `${prefix}-2026-${String(n).padStart(4,"0")}`; }
+export function ensureEvaluation(eventId: string) {
+  updateCommercial((state) => state.evaluations.some((evaluation) => evaluation.eventId === eventId) ? state : { ...state, evaluations: [...state.evaluations, { id: `EV-${eventId}`, eventId, state: "In evaluation", bids: [], audit: [audit("Procurement workflow", "Evaluation workspace created", `Source event ${eventId}; bids remain sealed until opening`)] }] });
+}

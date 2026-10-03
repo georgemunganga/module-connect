@@ -43,7 +43,7 @@ function RequestList() {
         primaryAction={requesterRole(role) ? <Button asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Create request</Link></Button> : undefined}
       />
           <ListPage<PurchaseRequest>
-            rows={requests.filter((r) => requestVisible(role, entityId, metadata[r.id]?.entity, r.requester, r.department)).filter((r) => (view === "open" ? !["Approved", "Rejected", "Cancelled"].includes(r.status) : view === "mine" ? r.requester === demoRequester(role) : true))}
+            rows={requests.filter((r) => requestVisible(role, entityId, metadata[r.id]?.entity, r.requester, r.department)).filter((r) => (view === "open" ? !["Approved", "Rejected", "Cancelled"].includes(r.status) : view === "mine" ? r.requester === demoRequester(role, entityId) : true))}
             savedViews={[
               { id: "all", label: "All requests" },
               { id: "open", label: "Awaiting action" },

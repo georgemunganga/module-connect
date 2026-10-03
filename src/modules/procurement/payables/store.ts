@@ -70,6 +70,8 @@ export interface CreditRef {
   reason: string;
   status: "Commercial review" | "Sent to Finance";
   created: string;
+  submittedBy?: string;
+  documentRef?: string;
 }
 export interface PolicyDraft {
   version: number;
@@ -393,7 +395,7 @@ export function addComment(
     },
   }));
 }
-export function addCreditRef(invoice: Invoice, amount: number, reason: string) {
+export function addCreditRef(invoice: Invoice, amount: number, reason: string, submittedBy = "AP processor", documentRef?: string) {
   const credit: CreditRef = {
     id: `CR-${Date.now().toString().slice(-7)}`,
     invoiceId: invoice.id,
@@ -403,8 +405,10 @@ export function addCreditRef(invoice: Invoice, amount: number, reason: string) {
     reason,
     status: "Commercial review",
     created: now(),
+    submittedBy,
+    documentRef,
   };
   updatePayables((s) => ({ ...s, credits: [credit, ...(s.credits ?? [])] }));
-  addEvidence(invoice.id, `Credit reference ${credit.id} created`, "AP processor", reason);
+  addEvidence(invoice.id, `Credit reference ${credit.id} created`, submittedBy, reason);
   return credit;
 }

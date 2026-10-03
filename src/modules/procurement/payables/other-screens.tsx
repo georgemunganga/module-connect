@@ -12,6 +12,7 @@ import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import {
   addComment,
+  addCreditRef,
   addInvoice,
   invoiceTotal,
   updatePayables,
@@ -164,6 +165,10 @@ export function SupplierPortal() {
   const [qualificationName, setQualificationName] = useState("Insurance certificate");
   const [qualificationRef, setQualificationRef] = useState("");
   const [qualificationValidTo, setQualificationValidTo] = useState("");
+  const [creditInvoice, setCreditInvoice] = useState("INV-1042");
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditReason, setCreditReason] = useState("");
+  const [creditDocument, setCreditDocument] = useState("");
   // The demo identity is pinned to sup-001. Switching ERP entity or URL cannot change supplier scope.
   const supplierId = "sup-001";
   const supplierName = "Northwind Devices B.V.";
@@ -350,6 +355,11 @@ export function SupplierPortal() {
         {tab === "Invoices & credits" && (
           <div className="space-y-3">
             <SupplierInvoiceSubmission orders={orders} invoices={invoices} />
+            <Box title="Submit a commercial credit reference">
+              <p className="text-xs text-muted-foreground">Procurement reviews the commercial reason. Finance owns any accounting credit or refund.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2"><div><Label htmlFor="credit-invoice">Original invoice</Label><select id="credit-invoice" className="h-10 w-full rounded-md border bg-background px-3" value={creditInvoice} onChange={(event) => setCreditInvoice(event.target.value)}>{invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.number} · {invoice.id}</option>)}</select></div><div><Label htmlFor="credit-amount">Credit amount</Label><Input id="credit-amount" type="number" min="0.01" step="0.01" value={creditAmount} onChange={(event) => setCreditAmount(event.target.value)} /></div><div><Label htmlFor="credit-reason">Commercial reason</Label><Input id="credit-reason" value={creditReason} onChange={(event) => setCreditReason(event.target.value)} /></div><div><Label htmlFor="credit-document">Credit note document reference</Label><Input id="credit-document" value={creditDocument} onChange={(event) => setCreditDocument(event.target.value)} /></div></div>
+              <Button className="mt-3" onClick={() => { const original = invoices.find((invoice) => invoice.id === creditInvoice); const amount = Number(creditAmount); if (!original || amount <= 0 || amount > invoiceTotal(original) || !creditReason.trim() || !creditDocument.trim()) return setMessage("Select your invoice, enter a positive credit no greater than its total, and provide a reason and document reference."); if ((state.credits ?? []).some((credit) => credit.invoiceId === original.id && credit.documentRef === creditDocument.trim())) return setMessage("This credit document reference is already recorded for the invoice."); const credit = addCreditRef(original, amount, creditReason.trim(), supplierName, creditDocument.trim()); setMessage(`${credit.id} submitted for commercial review. No Finance credit was posted.`); setCreditAmount(""); setCreditReason(""); setCreditDocument(""); }}>Submit credit reference</Button>
+            </Box>
             {invoices.map((i) => (
               <Box key={i.id} title={`${i.number} · ${i.po}`}>
                 <p className="text-sm">
@@ -379,6 +389,7 @@ export function SupplierPortal() {
                       currency: credit.currency,
                     }).format(credit.amount)}
                   </p>
+                  {credit.documentRef ? <p className="mt-1 text-xs text-muted-foreground">Document reference {credit.documentRef} · submitted by {credit.submittedBy}</p> : null}
                 </Box>
               ))}
           </div>

@@ -35,13 +35,14 @@ type Kind = "Goods" | "Service" | "Asset" | "Subscription";
 type Line = { id: string; catalogItemId?: string; description: string; qty: number; unitPrice: number; source: "Catalog" | "Contract" | "Non-catalog"; supplier: string; kind: Kind };
 
 type Draft = { kind: Kind | null; lines: Line[]; purpose: string; neededBy: string; deliverTo: string; costCentre: string; project: string; evidence: string[] };
-const empty: Draft = { kind: null, lines: [], purpose: "", neededBy: "", deliverTo: "Amsterdam HQ, Keizersgracht 100", costCentre: "", project: "", evidence: [] };
-const KEY = "proc:draft:new";
+const empty: Draft = { kind: null, lines: [], purpose: "", neededBy: "", deliverTo: "", costCentre: "", project: "", evidence: [] };
 
 function NewRequest() {
   const { item: selectedItem } = Route.useSearch();
   const { role } = useApp();
   const entity = useEntity();
+  const draftKey = `proc:draft:new:${entity.id}`;
+  const costCentres = entity.id === "ent-ke" ? ["KE-OPS-200 Operations", "KE-LOG-310 Logistics"] : entity.id === "ent-de" ? ["DE-ENG-410 Engineering", "DE-OPS-200 Operations"] : ["NL-ENG-410 Engineering", "NL-OPS-200 Operations", "NL-PPL-120 People"];
   const suppliers = useProcurement().suppliers;
   const catalogItems = useCatalog();
   const CCY = entity.country === "Kenya" ? "KES" : "EUR";
@@ -52,7 +53,7 @@ function NewRequest() {
     return { id: item.id, name: item.name, kind: item.kind === "Consumable" ? "Goods" as Kind : item.kind as Kind, price: offer?.price ?? 0, supplier: offer?.supplier ?? "No offer", source: offer?.source ?? "Catalog" as "Catalog" | "Contract", block: item.block ?? (!offer ? "No offer in this entity's currency." : supplier?.status !== "Active" ? "Supplier is not active. Ask Procurement to choose another source." : undefined) };
   }), [CCY, entity.id, suppliers, catalogItems]);
   const navigate = useNavigate();
-  const [d, setD] = useState<Draft>(empty);
+  const [d, setD] = useState<Draft>(() => ({ ...empty, deliverTo: entity.branches[0] }));
   const [loaded, setLoaded] = useState(false);
   const [q, setQ] = useState("");
   const [allKinds, setAllKinds] = useState(false);
@@ -64,13 +65,13 @@ function NewRequest() {
   const [prefillNotice, setPrefillNotice] = useState("");
 
   useEffect(() => {
-    const raw = sessionStorage.getItem(KEY);
-    if (raw) setD({ ...empty, ...JSON.parse(raw) });
+    const raw = sessionStorage.getItem(draftKey);
+    setD(raw ? { ...empty, deliverTo: entity.branches[0], ...JSON.parse(raw) } : { ...empty, deliverTo: entity.branches[0] });
     setLoaded(true);
-  }, []);
+  }, [draftKey, entity.branches]);
   useEffect(() => {
-    if (loaded) sessionStorage.setItem(KEY, JSON.stringify(d));
-  }, [d, loaded]);
+    if (loaded) sessionStorage.setItem(draftKey, JSON.stringify(d));
+  }, [d, loaded, draftKey]);
   useEffect(() => {
     if (!loaded || !selectedItem || prefillDone) return;
     const choice = catalog.find((candidate) => candidate.id === selectedItem);
@@ -95,6 +96,7 @@ function NewRequest() {
     !d.lines.length && "at least one line",
     !d.purpose.trim() && "a purpose",
     !d.neededBy && "a needed-by date",
+    !d.deliverTo.trim() && "a delivery destination",
     !d.costCentre && "a cost centre",
   ].filter(Boolean) as string[];
 
@@ -194,9 +196,7 @@ function NewRequest() {
             <Label htmlFor="cc">Cost centre</Label>
             <select id="cc" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={d.costCentre} onChange={(e) => set({ costCentre: e.target.value })}>
               <option value="">Choose…</option>
-              <option>NL-ENG-410 Engineering</option>
-              <option>NL-OPS-200 Operations</option>
-              <option>NL-PPL-120 People</option>
+              {costCentres.map((costCentre) => <option key={costCentre}>{costCentre}</option>)}
             </select>
           </div>
           <div><Label htmlFor="pj">Project (optional)</Label><Input id="pj" className="mt-1" value={d.project} onChange={(e) => set({ project: e.target.value })} /></div>
@@ -259,15 +259,15 @@ function NewRequest() {
       {prefillNotice ? <p role="status" className="mb-4 rounded-lg border bg-surface p-3 text-sm">{prefillNotice}</p> : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <GuidedFlow
-          flowId="proc-request-new"
+          flowId={`proc-request-new:${entity.id}`}
           steps={steps}
           submitLabel="Submit request"
           onSubmit={async () => {
             if (missing.length) return;
             await new Promise((r) => setTimeout(r, 600));
-            setRef(submitRequest({ title: d.purpose.trim(), requester: demoRequester(role), department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: procurementEntityName(entity.id), currency: CCY, neededBy: d.neededBy, lines: d.lines.map(({ description, qty, unitPrice, supplier, kind }) => ({ description, qty, unitPrice, supplier, kind })) }));
-            sessionStorage.removeItem(KEY);
-            sessionStorage.removeItem("flow:proc-request-new");
+            setRef(submitRequest({ title: d.purpose.trim(), requester: demoRequester(role, entity.id), department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: procurementEntityName(entity.id), currency: CCY, neededBy: d.neededBy, deliverTo: d.deliverTo, costCentre: d.costCentre, project: d.project, evidence: d.evidence, lines: d.lines.map(({ description, qty, unitPrice, supplier, kind }) => ({ description, qty, unitPrice, supplier, kind })) }));
+            sessionStorage.removeItem(draftKey);
+            sessionStorage.removeItem(`flow:proc-request-new:${entity.id}`);
           }}
           submitted={
             ref ? (
@@ -296,7 +296,7 @@ function NewRequest() {
             </dl>
             <div className="mt-4 flex flex-wrap gap-2 border-t pt-3">
               <Button size="sm" variant="outline" onClick={() => set({ lines: [...d.lines, ...d.lines.map((l) => ({ ...l, id: crypto.randomUUID() }))] })} disabled={!d.lines.length}><Copy className="size-4" aria-hidden />Duplicate lines</Button>
-              <Button size="sm" variant="ghost" onClick={() => { setD(empty); sessionStorage.removeItem(KEY); }}>Discard draft</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setD({ ...empty, deliverTo: entity.branches[0] }); sessionStorage.removeItem(draftKey); }}>Discard draft</Button>
             </div>
           </aside>
         ) : null}

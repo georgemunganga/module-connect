@@ -70,7 +70,7 @@ function PlanningPage() {
   const createRequest = (line: PlanLine) => {
     if (!["Approved", "Active"].includes(plan.state) || line.status === "Cancelled" || line.linkedRequest || line.estimate <= 0) return;
     if (!line.funding) { setNotice("This requirement has no funding source. Revise the plan and link funding before creating a request."); return; }
-    const ref = submitRequest({ title: line.requirement, requester: plan.owner, department: plan.department, entity: plan.entity, currency: line.currency, neededBy: line.expected, lines: [{ description: line.requirement, qty: 1, unitPrice: line.estimate }] });
+    const ref = submitRequest({ title: line.requirement, requester: plan.owner, department: plan.department, entity: plan.entity, currency: line.currency, neededBy: line.expected, deliverTo: plan.entity.includes("Kenya") ? "Nairobi Office" : "Rotterdam HQ", costCentre: line.funding, lines: [{ description: line.requirement, qty: 1, unitPrice: line.estimate }] });
     linkPlanRequest(plan.id, line.id, ref, line.estimate);
     setNotice(`${ref} submitted for approval from ${plan.id}. Planning remains an estimate; no budget was reserved.`);
   };

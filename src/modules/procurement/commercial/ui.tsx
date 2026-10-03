@@ -9,8 +9,8 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { useApp } from "@/platform/app-context";
 import { sameEntity } from "@/modules/procurement/access";
 import { getProcurement, saveProcurement, useProcurement } from "@/modules/procurement/store";
+import type { SourcingEvent } from "@/modules/procurement/sourcing";
 import { usePayables } from "@/modules/procurement/payables/store";
-import { sourcingEvents } from "@/modules/procurement/sourcing";
 import { audit, updateCommercial, useCommercial, getCommercial, nextId } from "./store";
 import type { Evaluation, Contract, Order, Receipt } from "./store";
 
@@ -130,6 +130,7 @@ function entityAllowed(entity: string, entityId: string, _role: string) {
 
 export function CommercialList({ area }: { area: Area }) {
   const data = useCommercial();
+  const sourcingEvents = useProcurement().sourcing;
   const { role, entityId } = useApp();
   const [q, setQ] = useState("");
   const records =
@@ -212,6 +213,7 @@ export function CommercialList({ area }: { area: Area }) {
 
 export function CommercialDetail({ area, id }: { area: Area; id: string }) {
   const data = useCommercial();
+  const sourcingEvents = useProcurement().sourcing;
   const { role, entityId } = useApp();
   const record =
     area === "evaluations"
@@ -234,7 +236,7 @@ export function CommercialDetail({ area, id }: { area: Area; id: string }) {
         </Link>
         <Header area={area} detail={id} />
         {area === "evaluations" ? (
-          <EvaluationView item={record as Evaluation} role={role} />
+          <EvaluationView item={record as Evaluation} role={role} event={sourcingEvents.find((event) => event.id === (record as Evaluation).eventId)!} />
         ) : area === "contracts" ? (
           <ContractView item={record as Contract} role={role} />
         ) : area === "orders" ? (
@@ -251,8 +253,10 @@ export function CommercialDetail({ area, id }: { area: Area; id: string }) {
   );
 }
 
-function EvaluationView({ item, role }: { item: Evaluation; role: string }) {
-  const event = useProcurement().sourcing.find((e) => e.id === item.eventId)!;
+function EvaluationView({ item, role, event }: { item: Evaluation; role: string; event: SourcingEvent }) {
+  const sourceLines = event.sourceLines.map((source) => { const [requestId, lineId] = source.split(" / "); const line = getProcurement().metadata[requestId]?.lines.find((candidate) => candidate.id === lineId); return line ? { requestId, lineId, line } : null; }).filter((source): source is NonNullable<typeof source> => source !== null);
+  const approvedSourceValue = sourceLines.length === event.sourceLines.length && sourceLines.length > 0 ? sourceLines.reduce((sum, source, index) => sum + Math.min(event.items[index]?.qty ?? source.line.approvedQty, Math.max(0, source.line.approvedQty - source.line.orderedQty - source.line.cancelledQty)) * source.line.unitPrice, 0) : undefined;
+  const sourceRequest = sourceLines.length === 1 ? getProcurement().requests.find((request) => request.id === sourceLines[0].requestId) : undefined;
   const [reason, setReason] = useState("");
   const [selected, setSelected] = useState(item.selectedBidId || "");
   const [error, setError] = useState("");
@@ -289,6 +293,8 @@ function EvaluationView({ item, role }: { item: Evaluation; role: string }) {
     )
       return setError("Currency mismatch requires a documented conversion basis.");
     const val = source.sealedContent.total + b.deliveryCost + b.tax;
+    if (sourceRequest && source.sealedContent.currency !== sourceRequest.currency) return setError("Bid currency differs from the approved request. Record an authorized conversion basis before award.");
+    if (approvedSourceValue !== undefined && val > approvedSourceValue) return setError(`Award exceeds approved request value of ${money(approvedSourceValue, source.sealedContent.currency)}. Reapprove the source first.`);
     if (val > 12000000 && event.entity.includes("Kenya"))
       return setError(
         "Award exceeds the demo source authority of KES 12,000,000. Renew approval first.",
@@ -341,6 +347,7 @@ function EvaluationView({ item, role }: { item: Evaluation; role: string }) {
       return setError(
         "Supplier is not active in the supplier master; draft PO conversion is blocked.",
       );
+    if (kind === "PO" && event.items.length !== 1) return setError("This event has multiple items. Record line-level award allocations before creating POs.");
     updateCommercial((state) => {
       if (kind === "PO") {
         if (state.orders.some((o) => o.source === item.id)) return state;
@@ -354,15 +361,16 @@ function EvaluationView({ item, role }: { item: Evaluation; role: string }) {
           supplier: awardBid.supplier,
           entity: event.entity,
           source: item.id,
-          sourceApprovedValue: item.awardValue!,
+          originRequest: sourceLines.length === 1 ? `${sourceLines[0].requestId} / ${sourceLines[0].lineId}` : undefined,
+          sourceApprovedValue: approvedSourceValue ?? item.awardValue!,
           status: "Draft",
           version: 1,
           currency: awardBid.sealedContent.currency,
-          shipTo: "Set delivery location",
+          shipTo: sourceLines.length === 1 ? getProcurement().metadata[sourceLines[0].requestId]?.deliverTo ?? "Set delivery location" : "Set delivery location",
           billTo: event.entity,
           taxRef: "Review tax reference",
           terms: event.terms,
-          due: event.closesAt.slice(0, 10),
+          due: sourceRequest?.neededBy ?? event.closesAt.slice(0, 10),
           line: {
             description: event.items[0]?.description || event.title,
             qty,
@@ -1159,6 +1167,7 @@ function OrderView({ item, role }: { item: Order; role: string }) {
                       ...line,
                       allocatedQty: Math.max(0, line.allocatedQty - item.line.qty),
                       orderedQty: line.orderedQty + item.line.qty,
+                      related: line.related.some((reference) => reference.kind === "PO" && reference.ref === item.id) ? line.related : [...line.related, { kind: "PO" as const, ref: item.id }],
                     }
                   : line,
               ),
@@ -1615,7 +1624,7 @@ function ReceivingView({
   const editable = canEdit("receiving", role);
   const remaining = item.line.qty - item.line.received;
   const kind = item.line.type;
-  const syncRequestReceipt = (delta: number) => {
+  const syncRequestReceipt = (delta: number, receiptRef?: string) => {
     const [requestId, lineId] = (item.originRequest ?? item.source).split(" / ");
     if (!requestId?.startsWith("PR-") || !lineId) return;
     saveProcurement((state) => {
@@ -1629,7 +1638,7 @@ function ReceivingView({
             ...meta,
             lines: meta.lines.map((line) =>
               line.id === lineId
-                ? { ...line, receivedQty: Math.max(0, line.receivedQty + delta) }
+                ? { ...line, receivedQty: Math.max(0, line.receivedQty + delta), related: receiptRef && !line.related.some((reference) => reference.kind === "Receipt" && reference.ref === receiptRef) ? [...line.related, { kind: "Receipt" as const, ref: receiptRef }] : line.related }
                 : line,
             ),
           },
@@ -1693,7 +1702,7 @@ function ReceivingView({
           : x,
       ),
     }));
-    syncRequestReceipt(qty);
+    syncRequestReceipt(qty, receipt.id);
     setQty(0);
     setRejected(0);
     setNote("");
