@@ -12,6 +12,7 @@ import { usePayables, resetPayables } from "@/modules/procurement/payables/store
 import { resetPlans } from "@/modules/procurement/planning";
 import { resetCatalog } from "@/modules/procurement/catalog";
 import { sameEntity } from "@/modules/procurement/access";
+import { useGettingStarted } from "@/modules/procurement/getting-started";
 import type { ProcWorkItem } from "@/modules/procurement/types";
 import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
@@ -98,6 +99,7 @@ const activity = [
 
 function ProcHome() {
   const { role, entityId } = useApp();
+  const gettingStarted = useGettingStarted(entityId);
   const demo = useProcurement();
   const commercial = useCommercial();
   const payables = usePayables();
@@ -156,6 +158,10 @@ function ProcHome() {
           ) : undefined
         }
       />
+
+      {role === "proc_admin" && gettingStarted.loaded ? <section className="mb-5 rounded-xl border border-primary/25 bg-primary/5 p-4" aria-labelledby="proc-start-h">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-primary">First use</p><h2 id="proc-start-h" className="mt-1 text-lg font-semibold">{gettingStarted.reviewedCount === 3 ? "Revisit Procurement setup" : "Start your Procurement journey"}</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Review buying controls, run a first purchase, and connect invoice and Finance workflows in three steps.</p><p className="mt-2 text-xs text-muted-foreground">{gettingStarted.reviewedCount} of 3 steps reviewed · progress is saved for this entity in this browser</p></div><Button asChild><Link to="/procurement/getting-started">{gettingStarted.reviewedCount === 3 ? "Open guide" : "Get started"}</Link></Button></div>
+      </section> : null}
 
       {role === "proc_admin" ? <div className="mb-4"><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Reset all Procurement demo transactions to their starting data?")) { resetProcurement(); resetCommercial(); resetPayables(); resetPlans(); resetCatalog(); } }}>Reset Procurement demo</Button></div> : null}
 

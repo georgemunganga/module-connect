@@ -26,6 +26,7 @@ import { Route as ProcurementCatalogRouteImport } from './routes/procurement.cat
 import { Route as ProcurementConfigurationRouteImport } from './routes/procurement.configuration'
 import { Route as ProcurementContractsRouteImport } from './routes/procurement.contracts'
 import { Route as ProcurementEvaluationsRouteImport } from './routes/procurement.evaluations'
+import { Route as ProcurementGettingStartedRouteImport } from './routes/procurement.getting-started'
 import { Route as ProcurementInvoicesRouteImport } from './routes/procurement.invoices'
 import { Route as ProcurementOrdersRouteImport } from './routes/procurement.orders'
 import { Route as ProcurementPlanningRouteImport } from './routes/procurement.planning'
@@ -143,6 +144,12 @@ const ProcurementEvaluationsRoute = ProcurementEvaluationsRouteImport.update({
   path: '/procurement/evaluations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementGettingStartedRoute =
+  ProcurementGettingStartedRouteImport.update({
+    id: '/procurement/getting-started',
+    path: '/procurement/getting-started',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProcurementInvoicesRoute = ProcurementInvoicesRouteImport.update({
   id: '/procurement/invoices',
   path: '/procurement/invoices',
@@ -310,6 +317,7 @@ export interface FileRoutesByFullPath {
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/contracts': typeof ProcurementContractsRoute
   '/procurement/evaluations': typeof ProcurementEvaluationsRoute
+  '/procurement/getting-started': typeof ProcurementGettingStartedRoute
   '/procurement/invoices': typeof ProcurementInvoicesRoute
   '/procurement/orders': typeof ProcurementOrdersRoute
   '/procurement/planning': typeof ProcurementPlanningRoute
@@ -359,6 +367,7 @@ export interface FileRoutesByTo {
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/contracts': typeof ProcurementContractsRoute
   '/procurement/evaluations': typeof ProcurementEvaluationsRoute
+  '/procurement/getting-started': typeof ProcurementGettingStartedRoute
   '/procurement/invoices': typeof ProcurementInvoicesRoute
   '/procurement/orders': typeof ProcurementOrdersRoute
   '/procurement/planning': typeof ProcurementPlanningRoute
@@ -409,6 +418,7 @@ export interface FileRoutesById {
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/contracts': typeof ProcurementContractsRoute
   '/procurement/evaluations': typeof ProcurementEvaluationsRoute
+  '/procurement/getting-started': typeof ProcurementGettingStartedRoute
   '/procurement/invoices': typeof ProcurementInvoicesRoute
   '/procurement/orders': typeof ProcurementOrdersRoute
   '/procurement/planning': typeof ProcurementPlanningRoute
@@ -460,6 +470,7 @@ export interface FileRouteTypes {
     | '/procurement/configuration'
     | '/procurement/contracts'
     | '/procurement/evaluations'
+    | '/procurement/getting-started'
     | '/procurement/invoices'
     | '/procurement/orders'
     | '/procurement/planning'
@@ -509,6 +520,7 @@ export interface FileRouteTypes {
     | '/procurement/configuration'
     | '/procurement/contracts'
     | '/procurement/evaluations'
+    | '/procurement/getting-started'
     | '/procurement/invoices'
     | '/procurement/orders'
     | '/procurement/planning'
@@ -558,6 +570,7 @@ export interface FileRouteTypes {
     | '/procurement/configuration'
     | '/procurement/contracts'
     | '/procurement/evaluations'
+    | '/procurement/getting-started'
     | '/procurement/invoices'
     | '/procurement/orders'
     | '/procurement/planning'
@@ -608,6 +621,7 @@ export interface RootRouteChildren {
   ProcurementConfigurationRoute: typeof ProcurementConfigurationRoute
   ProcurementContractsRoute: typeof ProcurementContractsRoute
   ProcurementEvaluationsRoute: typeof ProcurementEvaluationsRoute
+  ProcurementGettingStartedRoute: typeof ProcurementGettingStartedRoute
   ProcurementInvoicesRoute: typeof ProcurementInvoicesRoute
   ProcurementOrdersRoute: typeof ProcurementOrdersRoute
   ProcurementPlanningRoute: typeof ProcurementPlanningRoute
@@ -763,6 +777,13 @@ declare module '@tanstack/react-router' {
       path: '/procurement/evaluations'
       fullPath: '/procurement/evaluations'
       preLoaderRoute: typeof ProcurementEvaluationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/getting-started': {
+      id: '/procurement/getting-started'
+      path: '/procurement/getting-started'
+      fullPath: '/procurement/getting-started'
+      preLoaderRoute: typeof ProcurementGettingStartedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/procurement/invoices': {
@@ -992,6 +1013,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProcurementConfigurationRoute: ProcurementConfigurationRoute,
   ProcurementContractsRoute: ProcurementContractsRoute,
   ProcurementEvaluationsRoute: ProcurementEvaluationsRoute,
+  ProcurementGettingStartedRoute: ProcurementGettingStartedRoute,
   ProcurementInvoicesRoute: ProcurementInvoicesRoute,
   ProcurementOrdersRoute: ProcurementOrdersRoute,
   ProcurementPlanningRoute: ProcurementPlanningRoute,

@@ -1,4 +1,4 @@
-import { BarChart3, CalendarRange, BookOpen, Building2, FileSignature, FileText, Gavel, Home, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck, ClipboardCheck } from "lucide-react";
+import { BarChart3, CalendarRange, BookOpen, Building2, FileSignature, FileText, Gavel, Home, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck, ClipboardCheck, ListChecks } from "lucide-react";
 import type { ModuleDefinition } from "@/platform/nav";
 import { PLANNING_ENABLED } from "./planning";
 
@@ -15,6 +15,7 @@ export const procurementModule: ModuleDefinition = {
   shortName: "PROC",
   sections: [
     { id: "home", label: "Home", icon: Home, to: "/procurement" },
+    { id: "getting-started", label: "Getting started", icon: ListChecks, to: "/procurement/getting-started", roles: ["proc_admin"] },
     // Requester (employee) navigation
     { id: "catalog", label: "Catalog", icon: BookOpen, to: "/procurement/catalog", roles: [...(REQUESTERS ?? []), "buyer", "proc_admin"] },
     { id: "my-requests", label: "My requests", icon: FileText, to: "/procurement/requests", roles: REQUESTERS },

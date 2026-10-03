@@ -2,7 +2,7 @@
 
 This repository is the Lovable-connected **frontend demo** for the ERP Procurement module. Browser storage holds the demo records and decisions. The functional source of truth is the ERP specification in `newworld-erp/docs/procurement`; this frontend does not provide server authorization, Finance posting, payments, supplier identity, document storage, or live integration events.
 
-Screen groups exist for the feature map below. The full UI acceptance work is tracked in [the gap review](procurement-ui-gap-review.md); the connected three-line journey and several exception states remain open.
+Screen groups exist for the feature map below. The full UI acceptance work is tracked in [the gap review](procurement-ui-gap-review.md); several exception and recovery states remain open.
 
 ## Starting points and routes
 
@@ -14,11 +14,13 @@ Screen groups exist for the feature map below. The full UI acceptance work is tr
 | Supplier steward | `/procurement` | Supplier queue and profiles |
 | Receiver | `/procurement` | Purchase orders and receiving |
 | AP processor | `/procurement` | Invoice inbox, capture, match, exceptions, AP handoff demo |
-| Procurement admin | `/procurement` | All internal work areas, policy simulator, demo reset |
+| Procurement admin | `/procurement` | Three-step Getting started guide, all internal work areas, policy simulator, demo reset |
 | Auditor | `/procurement` | Read-only records and reports |
 | Supplier user | `/supplier` | Separate supplier-scoped portal |
 
-The internal route groups are `/procurement/catalog`, `/procurement/requests`, `/procurement/approvals`, `/procurement/suppliers`, `/procurement/planning`, `/procurement/sourcing`, `/procurement/evaluations`, `/procurement/contracts`, `/procurement/orders`, `/procurement/receiving`, `/procurement/invoices`, `/procurement/reports`, and `/procurement/configuration/policy`. Detail routes use the record reference. The supplier portal has its own shell at `/supplier`.
+The internal route groups are `/procurement/getting-started`, `/procurement/catalog`, `/procurement/requests`, `/procurement/approvals`, `/procurement/suppliers`, `/procurement/planning`, `/procurement/sourcing`, `/procurement/evaluations`, `/procurement/contracts`, `/procurement/orders`, `/procurement/receiving`, `/procurement/invoices`, `/procurement/reports`, and `/procurement/configuration/policy`. Detail routes use the record reference. The supplier portal has its own shell at `/supplier`.
+
+The administrator's first-use guide groups nine real route links into three steps: buying controls, first purchase, and invoices/Finance. A review acknowledgement is saved per entity in the current browser. It is a guide progress marker, not evidence that a policy or integration has been activated. Finance remains the owner of payment methods and payment execution.
 
 ## Feature-to-screen map
 
@@ -56,6 +58,7 @@ The source records are browser-local demo data. A fresh browser starts from the 
 - Browser route checks covered buyer, AP, supplier, and procurement-admin views. Internal records are hidden from supplier role; commercial detail screens apply entity scope; the supplier portal pins its demo identity to one supplier.
 - The responsive pass includes phone-width list tables, planning, PO and receiving detail. Wide data tables scroll within their own cards and the side navigation collapses behind the mobile menu.
 - Browser journeys verified a single three-line PR across RFQ, direct PO, and contract release; supplier bid → sealed response → controlled opening → evaluation → award PO; PO issue → supplier acknowledgment → goods receipt → supplier invoice → match → AP handoff → simulated Finance Paid; and source PR quantity reconciliation. No page errors occurred in the final connected run.
+- The Getting started guide was checked at phone width: Home links to the guide, review progress persists after reload, and progress is separate for Netherlands and Kenya. An employee role cannot open the administrator guide.
 
 ## Remaining production boundaries
 
