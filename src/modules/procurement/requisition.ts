@@ -80,6 +80,7 @@ export const reqMeta: Record<string, ReqMeta> = {
 };
 
 export const remaining = (l: ReqLine) => Math.max(0, l.approvedQty - l.orderedQty - l.cancelledQty);
+export const availableToAllocate = (l: ReqLine) => Math.max(0, l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty);
 
 /** Derived header progress from line facts. */
 export function deriveProgress(lines: ReqLine[]): string {
@@ -91,9 +92,10 @@ export function deriveProgress(lines: ReqLine[]): string {
   const ordered = live.reduce((s, l) => s + l.orderedQty, 0);
   const received = live.reduce((s, l) => s + l.receivedQty, 0);
   const approved = live.reduce((s, l) => s + l.approvedQty, 0);
-  if (received && received >= ordered && remaining(live[0]) === 0) return "Fulfilled";
+  if (live.every((l) => l.approval === "Approved" && l.orderedQty + l.cancelledQty >= l.approvedQty && l.receivedQty >= l.orderedQty)) return "Fulfilled";
   if (received) return "Partially received";
   if (ordered) return ordered >= approved ? "Ordered" : "Partially ordered";
+  if (live.some((l) => l.allocatedQty)) return "Allocated — awaiting order";
   if (live.some((l) => l.approval === "Pending")) return "Partly approved";
   return "Approved — awaiting buyer";
 }

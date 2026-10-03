@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/platform/app-context";
+import { internalRole, sameEntity } from "@/modules/procurement/access";
+import { RestrictedState } from "@/platform/components/States";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { NoResultsState } from "@/platform/components/States";
@@ -39,7 +41,7 @@ const MAINTAINERS = ["buyer", "proc_admin"];
 function CatalogPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const { role } = useApp();
+  const { role, entityId } = useApp();
   const maintainer = MAINTAINERS.includes(role);
   const [view, setView] = useState<"browse" | "manage">("browse");
   const setS = (p: Partial<Search>) => navigate({ search: (s: Search) => ({ ...s, ...p }), replace: true });
@@ -49,13 +51,15 @@ function CatalogPage() {
       catalogItems.filter(
         (i) =>
           (view === "manage" || i.status === "Active") &&
+          i.entities.some((entity) => sameEntity(entity, entityId)) &&
           (!search.kind || i.kind === search.kind) &&
           (!search.entity || i.entities.includes(search.entity)) &&
           (i.name + i.category + i.spec).toLowerCase().includes((search.q ?? "").toLowerCase()),
       ),
-    [search, view],
+    [search, view, entityId],
   );
 
+  if (!internalRole(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader

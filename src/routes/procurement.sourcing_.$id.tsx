@@ -11,16 +11,13 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { money } from "@/modules/procurement/catalog";
-import { sourcingEvents } from "@/modules/procurement/sourcing";
+import { useProcurement, saveProcurement } from "@/modules/procurement/store";
+import { sourcingRole, sameEntity } from "@/modules/procurement/access";
+import { RestrictedState } from "@/platform/components/States";
 import type { BidReceipt, SourcingEvent } from "@/modules/procurement/sourcing";
 
 export const Route = createFileRoute("/procurement/sourcing_/$id")({
-  head: ({ params }) => {
-    const e = sourcingEvents.find((x) => x.id === params.id);
-    const title = `${e ? `${e.id} ${e.title}` : "Event not found"} — Meridian ERP Sourcing`;
-    const description = e ? `${e.method} · ${e.state} · closes ${e.closesAt || "not set"}` : "This sourcing event doesn't exist.";
-    return { meta: [{ title }, { name: "description", content: description }, { property: "og:title", content: title }, { property: "og:description", content: description }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] };
-  },
+  head: () => ({ meta: [{ title: "Sourcing event — Meridian ERP" }, { name: "description", content: "Restricted sourcing event" }] }),
   component: EventDetail,
 });
 
@@ -29,14 +26,15 @@ const nowStr = () => new Date().toISOString().slice(0, 16).replace("T", " ");
 
 function EventDetail() {
   const { id } = Route.useParams();
-  const { role } = useApp();
-  const found = sourcingEvents.find((x) => x.id === id);
-  const [e, setE] = useState<SourcingEvent | undefined>(found);
+  const { role, entityId } = useApp();
+  const e = useProcurement().sourcing.find((x) => x.id === id);
+  const setE = (value: SourcingEvent) => saveProcurement((state) => ({ ...state, sourcing: state.sourcing.map((item) => item.id === id ? value : item) }));
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [amending, setAmending] = useState(false);
   const [surrogate, setSurrogate] = useState(false);
   const isBuyer = role === "buyer" || role === "proc_admin";
 
+  if (!e || !sourcingRole(role) || !sameEntity(e.entity, entityId)) return <AppShell><RestrictedState /></AppShell>;
   if (!e) return <AppShell><EmptyState title="Event not found" body="Check the reference or browse the sourcing queue." action={<Button variant="outline" asChild><Link to="/procurement/sourcing">Back to sourcing</Link></Button>} /></AppShell>;
 
   const primary = !isBuyer ? undefined
@@ -56,7 +54,7 @@ function EventDetail() {
         <span>Next: <strong>{e.nextAction}</strong> · due {e.dueDate}</span>
       </div>
       {e.portalOutage ? <Banner>{e.portalOutage}</Banner> : null}
-      {amending ? <AmendForm onCancel={() => setAmending(false)} onDone={(change) => { setAmending(false); setE({ ...e, amendments: [...e.amendments, { no: e.amendments.length + 1, at: nowStr(), change, notified: true }] }); }} /> : null}
+      {amending ? <AmendForm onCancel={() => setAmending(false)} onDone={(change) => { setAmending(false); setE({ ...e, amendments: [...e.amendments, { no: e.amendments.length + 1, at: nowStr(), change, notified: false }] }); }} /> : null}
 
       <div role="tablist" aria-label="Event sections" className="mb-4 flex gap-1 overflow-x-auto border-b">
         {TABS.map((t) => <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === t ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground"}`}>{t}</button>)}
@@ -80,7 +78,7 @@ function EventDetail() {
             <ul className="space-y-2">{e.invitations.map((i) => (
               <li key={i.supplier} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-surface p-3 text-sm">
                 <span><span className="font-medium">{i.supplier}</span>{i.note ? <span className="block text-xs text-danger">{i.note}</span> : null}</span>
-                <span className="flex items-center gap-2"><StatusBadge status={i.delivery} />{i.delivery === "Not delivered" && isBuyer ? <Button size="sm" variant="outline">Resend (demo)</Button> : null}</span>
+                <span className="flex items-center gap-2"><StatusBadge status={i.delivery} />{i.delivery === "Not delivered" && isBuyer ? <Button size="sm" variant="outline" disabled title="Invitation delivery is preview-only">Resend (preview)</Button> : null}</span>
               </li>))}</ul>
           ) : <EmptyState title="No invitations sent" body="Invitations go out when the event is published." />
         ) : tab === "Q&A" ? (
@@ -89,7 +87,7 @@ function EventDetail() {
         ) : tab === "Responses" ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="flex items-center gap-2 text-sm">{e.opened ? <>Opened — {e.openingAuthorisedBy}</> : <><Lock className="size-4" aria-hidden />Sealed. Only receipt details are visible until the authorised opening.</>}</p>
+              <p className="flex items-center gap-2 text-sm">{e.opened && isBuyer ? <>Opened — {e.openingAuthorisedBy}</> : <><Lock className="size-4" aria-hidden />Sealed. Only receipt details are visible until the authorised opening.</>}</p>
               {isBuyer && ["Published", "Closed"].includes(e.state) ? <Button size="sm" variant="outline" onClick={() => setSurrogate(true)}>Record offline response</Button> : null}
             </div>
             {surrogate ? <SurrogateForm e={e} onCancel={() => setSurrogate(false)} onDone={(b) => { setSurrogate(false); setE({ ...e, bids: [...e.bids, b] }); }} /> : null}
@@ -104,7 +102,7 @@ function EventDetail() {
                         <td className="p-3">{b.receivedAt}</td>
                         <td className="p-3">{b.channel}{b.enteredBy ? <span className="block text-xs text-muted-foreground">Entered by {b.enteredBy} at {b.enteredAt} · evidence: {b.evidence}</span> : null}</td>
                         <td className="p-3"><span className="flex items-center gap-1"><Lock className="size-3.5" aria-label="Locked" />v{b.version}</span></td>
-                        <td className="p-3">{e.opened ? <>{money(b.sealedContent.total, b.sealedContent.currency)} · {b.sealedContent.leadTimeDays} days<span className="block text-xs text-muted-foreground">{b.sealedContent.notes}</span></> : <span className="text-muted-foreground">Sealed</span>}</td>
+                        <td className="p-3">{e.opened && isBuyer ? <>{money(b.sealedContent.total, b.sealedContent.currency)} · {b.sealedContent.leadTimeDays} days<span className="block text-xs text-muted-foreground">{b.sealedContent.notes}</span></> : <span className="text-muted-foreground">Sealed</span>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -144,10 +142,10 @@ function AmendForm({ onCancel, onDone }: { onCancel: () => void; onDone: (c: str
   return (
     <section className="mb-4 rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm">
       <h2 className="font-semibold">Issue amendment</h2>
-      <p className="mt-1">Published events can't be edited directly. Describe the change; all invited suppliers will be notified.</p>
+      <p className="mt-1">Published events can't be edited directly. Describe the change; supplier notification is pending integration.</p>
       <Label htmlFor="am" className="mt-3 block">Change (required)</Label>
       <Textarea id="am" className="mt-1 bg-background" value={c} onChange={(ev) => setC(ev.target.value)} />
-      <div className="mt-3 flex gap-2"><Button disabled={!c.trim()} onClick={() => onDone(c)}>Issue and notify</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div>
+      <div className="mt-3 flex gap-2"><Button disabled={!c.trim()} onClick={() => onDone(c)}>Record amendment</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div>
     </section>
   );
 }

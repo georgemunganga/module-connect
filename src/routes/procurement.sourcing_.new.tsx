@@ -1,5 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useProcurement, saveProcurement } from "@/modules/procurement/store";
+import { useApp } from "@/platform/app-context";
+import { sourcingRole, sameEntity } from "@/modules/procurement/access";
+import { RestrictedState } from "@/platform/components/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +12,7 @@ import { GuidedFlow, NextSteps } from "@/platform/components/GuidedFlow";
 import type { FlowStep } from "@/platform/components/GuidedFlow";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { money } from "@/modules/procurement/catalog";
-import { reqMeta, remaining } from "@/modules/procurement/requisition";
+import { reqMeta, availableToAllocate } from "@/modules/procurement/requisition";
 import { permittedMethods } from "@/modules/procurement/sourcing";
 import type { SourcingMethod } from "@/modules/procurement/sourcing";
 
@@ -26,12 +30,15 @@ export const Route = createFileRoute("/procurement/sourcing_/new")({
   component: NewEvent,
 });
 
-const approvedLines = Object.entries(reqMeta).flatMap(([pr, m]) =>
-  m.lines.filter((l) => l.approval === "Approved" && remaining(l) > 0).map((l) => ({ key: l.id, pr, label: l.description, qty: remaining(l), value: remaining(l) * l.unitPrice, ccy: m.entity.includes("Kenya") ? "KES" : "EUR" })),
+const getApprovedLines = (metadata: typeof reqMeta) => Object.entries(metadata).flatMap(([pr, m]) =>
+  m.lines.filter((l) => l.approval === "Approved" && availableToAllocate(l) > 0).map((l) => ({ key: l.id, pr, label: l.description, qty: availableToAllocate(l), value: availableToAllocate(l) * l.unitPrice, ccy: m.entity.includes("Kenya") ? "KES" : "EUR" })),
 );
-const suppliersPool = ["Ahrend Office B.V.", "Bureau Comfort", "Northwind Devices B.V.", "Contoso Tech GmbH", "Kifaru Safety Ltd"];
 
 function NewEvent() {
+  const { role, entityId } = useApp();
+  const state = useProcurement();
+  const suppliersPool = state.suppliers.filter((supplier) => supplier.status === "Active" && sameEntity(supplier.country, entityId)).map((supplier) => supplier.name);
+  const approvedLines = getApprovedLines(state.metadata).filter((line) => sameEntity(state.metadata[line.pr]?.entity, entityId) && state.requests.find((request) => request.id === line.pr)?.status === "Approved");
   const [lines, setLines] = useState<string[]>([]);
   const [method, setMethod] = useState<SourcingMethod | null>(null);
   const [justification, setJustification] = useState("");
@@ -39,7 +46,7 @@ function NewEvent() {
   const [tz, setTz] = useState("Europe/Amsterdam");
   const [invited, setInvited] = useState<string[]>([]);
   const [criteria, setCriteria] = useState([{ name: "Price", weight: 60 }, { name: "Delivery time", weight: 20 }, { name: "Quality", weight: 20 }]);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
 
   const chosen = approvedLines.filter((l) => lines.includes(l.key));
   const estEur = chosen.filter((l) => l.ccy === "EUR").reduce((s, l) => s + l.value, 0) + chosen.filter((l) => l.ccy === "KES").reduce((s, l) => s + l.value / 140, 0);
@@ -85,12 +92,26 @@ function NewEvent() {
     } },
   ];
 
+  if (!sourcingRole(role) || role === "auditor") return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader eyebrow="Sourcing" title="Create sourcing event" description="Saved as a draft as you go. Nothing is sent to suppliers until it's approved and published." />
       <GuidedFlow flowId="proc-sourcing-new" steps={steps} submitLabel="Send for approval"
-        onSubmit={async () => { if (!chosen.length || !method || !closes || !invited.length || weightTotal !== 100) return; await new Promise((r) => setTimeout(r, 500)); setDone(true); sessionStorage.removeItem("flow:proc-sourcing-new"); }}
-        submitted={done ? <NextSteps reference="RFQ-2026-0056" title="Sent for approval (demo)" steps={["A Procurement lead checks method, suppliers and criteria.", "Once approved, it's published and invitations go out — in this demo nothing is actually sent.", "Responses stay sealed until the authorised opening."]} actions={<Button asChild><Link to="/procurement/sourcing">Back to sourcing</Link></Button>} /> : undefined}
+        onSubmit={async () => {
+          if (!chosen.length || !method || !closes || !invited.length || weightTotal !== 100 || (needsJustification && !justification.trim())) return;
+          const ref = `RFQ-DEMO-${Date.now()}`;
+          saveProcurement((store) => ({
+            ...store,
+            metadata: Object.fromEntries(Object.entries(store.metadata).map(([pr, meta]) => [pr, { ...meta, lines: meta.lines.map((line) => {
+              const selected = chosen.find((item) => item.pr === pr && item.key === line.id);
+              return selected ? { ...line, route: "RFQ / tender" as const, allocatedQty: line.allocatedQty + selected.qty, related: [...line.related, { kind: "RFQ" as const, ref }] } : line;
+            }) }])),
+            sourcing: [{ id: ref, title: chosen.map((x) => x.label).join(", "), method, state: "Pending approval", buyer: "You (demo)", entity: store.metadata[chosen[0].pr].entity, sourceLines: chosen.map((x) => `${x.pr} / ${x.key}`), items: chosen.map((x) => ({ description: x.label, qty: x.qty, unit: "each" })), opensAt: "", closesAt: closes, timeZone: tz, opened: false, eligibility: justification || "Active eligible suppliers", terms: "Demo terms", responseDocuments: [], criteria, invitations: invited.map((supplier) => ({ supplier, delivery: "Not delivered" as const, note: "Pending publication" })), qa: [], bids: [], amendments: [], nextAction: "Procurement lead approval", dueDate: closes.slice(0, 10) }, ...store.sourcing],
+          }));
+          setDone(ref);
+          sessionStorage.removeItem("flow:proc-sourcing-new");
+        }}
+        submitted={done ? <NextSteps reference={done} title="Sent for approval (demo)" steps={["A Procurement lead checks method, suppliers and criteria.", "Once approved, it's published and invitations go out — in this demo nothing is actually sent.", "Responses stay sealed until the authorised opening."]} actions={<Button asChild><Link to="/procurement/sourcing">Back to sourcing</Link></Button>} /> : undefined}
       />
     </AppShell>
   );

@@ -9,6 +9,9 @@ import { AppShell } from "@/platform/components/AppShell";
 import { GuidedFlow, NextSteps } from "@/platform/components/GuidedFlow";
 import type { FlowStep } from "@/platform/components/GuidedFlow";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { useApp, useEntity } from "@/platform/app-context";
+import { submitRequest } from "@/modules/procurement/store";
+import { RestrictedState } from "@/platform/components/States";
 
 export const Route = createFileRoute("/procurement/requests/new")({
   head: () => ({
@@ -44,6 +47,8 @@ const CCY = "EUR";
 const fmt = (n: number) => new Intl.NumberFormat("en-IE", { style: "currency", currency: CCY }).format(n);
 
 function NewRequest() {
+  const { role } = useApp();
+  const entity = useEntity();
   const navigate = useNavigate();
   const [d, setD] = useState<Draft>(empty);
   const [loaded, setLoaded] = useState(false);
@@ -227,6 +232,7 @@ function NewRequest() {
     },
   ];
 
+  if (!["employee", "manager", "hr_ops", "payroll", "hr_admin"].includes(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader eyebrow="Procurement" title="Create request" description="Answer a few questions. Your draft saves as you go." />
@@ -238,7 +244,7 @@ function NewRequest() {
           onSubmit={async () => {
             if (missing.length) return;
             await new Promise((r) => setTimeout(r, 600));
-            setRef(`PR-2026-${1045 + Math.floor(Math.random() * 50)}`);
+            setRef(submitRequest({ title: d.purpose.trim(), requester: "Amara Chukwuemeka-Van der Berghe", department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: entity.country, currency: CCY, neededBy: d.neededBy, lines: d.lines.map(({ description, qty, unitPrice }) => ({ description, qty, unitPrice })) }));
             sessionStorage.removeItem(KEY);
             sessionStorage.removeItem("flow:proc-request-new");
           }}

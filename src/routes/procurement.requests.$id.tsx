@@ -1,21 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { procApi, suppliers } from "@/modules/procurement/data";
-import { deriveProgress, remaining, reqMeta } from "@/modules/procurement/requisition";
+import { useProcurement, saveProcurement, routeLine, decideApproval } from "@/modules/procurement/store";
+import { requestVisible } from "@/modules/procurement/access";
+import { deriveProgress, remaining } from "@/modules/procurement/requisition";
 import type { LineRoute, ReqLine } from "@/modules/procurement/requisition";
 import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
-import { Async } from "@/platform/components/Async";
 import { ApprovalPanel } from "@/platform/components/ApprovalPanel";
 import { RecordDetail } from "@/platform/components/RecordDetail";
 import { RestrictedState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { StatusTimeline } from "@/platform/components/StatusTimeline";
-import { useMock } from "@/platform/use-mock";
-import type { TimelineEvent } from "@/mock/types";
 
 export const Route = createFileRoute("/procurement/requests/$id")({
   head: ({ params }) => ({
@@ -38,53 +36,47 @@ const now = () => new Date().toISOString().slice(0, 16).replace("T", " ");
 
 function RequestDetail() {
   const { id } = Route.useParams();
-  const state = useMock(() => procApi.purchaseRequest(id), [id]);
-  return (
-    <AppShell>
-      <Async state={state} rows={3}>{(r) => (r ? <Workspace r={r} /> : <RestrictedState />)}</Async>
-    </AppShell>
-  );
+  const { role, entityId } = useApp();
+  const state = useProcurement();
+  const r = state.requests.find((item) => item.id === id);
+  return <AppShell>{r && requestVisible(role, entityId, state.metadata[id]?.entity, r.requester) ? <Workspace r={r} /> : <RestrictedState />}</AppShell>;
 }
 
-function Workspace({ r }: { r: NonNullable<Awaited<ReturnType<typeof procApi.purchaseRequest>>> }) {
+function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseRequest }) {
   const { role } = useApp();
-  const meta = reqMeta[r.id];
-  const [lines, setLines] = useState<ReqLine[]>(meta?.lines ?? []);
-  const [events, setEvents] = useState<TimelineEvent[]>(r.timeline);
-  const [status, setStatus] = useState(r.status);
+  const { metadata, approvals } = useProcurement();
+  const taskForRequest = approvals.find((task) => task.recordId === r.id && task.state !== "Completed");
+  const meta = metadata[r.id];
+  const lines = meta?.lines ?? [];
+  const events = r.timeline;
+  const status = r.status;
   const [notice, setNotice] = useState<string | null>(null);
-  useEffect(() => { setLines(meta?.lines ?? []); }, [meta]);
 
   const money = new Intl.NumberFormat("en", { style: "currency", currency: r.currency, maximumFractionDigits: 0 });
-  const supplier = suppliers.find((s) => s.id === r.supplierId);
   const isBuyer = BUYERS.includes(role);
   const isApprover = APPROVERS.includes(role);
   const isRequester = ["employee", "manager", "hr_ops", "payroll", "hr_admin"].includes(role);
-  const log = (event: string, reason?: string) => setEvents((e) => [{ id: crypto.randomUUID(), at: now(), actor: "You (demo)", event, reason }, ...e]);
   const progress = deriveProgress(lines);
-
-  const updateLine = (id: string, patch: Partial<ReqLine>, event: string) => {
-    setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-    log(event);
-  };
-
-  const convert = (l: ReqLine, partial: boolean) => {
-    if (l.approval !== "Approved") return setNotice(`Line “${l.description}” isn't approved yet, so it can't be converted to an order.`);
-    if (l.lockedBy) return setNotice(`${l.lockedBy} is converting this line right now. Wait for them to finish or ask them to release it — converting twice would create a duplicate order.`);
-    const value = (partial ? Math.ceil(remaining(l) / 2) : remaining(l)) * l.unitPrice;
-    if (meta?.budgetBalance && value > meta.budgetBalance.available) return setNotice(`Insufficient balance: this conversion is ${money.format(value)} but only ${money.format(meta.budgetBalance.available)} is indicated as available. Ask the budget holder or reduce the quantity.`);
-    const qty = partial ? Math.ceil(remaining(l) / 2) : remaining(l);
-    updateLine(l.id, { orderedQty: l.orderedQty + qty, related: [...l.related, { kind: "PO", ref: "PO-DRAFT (demo)" }] }, `${qty} × ${l.description} converted to a draft PO (not sent to supplier)`);
-    setNotice(null);
+  const changeRequest = (patch: Partial<typeof r>, event: string, reason?: string) => saveProcurement((state) => ({ ...state, requests: state.requests.map((item) => item.id === r.id ? { ...item, ...patch, timeline: [{ id: crypto.randomUUID(), at: now(), actor: "You (demo)", event, reason }, ...item.timeline] } : item) }));
+  const updateLine = (id: string, patch: Partial<ReqLine>, event: string) => saveProcurement((state) => ({ ...state, metadata: { ...state.metadata, [r.id]: { ...state.metadata[r.id], lines: state.metadata[r.id].lines.map((line) => line.id === id ? { ...line, ...patch } : line) } }, requests: state.requests.map((item) => item.id === r.id ? { ...item, timeline: [{ id: crypto.randomUUID(), at: now(), actor: "You (demo)", event }, ...item.timeline] } : item) }));
+  const convert = (line: ReqLine, partial: boolean) => {
+    try {
+      const available = Math.max(0, line.approvedQty - line.allocatedQty - line.orderedQty - line.cancelledQty);
+      const qty = partial ? Math.ceil(available / 2) : available;
+      const value = qty * line.unitPrice;
+      if (meta?.budgetBalance && value > meta.budgetBalance.available) throw new Error(`Insufficient indicative balance: ${money.format(value)} exceeds ${money.format(meta.budgetBalance.available)}.`);
+      const ref = routeLine(r.id, line.id, line.route, qty);
+      setNotice(`${ref} created as a demo draft. No supplier message or financial commitment occurred.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not allocate this line."); }
   };
 
   // Header actions with permitted-state checks
   const actions: { label: string; why: string; enabled: boolean; run: () => void; tone?: "primary" }[] = [
-    { label: "Submit", why: status === "Draft" ? "Draft is complete enough to send for approval." : "Only drafts can be submitted.", enabled: status === "Draft" && isRequester, run: () => { setStatus("Submitted"); log("Submitted"); }, tone: "primary" },
-    { label: "Withdraw", why: ["Submitted", "In review"].includes(status) && !lines.some((l) => l.orderedQty) ? "Nothing ordered yet, so you can still withdraw." : "Withdraw is only possible before any line is ordered.", enabled: isRequester && ["Submitted", "In review"].includes(status) && !lines.some((l) => l.orderedQty), run: () => { setStatus("Cancelled"); log("Withdrawn by requester"); } },
-    { label: "Return for correction", why: isBuyer ? "Buyer review found something the requester must fix." : "Only the buyer or approver can return a request.", enabled: (isBuyer || isApprover) && !["Draft", "Returned", "Cancelled"].includes(status), run: () => { setStatus("Returned"); log("Returned for correction", "See line notes"); } },
-    { label: "Reopen as new version", why: "Material edits after submission create a new version; the original is preserved.", enabled: isRequester && status === "Returned", run: () => { setStatus("Draft"); log(`Reopened as version ${(meta?.versions.length ?? 0) + 1}`); } },
-    { label: "Close request", why: lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred") ? "No remaining quantity to order." : "Can't close while approved quantity is still unordered.", enabled: isBuyer && lines.length > 0 && lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred"), run: () => { setStatus("Closed" as typeof status); log("Closed; remaining quantity cancelled"); } },
+    { label: "Submit", why: status === "Draft" ? "Draft is complete enough to send for approval." : "Only drafts can be submitted.", enabled: status === "Draft" && isRequester, run: () => { changeRequest({ status: "Submitted" }, "Submitted"); }, tone: "primary" },
+    { label: "Withdraw", why: ["Submitted", "In review"].includes(status) && !lines.some((l) => l.orderedQty) ? "Nothing ordered yet, so you can still withdraw." : "Withdraw is only possible before any line is ordered.", enabled: isRequester && ["Submitted", "In review"].includes(status) && !lines.some((l) => l.orderedQty), run: () => { changeRequest({ status: "Cancelled" }, "Withdrawn by requester"); } },
+    { label: "Return for correction", why: isBuyer ? "Buyer review found something the requester must fix." : "Only the buyer or approver can return a request.", enabled: (isBuyer || isApprover) && !["Draft", "Returned", "Cancelled"].includes(status), run: () => { changeRequest({ status: "Returned" }, "Returned for correction", "See line notes"); } },
+    { label: "Reopen as new version", why: "Material edits after submission create a new version; the original is preserved.", enabled: isRequester && status === "Returned", run: () => { changeRequest({ status: "Draft" }, `Reopened as version ${(meta?.versions.length ?? 0) + 1}`); } },
+    { label: "Close request", why: lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred") ? "No remaining quantity to order." : "Can't close while approved quantity is still unordered.", enabled: isBuyer && lines.length > 0 && lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred"), run: () => { changeRequest({ status: "Closed" as typeof status }, "Closed; remaining quantity cancelled"); } },
   ];
   const primary = actions.find((a) => a.enabled && a.tone === "primary") ?? actions.find((a) => a.enabled);
 
@@ -98,7 +90,7 @@ function Workspace({ r }: { r: NonNullable<Awaited<ReturnType<typeof procApi.pur
       nextAction={`${r.nextAction} · due ${r.dueDate}`}
       summary={[
         { label: "Line progress", value: progress },
-        { label: "Supplier", value: supplier ? `${supplier.name} (${supplier.status})` : "Not selected" },
+        { label: "Supplier", value: r.supplierId ? "Preference on file — verify before ordering" : "Not selected" },
         { label: "Total requested", value: money.format(r.amount) },
         { label: "Needed by", value: r.neededBy },
         { label: "Version", value: meta?.versions.length ? `v${meta.versions[0].version}` : "Draft" },
@@ -136,7 +128,7 @@ function Workspace({ r }: { r: NonNullable<Awaited<ReturnType<typeof procApi.pur
                     <span className="block text-xs text-muted-foreground">{money.format(l.unitPrice)} each · {money.format(l.qty * l.unitPrice)}</span>
                     {l.splitNote ? <span className="block text-xs">{l.splitNote}</span> : null}
                     {l.cancelledQty ? <span className="block text-xs text-muted-foreground">{l.cancelledQty} cancelled (remainder)</span> : null}
-                    {l.related.length ? <span className="mt-1 flex flex-wrap gap-1">{l.related.map((x) => <span key={x.ref} className="rounded border px-1.5 text-xs">{x.kind} {x.ref}</span>)}</span> : null}
+                    {l.related.length ? <span className="mt-1 flex flex-wrap gap-1">{l.related.map((x) => x.kind === "RFQ" ? <Link key={x.ref} to="/procurement/sourcing/$id" params={{ id: x.ref }} className="rounded border px-1.5 text-xs text-primary underline">RFQ {x.ref}</Link> : <span key={x.ref} className="rounded border px-1.5 text-xs">{x.kind} {x.ref} · {x.ref.includes("DRAFT") ? "draft" : "preview"}</span>)}</span> : null}
                     {l.lockedBy ? <span className="mt-1 flex items-center gap-1 text-xs text-warning"><AlertTriangle className="size-3" aria-hidden />{l.lockedBy} is converting this line</span> : null}
                   </td>
                   <td className="py-2 pr-3"><StatusBadge status={l.approval} /></td>
@@ -151,7 +143,7 @@ function Workspace({ r }: { r: NonNullable<Awaited<ReturnType<typeof procApi.pur
                       <>
                         <Label htmlFor={`rt-${l.id}`} className="sr-only">Route for {l.description}</Label>
                         <select id={`rt-${l.id}`} className="h-8 rounded-md border bg-background px-2 text-xs" value={l.route}
-                          onChange={(e) => updateLine(l.id, { route: e.target.value as LineRoute, allocatedQty: e.target.value === "Cancelled" ? 0 : l.approvedQty }, `Line routed to ${e.target.value}`)}>
+                          disabled={status !== "Approved" || l.approval !== "Approved" || remaining(l) === 0} onChange={(e) => updateLine(l.id, { route: e.target.value as LineRoute }, `Line route selected: ${e.target.value}`)}>
                           <option disabled>Unassigned</option>{ROUTES.map((x) => <option key={x}>{x}</option>)}
                         </select>
                       </>
@@ -160,8 +152,8 @@ function Workspace({ r }: { r: NonNullable<Awaited<ReturnType<typeof procApi.pur
                   <td className="py-2">
                     {isBuyer ? (
                       <span className="flex flex-col gap-1">
-                        <Button size="sm" variant="outline" disabled={remaining(l) === 0 || l.route === "Cancelled"} onClick={() => convert(l, false)}>Convert to PO</Button>
-                        <Button size="sm" variant="ghost" disabled={remaining(l) < 2 || l.route === "Cancelled"} onClick={() => convert(l, true)}>Partial order</Button>
+                        <Button size="sm" variant="outline" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty <= 0 || !["Direct PO", "RFQ / tender", "Contract / framework"].includes(l.route)} onClick={() => convert(l, false)}>Create {l.route === "RFQ / tender" ? "RFQ" : l.route === "Contract / framework" ? "contract release" : "draft PO"}</Button>
+                        <Button size="sm" variant="ghost" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty < 2 || !["Direct PO", "RFQ / tender", "Contract / framework"].includes(l.route)} onClick={() => convert(l, true)}>Allocate half</Button>
                       </span>
                     ) : <span className="text-xs text-muted-foreground">Buyer only</span>}
                   </td>
@@ -180,7 +172,7 @@ function Workspace({ r }: { r: NonNullable<Awaited<ReturnType<typeof procApi.pur
       ) : null}
 
       {isApprover && ["Submitted", "In review"].includes(status) ? (
-        <ApprovalPanel decisionSummary={`Approve ${money.format(r.amount)} of spend for ${r.department}: ${r.title.toLowerCase()}.`} policy={r.policy} conflicts={r.conflicts} onDecision={() => undefined} />
+        <ApprovalPanel decisionSummary={`Approve ${money.format(r.amount)} of spend for ${r.department}: ${r.title.toLowerCase()}.`} policy={r.policy} conflicts={r.conflicts} onDecision={(decision, reason) => { const task = taskForRequest; if (!task) return setNotice("No approval task is assigned to this request."); if (decision === "delegate") return setNotice("Delegation is preview-only. Open the approval task for available decisions."); try { decideApproval(task.id, decision === "approve" ? "approve" : decision === "return" ? "return" : "reject", reason, role); } catch (error) { setNotice(error instanceof Error ? error.message : "Decision could not be recorded."); } }} />
       ) : null}
     </RecordDetail>
   );

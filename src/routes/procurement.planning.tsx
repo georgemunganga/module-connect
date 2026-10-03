@@ -59,9 +59,9 @@ function PlanningPage() {
   }
 
   const primary = readOnly ? undefined
-    : view === "procurement" && ["Submitted", "Revised"].includes(plan.state) ? <Button>Mark reviewed</Button>
+    : view === "procurement" && ["Submitted", "Revised"].includes(plan.state) ? <Button disabled title="Planning review is UI preview only">Mark reviewed (preview)</Button>
     : plan.state === "Approved" || plan.state === "Active" ? <Button asChild><Link to="/procurement/requests/new">Create request from plan</Link></Button>
-    : <Button>Submit plan</Button>;
+    : <Button disabled title="Planning submission is UI preview only">Submit plan (preview)</Button>;
 
   return (
     <AppShell>

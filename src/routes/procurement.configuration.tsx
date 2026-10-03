@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronRight } from "lucide-react";
+import { useApp } from "@/platform/app-context";
+import { RestrictedState } from "@/platform/components/States";
 import { procConfigurationGroups } from "@/modules/procurement/nav";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
@@ -17,6 +18,8 @@ export const Route = createFileRoute("/procurement/configuration")({
 });
 
 function ProcConfiguration() {
+  const { role } = useApp();
+  if (role !== "proc_admin") return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader
@@ -33,14 +36,14 @@ function ProcConfiguration() {
               {g.items.map((i) => (
                 <li key={i.label}>
                   <button
-                    type="button"
-                    className="flex w-full items-center justify-between gap-3 rounded-lg border bg-surface p-3 text-left transition-colors hover:border-border-strong"
+                    type="button" disabled title="Configuration editor is UI preview only"
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border bg-surface p-3 text-left opacity-75"
                   >
                     <span className="min-w-0">
                       <span className="block text-sm font-medium">{i.label}</span>
                       <span className="block truncate text-xs text-muted-foreground">{i.detail}</span>
                     </span>
-                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="shrink-0 text-xs text-muted-foreground">Preview</span>
                   </button>
                 </li>
               ))}

@@ -3,9 +3,13 @@ import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
-import { approvalTasks, slaLabel } from "@/modules/procurement/approvals";
+import { slaLabel } from "@/modules/procurement/approvals";
 import type { ApprovalTask, TaskState } from "@/modules/procurement/approvals";
 import { money } from "@/modules/procurement/catalog";
+import { useProcurement } from "@/modules/procurement/store";
+import { sameEntity } from "@/modules/procurement/access";
+import { useApp } from "@/platform/app-context";
+import { RestrictedState } from "@/platform/components/States";
 
 type Search = { tab?: TaskState };
 const TABS: TaskState[] = ["Assigned", "Delegated", "Overdue", "Escalated", "Completed"];
@@ -31,13 +35,16 @@ const inTab = (t: ApprovalTask, tab: TaskState) =>
 
 function ApprovalsPage() {
   const { tab = "Assigned" } = Route.useSearch();
-  const rows = approvalTasks.filter((t) => inTab(t, tab));
+  const { role, entityId } = useApp();
+  const approvals = useProcurement().approvals.filter((task) => sameEntity(task.recordEntity, entityId));
+  const rows = approvals.filter((t) => inTab(t, tab));
+  if (!["manager", "buyer", "proc_admin"].includes(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader eyebrow="Approvals" title="Tasks & approvals" description="Ordered by deadline. A breached deadline escalates to a person — nothing is approved automatically." />
       <nav aria-label="Task views" className="mb-4 flex gap-1 overflow-x-auto border-b">
         {TABS.map((t) => {
-          const n = approvalTasks.filter((x) => inTab(x, t)).length;
+          const n = approvals.filter((x) => inTab(x, t)).length;
           return (
             <Link key={t} to="/procurement/approvals" search={{ tab: t }} aria-current={tab === t ? "page" : undefined}
               className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === t ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground"}`}>

@@ -2,6 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { useApp } from "@/platform/app-context";
+import { internalRole } from "@/modules/procurement/access";
+import { RestrictedState } from "@/platform/components/States";
 import { EmptyState } from "@/platform/components/States";
 
 const areas: Record<string, { title: string; body: string; milestone: string }> = {
@@ -35,7 +38,9 @@ export const Route = createFileRoute("/procurement/area/$area")({
 
 function AreaPage() {
   const { area } = Route.useParams();
+  const { role } = useApp();
   const a = areas[area];
+  if (!internalRole(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader eyebrow="Procurement" title={a?.title ?? "Not found"} description={a?.body} />

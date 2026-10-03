@@ -6,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { workspaces } from "@/mock/data";
 import type { Role } from "@/mock/types";
 import { procApi } from "@/modules/procurement/data";
+import { useProcurement, resetProcurement } from "@/modules/procurement/store";
+import { sameEntity } from "@/modules/procurement/access";
+import type { ProcWorkItem } from "@/modules/procurement/types";
 import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
 import { Async } from "@/platform/components/Async";
@@ -90,11 +93,33 @@ const activity = [
 ];
 
 function ProcHome() {
-  const { role } = useApp();
+  const { role, entityId } = useApp();
+  const demo = useProcurement();
   const view = viewFor(role);
   const queue = useMock(() => procApi.workQueue(role), [role]);
   const ws = workspaces.find((w) => w.id === role)!;
-  const canRequest = view !== "auditor" && view !== "supplier";
+  const canRequest = view === "requester" || view === "approver";
+  const visibleRequests = demo.requests.filter((request) => sameEntity(demo.metadata[request.id]?.entity, entityId));
+  const visibleApprovals = demo.approvals.filter((task) => sameEntity(task.recordEntity, entityId) && task.state !== "Completed");
+  const cardValue = (card: Card) => {
+    if (card.label === "My open requests") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && !["Closed", "Cancelled", "Rejected"].includes(request.status)).length);
+    if (card.label === "Drafts") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && request.status === "Draft").length);
+    if (card.label === "Decisions pending") return String(visibleApprovals.length);
+    if (card.label === "Value awaiting you (EUR)" || card.label === "Value awaiting you (KES)") { const currency = card.label.includes("EUR") ? "EUR" : "KES"; return new Intl.NumberFormat("en", { style: "currency", currency, maximumFractionDigits: 0 }).format(visibleApprovals.filter((task) => task.amount?.currency === currency).reduce((sum, task) => sum + (task.amount?.value ?? 0), 0)); }
+    if (card.label === "Approved lines to process") return String(visibleRequests.filter((request) => request.status === "Approved").flatMap((request) => demo.metadata[request.id]?.lines ?? []).filter((line) => line.approval === "Approved" && line.approvedQty > line.allocatedQty + line.orderedQty + line.cancelledQty).length);
+    if (card.label === "Supplier onboarding" || card.label === "Onboarding in progress") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && ["Proposed", "Under diligence", "More information required", "Conditional"].includes(supplier.status)).length);
+    if (card.label === "Suppliers on hold") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && supplier.status === "Suspended").length);
+    return card.value;
+  };
+  const visibleQueueItems = (items: ProcWorkItem[]) => items.filter((item) => {
+    if (!item.params?.id) return true;
+    const request = visibleRequests.find((record) => record.id === item.params?.id);
+    if (!request) return false;
+    if (item.id === "q2") return request.status === "In review";
+    if (item.id === "q3") return request.status === "Submitted";
+    if (item.id === "q4") return request.status === "Approved";
+    return true;
+  });
 
   if (view === "supplier") {
     return (
@@ -123,6 +148,8 @@ function ProcHome() {
         }
       />
 
+      {role === "proc_admin" ? <div className="mb-4"><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Reset all Procurement demo transactions to their starting data?")) resetProcurement(); }}>Reset Procurement demo</Button></div> : null}
+
       {view === "auditor" ? (
         <AuditorHome />
       ) : (
@@ -130,7 +157,7 @@ function ProcHome() {
           <section aria-labelledby="summary-h">
             <h2 id="summary-h" className="sr-only">Summary</h2>
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {cardsByView[view].map((c) => (
+              {cardsByView[view].filter((c) => c.to !== "/procurement/area/$area").map((c) => (
                 <li key={c.label}>
                   <Link
                     to={c.to}
@@ -139,8 +166,8 @@ function ProcHome() {
                   >
                     <span>
                       <span className="block text-xs text-muted-foreground">{c.label}</span>
-                      <span className="mt-1 block text-xl font-semibold tabular-nums">{c.value}</span>
-                      <span className="mt-1 block text-xs text-muted-foreground">{c.hint}</span>
+                      <span className="mt-1 block text-xl font-semibold tabular-nums">{cardValue(c)}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">Open work queue</span>
                     </span>
                     <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden />
                   </Link>
@@ -151,7 +178,7 @@ function ProcHome() {
           <Async state={queue}>
             {(items) =>
               items.length ? (
-                <WorkQueue items={items} />
+                <WorkQueue items={visibleQueueItems(items)} />
               ) : (
                 <EmptyState
                   title={view === "requester" ? "You haven't asked for anything yet" : "Nothing needs you right now"}

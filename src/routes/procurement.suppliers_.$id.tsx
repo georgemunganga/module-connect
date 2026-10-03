@@ -8,26 +8,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
-import { MaskedValue } from "@/platform/components/Sensitive";
 import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { StatusTimeline } from "@/platform/components/StatusTimeline";
-import { supplierRecords } from "@/modules/procurement/suppliers";
+import { } from "@/modules/procurement/suppliers";
+import { useProcurement, saveProcurement } from "@/modules/procurement/store";
+import { supplierRole, sameEntity } from "@/modules/procurement/access";
+import { RestrictedState } from "@/platform/components/States";
 import type { Decision, SupplierRecord } from "@/modules/procurement/suppliers";
 
 export const Route = createFileRoute("/procurement/suppliers_/$id")({
-  head: ({ params }) => {
-    const s = supplierRecords.find((x) => x.id === params.id);
-    const title = `${s?.name ?? "Supplier not found"} — Meridian ERP Suppliers`;
-    const description = s ? `${s.status} · ${s.categories.join(", ")} · next: ${s.nextAction}` : "This supplier doesn't exist.";
-    return {
-      meta: [
-        { title }, { name: "description", content: description },
-        { property: "og:title", content: title }, { property: "og:description", content: description },
-        { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
-      ],
-    };
-  },
+  head: () => ({ meta: [{ title: "Supplier profile — Meridian ERP" }, { name: "description", content: "Restricted supplier profile" }] }),
   component: SupplierProfile,
 });
 
@@ -35,14 +26,15 @@ const tabs = ["Overview", "Sites & contacts", "Categories", "Qualifications", "R
 
 function SupplierProfile() {
   const { id } = Route.useParams();
-  const { role } = useApp();
-  const found = supplierRecords.find((x) => x.id === id);
-  const [s, setS] = useState<SupplierRecord | undefined>(found);
+  const { role, entityId } = useApp();
+  const s = useProcurement().suppliers.find((x) => x.id === id);
+  const setS = (value: SupplierRecord) => saveProcurement((state) => ({ ...state, suppliers: state.suppliers.map((item) => item.id === id ? value : item) }));
   const [tab, setTab] = useState<(typeof tabs)[number]>("Overview");
   const [suspending, setSuspending] = useState(false);
   const readOnly = role === "auditor";
   const canDecide = ["supplier_steward", "proc_admin"].includes(role);
 
+  if (!s || !supplierRole(role) || !sameEntity(s.country, entityId)) return <AppShell><RestrictedState /></AppShell>;
   if (!s) return <AppShell><EmptyState title="Supplier not found" body="Check the link or search the supplier queue." action={<Button variant="outline" asChild><Link to="/procurement/suppliers">Back to suppliers</Link></Button>} /></AppShell>;
 
   const missingEvidence = s.qualifications.filter((q) => q.status === "Missing").map((q) => q.name);
@@ -87,7 +79,7 @@ function SupplierProfile() {
             {s.bank ? (
               <div className="rounded-lg border bg-surface p-4">
                 <h2 className="text-sm font-semibold">Payment details</h2>
-                <div className="mt-2">{readOnly ? <p className="text-sm">{s.bank.masked}</p> : <MaskedValue label="Bank account" value={s.bank.full} />}</div>
+                <div className="mt-2"><p className="text-sm">{s.bank.masked}</p></div>
                 <p className="mt-2 text-xs text-muted-foreground">Changing payment details creates a new review version and needs Finance verification again.</p>
               </div>
             ) : null}
@@ -101,7 +93,7 @@ function SupplierProfile() {
               <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm lg:col-span-2">
                 <p className="font-medium">Possible duplicate</p>
                 {s.duplicates.map((d) => <p key={d.name}>{d.name} — {d.reason}</p>)}
-                {!readOnly ? <div className="mt-2 flex gap-2"><Button size="sm" variant="outline">Not a duplicate</Button><Button size="sm" variant="outline">Merge review</Button></div> : null}
+                {!readOnly ? <div className="mt-2 flex gap-2"><Button size="sm" variant="outline" disabled title="Review action is preview-only">Not a duplicate (preview)</Button><Button size="sm" variant="outline" disabled title="Merge review is preview-only">Merge review (preview)</Button></div> : null}
               </div>
             ) : null}
           </div>

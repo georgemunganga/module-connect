@@ -5,7 +5,9 @@ import { AppShell } from "@/platform/components/AppShell";
 import { ListPage } from "@/platform/components/ListPage";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
-import { sourcingEvents } from "@/modules/procurement/sourcing";
+import { useProcurement } from "@/modules/procurement/store";
+import { sourcingRole, sameEntity } from "@/modules/procurement/access";
+import { RestrictedState } from "@/platform/components/States";
 import type { SourcingEvent } from "@/modules/procurement/sourcing";
 
 export const Route = createFileRoute("/procurement/sourcing")({
@@ -23,7 +25,9 @@ export const Route = createFileRoute("/procurement/sourcing")({
 });
 
 function SourcingQueue() {
-  const { role } = useApp();
+  const { role, entityId } = useApp();
+  const events = useProcurement().sourcing.filter((event) => sameEntity(event.entity, entityId));
+  if (!sourcingRole(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader
@@ -33,7 +37,7 @@ function SourcingQueue() {
         primaryAction={role === "buyer" || role === "proc_admin" ? <Button asChild><Link to="/procurement/sourcing/new">Create event</Link></Button> : undefined}
       />
       <ListPage<SourcingEvent>
-        rows={sourcingEvents}
+        rows={events}
         searchPlaceholder="Search reference or title"
         searchFields={(e) => `${e.id} ${e.title}`}
         filters={[

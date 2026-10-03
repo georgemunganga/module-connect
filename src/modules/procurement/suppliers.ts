@@ -24,7 +24,7 @@ export interface SupplierRecord {
   contacts: { name: string; role: string; email: string }[];
   qualifications: { name: string; status: "Valid" | "Expiring" | "Expired" | "Missing"; validTo?: string }[];
   documents: { name: string; uploaded: string }[];
-  bank?: { masked: string; full: string; verification: Decision };
+  bank?: { masked: string; verification: Decision };
   procurementDecision: Decision;
   duplicates?: { name: string; reason: string }[];
   performance?: { period: string; source: string; delivery: number; quality: number; responsiveness: number; disputes: number };
@@ -43,7 +43,7 @@ export const supplierRecords: SupplierRecord[] = [
     contacts: [{ name: "Maarten Visser", role: "Account manager", email: "m.visser@northwind.example" }],
     qualifications: [{ name: "ISO 9001", status: "Valid", validTo: "2027-11-30" }, { name: "Insurance certificate", status: "Expiring", validTo: "2026-10-20" }],
     documents: [{ name: "Chamber of Commerce extract.pdf", uploaded: "2025-02-11" }, { name: "Bank confirmation letter.pdf", uploaded: "2025-02-11" }],
-    bank: { masked: "NL•• •••• •••• •••• 4821", full: "NL91 ABNA 0417 1643 4821", verification: { state: "Approved", by: "Finance — Jonas Keller", at: "2025-02-14", reference: "FV-2025-0031" } },
+    bank: { masked: "NL•• •••• •••• •••• 4821", verification: { state: "Approved", by: "Finance — Jonas Keller", at: "2025-02-14", reference: "FV-2025-0031" } },
     procurementDecision: { state: "Approved", by: "Priya Raman", at: "2025-02-13" },
     performance: { period: "Apr–Sep 2026", source: "Goods receipts and invoice disputes", delivery: 96, quality: 98, responsiveness: 91, disputes: 1 },
     openPOs: 3, openInvoices: 1, reviewVersion: 2,
@@ -73,7 +73,7 @@ export const supplierRecords: SupplierRecord[] = [
     categories: ["Furniture"], sites: [{ name: "Showroom", address: "Westerstraat 44, Amsterdam" }], contacts: [{ name: "Eva de Boer", role: "Sales", email: "eva@studiozit.example" }],
     qualifications: [{ name: "Product safety declaration", status: "Expired", validTo: "2026-08-31" }],
     documents: [{ name: "Price list 2026.pdf", uploaded: "2026-01-04" }],
-    bank: { masked: "NL•• •••• •••• •••• 9917", full: "NL20 INGB 0001 2349 9917", verification: { state: "Approved", by: "Finance — Jonas Keller", at: "2025-09-01", reference: "FV-2025-0102" } },
+    bank: { masked: "NL•• •••• •••• •••• 9917", verification: { state: "Approved", by: "Finance — Jonas Keller", at: "2025-09-01", reference: "FV-2025-0102" } },
     procurementDecision: { state: "Approved", by: "Priya Raman", at: "2025-08-30" },
     performance: { period: "Apr–Sep 2026", source: "Goods receipts", delivery: 71, quality: 88, responsiveness: 64, disputes: 3 },
     openPOs: 1, openInvoices: 2, reviewVersion: 1,
@@ -85,7 +85,7 @@ export const supplierRecords: SupplierRecord[] = [
     categories: ["Safety equipment"], sites: [{ name: "Warehouse", address: "Industrial Area, Nairobi" }], contacts: [{ name: "Peter Mwangi", role: "Sales", email: "peter@kifaru.example" }],
     qualifications: [{ name: "KEBS certification", status: "Valid", validTo: "2027-05-31" }],
     documents: [{ name: "KRA PIN certificate.pdf", uploaded: "2026-09-20" }, { name: "Bank letter.pdf", uploaded: "2026-09-20" }],
-    bank: { masked: "•••• •••• 3310", full: "Equity Bank 0180 2994 3310", verification: { state: "Pending" } },
+    bank: { masked: "•••• •••• 3310", verification: { state: "Pending" } },
     procurementDecision: { state: "Approved", by: "Grace Wanjiru", at: "2026-09-25" },
     openPOs: 0, openInvoices: 0, reviewVersion: 2,
     timeline: [

@@ -4,30 +4,21 @@ import { Button } from "@/components/ui/button";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/platform/components/States";
+import { useApp } from "@/platform/app-context";
+import { internalRole, sameEntity } from "@/modules/procurement/access";
+import { RestrictedState } from "@/platform/components/States";
 import { catalogItems, isExpired, money } from "@/modules/procurement/catalog";
 
 export const Route = createFileRoute("/procurement/catalog_/$id")({
-  head: ({ params }) => {
-    const i = catalogItems.find((x) => x.id === params.id);
-    const title = `${i?.name ?? "Item not found"} — Meridian ERP Catalog`;
-    const description = i ? `${i.kind} · ${i.category}. ${i.spec}` : "This catalog item doesn't exist.";
-    return {
-      meta: [
-        { title },
-        { name: "description", content: description },
-        { property: "og:title", content: title },
-        { property: "og:description", content: description },
-        { property: "og:type", content: "website" },
-        { name: "twitter:card", content: "summary" },
-      ],
-    };
-  },
+  head: () => ({ meta: [{ title: "Catalog item — Meridian ERP" }, { name: "description", content: "Procurement catalog item" }] }),
   component: ItemDetail,
 });
 
 function ItemDetail() {
   const { id } = Route.useParams();
+  const { role, entityId } = useApp();
   const i = catalogItems.find((x) => x.id === id);
+  if (!i || !internalRole(role) || !i.entities.some((entity) => sameEntity(entity, entityId))) return <AppShell><RestrictedState /></AppShell>;
   if (!i) {
     return (
       <AppShell>

@@ -5,7 +5,10 @@ import { AppShell } from "@/platform/components/AppShell";
 import { ListPage } from "@/platform/components/ListPage";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
-import { lifecycleFilters, supplierRecords } from "@/modules/procurement/suppliers";
+import { lifecycleFilters } from "@/modules/procurement/suppliers";
+import { useProcurement } from "@/modules/procurement/store";
+import { supplierRole, sameEntity } from "@/modules/procurement/access";
+import { RestrictedState } from "@/platform/components/States";
 import type { SupplierRecord } from "@/modules/procurement/suppliers";
 
 export const Route = createFileRoute("/procurement/suppliers")({
@@ -23,8 +26,10 @@ export const Route = createFileRoute("/procurement/suppliers")({
 });
 
 function SupplierList() {
-  const { role } = useApp();
+  const { role, entityId } = useApp();
   const canPropose = role !== "auditor";
+  const rows = useProcurement().suppliers.filter((supplier) => sameEntity(supplier.country, entityId));
+  if (!supplierRole(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader
@@ -34,7 +39,7 @@ function SupplierList() {
         primaryAction={canPropose ? <Button asChild><Link to="/procurement/suppliers/new">Propose supplier</Link></Button> : undefined}
       />
       <ListPage<SupplierRecord>
-        rows={supplierRecords}
+        rows={rows}
         searchPlaceholder="Search supplier, registration or category"
         searchFields={(s) => `${s.name} ${s.legalName} ${s.registration} ${s.categories.join(" ")}`}
         filters={[
