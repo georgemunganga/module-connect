@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ProcurementPolicy } from "@/modules/procurement/payables/other-screens";
+import { ProcurementPolicyScreen } from "@/modules/procurement/payables/policy-screen";
 export const Route = createFileRoute("/procurement/configuration_/policy")({
-  component: ProcurementPolicy,
+  component: ProcurementPolicyScreen,
 });
