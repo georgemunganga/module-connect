@@ -19,7 +19,7 @@ export const procurementModule: ModuleDefinition = {
     { id: "catalog", label: "Catalog", icon: BookOpen, to: "/procurement/catalog", roles: [...(REQUESTERS ?? []), "buyer", "proc_admin"] },
     { id: "my-requests", label: "My requests", icon: FileText, to: "/procurement/requests", roles: REQUESTERS },
     { id: "my-orders", label: "My orders & deliveries", icon: Package, to: "/procurement/area/$area", params: { area: "deliveries" }, roles: REQUESTERS },
-    { id: "approvals", label: "Approvals", icon: ShieldCheck, to: "/procurement/requests", roles: ["manager", "buyer", "proc_admin"] },
+    { id: "approvals", label: "Approvals", icon: ShieldCheck, to: "/procurement/approvals", roles: ["manager", "buyer", "proc_admin"] },
     ...(PLANNING_ENABLED
       ? [{ id: "planning", label: "Planning", icon: CalendarRange, to: "/procurement/planning", roles: ["manager", "buyer", "proc_admin", "auditor"] as ModuleDefinition["sections"][number]["roles"] }]
       : []),
