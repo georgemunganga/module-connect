@@ -23,7 +23,8 @@ interface AppState {
 }
 
 const Ctx = createContext<AppState | null>(null);
-const KEY = "erp.shell.state.v1";
+// Keep the Procurement demo's role and entity selection separate from the live HRM shell.
+const KEY = "erp.procurement.ui.shell.v1";
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [moduleId, setModuleId] = useState<ModuleId>("hrm");
@@ -45,6 +46,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (s.branch) setBranch(s.branch);
         if (s.theme) setTheme(s.theme);
         setSetupComplete(Boolean(s.setupComplete));
+      } else if (window.location.pathname.startsWith("/procurement")) {
+        setModuleId("procurement");
+        setRole("proc_admin");
+        setSetupComplete(true);
       }
     } catch {
       /* ignore corrupt local state */
