@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { NoResultsState } from "./States";
+import { EmptyState, NoResultsState } from "./States";
 
 export interface ColumnDef<T> {
   id: string;
@@ -46,6 +46,7 @@ export function ListPage<T extends { id: string }>({
   bulkActions = [],
   rowHref,
   emptyBody = "No records match the current view.",
+  emptyState,
 }: {
   rows: T[];
   columns: ColumnDef<T>[];
@@ -58,6 +59,7 @@ export function ListPage<T extends { id: string }>({
   bulkActions?: { label: string; onSelect: (ids: string[]) => void }[];
   rowHref?: (row: T) => ReactNode;
   emptyBody?: string;
+  emptyState?: { title: string; body: string; icon?: ReactNode; action?: ReactNode };
 }) {
   const [query, setQuery] = useState("");
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
@@ -191,8 +193,10 @@ export function ListPage<T extends { id: string }>({
         </div>
       ) : null}
 
-      {filtered.length === 0 ? (
-        <NoResultsState title="No matching records" body={emptyBody} />
+      {rows.length === 0 ? (
+        <EmptyState title={emptyState?.title ?? "No records yet"} body={emptyState?.body ?? emptyBody} icon={emptyState?.icon} action={emptyState?.action} />
+      ) : filtered.length === 0 ? (
+        <NoResultsState title="No matching records" body="Try a different search or clear the filters to see the available records." action={<Button variant="outline" onClick={() => { setQuery(""); setFilterValues({}); }}>Clear search and filters</Button>} />
       ) : (
         <div className="overflow-x-auto rounded-lg border bg-surface" style={{ contain: "paint" }}>
           <table className="w-full min-w-[42rem] text-left text-sm">

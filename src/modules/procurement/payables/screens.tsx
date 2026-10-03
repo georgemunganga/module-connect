@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Inbox } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { sameEntity } from "@/modules/procurement/access";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { EmptyState, NoResultsState } from "@/platform/components/States";
 import {
   addComment,
   addCreditRef,
@@ -101,6 +103,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
       (filter === "All" || i.status === filter) &&
       `${i.number} ${i.supplier} ${i.po}`.toLowerCase().includes(search.toLowerCase()),
   );
+  const viewRows = state.invoices.filter((invoice) => invoice.entityId === entityId && statusInView(invoice.status));
   const summary = view === "inbox"
     ? [{ label: "Awaiting review", value: rows.filter((i) => i.status === "Received").length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception" || i.status === "AP rejected").length }, { label: "Ready for AP", value: rows.filter((i) => i.status === "Validated").length }]
     : view === "payments"
@@ -188,8 +191,10 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
               </Link>
             ))}
           </div>
+        ) : !viewRows.length ? (
+          <EmptyState title={view === "payments" ? "No payment status yet" : view === "inbox" ? "Your invoice inbox is empty" : "No bills yet"} body={view === "payments" ? "Finance-confirmed posting and payment updates will appear after an invoice is handed to AP." : "Capture a supplier invoice to validate it against an order and receipt."} icon={<Inbox className="size-10" aria-hidden />} action={view !== "payments" && role !== "auditor" ? <Button asChild><Link to="/procurement/invoices/new">Capture invoice</Link></Button> : undefined} />
         ) : (
-          <Notice>No invoices match this entity or filter.</Notice>
+          <NoResultsState title="No matching invoices" body="Try a different search or status." action={<Button variant="outline" onClick={() => { setSearch(""); setFilter("All"); }}>Clear search and filter</Button>} />
         )}
         <p className="mt-5 text-xs text-muted-foreground">
           Payment and posting statuses appear only when confirmed by the Finance demo adapter.

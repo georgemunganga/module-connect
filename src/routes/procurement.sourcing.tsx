@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { FileSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
@@ -38,6 +39,7 @@ function SourcingQueue() {
       />
       <ListPage<SourcingEvent>
         rows={events}
+        emptyState={{ title: "No sourcing events yet", body: "Create an RFQ, RFP or tender from approved demand. Supplier invitations and responses will appear here.", icon: <FileSearch className="size-10" aria-hidden />, action: role === "buyer" || role === "proc_admin" ? <Button asChild><Link to="/procurement/sourcing/new" search={{ requestId: undefined, lineId: undefined }}>Create event</Link></Button> : undefined }}
         searchPlaceholder="Search reference or title"
         searchFields={(e) => `${e.id} ${e.title}`}
         filters={[

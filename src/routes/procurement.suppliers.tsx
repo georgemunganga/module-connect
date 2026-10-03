@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Building2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
@@ -28,18 +29,20 @@ export const Route = createFileRoute("/procurement/suppliers")({
 function SupplierList() {
   const { role, entityId } = useApp();
   const canPropose = role !== "auditor";
+  const actions = canPropose ? <div className="flex flex-wrap gap-2"><Button asChild><Link to="/procurement/suppliers/new">Add vendor</Link></Button><Button variant="outline" asChild><Link to="/procurement/suppliers/import"><Upload className="mr-2 size-4" aria-hidden />Import vendors</Link></Button></div> : undefined;
   const rows = useProcurement().suppliers.filter((supplier) => sameEntity(supplier.country, entityId));
   if (!supplierRole(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader
         eyebrow="Suppliers"
-        title="Supplier queue"
-        description="Every supplier shows its status, who owns it, what happens next and by when."
-        primaryAction={canPropose ? <Button asChild><Link to="/procurement/suppliers/new">Propose supplier</Link></Button> : undefined}
+        title="Vendors"
+        description="Create, review and manage vendors and their contact persons. Each record shows its next action and owner."
+        primaryAction={actions}
       />
       <ListPage<SupplierRecord>
         rows={rows}
+        emptyState={{ title: "Every purchase starts with a vendor", body: "Create and manage your vendors and their contact persons, all in one place.", icon: <Building2 className="size-10" aria-hidden />, action: actions }}
         searchPlaceholder="Search supplier, registration or category"
         searchFields={(s) => `${s.name} ${s.legalName} ${s.registration} ${s.categories.join(" ")}`}
         filters={[

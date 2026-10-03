@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { FileText, PackageCheck, ScrollText, Trophy } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { EmptyState, NoResultsState } from "@/platform/components/States";
 import { useApp } from "@/platform/app-context";
 import { sameEntity } from "@/modules/procurement/access";
 import { getProcurement, saveProcurement, useProcurement } from "@/modules/procurement/store";
@@ -168,6 +170,13 @@ export function CommercialList({ area }: { area: Area }) {
       entityAllowed(x.entity, entityId, role) &&
       `${x.id} ${x.name}`.toLowerCase().includes(q.toLowerCase()),
   );
+  const entityRecords = records.filter((x) => entityAllowed(x.entity, entityId, role));
+  const empty = {
+    evaluations: { title: "No evaluations yet", body: "Close a sourcing event and open its supplier responses to begin evaluation.", to: "/procurement/sourcing" as const, action: "Open sourcing", icon: <Trophy className="size-10" aria-hidden /> },
+    contracts: { title: "No contracts yet", body: "Approved awards and agreements will appear here for monitoring and release orders.", to: "/procurement/sourcing" as const, action: "Open sourcing", icon: <ScrollText className="size-10" aria-hidden /> },
+    orders: { title: "No purchase orders yet", body: "Approve demand or an award before creating a purchase order.", to: "/procurement/requests" as const, action: "Open requests", icon: <FileText className="size-10" aria-hidden /> },
+    receiving: { title: "No receipts yet", body: "Issue a purchase order before recording goods or service acceptance.", to: "/procurement/orders" as const, action: "Open orders", icon: <PackageCheck className="size-10" aria-hidden /> },
+  }[area];
   return (
     <Guard area={area}>
       <AppShell>
@@ -204,7 +213,8 @@ export function CommercialList({ area }: { area: Area }) {
               </div>
             </Link>
           ))}
-          {!visible.length && <p className={section}>No records match this entity and search.</p>}
+          {!visible.length && !entityRecords.length ? <EmptyState title={empty.title} body={empty.body} icon={empty.icon} action={<Button variant="outline" asChild><Link to={empty.to}>{empty.action}</Link></Button>} /> : null}
+          {!visible.length && entityRecords.length ? <NoResultsState title="No matching records" body="Try a different reference or supplier." action={<Button variant="outline" onClick={() => setQ("")}>Clear search</Button>} /> : null}
         </div>
       </AppShell>
     </Guard>

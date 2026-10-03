@@ -10,18 +10,21 @@ function Frame({
   body,
   action,
   tone = "neutral",
+  className,
 }: {
   icon: ReactNode;
   title: string;
   body: string;
   action?: ReactNode;
   tone?: "neutral" | "warning" | "danger";
+  className?: string;
 }) {
   return (
     <div
       role="status"
       className={cn(
         "flex flex-col items-center justify-center rounded-lg border border-dashed bg-surface px-6 py-12 text-center",
+        className,
         tone === "warning" && "border-warning/40 bg-warning-soft",
         tone === "danger" && "border-danger/40 bg-danger-soft",
       )}
@@ -34,8 +37,8 @@ function Frame({
   );
 }
 
-export const EmptyState = (p: { title: string; body: string; action?: ReactNode }) => (
-  <Frame icon={<Inbox className="size-8" aria-hidden />} {...p} />
+export const EmptyState = (p: { title: string; body: string; action?: ReactNode; icon?: ReactNode }) => (
+  <Frame icon={p.icon ?? <Inbox className="size-8" aria-hidden />} title={p.title} body={p.body} action={p.action} className="min-h-[22rem]" />
 );
 
 export const NoResultsState = (p: { title: string; body: string; action?: ReactNode }) => (

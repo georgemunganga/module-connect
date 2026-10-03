@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { deriveProgress } from "@/modules/procurement/requisition";
 import { useProcurement } from "@/modules/procurement/store";
@@ -44,6 +45,7 @@ function RequestList() {
       />
           <ListPage<PurchaseRequest>
             rows={requests.filter((r) => requestVisible(role, entityId, metadata[r.id]?.entity, r.requester, r.department)).filter((r) => (view === "open" ? !["Approved", "Rejected", "Cancelled"].includes(r.status) : view === "mine" ? r.requester === demoRequester(role, entityId) : true))}
+            emptyState={{ title: view === "all" ? "No purchase requests yet" : `No requests in ${view === "mine" ? "My requests" : "Awaiting action"}`, body: "Start with a request for the goods or services your team needs. Its approval and buying progress will appear here.", icon: <ClipboardList className="size-10" aria-hidden />, action: requesterRole(role) ? <Button asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Create request</Link></Button> : undefined }}
             savedViews={[
               { id: "all", label: "All requests" },
               { id: "open", label: "Awaiting action" },

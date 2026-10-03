@@ -36,6 +36,7 @@ function SupplierProfile() {
   const setS = (value: SupplierRecord) => saveProcurement((state) => ({ ...state, suppliers: state.suppliers.map((item) => item.id === id ? value : item) }));
   const [tab, setTab] = useState<(typeof tabs)[number]>("Overview");
   const [suspending, setSuspending] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
   const readOnly = role === "auditor";
   const canDecide = ["supplier_steward", "proc_admin"].includes(role);
 
@@ -46,7 +47,7 @@ function SupplierProfile() {
   const activationBlockers = [...missingEvidence.map((m) => `${m} missing`), s.duplicates?.length && s.duplicateReview?.state !== "Cleared" && "Unresolved duplicate review", !procOk && "Procurement approval", !financeOk && "Finance verification of payment details"].filter(Boolean) as string[];
 
   const primary = readOnly ? undefined
-    : s.status === "Active" && canDecide ? <Button variant="outline" onClick={() => setSuspending(true)}>Suspend supplier</Button>
+    : s.status === "Active" && canDecide ? <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setSuspending(true)}>Suspend supplier</Button><Button variant="outline" onClick={() => setDeactivating(true)}>Deactivate vendor</Button></div>
     : ["Conditional", "Under diligence", "More information required"].includes(s.status) && canDecide ? (
       <Button disabled={activationBlockers.length > 0} title={activationBlockers.length ? `Blocked: ${activationBlockers.join(", ")}` : undefined}
         onClick={() => setS({ ...s, status: "Active", nextAction: "Annual review", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString().slice(0, 16).replace("T", " "), actor: "You (demo)", event: "Activated", before: s.status, after: "Active" }, ...s.timeline] })}>
@@ -66,6 +67,7 @@ function SupplierProfile() {
       </div>
 
       {suspending ? <SuspendForm s={s} openOrders={openOrders.length} openInvoices={openInvoices.length} onCancel={() => setSuspending(false)} onDone={(reason, date) => { setSuspending(false); setS({ ...s, status: "Suspended", nextAction: `Review ${openOrders.length} open PO(s) and ${openInvoices.length} invoice(s)`, timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString().slice(0, 16).replace("T", " "), actor: "You (demo)", event: "Suspended", reason, before: "Active", after: `Suspended (effective ${date})` }, ...s.timeline] }); }} /> : null}
+      {deactivating ? <DeactivateForm openOrders={openOrders.length} openInvoices={openInvoices.length} onCancel={() => setDeactivating(false)} onDone={(reason) => { setDeactivating(false); setS({ ...s, status: "Inactive", nextAction: "No new purchase orders", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString(), actor: `${role} (demo)`, event: "Deactivated", reason, before: s.status, after: "Inactive" }, ...s.timeline] }); }} /> : null}
 
       <div role="tablist" aria-label="Supplier sections" className="mb-4 flex gap-1 overflow-x-auto border-b">
         {tabs.map((t) => (
@@ -103,7 +105,7 @@ function SupplierProfile() {
             {s.portalUpdates?.length ? <PortalUpdateReview s={s} onChange={setS} canDecide={canDecide} /> : null}
           </div>
         ) : tab === "Sites & contacts" ? (
-          <List empty="No sites or contacts yet." items={[...s.sites.map((x) => `${x.name} — ${x.address}`), ...s.contacts.map((c) => `${c.name}, ${c.role} — ${c.email}`)]} />
+          <div className="space-y-5"><section><h2 className="mb-2 font-semibold">Sites</h2><List empty="No sites yet." items={s.sites.map((x) => `${x.name} — ${x.address}`)} /></section><ContactManager s={s} canEdit={canDecide} role={role} onChange={setS} /></div>
         ) : tab === "Categories" ? (
           <List empty="No categories." items={s.categories} />
         ) : tab === "Qualifications" ? (
@@ -141,6 +143,46 @@ function DecisionCard({ title, d }: { title: string; d: Decision }) {
 
 function List({ items, empty }: { items: string[]; empty: string }) {
   return items.length ? <ul className="space-y-2">{items.map((i) => <li key={i} className="rounded-lg border bg-surface p-3 text-sm">{i}</li>)}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>;
+}
+
+function ContactManager({ s, canEdit, role, onChange }: { s: SupplierRecord; canEdit: boolean; role: string; onChange: (value: SupplierRecord) => void }) {
+  const [editing, setEditing] = useState<number | "new" | null>(null);
+  const [name, setName] = useState("");
+  const [contactRole, setContactRole] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const start = (index: number | "new") => {
+    const contact = typeof index === "number" ? s.contacts[index] : undefined;
+    setEditing(index); setName(contact?.name ?? ""); setContactRole(contact?.role ?? ""); setEmail(contact?.email ?? ""); setError("");
+  };
+  const update = (contacts: SupplierRecord["contacts"], event: string, reason: string) => onChange({ ...s, contacts,
+    timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString(), actor: `${role} (demo)`, event, reason }, ...s.timeline] });
+  const save = () => {
+    if (!name.trim() || !contactRole.trim() || !email.trim()) return setError("Name, role and email are required.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Enter a valid email address.");
+    if (s.contacts.some((contact, index) => index !== editing && contact.email.toLowerCase() === email.trim().toLowerCase())) return setError("This email is already on the vendor.");
+    const contact = { name: name.trim(), role: contactRole.trim(), email: email.trim() };
+    const contacts = editing === "new" ? [...s.contacts, contact] : s.contacts.map((current, index) => index === editing ? contact : current);
+    update(contacts, editing === "new" ? "Contact added" : "Contact updated", `${contact.name} · ${contact.email}`);
+    setEditing(null); setError("");
+  };
+  const remove = (index: number) => {
+    const contact = s.contacts[index];
+    if (!contact) return;
+    update(s.contacts.filter((_, current) => current !== index), "Contact removed", `${contact.name} · ${contact.email}`);
+    if (editing === index) setEditing(null);
+  };
+  return <section aria-labelledby="vendor-contacts" className="space-y-3">
+    <div className="flex items-center justify-between gap-3"><h2 id="vendor-contacts" className="font-semibold">Contact persons</h2>{canEdit ? <Button size="sm" onClick={() => start("new")}>Add contact</Button> : null}</div>
+    {s.contacts.length ? <ul className="space-y-2">{s.contacts.map((contact, index) => <li key={`${contact.email}-${index}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-surface p-3 text-sm"><div><strong>{contact.name}</strong><p className="text-muted-foreground">{contact.role} · {contact.email}</p></div>{canEdit ? <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => start(index)}>Edit</Button><Button size="sm" variant="outline" onClick={() => remove(index)}>Remove</Button></div> : null}</li>)}</ul> : <EmptyState title="No contacts yet" body="Add the people who handle quotes, orders and delivery for this vendor." action={canEdit ? <Button onClick={() => start("new")}>Add contact</Button> : undefined} />}
+    {editing !== null ? <div className="rounded-lg border bg-surface p-4"><h3 className="font-medium">{editing === "new" ? "Add contact" : "Edit contact"}</h3><div className="mt-3 grid gap-3 sm:grid-cols-3"><div><Label htmlFor="contact-name">Name</Label><Input id="contact-name" value={name} onChange={(event) => setName(event.target.value)} /></div><div><Label htmlFor="contact-role">Role</Label><Input id="contact-role" value={contactRole} onChange={(event) => setContactRole(event.target.value)} /></div><div><Label htmlFor="contact-email">Email</Label><Input id="contact-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></div></div>{error ? <p role="alert" className="mt-2 text-sm text-destructive">{error}</p> : null}<div className="mt-3 flex gap-2"><Button onClick={save}>Save contact</Button><Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button></div></div> : null}
+  </section>;
+}
+
+function DeactivateForm({ openOrders, openInvoices, onCancel, onDone }: { openOrders: number; openInvoices: number; onCancel: () => void; onDone: (reason: string) => void }) {
+  const [reason, setReason] = useState("");
+  const blocked = openOrders > 0 || openInvoices > 0;
+  return <section className="mb-4 rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm"><h2 className="font-semibold">Deactivate vendor</h2><p className="mt-1">{blocked ? `Resolve ${openOrders} open purchase order(s) and ${openInvoices} open invoice(s) before deactivation.` : "The vendor stays in history and cannot be used for new orders. Record the reason below."}</p><div className="mt-3 max-w-xl"><Label htmlFor="deactivation-reason">Reason</Label><Textarea id="deactivation-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></div><div className="mt-3 flex gap-2"><Button variant="destructive" disabled={blocked || !reason.trim()} onClick={() => onDone(reason.trim())}>Confirm deactivation</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div></section>;
 }
 
 function SuspendForm({ s, openOrders, openInvoices, onCancel, onDone }: { s: SupplierRecord; openOrders: number; openInvoices: number; onCancel: () => void; onDone: (reason: string, date: string) => void }) {

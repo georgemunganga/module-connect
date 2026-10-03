@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight, Package } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { internalRole, requesterRole, sameEntity } from "@/modules/procurement/a
 import { RestrictedState } from "@/platform/components/States";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
-import { NoResultsState } from "@/platform/components/States";
+import { EmptyState, NoResultsState } from "@/platform/components/States";
 import { bestOffer, catalogEntities, isExpired, money, useCatalog } from "@/modules/procurement/catalog";
 import { CatalogItemEditor } from "@/modules/procurement/CatalogItemEditor";
 import type { ItemKind } from "@/modules/procurement/catalog";
@@ -100,7 +100,9 @@ function CatalogPage() {
         </div>
       </div>
 
-      {!rows.length ? (
+      {!rows.length && !search.q && !search.kind && !search.entity ? (
+        <EmptyState title="No items in this catalog yet" body="Add approved goods or services so employees can find and request them here." icon={<Package className="size-10" aria-hidden />} action={maintainer ? <Button onClick={() => { setView("manage"); setAdding(true); }}>Add item</Button> : requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request non-catalog item</Link></Button> : undefined} />
+      ) : !rows.length ? (
         <NoResultsState title="No items match" body="Try fewer filters. If nothing fits, an employee can request a non-catalog item with a reason." action={requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request non-catalog item</Link></Button> : undefined} />
       ) : view === "manage" ? (
         <div className="overflow-x-auto rounded-lg border bg-surface">

@@ -19,7 +19,7 @@ The [workflow gap register](procurement-ui-workflow-gap-register.md) lists the i
 | Auditor | `/procurement` | Read-only records and reports |
 | Supplier user | `/supplier` | Separate supplier-scoped portal |
 
-The internal route groups are `/procurement/getting-started`, `/procurement/catalog`, `/procurement/requests`, `/procurement/approvals`, `/procurement/suppliers`, `/procurement/planning`, `/procurement/sourcing`, `/procurement/evaluations`, `/procurement/contracts`, `/procurement/orders`, `/procurement/receiving`, `/procurement/invoices`, `/procurement/reports`, and `/procurement/configuration/policy`. Detail routes use the record reference. The supplier portal has its own shell at `/supplier`.
+The internal route groups are `/procurement/getting-started`, `/procurement/catalog`, `/procurement/requests`, `/procurement/approvals`, `/procurement/suppliers`, `/procurement/planning`, `/procurement/sourcing`, `/procurement/evaluations`, `/procurement/contracts`, `/procurement/orders`, `/procurement/receiving`, `/procurement/invoices`, `/procurement/reports`, and `/procurement/configuration/policy`. The Settings directory is at `/procurement/configuration`, Bill settings at `/procurement/configuration/bills`, and vendor CSV import at `/procurement/suppliers/import`. Detail routes use the record reference. The supplier portal has its own shell at `/supplier`.
 
 The administrator's first-use guide groups nine real route links into three steps: buying controls, first purchase, and invoices/Finance. A review acknowledgement is saved per entity in the current browser. It is a guide progress marker, not evidence that a policy or integration has been activated. Finance remains the owner of payment methods and payment execution.
 
@@ -44,6 +44,8 @@ The sidebar groups work by audience: Home, My Requests, Approvals, Items, Vendor
 | PROC-12 Supplier portal | `/supplier` |
 | PROC-13 Supplier performance and risk | `/procurement/suppliers/:id`, `/procurement/reports` |
 | PROC-14 Analytics, controls and collaboration | `/procurement/reports`, `/procurement/configuration/policy`, record timelines/comments |
+
+Basic list pages now use centered, action-oriented empty states when the entity or selected view has no records. Search/filter misses show a separate recovery state. Vendors support browser-local Add, CSV Import, contact Add/Edit/Remove, suspension, and controlled deactivation; no record is physically deleted. Settings entries are marked Open or Reference, and Bill approval type choices are explicitly preview-only.
 
 ## Connected demo record
 
