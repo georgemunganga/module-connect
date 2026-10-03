@@ -1,5 +1,6 @@
-import { BarChart3, BookOpen, Building2, FileSignature, FileText, Gavel, Home, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck } from "lucide-react";
+import { BarChart3, CalendarRange, BookOpen, Building2, FileSignature, FileText, Gavel, Home, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck } from "lucide-react";
 import type { ModuleDefinition } from "@/platform/nav";
+import { PLANNING_ENABLED } from "./planning";
 
 /**
  * Procurement module navigation. Same shell conventions as HRM: grouped,
@@ -19,6 +20,9 @@ export const procurementModule: ModuleDefinition = {
     { id: "my-requests", label: "My requests", icon: FileText, to: "/procurement/requests", roles: REQUESTERS },
     { id: "my-orders", label: "My orders & deliveries", icon: Package, to: "/procurement/area/$area", params: { area: "deliveries" }, roles: REQUESTERS },
     { id: "approvals", label: "Approvals", icon: ShieldCheck, to: "/procurement/requests", roles: ["manager", "buyer", "proc_admin"] },
+    ...(PLANNING_ENABLED
+      ? [{ id: "planning", label: "Planning", icon: CalendarRange, to: "/procurement/planning", roles: ["manager", "buyer", "proc_admin", "auditor"] as ModuleDefinition["sections"][number]["roles"] }]
+      : []),
     // Procurement operations navigation (max one sublink level)
     { id: "buying", label: "Buying", icon: ShoppingCart, to: "/procurement/requests", roles: OPS },
     { id: "suppliers", label: "Suppliers", icon: Building2, to: "/procurement/suppliers", roles: OPS },
