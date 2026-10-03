@@ -9,7 +9,7 @@ Milestones follow the uploaded prompt pack, applied in order. HRM stays paused a
 - [x] 04 — Supplier onboarding, profile, risk, performance
 - [x] 05 — Procurement planning workspace (`/procurement/plans`)
 - [x] 06 — Requisition workspace and line routing
-- [ ] 07 — Approvals and budget control
+- [x] 07 — Approvals and budget control
 - [ ] 08 — Sourcing, RFx and bids (`/procurement/sourcing`)
 - [ ] 09 — Bid evaluation, comparison, award
 - [ ] 10 — Contracts, frameworks, recurring commitments
