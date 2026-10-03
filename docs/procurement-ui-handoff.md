@@ -2,6 +2,8 @@
 
 This repository is the Lovable-connected **frontend demo** for the ERP Procurement module. Browser storage holds the demo records and decisions. The functional source of truth is the ERP specification in `newworld-erp/docs/procurement`; this frontend does not provide server authorization, Finance posting, payments, supplier identity, document storage, or live integration events.
 
+Screen groups exist for the feature map below. The full UI acceptance work is tracked in [the gap review](procurement-ui-gap-review.md); the connected three-line journey and several exception states remain open.
+
 ## Starting points and routes
 
 | Role | Starting point | Main work areas |
@@ -43,6 +45,8 @@ The internal route groups are `/procurement/catalog`, `/procurement/requests`, `
 `PR-2026-1042` contains a laptop line and a docking-station line. Its laptop line links to `PO-2026-1042`, receipt `GRN-2026-1042`, and invoice `INV-1042`. The PO has 12 laptops at EUR 1,230; eight were accepted, while the supplier invoice bills ten. The invoice therefore shows a quantity exception. A buyer can also route the approved docking-station balance to a new draft PO. Its approval and issue update the PR's allocated and ordered quantities; recording a receipt updates accepted quantity.
 
 Other connected paths are available for review: `CON-2026-0030` is an active Northwind framework that can release a draft PO; `RFQ-2026-0061` has a quotation ready for evaluation, award approval, and draft PO creation; `RFQ-2026-0062` accepts a sealed Northwind quotation from the supplier portal, then supports a controlled close/open step and evaluation. A guided subscription request can route its approved line against the active framework. These routes keep source references on the generated transaction.
+
+`PR-2026-1043` is an approved Kenya safety-boots request allocated to draft `PO-2026-0044`. Kifaru Safety Ltd must receive a recorded independent Finance verification reference before activation; the draft PO cannot move to approval while the supplier is inactive. Supplier portal contact and qualification submissions enter the internal supplier review queue rather than changing approved master data immediately.
 
 The source records are browser-local demo data. A fresh browser starts from the seeded data; the Procurement admin can reset Procurement transactions from Home. For production, replace the browser stores with API adapters and enforce every permission, approval, entity boundary, supplier scope, and concurrency rule on the server.
 

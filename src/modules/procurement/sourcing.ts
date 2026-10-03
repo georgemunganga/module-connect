@@ -3,7 +3,7 @@ export type EventState = "Draft" | "Pending approval" | "Published" | "Closed" |
 
 export interface Invitation {
   supplier: string;
-  delivery: "Delivered" | "Opened" | "Not delivered" | "Declined";
+  delivery: "Delivered" | "Opened" | "Not delivered" | "Resend pending" | "Declined";
   at?: string;
   note?: string;
 }

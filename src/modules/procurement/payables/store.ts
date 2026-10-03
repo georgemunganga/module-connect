@@ -341,6 +341,10 @@ export function addInvoice(
   input: Omit<Invoice, "id" | "status" | "version" | "apAttempts" | "timeline">,
 ): { ok: boolean; message: string; id?: string } {
   hydrate();
+  if (input.correctionOf) {
+    const original = snapshot.invoices.find((invoice) => invoice.id === input.correctionOf);
+    if (!original || original.supplierId !== input.supplierId || original.entityId !== input.entityId || original.po !== input.po || original.status !== "Exception") return { ok: false, message: "Correction must reference an exception invoice for the same supplier, entity and PO." };
+  }
   const duplicate = snapshot.invoices.some(
     (i) =>
       i.supplierId === input.supplierId &&
@@ -361,7 +365,7 @@ export function addInvoice(
     status: "Received",
     version: 1,
     apAttempts: 0,
-    timeline: [{ at: now(), actor: "Demo user", action: "Invoice captured", reason: input.source }],
+    timeline: [{ at: now(), actor: "Demo user", action: input.correctionOf ? "Corrected invoice captured" : "Invoice captured", reason: input.correctionOf ? `Correction of ${input.correctionOf}; source ${input.source}` : input.source }],
   };
   updatePayables((s) => ({ ...s, invoices: [invoice, ...s.invoices] }));
   return { ok: true, message: `Saved ${id} as demo data`, id };

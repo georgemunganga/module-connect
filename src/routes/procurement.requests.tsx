@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { deriveProgress } from "@/modules/procurement/requisition";
 import { useProcurement } from "@/modules/procurement/store";
-import { requestVisible } from "@/modules/procurement/access";
+import { requestVisible, requesterRole, demoRequester } from "@/modules/procurement/access";
 import { useApp } from "@/platform/app-context";
 import type { PurchaseRequest } from "@/modules/procurement/types";
 import { AppShell } from "@/platform/components/AppShell";
@@ -40,10 +40,10 @@ function RequestList() {
         eyebrow="Purchasing"
         title="Purchase requests"
         description="Nothing here is a bare status: each row shows who owns it, what happens next and when it's due."
-        primaryAction={<Button asChild><Link to="/procurement/requests/new">Create request</Link></Button>}
+        primaryAction={requesterRole(role) ? <Button asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Create request</Link></Button> : undefined}
       />
           <ListPage<PurchaseRequest>
-            rows={requests.filter((r) => requestVisible(role, entityId, metadata[r.id]?.entity, r.requester)).filter((r) => (view === "open" ? !["Approved", "Rejected", "Cancelled"].includes(r.status) : view === "mine" ? r.requester.startsWith("Amara") : true))}
+            rows={requests.filter((r) => requestVisible(role, entityId, metadata[r.id]?.entity, r.requester, r.department)).filter((r) => (view === "open" ? !["Approved", "Rejected", "Cancelled"].includes(r.status) : view === "mine" ? r.requester === demoRequester(role) : true))}
             savedViews={[
               { id: "all", label: "All requests" },
               { id: "open", label: "Awaiting action" },
@@ -60,7 +60,6 @@ function RequestList() {
               { id: "category", label: "Category", options: ["IT hardware", "Safety equipment", "Furniture", "Logistics", "Office supplies"], match: (r, v) => metadata[r.id]?.category === v },
               { id: "exception", label: "Exception", options: ["Any exception", "Insufficient balance", "Concurrent conversion", "Supplier not onboarded", "Supplier on hold"], match: (r, v) => { const ex = metadata[r.id]?.exceptions ?? []; return v === "Any exception" ? ex.length > 0 : ex.includes(v); } },
             ]}
-            bulkActions={[{ label: "Export selection", onSelect: () => undefined }]}
             columns={[
               { id: "ref", header: "Reference", cell: (r) => <Link to="/procurement/requests/$id" params={{ id: r.id }} className="font-mono text-xs text-primary underline underline-offset-2">{r.id}</Link> },
               { id: "title", header: "Title", cell: (r) => <span className="block max-w-64 truncate">{r.title}</span> },

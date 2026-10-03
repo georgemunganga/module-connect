@@ -17,6 +17,7 @@ import { permittedMethods } from "@/modules/procurement/sourcing";
 import type { SourcingMethod } from "@/modules/procurement/sourcing";
 
 export const Route = createFileRoute("/procurement/sourcing_/new")({
+  validateSearch: (search: Record<string, unknown>) => ({ requestId: typeof search.requestId === "string" ? search.requestId : undefined, lineId: typeof search.lineId === "string" ? search.lineId : undefined }),
   head: () => ({
     meta: [
       { title: "Create sourcing event — Meridian ERP Procurement" },
@@ -35,11 +36,12 @@ const getApprovedLines = (metadata: typeof reqMeta) => Object.entries(metadata).
 );
 
 function NewEvent() {
+  const { requestId, lineId } = Route.useSearch();
   const { role, entityId } = useApp();
   const state = useProcurement();
   const suppliersPool = state.suppliers.filter((supplier) => supplier.status === "Active" && sameEntity(supplier.country, entityId)).map((supplier) => supplier.name);
   const approvedLines = getApprovedLines(state.metadata).filter((line) => sameEntity(state.metadata[line.pr]?.entity, entityId) && state.requests.find((request) => request.id === line.pr)?.status === "Approved");
-  const [lines, setLines] = useState<string[]>([]);
+  const [lines, setLines] = useState<string[]>(requestId && lineId ? [lineId] : []);
   const [method, setMethod] = useState<SourcingMethod | null>(null);
   const [justification, setJustification] = useState("");
   const [closes, setCloses] = useState("");

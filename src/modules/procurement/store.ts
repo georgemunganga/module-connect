@@ -20,7 +20,7 @@ export interface ProcurementState {
   sourcing: SourcingEvent[];
 }
 
-const KEY = "erp.procurement.demo.v4";
+const KEY = "erp.procurement.demo.v5";
 const seed = (): ProcurementState => {
   const state: ProcurementState = structuredClone({ requests: purchaseRequests, metadata: reqMeta, approvals: approvalTasks, suppliers: supplierRecords, sourcing: sourcingEvents });
   state.requests = state.requests.map((request) => {

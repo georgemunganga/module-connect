@@ -27,6 +27,8 @@ export interface SupplierRecord {
   bank?: { masked: string; verification: Decision };
   procurementDecision: Decision;
   duplicates?: { name: string; reason: string }[];
+  duplicateReview?: { state: "Cleared" | "Confirmed"; reason: string; by: string; at: string };
+  portalUpdates?: { id: string; kind: "Contact email" | "Qualification evidence"; value: string; qualification?: string; validTo?: string; status: "Pending" | "Accepted" | "Returned"; at: string; decisionReason?: string }[];
   performance?: { period: string; source: string; delivery: number; quality: number; responsiveness: number; disputes: number };
   openPOs: number;
   openInvoices: number;

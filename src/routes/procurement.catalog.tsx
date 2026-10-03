@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/platform/app-context";
-import { internalRole, sameEntity } from "@/modules/procurement/access";
+import { internalRole, requesterRole, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { NoResultsState } from "@/platform/components/States";
-import { bestOffer, catalogItems, isExpired, money } from "@/modules/procurement/catalog";
+import { bestOffer, catalogEntities, isExpired, money, useCatalog } from "@/modules/procurement/catalog";
+import { CatalogItemEditor } from "@/modules/procurement/CatalogItemEditor";
 import type { ItemKind } from "@/modules/procurement/catalog";
 
 type Search = { q?: string; kind?: string; entity?: string };
@@ -35,15 +36,16 @@ export const Route = createFileRoute("/procurement/catalog")({
 });
 
 const kinds: ItemKind[] = ["Goods", "Service", "Asset", "Consumable", "Subscription"];
-const entities = ["Meridian Netherlands B.V.", "Meridian GmbH", "Meridian Kenya Ltd"];
 const MAINTAINERS = ["buyer", "proc_admin"];
 
 function CatalogPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { role, entityId } = useApp();
+  const catalogItems = useCatalog();
   const maintainer = MAINTAINERS.includes(role);
   const [view, setView] = useState<"browse" | "manage">("browse");
+  const [adding, setAdding] = useState(false);
   const setS = (p: Partial<Search>) => navigate({ search: (s: Search) => ({ ...s, ...p }), replace: true });
 
   const rows = useMemo(
@@ -56,7 +58,7 @@ function CatalogPage() {
           (!search.entity || i.entities.includes(search.entity)) &&
           (i.name + i.category + i.spec).toLowerCase().includes((search.q ?? "").toLowerCase()),
       ),
-    [search, view, entityId],
+    [search, view, entityId, catalogItems],
   );
 
   if (!internalRole(role)) return <AppShell><RestrictedState /></AppShell>;
@@ -66,7 +68,7 @@ function CatalogPage() {
         eyebrow="Procurement"
         title="Catalog"
         description="Approved items and contract offers. Prices are indicative unless marked Contract."
-        primaryAction={<Button asChild><Link to="/procurement/requests/new">Create request</Link></Button>}
+        primaryAction={requesterRole(role) ? <Button asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Create request</Link></Button> : undefined}
       />
       {maintainer ? (
         <div role="tablist" aria-label="Catalog view" className="mb-4 inline-flex rounded-md border p-1">
@@ -79,6 +81,9 @@ function CatalogPage() {
         </div>
       ) : null}
 
+      {maintainer && view === "manage" ? <div className="mb-4"><Button onClick={() => setAdding(true)}>Add item reference</Button></div> : null}
+      {adding ? <div className="mb-5"><CatalogItemEditor onSaved={(id) => navigate({ to: "/procurement/catalog/$id", params: { id } })} onCancel={() => setAdding(false)} /></div> : null}
+
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <div><Label htmlFor="q">Search</Label><Input id="q" className="mt-1" value={search.q ?? ""} placeholder="Item, category or spec" onChange={(e) => setS({ q: e.target.value || undefined })} /></div>
         <div>
@@ -90,13 +95,13 @@ function CatalogPage() {
         <div>
           <Label htmlFor="e">Eligible for entity</Label>
           <select id="e" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={search.entity ?? ""} onChange={(e) => setS({ entity: e.target.value || undefined })}>
-            <option value="">All entities</option>{entities.map((k) => <option key={k}>{k}</option>)}
+            <option value="">All entities</option>{catalogEntities.map((k) => <option key={k}>{k}</option>)}
           </select>
         </div>
       </div>
 
       {!rows.length ? (
-        <NoResultsState title="No items match" body="Try fewer filters. If nothing fits, you can request a non-catalog item with a reason." action={<Button variant="outline" asChild><Link to="/procurement/requests/new">Request non-catalog item</Link></Button>} />
+        <NoResultsState title="No items match" body="Try fewer filters. If nothing fits, an employee can request a non-catalog item with a reason." action={requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request non-catalog item</Link></Button> : undefined} />
       ) : view === "manage" ? (
         <div className="overflow-x-auto rounded-lg border bg-surface">
           <table className="w-full text-sm">

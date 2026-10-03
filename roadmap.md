@@ -1,6 +1,6 @@
 # Roadmap — Procurement UI (prompt pack milestones)
 
-Milestones follow the uploaded prompt pack, applied in order. HRM stays paused and untouched.
+Milestones below mark **screen-group coverage in the browser-local prototype**, not full acceptance of every state in the 20 prompts. See `docs/procurement-ui-gap-review.md` for the remaining frontend work and backend boundaries. HRM stays paused and untouched.
 
 - [x] 00 — Procurement UI foundation: 9 role presets, Demo data indicator, typed mock boundary, shared patterns, route list
 - [x] 01 — Role-aware navigation and Home (employee vs buyer vs approver vs auditor views)
@@ -23,4 +23,4 @@ Milestones follow the uploaded prompt pack, applied in order. HRM stays paused a
 - [x] 18 — Responsive layout, keyboard labels, and recovery states pass
 - [x] 19 — Final browser demo journeys across requisition, sourcing, purchasing, receipt, and invoice
 
-These checks describe the browser-local UI prototype. Production integrations and server-side authorization remain separate implementation work.
+The connected three-line end-to-end scenario, several exception variants, full evaluator/award coverage, and route-by-route accessibility/recovery verification are still open. Production integrations and server-side authorization remain separate implementation work.

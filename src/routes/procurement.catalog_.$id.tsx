@@ -3,11 +3,13 @@ import { AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
-import { EmptyState } from "@/platform/components/States";
+import { useState } from "react";
 import { useApp } from "@/platform/app-context";
-import { internalRole, sameEntity } from "@/modules/procurement/access";
+import { internalRole, requesterRole, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
-import { catalogItems, isExpired, money } from "@/modules/procurement/catalog";
+import { isExpired, money, useCatalog } from "@/modules/procurement/catalog";
+import { CatalogItemEditor } from "@/modules/procurement/CatalogItemEditor";
+import { useProcurement } from "@/modules/procurement/store";
 
 export const Route = createFileRoute("/procurement/catalog_/$id")({
   head: () => ({ meta: [{ title: "Catalog item — Meridian ERP" }, { name: "description", content: "Procurement catalog item" }] }),
@@ -17,16 +19,13 @@ export const Route = createFileRoute("/procurement/catalog_/$id")({
 function ItemDetail() {
   const { id } = Route.useParams();
   const { role, entityId } = useApp();
+  const catalogItems = useCatalog();
+  const [editing, setEditing] = useState(false);
+  const suppliers = useProcurement().suppliers;
   const i = catalogItems.find((x) => x.id === id);
   if (!i || !internalRole(role) || !i.entities.some((entity) => sameEntity(entity, entityId))) return <AppShell><RestrictedState /></AppShell>;
-  if (!i) {
-    return (
-      <AppShell>
-        <EmptyState title="Item not found" body="It may have been removed from the catalog." action={<Button variant="outline" asChild><Link to="/procurement/catalog">Back to catalog</Link></Button>} />
-      </AppShell>
-    );
-  }
-  const canRequest = i.status === "Active" && !i.block;
+  const offer = i.offers.find((candidate) => !isExpired(candidate) && suppliers.some((supplier) => supplier.name === candidate.supplier && supplier.status === "Active"));
+  const canRequest = i.status === "Active" && !i.block && !!offer;
 
   return (
     <AppShell>
@@ -35,13 +34,17 @@ function ItemDetail() {
         title={i.name}
         description={`${i.category} · per ${i.unit} · ${i.status}`}
         primaryAction={
-          canRequest ? <Button asChild><Link to="/procurement/requests/new">Request this item</Link></Button> : <Button disabled>Can't be requested</Button>
+          requesterRole(role) ? canRequest ? <Button asChild><Link to="/procurement/requests/new" search={{ item: i.id }}>Request this item</Link></Button> : <Button disabled>Can't be requested</Button> : undefined
         }
       />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-6">
           {i.status === "Inactive" ? <Notice tone="warning">Inactive since {i.activeTo}. Choose a current item or request a non-catalog item with a reason.</Notice> : null}
           {i.block ? <Notice tone="warning">{i.block}</Notice> : null}
+          {!i.block && i.status === "Active" && !offer ? <Notice tone="warning">No current offer from an active supplier. Ask Procurement to refresh this item before requesting it.</Notice> : null}
+
+          {(["buyer", "proc_admin"].includes(role)) ? <div className="flex gap-2"><Button variant="outline" onClick={() => setEditing((value) => !value)}>{editing ? "Close editor" : "Revise item"}</Button><Button variant="ghost" asChild><Link to="/procurement/catalog">Manage catalog</Link></Button></div> : null}
+          {editing ? <CatalogItemEditor key={`${i.id}-${i.versions[0]?.version}`} item={i} onSaved={() => setEditing(false)} onCancel={() => setEditing(false)} /> : null}
 
           <section className="rounded-lg border bg-surface p-4">
             <h2 className="text-sm font-semibold">Supplier offers</h2>

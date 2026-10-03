@@ -39,7 +39,7 @@ function RequestDetail() {
   const { role, entityId } = useApp();
   const state = useProcurement();
   const r = state.requests.find((item) => item.id === id);
-  return <AppShell>{r && requestVisible(role, entityId, state.metadata[id]?.entity, r.requester) ? <Workspace r={r} /> : <RestrictedState />}</AppShell>;
+  return <AppShell>{r && requestVisible(role, entityId, state.metadata[id]?.entity, r.requester, r.department) ? <Workspace r={r} /> : <RestrictedState />}</AppShell>;
 }
 
 function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseRequest }) {
@@ -152,8 +152,8 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
                   <td className="py-2">
                     {isBuyer ? (
                       <span className="flex flex-col gap-1">
-                        <Button size="sm" variant="outline" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty <= 0 || !["Direct PO", "RFQ / tender", "Contract / framework"].includes(l.route)} onClick={() => convert(l, false)}>Create {l.route === "RFQ / tender" ? "RFQ" : l.route === "Contract / framework" ? "contract release" : "draft PO"}</Button>
-                        <Button size="sm" variant="ghost" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty < 2 || !["Direct PO", "RFQ / tender", "Contract / framework"].includes(l.route)} onClick={() => convert(l, true)}>Allocate half</Button>
+                        {l.route === "RFQ / tender" && status === "Approved" && l.approval === "Approved" && !l.lockedBy && remaining(l) > 0 ? <Button size="sm" variant="outline" asChild><Link to="/procurement/sourcing/new" search={{ requestId: r.id, lineId: l.id }}>Create RFQ</Link></Button> : <Button size="sm" variant="outline" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty <= 0 || !["Direct PO", "Contract / framework"].includes(l.route)} onClick={() => convert(l, false)}>Create {l.route === "Contract / framework" ? "contract release" : "draft PO"}</Button>}
+                        {l.route !== "RFQ / tender" ? <Button size="sm" variant="ghost" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty < 2 || !["Direct PO", "Contract / framework"].includes(l.route)} onClick={() => convert(l, true)}>Allocate half</Button> : null}
                       </span>
                     ) : <span className="text-xs text-muted-foreground">Buyer only</span>}
                   </td>

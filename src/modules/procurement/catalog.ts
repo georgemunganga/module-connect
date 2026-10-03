@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
+
 export type ItemKind = "Goods" | "Service" | "Asset" | "Subscription" | "Consumable";
+export const catalogEntities = ["Meridian Netherlands B.V.", "Meridian GmbH", "Meridian Kenya Ltd"];
 
 export interface SupplierOffer {
   supplier: string;
@@ -175,3 +178,52 @@ export const catalogItems: CatalogItem[] = [
 export const isExpired = (o: SupplierOffer) => o.validTo < today;
 export const bestOffer = (i: CatalogItem) => i.offers.find((o) => o.preferred && !isExpired(o)) ?? i.offers.find((o) => !isExpired(o)) ?? i.offers[0];
 export const money = (n: number, ccy: string) => new Intl.NumberFormat("en-IE", { style: "currency", currency: ccy, maximumFractionDigits: ccy === "KES" ? 0 : 2 }).format(n);
+
+const CATALOG_KEY = "erp.procurement.catalog.v1";
+let currentCatalog: CatalogItem[] = structuredClone(catalogItems);
+let catalogHydrated = false;
+const catalogListeners = new Set<() => void>();
+
+function hydrateCatalog() {
+  if (catalogHydrated || typeof window === "undefined") return;
+  catalogHydrated = true;
+  try {
+    const stored = localStorage.getItem(CATALOG_KEY);
+    if (stored) {
+      const parsed: unknown = JSON.parse(stored);
+      if (Array.isArray(parsed)) currentCatalog = parsed as CatalogItem[];
+    }
+  } catch {
+    currentCatalog = structuredClone(catalogItems);
+  }
+}
+
+export function getCatalog() {
+  hydrateCatalog();
+  return currentCatalog;
+}
+
+export function saveCatalog(update: (items: CatalogItem[]) => CatalogItem[]) {
+  hydrateCatalog();
+  currentCatalog = update(currentCatalog);
+  if (typeof window !== "undefined") localStorage.setItem(CATALOG_KEY, JSON.stringify(currentCatalog));
+  catalogListeners.forEach((notify) => notify());
+}
+
+export function resetCatalog() {
+  currentCatalog = structuredClone(catalogItems);
+  if (typeof window !== "undefined") localStorage.removeItem(CATALOG_KEY);
+  catalogListeners.forEach((notify) => notify());
+}
+
+export function useCatalog() {
+  const [items, setItems] = useState<CatalogItem[]>(catalogItems);
+  useEffect(() => {
+    hydrateCatalog();
+    setItems(currentCatalog);
+    const listener = () => setItems(currentCatalog);
+    catalogListeners.add(listener);
+    return () => { catalogListeners.delete(listener); };
+  }, []);
+  return items;
+}

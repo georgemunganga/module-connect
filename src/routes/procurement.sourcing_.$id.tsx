@@ -42,7 +42,7 @@ function EventDetail() {
 
   const primary = !isBuyer ? undefined
     : e.state === "Draft" ? <Button onClick={() => setE({ ...e, state: "Pending approval", nextAction: "Procurement lead to approve publication" })}>Send for approval</Button>
-    : e.state === "Pending approval" ? <Button onClick={() => setE({ ...e, state: "Published", nextAction: "Collect responses until closing" })}>Approve and publish (demo)</Button>
+    : e.state === "Pending approval" ? <Button onClick={() => setE({ ...e, state: "Published", opensAt: e.opensAt || nowStr(), nextAction: "Collect responses until closing", invitations: e.invitations.map((invitation) => ({ ...invitation, delivery: "Delivered", at: nowStr(), note: "Visible in local supplier portal demo; no external message sent" })) })}>Approve and publish (demo)</Button>
     : e.state === "Published" ? <Button variant="outline" onClick={() => setAmending(true)}>Issue amendment</Button>
     : e.state === "Closed" && !e.opened ? <Button onClick={() => setE({ ...e, opened: true, openingAuthorisedBy: `You (demo) · ${nowStr()}` })}>Authorise opening</Button>
     : e.state === "Cancelled" ? <Button variant="outline" onClick={() => setE({ ...e, state: "Reopened", nextAction: "Review dates and re-publish" })}>Reopen event</Button>
@@ -87,7 +87,7 @@ function EventDetail() {
             <ul className="space-y-2">{e.invitations.map((i) => (
               <li key={i.supplier} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-surface p-3 text-sm">
                 <span><span className="font-medium">{i.supplier}</span>{i.note ? <span className="block text-xs text-danger">{i.note}</span> : null}</span>
-                <span className="flex items-center gap-2"><StatusBadge status={i.delivery} />{i.delivery === "Not delivered" && isBuyer ? <Button size="sm" variant="outline" disabled title="Invitation delivery is preview-only">Resend (preview)</Button> : null}</span>
+                <span className="flex items-center gap-2"><StatusBadge status={i.delivery} />{i.delivery === "Not delivered" && isBuyer ? <Button size="sm" variant="outline" onClick={() => setE({ ...e, invitations: e.invitations.map((invitation) => invitation.supplier === i.supplier ? { ...invitation, delivery: "Resend pending", at: nowStr(), note: "Demo resend queued locally; external delivery is unconfirmed" } : invitation) })}>Queue resend</Button> : null}</span>
               </li>))}</ul>
           ) : <EmptyState title="No invitations sent" body="Invitations go out when the event is published." />
         ) : tab === "Q&A" ? (

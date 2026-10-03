@@ -445,26 +445,13 @@ export function InvoiceDetail({ id }: { id: string }) {
     }
     reviseInvoice(id, (i) => ({
       ...i,
-      version: i.version + 1,
-      lines: i.lines.map((line) => ({
-        ...line,
-        quantity: Math.min(line.quantity, line.acceptedQuantity),
-      })),
-      status: "Received",
-      exception: undefined,
-      apKey: undefined,
-      timeline: [
-        ...i.timeline,
-        {
-          at: new Date().toISOString(),
-          actor: "AP processor",
-          action: `Invoice correction v${i.version + 1}`,
-          reason,
-        },
-      ],
+      status: "Exception",
+      exception: { type: "Supplier correction", reason, owner: i.supplier, due: i.due },
+      timeline: [...i.timeline, { at: new Date().toISOString(), actor: "AP processor", action: "Supplier correction requested", reason }],
     }));
+    addComment(id, "AP processor", `Please submit a corrected invoice: ${reason}`, "Supplier");
     setReason("");
-    setMessage("Corrected demo version saved. Rerun matching.");
+    setMessage("Correction requested from supplier. The original invoice remains unchanged; a linked replacement must be submitted.");
   }
   function handoff() {
     if (!invoice || invoice.status !== "Validated") {
@@ -566,6 +553,8 @@ export function InvoiceDetail({ id }: { id: string }) {
               Invoice {invoice.number} · {invoice.date}
             </p>
             <p className="text-sm">Due {invoice.due}</p>
+            {invoice.correctionOf ? <p className="text-sm">Corrects <Link to="/procurement/invoices/$id" params={{ id: invoice.correctionOf }} className="text-primary underline">{invoice.correctionOf}</Link></p> : null}
+            {state.invoices.filter((candidate) => candidate.correctionOf === invoice.id).map((candidate) => <p key={candidate.id} className="text-sm">Replacement <Link to="/procurement/invoices/$id" params={{ id: candidate.id }} className="text-primary underline">{candidate.id}</Link></p>)}
             <p className="text-sm">Attachment: {invoice.attachment}</p>
             <p className="mt-3 text-xl font-semibold">
               {money(invoiceTotal(invoice), invoice.currency)}
@@ -627,7 +616,7 @@ export function InvoiceDetail({ id }: { id: string }) {
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button onClick={match}>Run match</Button>
                 <Button variant="outline" onClick={correct} disabled={!issues.length}>
-                  Correct to accepted quantity
+                  Request supplier correction
                 </Button>
               </div>
             )}

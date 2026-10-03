@@ -89,16 +89,16 @@ export const purchaseRequests: PurchaseRequest[] = [
   },
   {
     id: "PR-2026-1043",
-    title: "Safety boots and hi-vis for Nairobi warehouse team",
+    title: "Safety boots for Nairobi warehouse team",
     requester: "Wanjiru Muthoni",
     department: "Operations",
-    supplierId: "sup-002",
+    supplierId: "sup-006",
     currency: "KES",
     amount: 386000,
     neededBy: "2026-10-15",
-    status: "Submitted",
-    owner: "Procurement triage",
-    nextAction: "Assign a buyer",
+    status: "Approved",
+    owner: "Grace Wanjiru",
+    nextAction: "Complete supplier activation before issuing draft PO",
     dueDate: "2026-10-06",
     submittedAt: "2026-10-02",
     policy: [
@@ -111,8 +111,7 @@ export const purchaseRequests: PurchaseRequest[] = [
     ],
     conflicts: [],
     lines: [
-      { description: "Safety boots, sizes 38–47", qty: 22, unitPrice: 12500 },
-      { description: "Hi-vis jackets, class 2", qty: 22, unitPrice: 5050 },
+      { description: "Safety boots, size range", qty: 50, unitPrice: 7720 },
     ],
   },
   {
@@ -210,8 +209,8 @@ const queueItems: ProcWorkItem[] = [
   {
     id: "q3",
     band: "task",
-    title: "Assign a buyer to PR-2026-1043",
-    context: "Safety equipment, Nairobi warehouse · all policy checks passed",
+    title: "Resolve supplier activation for PR-2026-1043",
+    context: "Safety boots, Nairobi warehouse · draft PO awaits supplier activation",
     due: "Due 6 Oct",
     to: "/procurement/requests/$id",
     params: { id: "PR-2026-1043" },

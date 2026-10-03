@@ -12,11 +12,12 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { useApp, useEntity } from "@/platform/app-context";
 import { submitRequest } from "@/modules/procurement/store";
 import { useProcurement } from "@/modules/procurement/store";
-import { catalogItems } from "@/modules/procurement/catalog";
-import { sameEntity } from "@/modules/procurement/access";
+import { useCatalog } from "@/modules/procurement/catalog";
+import { requesterRole, sameEntity, demoRequester, procurementEntityName } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 
 export const Route = createFileRoute("/procurement/requests_/new")({
+  validateSearch: (search: Record<string, unknown>) => ({ item: typeof search.item === "string" ? search.item : undefined }),
   head: () => ({
     meta: [
       { title: "Create request — Meridian ERP Procurement" },
@@ -31,23 +32,25 @@ export const Route = createFileRoute("/procurement/requests_/new")({
 });
 
 type Kind = "Goods" | "Service" | "Asset" | "Subscription";
-type Line = { id: string; description: string; qty: number; unitPrice: number; source: "Catalog" | "Contract" | "Non-catalog"; supplier: string; kind: Kind };
+type Line = { id: string; catalogItemId?: string; description: string; qty: number; unitPrice: number; source: "Catalog" | "Contract" | "Non-catalog"; supplier: string; kind: Kind };
 
 type Draft = { kind: Kind | null; lines: Line[]; purpose: string; neededBy: string; deliverTo: string; costCentre: string; project: string; evidence: string[] };
 const empty: Draft = { kind: null, lines: [], purpose: "", neededBy: "", deliverTo: "Amsterdam HQ, Keizersgracht 100", costCentre: "", project: "", evidence: [] };
 const KEY = "proc:draft:new";
 
 function NewRequest() {
+  const { item: selectedItem } = Route.useSearch();
   const { role } = useApp();
   const entity = useEntity();
   const suppliers = useProcurement().suppliers;
+  const catalogItems = useCatalog();
   const CCY = entity.country === "Kenya" ? "KES" : "EUR";
   const fmt = (amount: number) => new Intl.NumberFormat("en-IE", { style: "currency", currency: CCY }).format(amount);
   const catalog = useMemo(() => catalogItems.filter((item) => item.entities.some((allowed) => sameEntity(allowed, entity.id))).map((item) => {
     const offer = item.offers.find((candidate) => candidate.currency === CCY);
     const supplier = suppliers.find((record) => record.name === offer?.supplier);
     return { id: item.id, name: item.name, kind: item.kind === "Consumable" ? "Goods" as Kind : item.kind as Kind, price: offer?.price ?? 0, supplier: offer?.supplier ?? "No offer", source: offer?.source ?? "Catalog" as "Catalog" | "Contract", block: item.block ?? (!offer ? "No offer in this entity's currency." : supplier?.status !== "Active" ? "Supplier is not active. Ask Procurement to choose another source." : undefined) };
-  }), [CCY, entity.id, suppliers]);
+  }), [CCY, entity.id, suppliers, catalogItems]);
   const navigate = useNavigate();
   const [d, setD] = useState<Draft>(empty);
   const [loaded, setLoaded] = useState(false);
@@ -57,6 +60,8 @@ function NewRequest() {
   const [ncKind, setNcKind] = useState<Kind>("Service");
   const [ref, setRef] = useState<string | null>(null);
   const [budgetDown, setBudgetDown] = useState(false);
+  const [prefillDone, setPrefillDone] = useState(false);
+  const [prefillNotice, setPrefillNotice] = useState("");
 
   useEffect(() => {
     const raw = sessionStorage.getItem(KEY);
@@ -66,6 +71,18 @@ function NewRequest() {
   useEffect(() => {
     if (loaded) sessionStorage.setItem(KEY, JSON.stringify(d));
   }, [d, loaded]);
+  useEffect(() => {
+    if (!loaded || !selectedItem || prefillDone) return;
+    const choice = catalog.find((candidate) => candidate.id === selectedItem);
+    if (!choice) {
+      if (catalogItems.some((candidate) => candidate.id === selectedItem)) { setPrefillNotice("This item is not eligible in the selected entity."); setPrefillDone(true); }
+      return;
+    }
+    if (choice.block) { setPrefillNotice(choice.block); setPrefillDone(true); return; }
+    setD((current) => current.lines.some((line) => line.catalogItemId === selectedItem) ? current : { ...current, kind: current.kind ?? choice.kind, lines: [...current.lines, { id: crypto.randomUUID(), catalogItemId: selectedItem, description: choice.name, qty: 1, unitPrice: choice.price, source: choice.source, supplier: choice.supplier, kind: choice.kind }] });
+    setPrefillNotice(`${choice.name} added to your draft. Check the quantity and complete the remaining steps.`);
+    setPrefillDone(true);
+  }, [loaded, selectedItem, prefillDone, catalog, catalogItems]);
 
   const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
   const total = d.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
@@ -124,7 +141,7 @@ function NewRequest() {
                       <p className="text-xs text-muted-foreground">{c.source} · {c.supplier} · {fmt(c.price)} each (indicative)</p>
                     </div>
                     <Button size="sm" variant="outline" disabled={!!c.block}
-                      onClick={() => set({ lines: [...d.lines, { id: crypto.randomUUID(), description: c.name, qty: 1, unitPrice: c.price, source: c.source, supplier: c.supplier, kind: c.kind }] })}>
+                      onClick={() => set({ lines: [...d.lines, { id: crypto.randomUUID(), catalogItemId: c.id, description: c.name, qty: 1, unitPrice: c.price, source: c.source, supplier: c.supplier, kind: c.kind }] })}>
                       <Plus className="size-4" aria-hidden /> Add
                     </Button>
                   </div>
@@ -235,10 +252,11 @@ function NewRequest() {
     },
   ];
 
-  if (!["employee", "manager", "hr_ops", "payroll", "hr_admin"].includes(role)) return <AppShell><RestrictedState /></AppShell>;
+  if (!requesterRole(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader eyebrow="Procurement" title="Create request" description="Answer a few questions. Your draft saves as you go." />
+      {prefillNotice ? <p role="status" className="mb-4 rounded-lg border bg-surface p-3 text-sm">{prefillNotice}</p> : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <GuidedFlow
           flowId="proc-request-new"
@@ -247,7 +265,7 @@ function NewRequest() {
           onSubmit={async () => {
             if (missing.length) return;
             await new Promise((r) => setTimeout(r, 600));
-            setRef(submitRequest({ title: d.purpose.trim(), requester: "Amara Chukwuemeka-Van der Berghe", department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: entity.country, currency: CCY, neededBy: d.neededBy, lines: d.lines.map(({ description, qty, unitPrice, supplier, kind }) => ({ description, qty, unitPrice, supplier, kind })) }));
+            setRef(submitRequest({ title: d.purpose.trim(), requester: demoRequester(role), department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: procurementEntityName(entity.id), currency: CCY, neededBy: d.neededBy, lines: d.lines.map(({ description, qty, unitPrice, supplier, kind }) => ({ description, qty, unitPrice, supplier, kind })) }));
             sessionStorage.removeItem(KEY);
             sessionStorage.removeItem("flow:proc-request-new");
           }}

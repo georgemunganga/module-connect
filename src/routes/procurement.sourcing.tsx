@@ -34,7 +34,7 @@ function SourcingQueue() {
         eyebrow="Sourcing"
         title="Sourcing events"
         description="Bids stay sealed until the authorised opening. Only receipt details are shown before then."
-        primaryAction={role === "buyer" || role === "proc_admin" ? <Button asChild><Link to="/procurement/sourcing/new">Create event</Link></Button> : undefined}
+        primaryAction={role === "buyer" || role === "proc_admin" ? <Button asChild><Link to="/procurement/sourcing/new" search={{ requestId: undefined, lineId: undefined }}>Create event</Link></Button> : undefined}
       />
       <ListPage<SourcingEvent>
         rows={events}

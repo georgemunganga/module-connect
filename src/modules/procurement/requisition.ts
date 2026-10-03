@@ -50,7 +50,7 @@ export const reqMeta: Record<string, ReqMeta> = {
     entity: "Meridian Kenya Ltd", category: "Safety equipment", exceptions: [],
     versions: [{ version: 1, date: "2026-10-02", by: "Daniel Otieno", note: "Submitted" }],
     lines: [
-      { id: "1043-1", description: "Safety boots, size range", category: "Safety equipment", qty: 50, unitPrice: 7720, approval: "Approved", approvedQty: 50, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] },
+      { id: "1043-1", description: "Safety boots, size range", category: "Safety equipment", qty: 50, unitPrice: 7720, approval: "Approved", approvedQty: 50, allocatedQty: 50, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Direct PO", related: [{ kind: "PO", ref: "PO-2026-0044" }] },
     ],
   },
   "PR-2026-1038": {
