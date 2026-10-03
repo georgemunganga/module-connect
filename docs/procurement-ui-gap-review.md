@@ -2,6 +2,8 @@
 
 Reviewed 3 October 2026 against `PROC-UX-02-COMPLETE-LOVABLE-UI-PROMPT-PACK.md` in the ERP documentation repository. This is a browser-local frontend prototype. A check in `roadmap.md` means the corresponding screen group exists; it does **not** mean every operation and negative path in that prompt has passed acceptance.
 
+The detailed missing and partial workflows, priorities, and acceptance outcomes are in the [workflow gap register](procurement-ui-workflow-gap-register.md).
+
 ## Current result
 
 The Procurement navigation, role-specific home, catalog, supplier, request, approval, planning, sourcing, evaluation, contract, PO, receiving, invoice, reporting, configuration, and supplier portal screens exist. Request-to-PO, RFQ-to-award, receipt-to-match, and supplier portal interactions have been tested independently. **The full frontend is not yet complete against the agreed prompt pack.**

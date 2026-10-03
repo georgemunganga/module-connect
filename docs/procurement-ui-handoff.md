@@ -3,6 +3,7 @@
 This repository is the Lovable-connected **frontend demo** for the ERP Procurement module. Browser storage holds the demo records and decisions. The functional source of truth is the ERP specification in `newworld-erp/docs/procurement`; this frontend does not provide server authorization, Finance posting, payments, supplier identity, document storage, or live integration events.
 
 Screen groups exist for the feature map below. The full UI acceptance work is tracked in [the gap review](procurement-ui-gap-review.md); several exception and recovery states remain open.
+The [workflow gap register](procurement-ui-workflow-gap-register.md) lists the incomplete user paths and the UI needed to finish them.
 
 ## Starting points and routes
 
