@@ -212,6 +212,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const unread = notifications.filter((n) => n.unread).length;
 
   const switchModule = (id: ModuleId) => {
+    if (id === "hrm" && window.location.hostname === "erp.amizopower.co.zm") {
+      window.location.assign("/hrm");
+      return;
+    }
     setModuleId(id);
     navigate({ to: moduleRegistry[id].home });
   };
