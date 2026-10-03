@@ -9,55 +9,40 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SpeakUpRouteImport } from './routes/speak-up'
-import { Route as SetupRouteImport } from './routes/setup'
-import { Route as HelpRouteImport } from './routes/help'
-import { Route as ConfigurationRouteImport } from './routes/configuration'
-import { Route as ApprovalsRouteImport } from './routes/approvals'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as WorkersIndexRouteImport } from './routes/workers.index'
-import { Route as RequestsIndexRouteImport } from './routes/requests.index'
-import { Route as ProcurementIndexRouteImport } from './routes/procurement.index'
-import { Route as PayslipsIndexRouteImport } from './routes/payslips.index'
-import { Route as LeaveIndexRouteImport } from './routes/leave.index'
+import { Route as ApprovalsRouteImport } from './routes/approvals'
+import { Route as ConfigurationRouteImport } from './routes/configuration'
+import { Route as HelpRouteImport } from './routes/help'
+import { Route as SetupRouteImport } from './routes/setup'
+import { Route as SpeakUpRouteImport } from './routes/speak-up'
 import { Route as AttendanceIndexRouteImport } from './routes/attendance.index'
-import { Route as WorkersIdRouteImport } from './routes/workers.$id'
-import { Route as RequestsNewRouteImport } from './routes/requests.new'
-import { Route as RequestsIdRouteImport } from './routes/requests.$id'
-import { Route as ProcurementSuppliersRouteImport } from './routes/procurement.suppliers'
-import { Route as ProcurementRequestsRouteImport } from './routes/procurement.requests'
-import { Route as ProcurementPlanningRouteImport } from './routes/procurement.planning'
-import { Route as ProcurementConfigurationRouteImport } from './routes/procurement.configuration'
-import { Route as ProcurementCatalogRouteImport } from './routes/procurement.catalog'
-import { Route as ProcurementApprovalsRouteImport } from './routes/procurement.approvals'
-import { Route as LeaveNewRouteImport } from './routes/leave.new'
+import { Route as LeaveIndexRouteImport } from './routes/leave.index'
 import { Route as LeaveIdRouteImport } from './routes/leave.$id'
-import { Route as ProcurementSuppliersNewRouteImport } from './routes/procurement.suppliers_.new'
-import { Route as ProcurementSuppliersIdRouteImport } from './routes/procurement.suppliers_.$id'
-import { Route as ProcurementRequestsNewRouteImport } from './routes/procurement.requests.new'
-import { Route as ProcurementRequestsIdRouteImport } from './routes/procurement.requests.$id'
-import { Route as ProcurementCatalogIdRouteImport } from './routes/procurement.catalog_.$id'
-import { Route as ProcurementAreaAreaRouteImport } from './routes/procurement.area.$area'
+import { Route as LeaveNewRouteImport } from './routes/leave.new'
+import { Route as PayslipsIndexRouteImport } from './routes/payslips.index'
+import { Route as ProcurementIndexRouteImport } from './routes/procurement.index'
+import { Route as ProcurementApprovalsRouteImport } from './routes/procurement.approvals'
+import { Route as ProcurementCatalogRouteImport } from './routes/procurement.catalog'
+import { Route as ProcurementConfigurationRouteImport } from './routes/procurement.configuration'
+import { Route as ProcurementPlanningRouteImport } from './routes/procurement.planning'
+import { Route as ProcurementRequestsRouteImport } from './routes/procurement.requests'
+import { Route as ProcurementSuppliersRouteImport } from './routes/procurement.suppliers'
+import { Route as RequestsIndexRouteImport } from './routes/requests.index'
+import { Route as RequestsIdRouteImport } from './routes/requests.$id'
+import { Route as RequestsNewRouteImport } from './routes/requests.new'
+import { Route as WorkersIndexRouteImport } from './routes/workers.index'
+import { Route as WorkersIdRouteImport } from './routes/workers.$id'
 import { Route as ProcurementApprovalsIdRouteImport } from './routes/procurement.approvals_.$id'
+import { Route as ProcurementAreaAreaRouteImport } from './routes/procurement.area.$area'
+import { Route as ProcurementCatalogIdRouteImport } from './routes/procurement.catalog_.$id'
+import { Route as ProcurementRequestsIdRouteImport } from './routes/procurement.requests.$id'
+import { Route as ProcurementRequestsNewRouteImport } from './routes/procurement.requests.new'
+import { Route as ProcurementSuppliersIdRouteImport } from './routes/procurement.suppliers_.$id'
+import { Route as ProcurementSuppliersNewRouteImport } from './routes/procurement.suppliers_.new'
 
-const SpeakUpRoute = SpeakUpRouteImport.update({
-  id: '/speak-up',
-  path: '/speak-up',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SetupRoute = SetupRouteImport.update({
-  id: '/setup',
-  path: '/setup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HelpRoute = HelpRouteImport.update({
-  id: '/help',
-  path: '/help',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ConfigurationRoute = ConfigurationRouteImport.update({
-  id: '/configuration',
-  path: '/configuration',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApprovalsRoute = ApprovalsRouteImport.update({
@@ -65,34 +50,24 @@ const ApprovalsRoute = ApprovalsRouteImport.update({
   path: '/approvals',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const ConfigurationRoute = ConfigurationRouteImport.update({
+  id: '/configuration',
+  path: '/configuration',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WorkersIndexRoute = WorkersIndexRouteImport.update({
-  id: '/workers/',
-  path: '/workers/',
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RequestsIndexRoute = RequestsIndexRouteImport.update({
-  id: '/requests/',
-  path: '/requests/',
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementIndexRoute = ProcurementIndexRouteImport.update({
-  id: '/procurement/',
-  path: '/procurement/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PayslipsIndexRoute = PayslipsIndexRouteImport.update({
-  id: '/payslips/',
-  path: '/payslips/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LeaveIndexRoute = LeaveIndexRouteImport.update({
-  id: '/leave/',
-  path: '/leave/',
+const SpeakUpRoute = SpeakUpRouteImport.update({
+  id: '/speak-up',
+  path: '/speak-up',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AttendanceIndexRoute = AttendanceIndexRouteImport.update({
@@ -100,34 +75,39 @@ const AttendanceIndexRoute = AttendanceIndexRouteImport.update({
   path: '/attendance/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WorkersIdRoute = WorkersIdRouteImport.update({
-  id: '/workers/$id',
-  path: '/workers/$id',
+const LeaveIndexRoute = LeaveIndexRouteImport.update({
+  id: '/leave/',
+  path: '/leave/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RequestsNewRoute = RequestsNewRouteImport.update({
-  id: '/requests/new',
-  path: '/requests/new',
+const LeaveIdRoute = LeaveIdRouteImport.update({
+  id: '/leave/$id',
+  path: '/leave/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RequestsIdRoute = RequestsIdRouteImport.update({
-  id: '/requests/$id',
-  path: '/requests/$id',
+const LeaveNewRoute = LeaveNewRouteImport.update({
+  id: '/leave/new',
+  path: '/leave/new',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementSuppliersRoute = ProcurementSuppliersRouteImport.update({
-  id: '/procurement/suppliers',
-  path: '/procurement/suppliers',
+const PayslipsIndexRoute = PayslipsIndexRouteImport.update({
+  id: '/payslips/',
+  path: '/payslips/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementRequestsRoute = ProcurementRequestsRouteImport.update({
-  id: '/procurement/requests',
-  path: '/procurement/requests',
+const ProcurementIndexRoute = ProcurementIndexRouteImport.update({
+  id: '/procurement/',
+  path: '/procurement/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementPlanningRoute = ProcurementPlanningRouteImport.update({
-  id: '/procurement/planning',
-  path: '/procurement/planning',
+const ProcurementApprovalsRoute = ProcurementApprovalsRouteImport.update({
+  id: '/procurement/approvals',
+  path: '/procurement/approvals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementCatalogRoute = ProcurementCatalogRouteImport.update({
+  id: '/procurement/catalog',
+  path: '/procurement/catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProcurementConfigurationRoute =
@@ -136,49 +116,49 @@ const ProcurementConfigurationRoute =
     path: '/procurement/configuration',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ProcurementCatalogRoute = ProcurementCatalogRouteImport.update({
-  id: '/procurement/catalog',
-  path: '/procurement/catalog',
+const ProcurementPlanningRoute = ProcurementPlanningRouteImport.update({
+  id: '/procurement/planning',
+  path: '/procurement/planning',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementApprovalsRoute = ProcurementApprovalsRouteImport.update({
-  id: '/procurement/approvals',
-  path: '/procurement/approvals',
+const ProcurementRequestsRoute = ProcurementRequestsRouteImport.update({
+  id: '/procurement/requests',
+  path: '/procurement/requests',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LeaveNewRoute = LeaveNewRouteImport.update({
-  id: '/leave/new',
-  path: '/leave/new',
+const ProcurementSuppliersRoute = ProcurementSuppliersRouteImport.update({
+  id: '/procurement/suppliers',
+  path: '/procurement/suppliers',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LeaveIdRoute = LeaveIdRouteImport.update({
-  id: '/leave/$id',
-  path: '/leave/$id',
+const RequestsIndexRoute = RequestsIndexRouteImport.update({
+  id: '/requests/',
+  path: '/requests/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementSuppliersNewRoute = ProcurementSuppliersNewRouteImport.update({
-  id: '/procurement/suppliers_/new',
-  path: '/procurement/suppliers/new',
+const RequestsIdRoute = RequestsIdRouteImport.update({
+  id: '/requests/$id',
+  path: '/requests/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementSuppliersIdRoute = ProcurementSuppliersIdRouteImport.update({
-  id: '/procurement/suppliers_/$id',
-  path: '/procurement/suppliers/$id',
+const RequestsNewRoute = RequestsNewRouteImport.update({
+  id: '/requests/new',
+  path: '/requests/new',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementRequestsNewRoute = ProcurementRequestsNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => ProcurementRequestsRoute,
+const WorkersIndexRoute = WorkersIndexRouteImport.update({
+  id: '/workers/',
+  path: '/workers/',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementRequestsIdRoute = ProcurementRequestsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ProcurementRequestsRoute,
+const WorkersIdRoute = WorkersIdRouteImport.update({
+  id: '/workers/$id',
+  path: '/workers/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementCatalogIdRoute = ProcurementCatalogIdRouteImport.update({
-  id: '/procurement/catalog_/$id',
-  path: '/procurement/catalog/$id',
+const ProcurementApprovalsIdRoute = ProcurementApprovalsIdRouteImport.update({
+  id: '/procurement/approvals_/$id',
+  path: '/procurement/approvals/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProcurementAreaAreaRoute = ProcurementAreaAreaRouteImport.update({
@@ -186,9 +166,29 @@ const ProcurementAreaAreaRoute = ProcurementAreaAreaRouteImport.update({
   path: '/procurement/area/$area',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProcurementApprovalsIdRoute = ProcurementApprovalsIdRouteImport.update({
-  id: '/procurement/approvals_/$id',
-  path: '/procurement/approvals/$id',
+const ProcurementCatalogIdRoute = ProcurementCatalogIdRouteImport.update({
+  id: '/procurement/catalog_/$id',
+  path: '/procurement/catalog/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementRequestsIdRoute = ProcurementRequestsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ProcurementRequestsRoute,
+} as any)
+const ProcurementRequestsNewRoute = ProcurementRequestsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => ProcurementRequestsRoute,
+} as any)
+const ProcurementSuppliersIdRoute = ProcurementSuppliersIdRouteImport.update({
+  id: '/procurement/suppliers_/$id',
+  path: '/procurement/suppliers/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementSuppliersNewRoute = ProcurementSuppliersNewRouteImport.update({
+  id: '/procurement/suppliers_/new',
+  path: '/procurement/suppliers/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -421,32 +421,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/speak-up': {
-      id: '/speak-up'
-      path: '/speak-up'
-      fullPath: '/speak-up'
-      preLoaderRoute: typeof SpeakUpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/setup': {
-      id: '/setup'
-      path: '/setup'
-      fullPath: '/setup'
-      preLoaderRoute: typeof SetupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/help': {
-      id: '/help'
-      path: '/help'
-      fullPath: '/help'
-      preLoaderRoute: typeof HelpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/configuration': {
-      id: '/configuration'
-      path: '/configuration'
-      fullPath: '/configuration'
-      preLoaderRoute: typeof ConfigurationRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/approvals': {
@@ -456,46 +435,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApprovalsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/configuration': {
+      id: '/configuration'
+      path: '/configuration'
+      fullPath: '/configuration'
+      preLoaderRoute: typeof ConfigurationRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/workers/': {
-      id: '/workers/'
-      path: '/workers'
-      fullPath: '/workers/'
-      preLoaderRoute: typeof WorkersIndexRouteImport
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/requests/': {
-      id: '/requests/'
-      path: '/requests'
-      fullPath: '/requests/'
-      preLoaderRoute: typeof RequestsIndexRouteImport
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/procurement/': {
-      id: '/procurement/'
-      path: '/procurement'
-      fullPath: '/procurement/'
-      preLoaderRoute: typeof ProcurementIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/payslips/': {
-      id: '/payslips/'
-      path: '/payslips'
-      fullPath: '/payslips/'
-      preLoaderRoute: typeof PayslipsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/leave/': {
-      id: '/leave/'
-      path: '/leave'
-      fullPath: '/leave/'
-      preLoaderRoute: typeof LeaveIndexRouteImport
+    '/speak-up': {
+      id: '/speak-up'
+      path: '/speak-up'
+      fullPath: '/speak-up'
+      preLoaderRoute: typeof SpeakUpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/attendance/': {
@@ -505,74 +470,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AttendanceIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/workers/$id': {
-      id: '/workers/$id'
-      path: '/workers/$id'
-      fullPath: '/workers/$id'
-      preLoaderRoute: typeof WorkersIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/requests/new': {
-      id: '/requests/new'
-      path: '/requests/new'
-      fullPath: '/requests/new'
-      preLoaderRoute: typeof RequestsNewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/requests/$id': {
-      id: '/requests/$id'
-      path: '/requests/$id'
-      fullPath: '/requests/$id'
-      preLoaderRoute: typeof RequestsIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/procurement/suppliers': {
-      id: '/procurement/suppliers'
-      path: '/procurement/suppliers'
-      fullPath: '/procurement/suppliers'
-      preLoaderRoute: typeof ProcurementSuppliersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/procurement/requests': {
-      id: '/procurement/requests'
-      path: '/procurement/requests'
-      fullPath: '/procurement/requests'
-      preLoaderRoute: typeof ProcurementRequestsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/procurement/planning': {
-      id: '/procurement/planning'
-      path: '/procurement/planning'
-      fullPath: '/procurement/planning'
-      preLoaderRoute: typeof ProcurementPlanningRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/procurement/configuration': {
-      id: '/procurement/configuration'
-      path: '/procurement/configuration'
-      fullPath: '/procurement/configuration'
-      preLoaderRoute: typeof ProcurementConfigurationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/procurement/catalog': {
-      id: '/procurement/catalog'
-      path: '/procurement/catalog'
-      fullPath: '/procurement/catalog'
-      preLoaderRoute: typeof ProcurementCatalogRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/procurement/approvals': {
-      id: '/procurement/approvals'
-      path: '/procurement/approvals'
-      fullPath: '/procurement/approvals'
-      preLoaderRoute: typeof ProcurementApprovalsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/leave/new': {
-      id: '/leave/new'
-      path: '/leave/new'
-      fullPath: '/leave/new'
-      preLoaderRoute: typeof LeaveNewRouteImport
+    '/leave/': {
+      id: '/leave/'
+      path: '/leave'
+      fullPath: '/leave/'
+      preLoaderRoute: typeof LeaveIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leave/$id': {
@@ -582,39 +484,109 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeaveIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/procurement/suppliers_/new': {
-      id: '/procurement/suppliers_/new'
-      path: '/procurement/suppliers/new'
-      fullPath: '/procurement/suppliers/new'
-      preLoaderRoute: typeof ProcurementSuppliersNewRouteImport
+    '/leave/new': {
+      id: '/leave/new'
+      path: '/leave/new'
+      fullPath: '/leave/new'
+      preLoaderRoute: typeof LeaveNewRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/procurement/suppliers_/$id': {
-      id: '/procurement/suppliers_/$id'
-      path: '/procurement/suppliers/$id'
-      fullPath: '/procurement/suppliers/$id'
-      preLoaderRoute: typeof ProcurementSuppliersIdRouteImport
+    '/payslips/': {
+      id: '/payslips/'
+      path: '/payslips'
+      fullPath: '/payslips/'
+      preLoaderRoute: typeof PayslipsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/procurement/requests/new': {
-      id: '/procurement/requests/new'
-      path: '/new'
-      fullPath: '/procurement/requests/new'
-      preLoaderRoute: typeof ProcurementRequestsNewRouteImport
-      parentRoute: typeof ProcurementRequestsRoute
+    '/procurement/': {
+      id: '/procurement/'
+      path: '/procurement'
+      fullPath: '/procurement/'
+      preLoaderRoute: typeof ProcurementIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/procurement/requests/$id': {
-      id: '/procurement/requests/$id'
-      path: '/$id'
-      fullPath: '/procurement/requests/$id'
-      preLoaderRoute: typeof ProcurementRequestsIdRouteImport
-      parentRoute: typeof ProcurementRequestsRoute
+    '/procurement/approvals': {
+      id: '/procurement/approvals'
+      path: '/procurement/approvals'
+      fullPath: '/procurement/approvals'
+      preLoaderRoute: typeof ProcurementApprovalsRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/procurement/catalog_/$id': {
-      id: '/procurement/catalog_/$id'
-      path: '/procurement/catalog/$id'
-      fullPath: '/procurement/catalog/$id'
-      preLoaderRoute: typeof ProcurementCatalogIdRouteImport
+    '/procurement/catalog': {
+      id: '/procurement/catalog'
+      path: '/procurement/catalog'
+      fullPath: '/procurement/catalog'
+      preLoaderRoute: typeof ProcurementCatalogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/configuration': {
+      id: '/procurement/configuration'
+      path: '/procurement/configuration'
+      fullPath: '/procurement/configuration'
+      preLoaderRoute: typeof ProcurementConfigurationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/planning': {
+      id: '/procurement/planning'
+      path: '/procurement/planning'
+      fullPath: '/procurement/planning'
+      preLoaderRoute: typeof ProcurementPlanningRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/requests': {
+      id: '/procurement/requests'
+      path: '/procurement/requests'
+      fullPath: '/procurement/requests'
+      preLoaderRoute: typeof ProcurementRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/suppliers': {
+      id: '/procurement/suppliers'
+      path: '/procurement/suppliers'
+      fullPath: '/procurement/suppliers'
+      preLoaderRoute: typeof ProcurementSuppliersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/requests/': {
+      id: '/requests/'
+      path: '/requests'
+      fullPath: '/requests/'
+      preLoaderRoute: typeof RequestsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/requests/$id': {
+      id: '/requests/$id'
+      path: '/requests/$id'
+      fullPath: '/requests/$id'
+      preLoaderRoute: typeof RequestsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/requests/new': {
+      id: '/requests/new'
+      path: '/requests/new'
+      fullPath: '/requests/new'
+      preLoaderRoute: typeof RequestsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workers/': {
+      id: '/workers/'
+      path: '/workers'
+      fullPath: '/workers/'
+      preLoaderRoute: typeof WorkersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workers/$id': {
+      id: '/workers/$id'
+      path: '/workers/$id'
+      fullPath: '/workers/$id'
+      preLoaderRoute: typeof WorkersIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/approvals_/$id': {
+      id: '/procurement/approvals_/$id'
+      path: '/procurement/approvals/$id'
+      fullPath: '/procurement/approvals/$id'
+      preLoaderRoute: typeof ProcurementApprovalsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/procurement/area/$area': {
@@ -624,11 +596,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProcurementAreaAreaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/procurement/approvals_/$id': {
-      id: '/procurement/approvals_/$id'
-      path: '/procurement/approvals/$id'
-      fullPath: '/procurement/approvals/$id'
-      preLoaderRoute: typeof ProcurementApprovalsIdRouteImport
+    '/procurement/catalog_/$id': {
+      id: '/procurement/catalog_/$id'
+      path: '/procurement/catalog/$id'
+      fullPath: '/procurement/catalog/$id'
+      preLoaderRoute: typeof ProcurementCatalogIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/requests/$id': {
+      id: '/procurement/requests/$id'
+      path: '/$id'
+      fullPath: '/procurement/requests/$id'
+      preLoaderRoute: typeof ProcurementRequestsIdRouteImport
+      parentRoute: typeof ProcurementRequestsRoute
+    }
+    '/procurement/requests/new': {
+      id: '/procurement/requests/new'
+      path: '/new'
+      fullPath: '/procurement/requests/new'
+      preLoaderRoute: typeof ProcurementRequestsNewRouteImport
+      parentRoute: typeof ProcurementRequestsRoute
+    }
+    '/procurement/suppliers_/$id': {
+      id: '/procurement/suppliers_/$id'
+      path: '/procurement/suppliers/$id'
+      fullPath: '/procurement/suppliers/$id'
+      preLoaderRoute: typeof ProcurementSuppliersIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/suppliers_/new': {
+      id: '/procurement/suppliers_/new'
+      path: '/procurement/suppliers/new'
+      fullPath: '/procurement/suppliers/new'
+      preLoaderRoute: typeof ProcurementSuppliersNewRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
