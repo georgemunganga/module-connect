@@ -1,56 +1,57 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { procApi } from "@/modules/procurement/data";
-import type { Supplier } from "@/modules/procurement/types";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
-import { Async } from "@/platform/components/Async";
 import { ListPage } from "@/platform/components/ListPage";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
-import { useMock } from "@/platform/use-mock";
+import { lifecycleFilters, supplierRecords } from "@/modules/procurement/suppliers";
+import type { SupplierRecord } from "@/modules/procurement/suppliers";
 
 export const Route = createFileRoute("/procurement/suppliers")({
   head: () => ({
     meta: [
       { title: "Suppliers — Meridian ERP Procurement" },
-      { name: "description", content: "Every supplier with onboarding status, terms and category." },
+      { name: "description", content: "Supplier queue by lifecycle status, with owner, next action and due date." },
       { property: "og:title", content: "Suppliers — Meridian ERP Procurement" },
-      { property: "og:description", content: "Every supplier with onboarding status, terms and category." },
+      { property: "og:description", content: "Supplier onboarding, diligence and status in one queue." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SupplierList,
 });
 
 function SupplierList() {
-  const state = useMock(() => procApi.suppliers());
-
+  const { role } = useApp();
+  const canPropose = role !== "auditor";
   return (
     <AppShell>
       <PageHeader
-        eyebrow="Purchasing"
-        title="Suppliers"
-        description="Onboarding status is always visible — a request against an incomplete supplier cannot be approved."
+        eyebrow="Suppliers"
+        title="Supplier queue"
+        description="Every supplier shows its status, who owns it, what happens next and by when."
+        primaryAction={canPropose ? <Button asChild><Link to="/procurement/suppliers/new">Propose supplier</Link></Button> : undefined}
       />
-      <Async state={state}>
-        {(rows) => (
-          <ListPage<Supplier>
-            rows={rows}
-            searchPlaceholder="Search supplier or category"
-            searchFields={(s) => `${s.name} ${s.category} ${s.country}`}
-            filters={[
-              { id: "status", label: "Status", options: ["Active", "On hold", "Pending onboarding"], match: (s, v) => s.status === v },
-              { id: "country", label: "Country", options: ["Netherlands", "Kenya", "Germany"], match: (s, v) => s.country === v },
-            ]}
-            columns={[
-              { id: "name", header: "Supplier", cell: (s) => <span className="block max-w-64 truncate font-medium">{s.name}</span> },
-              { id: "category", header: "Category", cell: (s) => s.category },
-              { id: "country", header: "Country", cell: (s) => s.country },
-              { id: "terms", header: "Terms", cell: (s) => s.paymentTerms },
-              { id: "status", header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
-              { id: "tax", header: "Tax ID", defaultVisible: false, cell: (s) => s.taxId ?? "Not on file" },
-            ]}
-          />
-        )}
-      </Async>
+      <ListPage<SupplierRecord>
+        rows={supplierRecords}
+        searchPlaceholder="Search supplier, registration or category"
+        searchFields={(s) => `${s.name} ${s.legalName} ${s.registration} ${s.categories.join(" ")}`}
+        filters={[
+          { id: "status", label: "Status", options: lifecycleFilters, match: (s, v) => s.status === v },
+          { id: "country", label: "Country", options: ["Netherlands", "Kenya", "Germany"], match: (s, v) => s.country === v },
+        ]}
+        columns={[
+          { id: "name", header: "Supplier", cell: (s) => <span className="block max-w-64 truncate font-medium">{s.name}</span> },
+          { id: "status", header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
+          { id: "owner", header: "Owner", cell: (s) => s.owner },
+          { id: "next", header: "Next action", cell: (s) => <span className="block max-w-72 truncate">{s.nextAction}</span> },
+          { id: "due", header: "Due", cell: (s) => s.dueDate },
+          { id: "country", header: "Country", cell: (s) => s.country },
+          { id: "cat", header: "Categories", defaultVisible: false, cell: (s) => s.categories.join(", ") },
+        ]}
+        rowHref={(s) => <Link to="/procurement/suppliers/$id" params={{ id: s.id }} className="text-sm font-medium text-primary hover:underline">Open<span className="sr-only"> {s.name}</span></Link>}
+      />
     </AppShell>
   );
 }

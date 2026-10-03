@@ -30,6 +30,8 @@ import { Route as ProcurementConfigurationRouteImport } from './routes/procureme
 import { Route as ProcurementCatalogRouteImport } from './routes/procurement.catalog'
 import { Route as LeaveNewRouteImport } from './routes/leave.new'
 import { Route as LeaveIdRouteImport } from './routes/leave.$id'
+import { Route as ProcurementSuppliersNewRouteImport } from './routes/procurement.suppliers_.new'
+import { Route as ProcurementSuppliersIdRouteImport } from './routes/procurement.suppliers_.$id'
 import { Route as ProcurementRequestsNewRouteImport } from './routes/procurement.requests.new'
 import { Route as ProcurementRequestsIdRouteImport } from './routes/procurement.requests.$id'
 import { Route as ProcurementCatalogIdRouteImport } from './routes/procurement.catalog_.$id'
@@ -141,6 +143,16 @@ const LeaveIdRoute = LeaveIdRouteImport.update({
   path: '/leave/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementSuppliersNewRoute = ProcurementSuppliersNewRouteImport.update({
+  id: '/procurement/suppliers_/new',
+  path: '/procurement/suppliers/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementSuppliersIdRoute = ProcurementSuppliersIdRouteImport.update({
+  id: '/procurement/suppliers_/$id',
+  path: '/procurement/suppliers/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProcurementRequestsNewRoute = ProcurementRequestsNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -188,6 +200,8 @@ export interface FileRoutesByFullPath {
   '/procurement/catalog/$id': typeof ProcurementCatalogIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests/new': typeof ProcurementRequestsNewRoute
+  '/procurement/suppliers/$id': typeof ProcurementSuppliersIdRoute
+  '/procurement/suppliers/new': typeof ProcurementSuppliersNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -215,6 +229,8 @@ export interface FileRoutesByTo {
   '/procurement/catalog/$id': typeof ProcurementCatalogIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests/new': typeof ProcurementRequestsNewRoute
+  '/procurement/suppliers/$id': typeof ProcurementSuppliersIdRoute
+  '/procurement/suppliers/new': typeof ProcurementSuppliersNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -243,6 +259,8 @@ export interface FileRoutesById {
   '/procurement/catalog_/$id': typeof ProcurementCatalogIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests/new': typeof ProcurementRequestsNewRoute
+  '/procurement/suppliers_/$id': typeof ProcurementSuppliersIdRoute
+  '/procurement/suppliers_/new': typeof ProcurementSuppliersNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -272,6 +290,8 @@ export interface FileRouteTypes {
     | '/procurement/catalog/$id'
     | '/procurement/requests/$id'
     | '/procurement/requests/new'
+    | '/procurement/suppliers/$id'
+    | '/procurement/suppliers/new'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -299,6 +319,8 @@ export interface FileRouteTypes {
     | '/procurement/catalog/$id'
     | '/procurement/requests/$id'
     | '/procurement/requests/new'
+    | '/procurement/suppliers/$id'
+    | '/procurement/suppliers/new'
   id:
     | '__root__'
     | '/'
@@ -326,6 +348,8 @@ export interface FileRouteTypes {
     | '/procurement/catalog_/$id'
     | '/procurement/requests/$id'
     | '/procurement/requests/new'
+    | '/procurement/suppliers_/$id'
+    | '/procurement/suppliers_/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -352,6 +376,8 @@ export interface RootRouteChildren {
   WorkersIndexRoute: typeof WorkersIndexRoute
   ProcurementAreaAreaRoute: typeof ProcurementAreaAreaRoute
   ProcurementCatalogIdRoute: typeof ProcurementCatalogIdRoute
+  ProcurementSuppliersIdRoute: typeof ProcurementSuppliersIdRoute
+  ProcurementSuppliersNewRoute: typeof ProcurementSuppliersNewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -503,6 +529,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeaveIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/suppliers_/new': {
+      id: '/procurement/suppliers_/new'
+      path: '/procurement/suppliers/new'
+      fullPath: '/procurement/suppliers/new'
+      preLoaderRoute: typeof ProcurementSuppliersNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/suppliers_/$id': {
+      id: '/procurement/suppliers_/$id'
+      path: '/procurement/suppliers/$id'
+      fullPath: '/procurement/suppliers/$id'
+      preLoaderRoute: typeof ProcurementSuppliersIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/procurement/requests/new': {
       id: '/procurement/requests/new'
       path: '/new'
@@ -571,6 +611,8 @@ const rootRouteChildren: RootRouteChildren = {
   WorkersIndexRoute: WorkersIndexRoute,
   ProcurementAreaAreaRoute: ProcurementAreaAreaRoute,
   ProcurementCatalogIdRoute: ProcurementCatalogIdRoute,
+  ProcurementSuppliersIdRoute: ProcurementSuppliersIdRoute,
+  ProcurementSuppliersNewRoute: ProcurementSuppliersNewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
