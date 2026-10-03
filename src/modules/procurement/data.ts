@@ -90,7 +90,7 @@ export const purchaseRequests: PurchaseRequest[] = [
   {
     id: "PR-2026-1043",
     title: "Safety boots for Nairobi warehouse team",
-    requester: "Wanjiru Muthoni",
+    requester: "Daniel Otieno",
     department: "Operations",
     supplierId: "sup-006",
     currency: "KES",
@@ -142,7 +142,7 @@ export const purchaseRequests: PurchaseRequest[] = [
   {
     id: "PR-2026-1035",
     title: "Freight for Q3 stock replenishment, Mombasa → Nairobi",
-    requester: "Otieno Odhiambo",
+    requester: "Daniel Otieno",
     department: "Logistics",
     supplierId: "sup-004",
     currency: "KES",

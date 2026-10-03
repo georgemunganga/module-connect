@@ -13,7 +13,7 @@ import { approvalBlockers, slaLabel } from "@/modules/procurement/approvals";
 import type { ApprovalTask } from "@/modules/procurement/approvals";
 import { money } from "@/modules/procurement/catalog";
 import { useProcurement, decideApproval, delegateApproval, reassignApproval } from "@/modules/procurement/store";
-import { sameEntity, demoManagerForEntity } from "@/modules/procurement/access";
+import { sameEntity, demoApprovalActors } from "@/modules/procurement/access";
 import { useApp } from "@/platform/app-context";
 import { RestrictedState } from "@/platform/components/States";
 
@@ -24,23 +24,25 @@ export const Route = createFileRoute("/procurement/approvals_/$id")({
 
 function Decision() {
   const { id } = Route.useParams();
-  const { role, entityId } = useApp();
+  const { role, entityId, approvalActor } = useApp();
   const { approvals } = useProcurement();
   const t = approvals.find((x) => x.id === id);
   const [result, setResult] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [replacement, setReplacement] = useState("");
   const [reassignmentReason, setReassignmentReason] = useState("");
-  if (!t || !["manager", "buyer", "proc_admin"].includes(role) || !sameEntity(t.recordEntity, entityId) || role === "manager" && t.assignee !== demoManagerForEntity(t.recordEntity) || role === "buyer" && !t.stages.some((stage) => stage.current && stage.name.includes("Procurement"))) return <AppShell><RestrictedState /></AppShell>;
+  if (!t || !["manager", "buyer", "proc_admin"].includes(role) || !sameEntity(t.recordEntity, entityId) || role === "manager" && !t.stages.some((stage) => stage.approvers.some((approver) => approver.name === approvalActor && (t.state === "Completed" || stage.current && approver.state === "Pending"))) || role === "buyer" && !t.stages.some((stage) => stage.current && stage.name.includes("Procurement"))) return <AppShell><RestrictedState /></AppShell>;
   if (!t) return <AppShell><EmptyState title="Task not found" body="It may have been completed or reassigned." action={<Button variant="outline" asChild><Link to="/procurement/approvals">Back to approvals</Link></Button>} /></AppShell>;
 
-  const blockers = approvalBlockers(t, t.assignee);
+  const actor = role === "manager" ? approvalActor : t.assignee;
+  const blockers = approvalBlockers(t, actor);
   const amount = t.amount ? money(t.amount.value, t.amount.currency) : "";
   const sla = slaLabel(t);
 
   return (
     <AppShell>
       <PageHeader eyebrow={`${t.recordType} · ${t.recordId}`} title={t.subject} description={`${amount} · requested by ${t.requester} · ${t.policyVersion}`} />
+      {role === "manager" ? <p className="mb-3 text-xs text-muted-foreground">Acting as {approvalActor}. <Link to="/procurement/approvals" className="text-primary underline">Change demo approver in the task queue</Link>.</p> : null}
       <div className="mb-4 flex flex-wrap gap-3 text-sm">
         <StatusBadge status={t.state} />
         <span className={`font-medium ${sla.tone}`}>{sla.text}</span>
@@ -90,22 +92,22 @@ function Decision() {
             <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm">
               <p className="font-medium">Confirm approval of {amount}?</p>
               <p className="mt-1">This moves {t.recordId} to the next stage. It doesn't reserve budget or send anything to a supplier.</p>
-              <div className="mt-3 flex gap-2"><Button onClick={() => { setConfirming(false); try { decideApproval(t.id, "approve", "Approved in demo", role); setResult("Approval recorded. Request and task updated."); } catch (error) { setResult(error instanceof Error ? error.message : "Could not approve."); } }}>Yes, approve</Button><Button variant="outline" onClick={() => setConfirming(false)}>Cancel</Button></div>
+              <div className="mt-3 flex gap-2"><Button onClick={() => { setConfirming(false); try { decideApproval(t.id, "approve", "Approved in demo", role, actor); setResult("Approval recorded. Request and task updated."); } catch (error) { setResult(error instanceof Error ? error.message : "Could not approve."); } }}>Yes, approve</Button><Button variant="outline" onClick={() => setConfirming(false)}>Cancel</Button></div>
             </div>
           ) : (
             <ApprovalPanel
               decisionSummary={`${t.subject} · ${amount}`}
               policy={t.policy}
               conflicts={t.conflicts}
-              delegates={t.state === "Delegated" || t.approverEntity !== t.recordEntity ? [] : (t.recordEntity.includes("Kenya") ? ["Grace Wanjiru", "Daniel Otieno"] : ["Marieke Hoek", "Joost Meijer", "Priya Raman", "Lukas Brandt"]).filter((name) => name !== t.assignee && name !== t.requester)}
+              delegates={role === "buyer" || t.state === "Delegated" || t.approverEntity !== t.recordEntity ? [] : demoApprovalActors(entityId).filter((name) => name !== actor && name !== t.requester)}
               onDecision={(d, reason, delegate) => {
                 if (d === "approve") {
                   if (blockers.length) return setResult(`Not approved: ${blockers[0]}`);
                   if (t.consequential) return setConfirming(true);
-                  try { decideApproval(t.id, "approve", reason || "Approved in demo", role); setResult("Approval recorded. Request and task updated."); } catch (error) { setResult(error instanceof Error ? error.message : "Could not approve."); } return;
+                  try { decideApproval(t.id, "approve", reason || "Approved in demo", role, actor); setResult("Approval recorded. Request and task updated."); } catch (error) { setResult(error instanceof Error ? error.message : "Could not approve."); } return;
                 }
-                if (d === "delegate") { try { delegateApproval(t.id, delegate ?? "", reason, role); setResult(`Delegated to ${delegate}. Effective dates and authority are recorded on this task.`); } catch (error) { setResult(error instanceof Error ? error.message : "Could not delegate."); } return; }
-                try { decideApproval(t.id, d === "return" ? "return" : "reject", reason, role); setResult(`${d === "return" ? "Returned" : "Rejected"}. Request and task updated.`); } catch (error) { setResult(error instanceof Error ? error.message : "Could not record decision."); }
+                if (d === "delegate") { try { delegateApproval(t.id, delegate ?? "", reason, role, actor); setResult(`Delegated to ${delegate}. Effective dates and authority are recorded on this task.`); } catch (error) { setResult(error instanceof Error ? error.message : "Could not delegate."); } return; }
+                try { decideApproval(t.id, d === "return" ? "return" : "reject", reason, role, actor); setResult(`${d === "return" ? "Returned" : "Rejected"}. Request and task updated.`); } catch (error) { setResult(error instanceof Error ? error.message : "Could not record decision."); }
               }}
             />
           )}

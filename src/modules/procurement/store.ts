@@ -11,7 +11,7 @@ import type { SupplierRecord } from "./suppliers";
 import type { SourcingEvent } from "./sourcing";
 import type { Role } from "@/mock/types";
 import { getCommercial, updateCommercial } from "./commercial/store";
-import { demoManagerForEntity } from "./access";
+import { demoApprovalActors, demoManagerForEntity } from "./access";
 
 export interface ProcurementState {
   requests: PurchaseRequest[];
@@ -70,6 +70,11 @@ export function useProcurement() {
 }
 
 const stamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
+const snapshot = (request: PurchaseRequest, meta: ReqMeta) => ({
+  title: request.title, neededBy: request.neededBy, deliverTo: meta.deliverTo ?? "", costCentre: meta.costCentre ?? "",
+  project: meta.project ?? "", evidence: meta.evidence ?? [],
+  lines: meta.lines.map(({ id, description, qty, unitPrice }) => ({ id, description, qty, unitPrice })),
+});
 
 export function submitRequest(input: { title: string; requester: string; department: string; entity: string; currency: string; neededBy: string; deliverTo: string; costCentre: string; project?: string; evidence?: string[]; lines: { description: string; qty: number; unitPrice: number; supplier?: string; kind?: "Goods" | "Service" | "Asset" | "Subscription" }[] }) {
   const state = getProcurement();
@@ -77,49 +82,117 @@ export function submitRequest(input: { title: string; requester: string; departm
   const id = `PR-2026-${next}`;
   const amount = input.lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0);
   const request: PurchaseRequest = { id, title: input.title, requester: input.requester, department: input.department, currency: input.currency, amount, neededBy: input.neededBy, status: "Submitted", owner: "Budget holder", nextAction: "Budget holder decision", dueDate: input.neededBy, submittedAt: stamp(), policy: [], timeline: [{ id: crypto.randomUUID(), at: stamp(), actor: input.requester, event: "Request submitted" }], conflicts: [], lines: input.lines };
-  const meta: ReqMeta = { entity: input.entity, deliverTo: input.deliverTo, costCentre: input.costCentre, project: input.project, evidence: input.evidence, category: "Mixed", exceptions: [], versions: [{ version: 1, date: stamp(), by: input.requester, note: "Submitted" }], lines: input.lines.map((line, index) => ({ id: `${next}-${index + 1}`, description: line.description, category: "Unclassified", qty: line.qty, unitPrice: line.unitPrice, preferredSupplier: line.supplier && line.supplier !== "To be sourced by buyer" ? line.supplier : undefined, kind: line.kind, approval: "Pending", approvedQty: 0, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] })) };
+  const meta: ReqMeta = { entity: input.entity, deliverTo: input.deliverTo, costCentre: input.costCentre, project: input.project, evidence: input.evidence, category: "Mixed", exceptions: [], versions: [], lines: input.lines.map((line, index) => ({ id: `${next}-${index + 1}`, description: line.description, category: "Unclassified", qty: line.qty, unitPrice: line.unitPrice, preferredSupplier: line.supplier && line.supplier !== "To be sourced by buyer" ? line.supplier : undefined, kind: line.kind, approval: "Pending", approvedQty: 0, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] })) };
+  meta.versions = [{ version: 1, date: stamp(), by: input.requester, note: "Submitted", snapshot: snapshot(request, meta) }];
   const approverName = (input.entity.includes("Kenya") ? ["Grace Wanjiru", "Daniel Otieno"] : ["Lukas Brandt", "Marieke Hoek"]).find((name) => name !== input.requester) ?? "Independent approver";
   const task: ApprovalTask = { id: `AT-${next}`, subject: input.title, recordType: "Purchase request", recordId: id, amount: { value: amount, currency: input.currency }, requester: input.requester, assignee: approverName, state: "Assigned", sla: { due: input.neededBy, hoursLeft: 72 }, policyVersion: "Demo approval policy v1", stages: [{ name: "Budget holder", mode: "Sequential", current: true, approvers: [{ name: approverName, state: "Pending", entity: input.entity }] }], policy: [], conflicts: [], documents: input.evidence ?? [], budget: { kind: "advisory", result: "pass", source: "Demo budget check", at: stamp(), detail: "Indicative only. No funds reserved." }, authorityLimit: Number.MAX_SAFE_INTEGER, approverEntity: input.entity, recordEntity: input.entity, consequential: amount > 10000 };
   saveProcurement((s) => ({ ...s, requests: [request, ...s.requests], metadata: { ...s.metadata, [id]: meta }, approvals: [task, ...s.approvals] }));
   return id;
 }
 
-export function decideApproval(id: string, decision: "approve" | "return" | "reject", reason: string, role: Role) {
+function submitEditedRequest(id: string, actor: string, input: {
+  title: string; neededBy: string; deliverTo: string; costCentre: string; project: string; evidence: string[];
+  lines: { id: string; description: string; qty: number; unitPrice: number }[];
+}, expectedStatus: "Draft" | "Returned") {
+  const state = getProcurement();
+  const request = state.requests.find((item) => item.id === id);
+  const meta = state.metadata[id];
+  if (!request || !meta || request.status !== expectedStatus || request.requester !== actor) throw new Error(`Only the requester can submit their ${expectedStatus.toLowerCase()} request.`);
+  if (meta.lines.some((line) => line.allocatedQty || line.orderedQty || line.receivedQty || line.related.length)) throw new Error("A request with sourcing, orders or receipts cannot be resubmitted here.");
+  if (!input.title.trim() || !input.neededBy || !input.deliverTo.trim() || !input.costCentre.trim() || input.lines.length !== meta.lines.length ||
+    input.lines.some((line) => !line.description.trim() || !Number.isFinite(line.qty) || line.qty <= 0 || !Number.isFinite(line.unitPrice) || line.unitPrice < 0 || !meta.lines.some((old) => old.id === line.id))) throw new Error("Complete the request, coding and all line quantities and prices before resubmitting.");
+  const amount = input.lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0);
+  const version = Math.max(0, ...meta.versions.map((entry) => entry.version)) + 1;
+  const oldSnapshot = snapshot(request, meta);
+  const updatedMeta: ReqMeta = { ...meta, deliverTo: input.deliverTo.trim(), costCentre: input.costCentre.trim(), project: input.project.trim(), evidence: input.evidence.filter(Boolean),
+    lines: meta.lines.map((line) => { const edited = input.lines.find((item) => item.id === line.id)!; return { ...line, description: edited.description.trim(), qty: edited.qty, unitPrice: edited.unitPrice, approval: "Pending", approvedQty: 0, route: "Unassigned" }; }),
+    versions: meta.versions.map((entry, index) => index === 0 && !entry.snapshot ? { ...entry, snapshot: oldSnapshot } : entry),
+  };
+  const updatedRequest: PurchaseRequest = { ...request, title: input.title.trim(), neededBy: input.neededBy, dueDate: input.neededBy, amount,
+    lines: updatedMeta.lines.map(({ description, qty, unitPrice }) => ({ description, qty, unitPrice })), status: "Submitted", owner: "Budget holder", nextAction: "Budget holder decision", submittedAt: stamp(),
+    timeline: [{ id: crypto.randomUUID(), at: stamp(), actor, event: `Version ${version} ${expectedStatus === "Draft" ? "submitted" : "resubmitted"} for approval`, reason: expectedStatus === "Returned" ? "Returned request corrected and revalidated" : "Draft completed", after: "Submitted" }, ...request.timeline] };
+  updatedMeta.versions = [{ version, date: stamp(), by: actor, note: expectedStatus === "Draft" ? "Submitted" : "Corrected and resubmitted", snapshot: snapshot(updatedRequest, updatedMeta) }, ...updatedMeta.versions];
+  const approver = (meta.entity.includes("Kenya") ? ["Grace Wanjiru", "Daniel Otieno"] : ["Lukas Brandt", "Marieke Hoek", "Joost Meijer"]).find((name) => name !== actor) ?? "Independent approver";
+  const previousTask = state.approvals.find((task) => task.recordId === id && task.recordType === "Purchase request");
+  const task: ApprovalTask = { id: `AT-${id.split("-").at(-1)}-v${version}`, subject: updatedRequest.title, recordType: "Purchase request", recordId: id,
+    amount: { value: amount, currency: request.currency }, requester: actor, assignee: approver, state: "Assigned",
+    sla: { due: input.neededBy, hoursLeft: 72 }, policyVersion: previousTask?.policyVersion ?? "Demo approval policy v1",
+    stages: [{ name: "Budget holder", mode: "Sequential", current: true, approvers: [{ name: approver, state: "Pending", entity: meta.entity }] }],
+    policy: previousTask?.policy ?? [], conflicts: [], documents: updatedMeta.evidence ?? [],
+    budget: previousTask?.budget.kind === "hard-fail" || previousTask?.budget.kind === "unavailable" ? previousTask.budget :
+      { kind: "advisory", result: "warn", source: "Demo budget check", at: stamp(), detail: `Revised amount ${request.currency} ${amount.toLocaleString()} requires Finance confirmation. No funds reserved.` },
+    authorityLimit: previousTask?.authorityLimit ?? Number.MAX_SAFE_INTEGER, approverEntity: meta.entity, recordEntity: meta.entity, consequential: amount > 10000 };
+  saveProcurement((current) => ({ ...current, requests: current.requests.map((item) => item.id === id ? updatedRequest : item), metadata: { ...current.metadata, [id]: updatedMeta }, approvals: [task, ...current.approvals.map((old) => old.recordId === id && old.state !== "Completed" ? { ...old, state: "Completed" as const, reassignedNote: `Superseded by ${task.id} after requester correction.`, stages: old.stages.map((stage) => ({ ...stage, current: false, approvers: stage.approvers.map((approver) => approver.state === "Pending" ? { ...approver, state: "Skipped" as const, at: stamp() } : approver) })) } : old)] }));
+  return task.id;
+}
+
+export function resubmitReturnedRequest(id: string, actor: string, input: Parameters<typeof submitEditedRequest>[2]) {
+  return submitEditedRequest(id, actor, input, "Returned");
+}
+
+export function submitDraftRequest(id: string, actor: string, input: Parameters<typeof submitEditedRequest>[2]) {
+  return submitEditedRequest(id, actor, input, "Draft");
+}
+
+export function withdrawRequest(id: string, actor: string) {
+  const state = getProcurement();
+  const request = state.requests.find((item) => item.id === id);
+  const meta = state.metadata[id];
+  if (!request || !meta || request.requester !== actor || !["Submitted", "In review"].includes(request.status) ||
+    meta.lines.some((line) => line.allocatedQty || line.orderedQty || line.receivedQty || line.related.length)) throw new Error("Only the requester can withdraw before sourcing or ordering starts.");
+  saveProcurement((current) => ({ ...current,
+    requests: current.requests.map((item) => item.id === id ? { ...item, status: "Cancelled", owner: actor, nextAction: "No further action", timeline: [{ id: crypto.randomUUID(), at: stamp(), actor, event: "Withdrawn by requester", after: "Cancelled" }, ...item.timeline] } : item),
+    metadata: { ...current.metadata, [id]: { ...meta, lines: meta.lines.map((line) => ({ ...line, route: "Cancelled" as const, approvedQty: 0 })) } },
+    approvals: current.approvals.map((task) => task.recordId === id && task.state !== "Completed" ? { ...task, state: "Completed" as const, reassignedNote: "Request withdrawn by requester.", stages: task.stages.map((stage) => ({ ...stage, current: false, approvers: stage.approvers.map((approver) => approver.state === "Pending" ? { ...approver, state: "Skipped" as const, at: stamp() } : approver) })) } : task),
+  }));
+}
+
+export function decideApproval(id: string, decision: "approve" | "return" | "reject", reason: string, role: Role, actorName?: string) {
   const state = getProcurement();
   const task = state.approvals.find((item) => item.id === id);
   if (!task) throw new Error("Approval task not found.");
-  if (role === "manager" && task.assignee !== demoManagerForEntity(task.recordEntity)) throw new Error("This approval is assigned to another person.");
-  const stageName = task.stages.find((stage) => stage.current)?.name ?? "";
+  if (decision !== "approve" && !reason.trim()) throw new Error("Give a reason when returning or rejecting.");
+  const request = task.recordType === "Purchase request" ? state.requests.find((item) => item.id === task.recordId) : undefined;
+  if (request && !["Submitted", "In review"].includes(request.status)) throw new Error("The request is no longer awaiting approval.");
+  const actor = actorName ?? (role === "manager" ? demoManagerForEntity(task.recordEntity) : task.assignee);
+  const currentIndex = task.stages.findIndex((stage) => stage.current);
+  const currentStage = task.stages[currentIndex];
+  if (!currentStage || !currentStage.approvers.some((approver) => approver.name === actor && approver.state === "Pending")) throw new Error("This decision is assigned to another person or the stage is complete.");
+  const stageName = currentStage.name;
   const allowedRoles = stageName.includes("Procurement") ? ["buyer", "proc_admin"] : ["manager", "proc_admin"];
   if (!allowedRoles.includes(role)) throw new Error("This approval stage is assigned to another role.");
-  if (decision === "approve" && approvalBlockers(task, task.assignee).length) throw new Error(approvalBlockers(task, task.assignee)[0]);
+  if (decision === "approve" && approvalBlockers(task, actor).length) throw new Error(approvalBlockers(task, actor)[0]);
   if (task.state === "Completed") throw new Error("This task was already decided.");
   const nextStatus = decision === "approve" ? "Approved" : decision === "return" ? "Returned" : "Rejected";
-  const currentIndex = task.stages.findIndex((stage) => stage.current);
-  const stages = task.stages.map((stage, index) => ({ ...stage, current: decision === "approve" && index === currentIndex + 1, approvers: index === currentIndex ? stage.approvers.map((a) => a.state === "Pending" ? { ...a, state: nextStatus as "Approved" | "Returned" | "Rejected", at: stamp() } : a) : stage.approvers }));
-  const nextStage = decision === "approve" ? stages[currentIndex + 1] : undefined;
-  const finalApproval = decision === "approve" && !nextStage;
+  const decidedApprovers = currentStage.approvers.map((approver) => approver.name === actor ? { ...approver, state: nextStatus as "Approved" | "Returned" | "Rejected", at: stamp() } : approver);
+  const required = currentStage.mode === "Parallel" ? Math.max(1, Math.min(currentStage.quorum ?? currentStage.approvers.length, currentStage.approvers.length)) : 1;
+  const stageComplete = decision !== "approve" || decidedApprovers.filter((approver) => approver.state === "Approved").length >= required;
+  const stages = task.stages.map((stage, index) => index === currentIndex ? { ...stage, current: !stageComplete, approvers: stageComplete ? decidedApprovers.map((approver) => approver.state === "Pending" ? { ...approver, state: "Skipped" as const, at: stamp() } : approver) : decidedApprovers } : { ...stage, current: decision === "approve" && stageComplete && index === currentIndex + 1 });
+  const nextStage = decision === "approve" && stageComplete ? stages[currentIndex + 1] : undefined;
+  const nextAssignee = stageComplete ? nextStage?.approvers.find((approver) => approver.state === "Pending")?.name : stages[currentIndex].approvers.find((approver) => approver.state === "Pending")?.name;
+  const finalApproval = decision === "approve" && stageComplete && !nextStage;
   saveProcurement((s) => ({
     ...s,
-    approvals: s.approvals.map((item) => item.id === id ? { ...item, state: nextStage ? "Assigned" : "Completed", assignee: nextStage?.approvers.find((a) => a.state === "Pending")?.name ?? item.assignee, stages } : item),
-    requests: s.requests.map((request) => request.id === task.recordId ? { ...request, status: finalApproval ? "Approved" : decision === "approve" ? "In review" : nextStatus, owner: nextStage?.approvers.find((a) => a.state === "Pending")?.name ?? (finalApproval ? "Procurement buyer" : request.requester), nextAction: nextStage ? `${nextStage.name} decision` : finalApproval ? "Route approved lines" : decision === "return" ? "Correct and resubmit" : "No further action", timeline: [{ id: crypto.randomUUID(), at: stamp(), actor: task.assignee, event: nextStage ? `${task.stages[currentIndex]?.name ?? "Approval"} approved` : nextStatus, reason, after: nextStage ? "In review" : nextStatus }, ...request.timeline] } : request),
+    approvals: s.approvals.map((item) => item.id === id ? { ...item, state: decision !== "approve" || finalApproval ? "Completed" : "Assigned", assignee: nextAssignee ?? item.assignee, stages } : item),
+    requests: s.requests.map((request) => request.id === task.recordId ? { ...request, status: finalApproval ? "Approved" : decision === "approve" ? "In review" : nextStatus, owner: nextAssignee ?? (finalApproval ? "Procurement buyer" : request.requester), nextAction: nextStage ? `${nextStage.name} decision` : decision === "approve" && !stageComplete ? `${currentStage.name}: ${required - decidedApprovers.filter((approver) => approver.state === "Approved").length} more decision(s)` : finalApproval ? "Route approved lines" : decision === "return" ? "Correct and resubmit" : "No further action", timeline: [{ id: crypto.randomUUID(), at: stamp(), actor, event: decision === "approve" && !stageComplete ? `${currentStage.name}: individual approval recorded` : nextStage ? `${currentStage.name} approved` : nextStatus, reason, after: nextStage || !stageComplete && decision === "approve" ? "In review" : nextStatus }, ...request.timeline] } : request),
     metadata: Object.fromEntries(Object.entries(s.metadata).map(([key, meta]) => [key, key === task.recordId && (finalApproval || decision !== "approve") ? { ...meta, lines: meta.lines.map((line) => ({ ...line, approval: nextStatus === "Approved" ? "Approved" : nextStatus, approvedQty: finalApproval ? line.qty : 0 })) } : meta])),
   }));
 }
 
-export function delegateApproval(id: string, delegate: string, reason: string, role: Role) {
+export function delegateApproval(id: string, delegate: string, reason: string, role: Role, actorName?: string) {
   const state = getProcurement();
   const task = state.approvals.find((item) => item.id === id);
-  if (!task || !["manager", "proc_admin"].includes(role) || !["Assigned", "Overdue", "Escalated"].includes(task.state) || task.approverEntity !== task.recordEntity || role === "manager" && task.assignee !== demoManagerForEntity(task.recordEntity)) throw new Error("This approval cannot be delegated across entities, by another approver, or in its current state.");
-  if (!reason.trim() || !delegate.trim() || delegate === task.assignee || delegate === task.requester) throw new Error("Choose an independent delegate and record a reason.");
-  const allowed = task.recordEntity.includes("Kenya") ? ["Grace Wanjiru", "Daniel Otieno"] : ["Marieke Hoek", "Joost Meijer", "Priya Raman", "Lukas Brandt"];
+  const actor = actorName ?? (role === "manager" ? task && demoManagerForEntity(task.recordEntity) : task?.assignee);
+  if (!task || !actor || !["manager", "proc_admin"].includes(role) || !["Assigned", "Overdue", "Escalated"].includes(task.state) || task.approverEntity !== task.recordEntity || !task.stages.some((stage) => stage.current && stage.approvers.some((approver) => approver.name === actor && approver.state === "Pending"))) throw new Error("This approval cannot be delegated across entities, by another approver, or in its current state.");
+  if (!reason.trim() || !delegate.trim() || delegate === actor || delegate === task.requester) throw new Error("Choose an independent delegate and record a reason.");
+  const allowed = demoApprovalActors(task.recordEntity.includes("Kenya") ? "ent-ke" : task.recordEntity.includes("Germany") ? "ent-de" : "ent-nl");
   if (!allowed.includes(delegate)) throw new Error("Delegate must belong to the same entity's approved demo authority list.");
   const from = new Date().toISOString().slice(0, 10);
   const sevenDays = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
   const to = task.sla.due.slice(0, 10) >= from ? task.sla.due.slice(0, 10) : sevenDays;
-  const currentName = task.assignee;
+  const currentName = actor;
   saveProcurement((current) => ({ ...current,
-    approvals: current.approvals.map((item) => item.id === id ? { ...item, assignee: delegate, state: "Delegated", delegatedFrom: { name: currentName, from, to, limit: item.authorityLimit, currency: item.amount?.currency ?? "EUR" }, reassignedNote: `Delegated by ${currentName} to ${delegate} until ${to}. Reason: ${reason}`,
+    approvals: current.approvals.map((item) => item.id === id ? { ...item, assignee: delegate, state: "Delegated", delegatedFrom: { name: currentName, delegateName: delegate, from, to, limit: item.authorityLimit, currency: item.amount?.currency ?? "EUR" }, reassignedNote: `Delegated by ${currentName} to ${delegate} until ${to}. Reason: ${reason}`,
       stages: item.stages.map((stage) => stage.current ? { ...stage, approvers: stage.approvers.map((approver) => approver.name === currentName && approver.state === "Pending" ? { ...approver, name: delegate } : approver) } : stage) } : item),
     requests: current.requests.map((request) => request.id === task.recordId ? { ...request, owner: delegate, nextAction: `Delegated approval by ${delegate}`, timeline: [{ id: crypto.randomUUID(), at: stamp(), actor: currentName, event: `Approval delegated to ${delegate}`, reason }, ...request.timeline] } : request),
   }));
@@ -129,12 +202,12 @@ export function reassignApproval(id: string, assignee: string, reason: string, r
   const state = getProcurement();
   const task = state.approvals.find((item) => item.id === id);
   if (!task || role !== "proc_admin" || task.state === "Completed") throw new Error("Only Procurement admin can reassign an open task.");
-  const allowed = task.recordEntity.includes("Kenya") ? ["Grace Wanjiru", "Daniel Otieno"] : ["Marieke Hoek", "Joost Meijer", "Priya Raman", "Lukas Brandt"];
+  const allowed = demoApprovalActors(task.recordEntity.includes("Kenya") ? "ent-ke" : task.recordEntity.includes("Germany") ? "ent-de" : "ent-nl");
   if (!reason.trim() || !allowed.includes(assignee) || assignee === task.requester) throw new Error("Select an independent approver in the record entity and give a reason.");
   const previous = task.assignee;
   saveProcurement((current) => ({ ...current,
     approvals: current.approvals.map((item) => item.id === id ? { ...item, assignee, approverEntity: item.recordEntity, state: "Assigned", delegatedFrom: undefined, reassignedNote: `Reassigned from ${previous} to ${assignee}. Reason: ${reason}`,
-      stages: item.stages.map((stage) => stage.current ? { ...stage, approvers: stage.approvers.map((approver) => approver.state === "Pending" ? { ...approver, name: assignee, entity: item.recordEntity } : approver) } : stage) } : item),
+      stages: item.stages.map((stage) => stage.current ? { ...stage, approvers: stage.approvers.map((approver) => approver.state === "Pending" && approver.name === previous ? { ...approver, name: assignee, entity: item.recordEntity } : approver) } : stage) } : item),
     requests: current.requests.map((request) => request.id === task.recordId ? { ...request, owner: assignee, nextAction: `Approval by ${assignee}`, timeline: [{ id: crypto.randomUUID(), at: stamp(), actor: "Procurement admin (demo)", event: `Approval reassigned to ${assignee}`, reason }, ...request.timeline] } : request),
   }));
 }

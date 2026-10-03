@@ -7,7 +7,7 @@ import { slaLabel } from "@/modules/procurement/approvals";
 import type { ApprovalTask, TaskState } from "@/modules/procurement/approvals";
 import { money } from "@/modules/procurement/catalog";
 import { useProcurement } from "@/modules/procurement/store";
-import { sameEntity, demoManagerForEntity } from "@/modules/procurement/access";
+import { sameEntity, demoApprovalActors } from "@/modules/procurement/access";
 import { useApp } from "@/platform/app-context";
 import { RestrictedState } from "@/platform/components/States";
 
@@ -35,13 +35,19 @@ const inTab = (t: ApprovalTask, tab: TaskState) =>
 
 function ApprovalsPage() {
   const { tab = "Assigned" } = Route.useSearch();
-  const { role, entityId } = useApp();
-  const approvals = useProcurement().approvals.filter((task) => sameEntity(task.recordEntity, entityId) && (role !== "manager" || task.assignee === demoManagerForEntity(task.recordEntity)) && (role !== "buyer" || task.stages.some((stage) => stage.current && stage.name.includes("Procurement"))));
+  const { role, entityId, approvalActor, setApprovalActor } = useApp();
+  const approvals = useProcurement().approvals.filter((task) =>
+    sameEntity(task.recordEntity, entityId) &&
+    (role !== "manager" || task.stages.some((stage) =>
+      stage.approvers.some((approver) => approver.name === approvalActor &&
+        (task.state === "Completed" || (stage.current && approver.state === "Pending"))))) &&
+    (role !== "buyer" || task.stages.some((stage) => stage.current && stage.name.includes("Procurement"))));
   const rows = approvals.filter((t) => inTab(t, tab));
   if (!["manager", "buyer", "proc_admin"].includes(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
       <PageHeader eyebrow="Approvals" title="Tasks & approvals" description="Ordered by deadline. A breached deadline escalates to a person — nothing is approved automatically." />
+      {role === "manager" ? <div className="mb-4 rounded-lg border bg-surface p-3 text-sm"><label htmlFor="approval-persona" className="font-medium">Acting as demo approver</label><select id="approval-persona" className="ml-3 h-9 max-w-full rounded-md border bg-background px-2" value={approvalActor} onChange={(event) => setApprovalActor(event.target.value)}>{demoApprovalActors(entityId).map((name) => <option key={name}>{name}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Select a named demo person to review their own assigned or delegated task. This switch does not grant production access.</p></div> : null}
       <nav aria-label="Task views" className="mb-4 flex gap-1 overflow-x-auto border-b">
         {TABS.map((t) => {
           const n = approvals.filter((x) => inTab(x, t)).length;

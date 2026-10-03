@@ -35,7 +35,10 @@ export interface ReqMeta {
   category: string;
   exceptions: string[];
   budgetBalance?: { available: number; note: string };
-  versions: { version: number; date: string; by: string; note: string }[];
+  versions: { version: number; date: string; by: string; note: string; snapshot?: {
+    title: string; neededBy: string; deliverTo: string; costCentre: string; project: string; evidence: string[];
+    lines: { id: string; description: string; qty: number; unitPrice: number }[];
+  } }[];
   lines: ReqLine[];
 }
 

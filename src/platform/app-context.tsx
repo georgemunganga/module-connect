@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { entities, workspaces } from "@/mock/data";
 import type { Role } from "@/mock/types";
+import { approvalActorForEntity } from "@/modules/procurement/access";
 
 export type ModuleId = "hrm" | "procurement";
 
@@ -12,6 +13,8 @@ interface AppState {
   setRole: (r: Role) => void;
   entityId: string;
   setEntityId: (id: string) => void;
+  approvalActor: string;
+  setApprovalActor: (name: string) => void;
   branch: string;
   setBranch: (b: string) => void;
   theme: "light" | "dark";
@@ -30,6 +33,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [moduleId, setModuleId] = useState<ModuleId>("hrm");
   const [role, setRole] = useState<Role>("hr_admin");
   const [entityId, setEntityId] = useState(entities[0].id);
+  const [approvalPersona, setApprovalPersona] = useState<{ entityId: string; name: string } | null>(null);
   const [branch, setBranch] = useState(entities[0].branches[0]);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [setupComplete, setSetupComplete] = useState(false);
@@ -43,6 +47,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (s.moduleId) setModuleId(s.moduleId);
         if (s.role) setRole(s.role);
         if (s.entityId) setEntityId(s.entityId);
+        if (s.approvalPersona) setApprovalPersona(s.approvalPersona);
         if (s.branch) setBranch(s.branch);
         if (s.theme) setTheme(s.theme);
         setSetupComplete(Boolean(s.setupComplete));
@@ -59,9 +64,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(KEY, JSON.stringify({ moduleId, role, entityId, branch, theme, setupComplete }));
+    localStorage.setItem(KEY, JSON.stringify({ moduleId, role, entityId, approvalPersona, branch, theme, setupComplete }));
     document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [moduleId, role, entityId, branch, theme, setupComplete, hydrated]);
+  }, [moduleId, role, entityId, approvalPersona, branch, theme, setupComplete, hydrated]);
 
   const value = useMemo<AppState>(
     () => ({
@@ -70,6 +75,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       role,
       setRole,
       entityId,
+      approvalActor: approvalActorForEntity(approvalPersona, entityId),
+      setApprovalActor: (name: string) => setApprovalPersona({ entityId, name }),
       setEntityId: (id: string) => {
         setEntityId(id);
         const e = entities.find((x) => x.id === id);
@@ -84,7 +91,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       resetSetup: () => setSetupComplete(false),
       hydrated,
     }),
-    [moduleId, role, entityId, branch, theme, setupComplete, hydrated],
+    [moduleId, role, entityId, approvalPersona, branch, theme, setupComplete, hydrated],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

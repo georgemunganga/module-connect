@@ -2,15 +2,16 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useProcurement, saveProcurement, routeLine, decideApproval } from "@/modules/procurement/store";
+import { Textarea } from "@/components/ui/textarea";
+import { useProcurement, saveProcurement, routeLine, resubmitReturnedRequest, submitDraftRequest, withdrawRequest } from "@/modules/procurement/store";
 import { useCommercial } from "@/modules/procurement/commercial/store";
-import { requestVisible, demoManagerForEntity, sameEntity } from "@/modules/procurement/access";
+import { requestVisible, demoRequester, sameEntity } from "@/modules/procurement/access";
 import { deriveProgress, remaining } from "@/modules/procurement/requisition";
 import type { LineRoute, ReqLine } from "@/modules/procurement/requisition";
 import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
-import { ApprovalPanel } from "@/platform/components/ApprovalPanel";
 import { RecordDetail } from "@/platform/components/RecordDetail";
 import { RestrictedState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -44,7 +45,7 @@ function RequestDetail() {
 }
 
 function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseRequest }) {
-  const { role, entityId } = useApp();
+  const { role, entityId, approvalActor } = useApp();
   const { metadata, approvals, suppliers } = useProcurement();
   const receipts = useCommercial().receipts;
   const taskForRequest = approvals.find((task) => task.recordId === r.id && task.state !== "Completed");
@@ -56,8 +57,8 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
 
   const money = new Intl.NumberFormat("en", { style: "currency", currency: r.currency, maximumFractionDigits: 0 });
   const isBuyer = BUYERS.includes(role);
-  const isApprover = APPROVERS.includes(role) && (role === "proc_admin" || Boolean(taskForRequest && taskForRequest.assignee === demoManagerForEntity(taskForRequest.recordEntity)));
-  const isRequester = ["employee", "manager", "hr_ops", "payroll", "hr_admin"].includes(role);
+  const isApprover = APPROVERS.includes(role) && Boolean(taskForRequest && (role === "proc_admin" || taskForRequest.stages.some((stage) => stage.current && stage.approvers.some((approver) => approver.name === approvalActor && approver.state === "Pending"))));
+  const isRequester = ["employee", "manager", "hr_ops", "payroll", "hr_admin"].includes(role) && r.requester === demoRequester(role, entityId);
   const progress = deriveProgress(lines);
   const changeRequest = (patch: Partial<typeof r>, event: string, reason?: string) => saveProcurement((state) => ({ ...state, requests: state.requests.map((item) => item.id === r.id ? { ...item, ...patch, timeline: [{ id: crypto.randomUUID(), at: now(), actor: "You (demo)", event, reason }, ...item.timeline] } : item) }));
   const updateLine = (id: string, patch: Partial<ReqLine>, event: string) => saveProcurement((state) => ({ ...state, metadata: { ...state.metadata, [r.id]: { ...state.metadata[r.id], lines: state.metadata[r.id].lines.map((line) => line.id === id ? { ...line, ...patch } : line) } }, requests: state.requests.map((item) => item.id === r.id ? { ...item, timeline: [{ id: crypto.randomUUID(), at: now(), actor: "You (demo)", event }, ...item.timeline] } : item) }));
@@ -74,11 +75,8 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
 
   // Header actions with permitted-state checks
   const actions: { label: string; why: string; enabled: boolean; run: () => void; tone?: "primary" }[] = [
-    { label: "Submit", why: status === "Draft" ? "Draft is complete enough to send for approval." : "Only drafts can be submitted.", enabled: status === "Draft" && isRequester, run: () => { changeRequest({ status: "Submitted" }, "Submitted"); }, tone: "primary" },
-    { label: "Withdraw", why: ["Submitted", "In review"].includes(status) && !lines.some((l) => l.orderedQty) ? "Nothing ordered yet, so you can still withdraw." : "Withdraw is only possible before any line is ordered.", enabled: isRequester && ["Submitted", "In review"].includes(status) && !lines.some((l) => l.orderedQty), run: () => { changeRequest({ status: "Cancelled" }, "Withdrawn by requester"); } },
-    { label: "Return for correction", why: isBuyer ? "Buyer review found something the requester must fix." : "Only the buyer or approver can return a request.", enabled: (isBuyer || isApprover) && !["Draft", "Returned", "Cancelled"].includes(status), run: () => { changeRequest({ status: "Returned" }, "Returned for correction", "See line notes"); } },
-    { label: "Reopen as new version", why: "Material edits after submission create a new version; the original is preserved.", enabled: isRequester && status === "Returned", run: () => { changeRequest({ status: "Draft" }, `Reopened as version ${(meta?.versions.length ?? 0) + 1}`); } },
-    { label: "Close request", why: lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred") ? "No remaining quantity to order." : "Can't close while approved quantity is still unordered.", enabled: isBuyer && lines.length > 0 && lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred"), run: () => { changeRequest({ status: "Closed" as typeof status }, "Closed; remaining quantity cancelled"); } },
+    { label: "Withdraw", why: ["Submitted", "In review"].includes(status) && !lines.some((l) => l.allocatedQty || l.orderedQty || l.related.length) ? "Nothing has entered sourcing or ordering yet." : "Withdraw is only possible before sourcing or ordering starts.", enabled: isRequester && ["Submitted", "In review"].includes(status) && !lines.some((l) => l.allocatedQty || l.orderedQty || l.related.length), run: () => { try { withdrawRequest(r.id, r.requester); setNotice("Request withdrawn. Pending approval tasks were closed."); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not withdraw request."); } } },
+    { label: "Close request", why: status !== "Approved" ? "Only an approved request can be closed." : lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred") ? "No remaining quantity to order." : "Can't close while approved quantity is still unordered.", enabled: isBuyer && status === "Approved" && lines.length > 0 && lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred"), run: () => { changeRequest({ status: "Closed" as typeof status }, "Closed; remaining quantity cancelled"); } },
   ];
   const primary = actions.find((a) => a.enabled && a.tone === "primary") ?? actions.find((a) => a.enabled);
 
@@ -116,6 +114,8 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
       </section>
 
       {notice ? <p role="alert" className="flex gap-2 rounded-md border border-danger/40 bg-danger-soft p-3 text-sm"><AlertTriangle className="size-4 shrink-0 text-danger" aria-hidden />{notice}</p> : null}
+
+      {isRequester && ["Draft", "Returned"].includes(status) && meta ? <CorrectionEditor request={r} meta={meta} onResult={setNotice} /> : null}
 
       {meta?.evidence?.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Supporting evidence references</h2><ul className="mt-2 list-disc pl-5 text-sm">{meta.evidence.map((reference) => <li key={reference}>{reference} · demo reference, no uploaded file</li>)}</ul></section> : null}
 
@@ -176,13 +176,42 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
       {meta?.versions.length ? (
         <section className="rounded-lg border bg-surface p-4 text-sm">
           <h2 className="font-semibold">Versions</h2>
-          <ul className="mt-2 space-y-1">{meta.versions.map((v) => <li key={v.version}>v{v.version} · {v.note} <span className="text-xs text-muted-foreground">— {v.by}, {v.date}</span></li>)}</ul>
+          <ul className="mt-2 space-y-2">{meta.versions.map((v) => <li key={v.version}><span className="font-medium">v{v.version} · {v.note}</span> <span className="text-xs text-muted-foreground">— {v.by}, {v.date}</span>{v.snapshot ? <span className="block text-xs text-muted-foreground">{v.snapshot.title} · {v.snapshot.lines.map((line) => `${line.qty} × ${line.description}`).join("; ")} · {v.snapshot.costCentre}</span> : null}</li>)}</ul>
         </section>
       ) : null}
 
-      {isApprover && ["Submitted", "In review"].includes(status) ? (
-        <ApprovalPanel decisionSummary={`Approve ${money.format(r.amount)} of spend for ${r.department}: ${r.title.toLowerCase()}.`} policy={r.policy} conflicts={r.conflicts} onDecision={(decision, reason) => { const task = taskForRequest; if (!task) return setNotice("No approval task is assigned to this request."); if (decision === "delegate") return setNotice("Delegation is preview-only. Open the approval task for available decisions."); try { decideApproval(task.id, decision === "approve" ? "approve" : decision === "return" ? "return" : "reject", reason, role); } catch (error) { setNotice(error instanceof Error ? error.message : "Decision could not be recorded."); } }} />
-      ) : null}
+      {isApprover && ["Submitted", "In review"].includes(status) && taskForRequest ? <section className="rounded-lg border bg-surface p-4 text-sm"><h2 className="font-semibold">Approval decision</h2><p className="mt-1 text-muted-foreground">Review the current stage, budget result and policy blockers before deciding.</p><Button className="mt-3" asChild><Link to="/procurement/approvals/$id" params={{ id: taskForRequest.id }}>Open approval task</Link></Button></section> : null}
     </RecordDetail>
   );
+}
+
+function CorrectionEditor({ request, meta, onResult }: { request: import("@/modules/procurement/types").PurchaseRequest; meta: import("@/modules/procurement/requisition").ReqMeta; onResult: (message: string) => void }) {
+  const isDraft = request.status === "Draft";
+  const [title, setTitle] = useState(request.title);
+  const [neededBy, setNeededBy] = useState(request.neededBy);
+  const [deliverTo, setDeliverTo] = useState(meta.deliverTo ?? "");
+  const [costCentre, setCostCentre] = useState(meta.costCentre ?? "");
+  const [project, setProject] = useState(meta.project ?? "");
+  const [evidence, setEvidence] = useState((meta.evidence ?? []).join("\n"));
+  const [lines, setLines] = useState(meta.lines.map(({ id, description, qty, unitPrice }) => ({ id, description, qty, unitPrice })));
+  const update = (id: string, patch: Partial<(typeof lines)[number]>) => setLines((current) => current.map((line) => line.id === id ? { ...line, ...patch } : line));
+  return <section className="rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm" aria-labelledby="correct-h">
+    <h2 id="correct-h" className="font-semibold">{isDraft ? "Complete and submit draft" : "Correct and resubmit"}</h2>
+    <p className="mt-1 text-muted-foreground">{isDraft ? "Complete the required fields before sending this request for approval." : "Review the return reason in History. Submitting saves a new version and creates a fresh approval task. Any unresolved policy or hard budget failure stays blocked."}</p>
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="sm:col-span-2"><Label htmlFor="correct-title">Request title</Label><Input id="correct-title" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
+      <div><Label htmlFor="correct-needed">Needed by</Label><Input id="correct-needed" type="date" value={neededBy.slice(0, 10)} onChange={(event) => setNeededBy(event.target.value)} /></div>
+      <div><Label htmlFor="correct-deliver">Deliver to</Label><Input id="correct-deliver" value={deliverTo} onChange={(event) => setDeliverTo(event.target.value)} /></div>
+      <div><Label htmlFor="correct-cost">Cost centre</Label><Input id="correct-cost" value={costCentre} onChange={(event) => setCostCentre(event.target.value)} /></div>
+      <div><Label htmlFor="correct-project">Project, if applicable</Label><Input id="correct-project" value={project} onChange={(event) => setProject(event.target.value)} /></div>
+      <div className="sm:col-span-2"><Label htmlFor="correct-evidence">Evidence references, one per line</Label><Textarea id="correct-evidence" value={evidence} onChange={(event) => setEvidence(event.target.value)} /></div>
+    </div>
+    <div className="mt-4 space-y-3">{lines.map((line, index) => <div key={line.id} className="grid gap-2 rounded-md border bg-surface p-3 sm:grid-cols-[minmax(0,1fr)_7rem_9rem]">
+      <div><Label htmlFor={`correct-description-${line.id}`}>Line {index + 1} description</Label><Input id={`correct-description-${line.id}`} value={line.description} onChange={(event) => update(line.id, { description: event.target.value })} /></div>
+      <div><Label htmlFor={`correct-qty-${line.id}`}>Quantity</Label><Input id={`correct-qty-${line.id}`} type="number" min="1" value={line.qty} onChange={(event) => update(line.id, { qty: Number(event.target.value) })} /></div>
+      <div><Label htmlFor={`correct-price-${line.id}`}>Unit price</Label><Input id={`correct-price-${line.id}`} type="number" min="0" step="0.01" value={line.unitPrice} onChange={(event) => update(line.id, { unitPrice: Number(event.target.value) })} /></div>
+    </div>)}</div>
+    <div className="mt-4 rounded-md border bg-surface p-3 text-xs"><strong>Review change:</strong> {request.amount.toLocaleString()} → {lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0).toLocaleString()} {request.currency} · {isDraft ? "Draft" : `v${meta.versions[0]?.version ?? 1}`} → v{isDraft ? 1 : (meta.versions[0]?.version ?? 1) + 1}</div>
+    <Button className="mt-4" onClick={() => { try { const input = { title, neededBy, deliverTo, costCentre, project, evidence: evidence.split("\n").map((item) => item.trim()).filter(Boolean), lines }; const task = isDraft ? submitDraftRequest(request.id, request.requester, input) : resubmitReturnedRequest(request.id, request.requester, input); onResult(`Request submitted. Approval task ${task} is assigned.`); } catch (error) { onResult(error instanceof Error ? error.message : "Request could not be submitted."); } }}>{isDraft ? "Submit draft for approval" : "Resubmit corrected request"}</Button>
+  </section>;
 }

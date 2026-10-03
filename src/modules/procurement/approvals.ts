@@ -23,7 +23,7 @@ export interface ApprovalTask {
   amount?: { value: number; currency: string };
   requester: string;
   assignee: string;
-  delegatedFrom?: { name: string; from: string; to: string; limit: number; currency: string };
+  delegatedFrom?: { name: string; delegateName?: string; from: string; to: string; limit: number; currency: string };
   state: TaskState;
   sla: { due: string; hoursLeft: number; paused?: string };
   policyVersion: string;
@@ -110,10 +110,12 @@ export function approvalBlockers(t: ApprovalTask, me = "Lukas Brandt"): string[]
   if (t.state === "Completed") b.push("Already decided.");
   if (t.requester === me) b.push("You requested this. Someone else must give the final approval.");
   if (t.amount && t.amount.value > t.authorityLimit) b.push(`Amount exceeds your ${t.delegatedFrom ? "delegated " : ""}authority of ${t.amount.currency} ${t.authorityLimit.toLocaleString()}.`);
-  if (t.delegatedFrom && (new Date().toISOString().slice(0, 10) < t.delegatedFrom.from || new Date().toISOString().slice(0, 10) > t.delegatedFrom.to)) b.push(`Delegation is only effective ${t.delegatedFrom.from} to ${t.delegatedFrom.to}.`);
-  if (t.delegatedFrom && t.amount && t.amount.value > t.delegatedFrom.limit) b.push("Amount exceeds delegated authority.");
+  if (t.delegatedFrom && me === (t.delegatedFrom.delegateName ?? t.assignee) && (new Date().toISOString().slice(0, 10) < t.delegatedFrom.from || new Date().toISOString().slice(0, 10) > t.delegatedFrom.to)) b.push(`Delegation is only effective ${t.delegatedFrom.from} to ${t.delegatedFrom.to}.`);
+  if (t.delegatedFrom && me === (t.delegatedFrom.delegateName ?? t.assignee) && t.amount && t.amount.value > t.delegatedFrom.limit) b.push("Amount exceeds delegated authority.");
   if (t.approverEntity !== t.recordEntity) b.push(`You approve for ${t.approverEntity}; this belongs to ${t.recordEntity}.`);
   if (t.budget.kind === "hard-fail" && !t.exception) b.push("Budget check failed. Only an authorised exception route can unblock this.");
+  if (t.budget.kind === "unavailable") b.push("Finance budget check is unavailable. Retry or assign an authorised review before approval.");
+  for (const result of t.policy.filter((item) => item.outcome === "fail")) b.push(`${result.label}: ${result.detail}`);
   if (t.stale) b.push("A material change made the earlier approval stale; review the change first.");
   return b;
 }
