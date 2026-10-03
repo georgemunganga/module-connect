@@ -117,7 +117,7 @@ function ProcHome() {
         primaryAction={
           canRequest ? (
             <Button asChild>
-              <Link to="/procurement/requests">Create request</Link>
+              <Link to="/procurement/requests/new">Create request</Link>
             </Button>
           ) : undefined
         }
