@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   Building2,
@@ -39,17 +39,19 @@ import { Separator } from "@/components/ui/separator";
 import { entities, notifications, workspaces } from "@/mock/data";
 import type { Role } from "@/mock/types";
 import { hrmModule } from "@/modules/hrm/nav";
+import { procurementModule } from "@/modules/procurement/nav";
 import type { ModuleDefinition, NavItem, NavSection } from "@/platform/nav";
 import { useApp } from "@/platform/app-context";
+import type { ModuleId } from "@/platform/app-context";
 import { cn } from "@/lib/utils";
 
-const modules = [
-  { id: "hrm", label: "Human resources", available: true },
-  { id: "finance", label: "Finance", available: false },
-  { id: "procurement", label: "Procurement", available: false },
-  { id: "inventory", label: "Inventory", available: false },
-  { id: "accounting", label: "Accounting", available: false },
-];
+/** Module registry: adding a future module means registering it here — never copying shell code. */
+const moduleRegistry: Record<ModuleId, { def: ModuleDefinition; home: string; available: boolean }> = {
+  hrm: { def: hrmModule, home: "/", available: true },
+  procurement: { def: procurementModule, home: "/procurement", available: true },
+};
+
+const comingSoon = ["Finance", "Inventory", "Accounting"];
 
 function useVisibleSections(mod: ModuleDefinition, role: Role) {
   return mod.sections.filter((s) => !s.roles || s.roles.includes(role));
@@ -125,8 +127,9 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate?: ()
 }
 
 function RailContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { role } = useApp();
-  const sections = useVisibleSections(hrmModule, role);
+  const { role, moduleId } = useApp();
+  const mod = moduleRegistry[moduleId].def;
+  const sections = useVisibleSections(mod, role);
   const main = sections.filter((s) => s.id !== "configuration");
   const config = sections.find((s) => s.id === "configuration");
 
@@ -134,7 +137,7 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col">
       <div className="px-3 py-4">
         <p className="px-2 text-xs font-semibold uppercase tracking-wide text-rail-muted">Module</p>
-        <p className="px-2 text-sm font-semibold text-rail-foreground">{hrmModule.name}</p>
+        <p className="px-2 text-sm font-semibold text-rail-foreground">{mod.name}</p>
       </div>
       <nav aria-label="Main" className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {main.map((s) => <Section key={s.id} section={s} onNavigate={onNavigate} />)}
@@ -152,8 +155,9 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { role } = useApp();
-  const sections = useVisibleSections(hrmModule, role);
+  const { role, moduleId } = useApp();
+  const mod = moduleRegistry[moduleId].def;
+  const sections = useVisibleSections(mod, role);
   const links = sections.flatMap((s) =>
     s.to ? [{ label: s.label, to: s.to, params: undefined }] : (s.items ?? []).map((i) => ({ label: `${s.label}: ${i.label}`, to: i.to, params: i.params })),
   );
@@ -173,16 +177,26 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
           ))}
         </CommandGroup>
         <CommandGroup heading="Records">
-          <CommandItem value="LV-2026-0412" asChild>
-            <Link to="/leave/$id" params={{ id: "LV-2026-0412" }} onClick={() => onOpenChange(false)}>
-              LV-2026-0412 — Annual leave, Amara
-            </Link>
-          </CommandItem>
-          <CommandItem value="HR-2026-0912" asChild>
-            <Link to="/requests/$id" params={{ id: "HR-2026-0912" }} onClick={() => onOpenChange(false)}>
-              HR-2026-0912 — Employment letter
-            </Link>
-          </CommandItem>
+          {moduleId === "hrm" ? (
+            <>
+              <CommandItem value="LV-2026-0412" asChild>
+                <Link to="/leave/$id" params={{ id: "LV-2026-0412" }} onClick={() => onOpenChange(false)}>
+                  LV-2026-0412 — Annual leave, Amara
+                </Link>
+              </CommandItem>
+              <CommandItem value="HR-2026-0912" asChild>
+                <Link to="/requests/$id" params={{ id: "HR-2026-0912" }} onClick={() => onOpenChange(false)}>
+                  HR-2026-0912 — Employment letter
+                </Link>
+              </CommandItem>
+            </>
+          ) : (
+            <CommandItem value="PR-2026-1042" asChild>
+              <Link to="/procurement/requests/$id" params={{ id: "PR-2026-1042" }} onClick={() => onOpenChange(false)}>
+                PR-2026-1042 — Laptops, €18,450
+              </Link>
+            </CommandItem>
+          )}
         </CommandGroup>
       </CommandList>
     </CommandDialog>
@@ -190,10 +204,16 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, setRole, entityId, setEntityId, branch, setBranch, theme, toggleTheme } = useApp();
+  const { role, setRole, entityId, setEntityId, branch, setBranch, theme, toggleTheme, moduleId, setModuleId } = useApp();
+  const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const entity = entities.find((e) => e.id === entityId)!;
   const unread = notifications.filter((n) => n.unread).length;
+
+  const switchModule = (id: ModuleId) => {
+    setModuleId(id);
+    navigate({ to: moduleRegistry[id].home });
+  };
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -241,10 +261,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuLabel>Modules</DropdownMenuLabel>
-              {modules.map((m) => (
-                <DropdownMenuItem key={m.id} disabled={!m.available}>
-                  {m.label}
-                  {!m.available ? <span className="ml-auto text-xs text-muted-foreground">Not enabled</span> : null}
+              {(Object.keys(moduleRegistry) as ModuleId[]).map((id) => (
+                <DropdownMenuItem
+                  key={id}
+                  onSelect={() => switchModule(id)}
+                  aria-current={id === moduleId ? "true" : undefined}
+                >
+                  {moduleRegistry[id].def.name}
+                  {id === moduleId ? <span className="ml-auto text-xs text-muted-foreground">Current</span> : null}
+                </DropdownMenuItem>
+              ))}
+              {comingSoon.map((label) => (
+                <DropdownMenuItem key={label} disabled>
+                  {label}
+                  <span className="ml-auto text-xs text-muted-foreground">Not enabled</span>
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />

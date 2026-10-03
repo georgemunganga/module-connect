@@ -17,14 +17,19 @@ import { Route as ApprovalsRouteImport } from './routes/approvals'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkersIndexRouteImport } from './routes/workers.index'
 import { Route as RequestsIndexRouteImport } from './routes/requests.index'
+import { Route as ProcurementIndexRouteImport } from './routes/procurement.index'
 import { Route as PayslipsIndexRouteImport } from './routes/payslips.index'
 import { Route as LeaveIndexRouteImport } from './routes/leave.index'
 import { Route as AttendanceIndexRouteImport } from './routes/attendance.index'
 import { Route as WorkersIdRouteImport } from './routes/workers.$id'
 import { Route as RequestsNewRouteImport } from './routes/requests.new'
 import { Route as RequestsIdRouteImport } from './routes/requests.$id'
+import { Route as ProcurementSuppliersRouteImport } from './routes/procurement.suppliers'
+import { Route as ProcurementRequestsRouteImport } from './routes/procurement.requests'
+import { Route as ProcurementConfigurationRouteImport } from './routes/procurement.configuration'
 import { Route as LeaveNewRouteImport } from './routes/leave.new'
 import { Route as LeaveIdRouteImport } from './routes/leave.$id'
+import { Route as ProcurementRequestsIdRouteImport } from './routes/procurement.requests.$id'
 
 const SpeakUpRoute = SpeakUpRouteImport.update({
   id: '/speak-up',
@@ -66,6 +71,11 @@ const RequestsIndexRoute = RequestsIndexRouteImport.update({
   path: '/requests/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementIndexRoute = ProcurementIndexRouteImport.update({
+  id: '/procurement/',
+  path: '/procurement/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PayslipsIndexRoute = PayslipsIndexRouteImport.update({
   id: '/payslips/',
   path: '/payslips/',
@@ -96,6 +106,22 @@ const RequestsIdRoute = RequestsIdRouteImport.update({
   path: '/requests/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementSuppliersRoute = ProcurementSuppliersRouteImport.update({
+  id: '/procurement/suppliers',
+  path: '/procurement/suppliers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementRequestsRoute = ProcurementRequestsRouteImport.update({
+  id: '/procurement/requests',
+  path: '/procurement/requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementConfigurationRoute =
+  ProcurementConfigurationRouteImport.update({
+    id: '/procurement/configuration',
+    path: '/procurement/configuration',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const LeaveNewRoute = LeaveNewRouteImport.update({
   id: '/leave/new',
   path: '/leave/new',
@@ -105,6 +131,11 @@ const LeaveIdRoute = LeaveIdRouteImport.update({
   id: '/leave/$id',
   path: '/leave/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementRequestsIdRoute = ProcurementRequestsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ProcurementRequestsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -116,14 +147,19 @@ export interface FileRoutesByFullPath {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/procurement/configuration': typeof ProcurementConfigurationRoute
+  '/procurement/requests': typeof ProcurementRequestsRouteWithChildren
+  '/procurement/suppliers': typeof ProcurementSuppliersRoute
   '/requests/$id': typeof RequestsIdRoute
   '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
   '/attendance/': typeof AttendanceIndexRoute
   '/leave/': typeof LeaveIndexRoute
   '/payslips/': typeof PayslipsIndexRoute
+  '/procurement/': typeof ProcurementIndexRoute
   '/requests/': typeof RequestsIndexRoute
   '/workers/': typeof WorkersIndexRoute
+  '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -134,14 +170,19 @@ export interface FileRoutesByTo {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/procurement/configuration': typeof ProcurementConfigurationRoute
+  '/procurement/requests': typeof ProcurementRequestsRouteWithChildren
+  '/procurement/suppliers': typeof ProcurementSuppliersRoute
   '/requests/$id': typeof RequestsIdRoute
   '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
   '/attendance': typeof AttendanceIndexRoute
   '/leave': typeof LeaveIndexRoute
   '/payslips': typeof PayslipsIndexRoute
+  '/procurement': typeof ProcurementIndexRoute
   '/requests': typeof RequestsIndexRoute
   '/workers': typeof WorkersIndexRoute
+  '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -153,14 +194,19 @@ export interface FileRoutesById {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/procurement/configuration': typeof ProcurementConfigurationRoute
+  '/procurement/requests': typeof ProcurementRequestsRouteWithChildren
+  '/procurement/suppliers': typeof ProcurementSuppliersRoute
   '/requests/$id': typeof RequestsIdRoute
   '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
   '/attendance/': typeof AttendanceIndexRoute
   '/leave/': typeof LeaveIndexRoute
   '/payslips/': typeof PayslipsIndexRoute
+  '/procurement/': typeof ProcurementIndexRoute
   '/requests/': typeof RequestsIndexRoute
   '/workers/': typeof WorkersIndexRoute
+  '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -173,14 +219,19 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/procurement/configuration'
+    | '/procurement/requests'
+    | '/procurement/suppliers'
     | '/requests/$id'
     | '/requests/new'
     | '/workers/$id'
     | '/attendance/'
     | '/leave/'
     | '/payslips/'
+    | '/procurement/'
     | '/requests/'
     | '/workers/'
+    | '/procurement/requests/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -191,14 +242,19 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/procurement/configuration'
+    | '/procurement/requests'
+    | '/procurement/suppliers'
     | '/requests/$id'
     | '/requests/new'
     | '/workers/$id'
     | '/attendance'
     | '/leave'
     | '/payslips'
+    | '/procurement'
     | '/requests'
     | '/workers'
+    | '/procurement/requests/$id'
   id:
     | '__root__'
     | '/'
@@ -209,14 +265,19 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/procurement/configuration'
+    | '/procurement/requests'
+    | '/procurement/suppliers'
     | '/requests/$id'
     | '/requests/new'
     | '/workers/$id'
     | '/attendance/'
     | '/leave/'
     | '/payslips/'
+    | '/procurement/'
     | '/requests/'
     | '/workers/'
+    | '/procurement/requests/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -228,12 +289,16 @@ export interface RootRouteChildren {
   SpeakUpRoute: typeof SpeakUpRoute
   LeaveIdRoute: typeof LeaveIdRoute
   LeaveNewRoute: typeof LeaveNewRoute
+  ProcurementConfigurationRoute: typeof ProcurementConfigurationRoute
+  ProcurementRequestsRoute: typeof ProcurementRequestsRouteWithChildren
+  ProcurementSuppliersRoute: typeof ProcurementSuppliersRoute
   RequestsIdRoute: typeof RequestsIdRoute
   RequestsNewRoute: typeof RequestsNewRoute
   WorkersIdRoute: typeof WorkersIdRoute
   AttendanceIndexRoute: typeof AttendanceIndexRoute
   LeaveIndexRoute: typeof LeaveIndexRoute
   PayslipsIndexRoute: typeof PayslipsIndexRoute
+  ProcurementIndexRoute: typeof ProcurementIndexRoute
   RequestsIndexRoute: typeof RequestsIndexRoute
   WorkersIndexRoute: typeof WorkersIndexRoute
 }
@@ -296,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RequestsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/': {
+      id: '/procurement/'
+      path: '/procurement'
+      fullPath: '/procurement/'
+      preLoaderRoute: typeof ProcurementIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/payslips/': {
       id: '/payslips/'
       path: '/payslips'
@@ -338,6 +410,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RequestsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/suppliers': {
+      id: '/procurement/suppliers'
+      path: '/procurement/suppliers'
+      fullPath: '/procurement/suppliers'
+      preLoaderRoute: typeof ProcurementSuppliersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/requests': {
+      id: '/procurement/requests'
+      path: '/procurement/requests'
+      fullPath: '/procurement/requests'
+      preLoaderRoute: typeof ProcurementRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/configuration': {
+      id: '/procurement/configuration'
+      path: '/procurement/configuration'
+      fullPath: '/procurement/configuration'
+      preLoaderRoute: typeof ProcurementConfigurationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leave/new': {
       id: '/leave/new'
       path: '/leave/new'
@@ -352,8 +445,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeaveIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/requests/$id': {
+      id: '/procurement/requests/$id'
+      path: '/$id'
+      fullPath: '/procurement/requests/$id'
+      preLoaderRoute: typeof ProcurementRequestsIdRouteImport
+      parentRoute: typeof ProcurementRequestsRoute
+    }
   }
 }
+
+interface ProcurementRequestsRouteChildren {
+  ProcurementRequestsIdRoute: typeof ProcurementRequestsIdRoute
+}
+
+const ProcurementRequestsRouteChildren: ProcurementRequestsRouteChildren = {
+  ProcurementRequestsIdRoute: ProcurementRequestsIdRoute,
+}
+
+const ProcurementRequestsRouteWithChildren =
+  ProcurementRequestsRoute._addFileChildren(ProcurementRequestsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -364,12 +475,16 @@ const rootRouteChildren: RootRouteChildren = {
   SpeakUpRoute: SpeakUpRoute,
   LeaveIdRoute: LeaveIdRoute,
   LeaveNewRoute: LeaveNewRoute,
+  ProcurementConfigurationRoute: ProcurementConfigurationRoute,
+  ProcurementRequestsRoute: ProcurementRequestsRouteWithChildren,
+  ProcurementSuppliersRoute: ProcurementSuppliersRoute,
   RequestsIdRoute: RequestsIdRoute,
   RequestsNewRoute: RequestsNewRoute,
   WorkersIdRoute: WorkersIdRoute,
   AttendanceIndexRoute: AttendanceIndexRoute,
   LeaveIndexRoute: LeaveIndexRoute,
   PayslipsIndexRoute: PayslipsIndexRoute,
+  ProcurementIndexRoute: ProcurementIndexRoute,
   RequestsIndexRoute: RequestsIndexRoute,
   WorkersIndexRoute: WorkersIndexRoute,
 }

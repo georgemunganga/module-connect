@@ -3,7 +3,11 @@ import type { ReactNode } from "react";
 import { entities, workspaces } from "@/mock/data";
 import type { Role } from "@/mock/types";
 
+export type ModuleId = "hrm" | "procurement";
+
 interface AppState {
+  moduleId: ModuleId;
+  setModuleId: (m: ModuleId) => void;
   role: Role;
   setRole: (r: Role) => void;
   entityId: string;
@@ -22,6 +26,7 @@ const Ctx = createContext<AppState | null>(null);
 const KEY = "erp.shell.state.v1";
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const [moduleId, setModuleId] = useState<ModuleId>("hrm");
   const [role, setRole] = useState<Role>("hr_admin");
   const [entityId, setEntityId] = useState(entities[0].id);
   const [branch, setBranch] = useState(entities[0].branches[0]);
@@ -34,6 +39,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const s = JSON.parse(raw);
+        if (s.moduleId) setModuleId(s.moduleId);
         if (s.role) setRole(s.role);
         if (s.entityId) setEntityId(s.entityId);
         if (s.branch) setBranch(s.branch);
@@ -48,12 +54,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(KEY, JSON.stringify({ role, entityId, branch, theme, setupComplete }));
+    localStorage.setItem(KEY, JSON.stringify({ moduleId, role, entityId, branch, theme, setupComplete }));
     document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [role, entityId, branch, theme, setupComplete, hydrated]);
+  }, [moduleId, role, entityId, branch, theme, setupComplete, hydrated]);
 
   const value = useMemo<AppState>(
     () => ({
+      moduleId,
+      setModuleId,
       role,
       setRole,
       entityId,
@@ -71,7 +79,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       resetSetup: () => setSetupComplete(false),
       hydrated,
     }),
-    [role, entityId, branch, theme, setupComplete, hydrated],
+    [moduleId, role, entityId, branch, theme, setupComplete, hydrated],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
