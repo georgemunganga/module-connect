@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getCommercial } from "@/modules/procurement/commercial/store";
 
 export type InvoiceStatus =
   | "Received"
@@ -101,16 +102,16 @@ export const initialPayables: PayablesState = {
       currency: "EUR",
       date: "2026-10-01",
       due: "2026-10-31",
-      tax: 378,
+      tax: 2583,
       status: "Exception",
       matchType: "3-way",
       lines: [
         {
           description: "Laptop",
           quantity: 10,
-          unitPrice: 180,
+          unitPrice: 1230,
           acceptedQuantity: 8,
-          poUnitPrice: 180,
+          poUnitPrice: 1230,
         },
       ],
       owner: "AP processor",
@@ -258,7 +259,7 @@ export const initialPayables: PayablesState = {
   },
   comments: {},
 };
-const key = "meridian.procurement.payables.v1";
+const key = "meridian.procurement.payables.v3";
 let snapshot = initialPayables;
 const listeners = new Set<() => void>();
 let loaded = false;
@@ -291,6 +292,11 @@ export function updatePayables(change: (s: PayablesState) => PayablesState) {
   if (typeof window !== "undefined") localStorage.setItem(key, JSON.stringify(snapshot));
   listeners.forEach((fn) => fn());
 }
+export function resetPayables() {
+  snapshot = structuredClone(initialPayables);
+  if (typeof window !== "undefined") localStorage.removeItem(key);
+  listeners.forEach((fn) => fn());
+}
 export function reviseInvoice(id: string, change: (i: Invoice) => Invoice) {
   updatePayables((s) => ({ ...s, invoices: s.invoices.map((i) => (i.id === id ? change(i) : i)) }));
 }
@@ -311,13 +317,20 @@ export function invoiceTotal(i: Invoice) {
 }
 export function matchInvoice(i: Invoice, tolerancePercent: number) {
   const issues: string[] = [];
+  const commercial = getCommercial();
+  const order = commercial.orders.find((candidate) => candidate.id === i.po);
+  if (!order) issues.push(`Purchase order ${i.po} is unavailable`);
+  if (order && order.supplier !== i.supplier) issues.push("Invoice supplier does not match the PO supplier");
+  if (order && order.currency !== i.currency) issues.push("Invoice currency does not match the PO currency");
+  if (order && !["Issued", "Acknowledged", "Closed"].includes(order.status)) issues.push("PO is not issued");
+  const accepted = order ? commercial.receipts.filter((receipt) => receipt.poId === order.id && ["Accepted", "Partially accepted"].includes(receipt.status)).reduce((sum, receipt) => sum + receipt.qty, 0) : 0;
   for (const line of i.lines) {
-    if (i.matchType === "3-way" && line.quantity > line.acceptedQuantity)
+    if (i.matchType === "3-way" && line.quantity > accepted)
       issues.push(
-        `${line.description}: invoice ${line.quantity} exceeds accepted ${line.acceptedQuantity}`,
+        `${line.description}: invoice ${line.quantity} exceeds accepted ${accepted}`,
       );
     if (
-      (Math.abs(line.unitPrice - line.poUnitPrice) / Math.max(1, line.poUnitPrice)) * 100 >
+      (Math.abs(line.unitPrice - (order?.line.price ?? line.poUnitPrice)) / Math.max(1, order?.line.price ?? line.poUnitPrice)) * 100 >
       tolerancePercent
     )
       issues.push(`${line.description}: price variance exceeds ${tolerancePercent}%`);

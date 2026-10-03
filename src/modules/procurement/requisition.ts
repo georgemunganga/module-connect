@@ -11,6 +11,7 @@ export interface ReqLine {
   category: string;
   qty: number;
   unitPrice: number;
+  preferredSupplier?: string;
   approval: LineApproval;
   approvedQty: number;
   allocatedQty: number;
@@ -36,12 +37,12 @@ export interface ReqMeta {
 export const reqMeta: Record<string, ReqMeta> = {
   "PR-2026-1042": {
     entity: "Meridian Netherlands B.V.", category: "IT hardware",
-    exceptions: ["Concurrent conversion", "Supplier on hold"],
-    budgetBalance: { available: 12000, note: "CAPEX-ENG-27 indicative balance (Finance not confirmed)" },
+    exceptions: [],
+    budgetBalance: { available: 60000, note: "CAPEX-ENG-27 indicative balance (Finance not confirmed)" },
     versions: [{ version: 1, date: "2026-10-01", by: "Sanne de Vries", note: "Submitted" }],
     lines: [
-      { id: "1042-1", description: "Laptop 14\" standard build", category: "IT hardware", qty: 12, unitPrice: 1230, approval: "Approved", approvedQty: 12, allocatedQty: 12, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Contract / framework", related: [{ kind: "Contract", ref: "CT-2025-014" }], lockedBy: "Tom Bakker" },
-      { id: "1042-2", description: "Docking station", category: "IT hardware", qty: 12, unitPrice: 307.5, approval: "Pending", approvedQty: 0, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] },
+      { id: "1042-1", description: "Laptop 14\" standard build", category: "IT hardware", qty: 12, unitPrice: 1230, approval: "Approved", approvedQty: 12, allocatedQty: 0, orderedQty: 12, receivedQty: 8, cancelledQty: 0, route: "Contract / framework", related: [{ kind: "Contract", ref: "CT-2025-014" }, { kind: "PO", ref: "PO-2026-1042" }, { kind: "Receipt", ref: "GRN-2026-1042" }] },
+      { id: "1042-2", description: "Docking station", category: "IT hardware", qty: 12, unitPrice: 307.5, approval: "Approved", approvedQty: 12, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] },
     ],
   },
   "PR-2026-1043": {
@@ -53,14 +54,14 @@ export const reqMeta: Record<string, ReqMeta> = {
   },
   "PR-2026-1038": {
     entity: "Meridian Netherlands B.V.", category: "Furniture",
-    exceptions: ["Insufficient balance"],
+    exceptions: ["Supplier suspended after PO issue"],
     budgetBalance: { available: 1500, note: "OPEX-ENG-27 indicative balance (Finance not confirmed)" },
     versions: [
       { version: 2, date: "2026-09-26", by: "Lukas Brandt", note: "Reopened: quantity 25 → 20 (original preserved)" },
       { version: 1, date: "2026-09-20", by: "Lukas Brandt", note: "Submitted" },
     ],
     lines: [
-      { id: "1038-1", description: "Ergonomic office chair", category: "Furniture", qty: 20, unitPrice: 360, approval: "Approved", approvedQty: 20, allocatedQty: 20, orderedQty: 12, receivedQty: 8, cancelledQty: 4, route: "Direct PO", splitNote: "12 ordered on PO-2026-0311; 4 cancelled (supplier suspended); 4 moved to RFQ", related: [{ kind: "PO", ref: "PO-2026-0311" }, { kind: "Receipt", ref: "GR-2026-0144" }, { kind: "RFQ", ref: "RFQ-2026-0052" }] },
+      { id: "1038-1", description: "Ergonomic office chair", category: "Furniture", qty: 20, unitPrice: 360, approval: "Approved", approvedQty: 20, allocatedQty: 4, orderedQty: 12, receivedQty: 8, cancelledQty: 4, route: "Direct PO", splitNote: "12 ordered on PO-2026-0311; 4 cancelled (supplier suspended); 4 moved to RFQ", related: [{ kind: "PO", ref: "PO-2026-0311" }, { kind: "Receipt", ref: "GR-2026-0144" }, { kind: "RFQ", ref: "RFQ-2026-0052" }] },
     ],
   },
   "PR-2026-1035": {

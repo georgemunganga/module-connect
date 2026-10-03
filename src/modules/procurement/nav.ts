@@ -1,4 +1,4 @@
-import { BarChart3, CalendarRange, BookOpen, Building2, FileSignature, FileText, Gavel, Home, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck } from "lucide-react";
+import { BarChart3, CalendarRange, BookOpen, Building2, FileSignature, FileText, Gavel, Home, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck, ClipboardCheck } from "lucide-react";
 import type { ModuleDefinition } from "@/platform/nav";
 import { PLANNING_ENABLED } from "./planning";
 
@@ -18,7 +18,7 @@ export const procurementModule: ModuleDefinition = {
     // Requester (employee) navigation
     { id: "catalog", label: "Catalog", icon: BookOpen, to: "/procurement/catalog", roles: [...(REQUESTERS ?? []), "buyer", "proc_admin"] },
     { id: "my-requests", label: "My requests", icon: FileText, to: "/procurement/requests", roles: REQUESTERS },
-    { id: "my-orders", label: "My orders & deliveries", icon: Package, to: "/procurement/area/$area", params: { area: "deliveries" }, roles: REQUESTERS },
+    { id: "my-orders", label: "My purchases", icon: Package, to: "/procurement/requests", roles: REQUESTERS },
     { id: "approvals", label: "Approvals", icon: ShieldCheck, to: "/procurement/approvals", roles: ["manager", "buyer", "proc_admin"] },
     ...(PLANNING_ENABLED
       ? [{ id: "planning", label: "Planning", icon: CalendarRange, to: "/procurement/planning", roles: ["manager", "buyer", "proc_admin", "auditor"] as ModuleDefinition["sections"][number]["roles"] }]
@@ -27,10 +27,12 @@ export const procurementModule: ModuleDefinition = {
     { id: "buying", label: "Buying", icon: ShoppingCart, to: "/procurement/requests", roles: OPS },
     { id: "suppliers", label: "Suppliers", icon: Building2, to: "/procurement/suppliers", roles: OPS },
     { id: "sourcing", label: "Sourcing", icon: Gavel, to: "/procurement/sourcing", roles: ["buyer", "proc_admin", "auditor"] },
-    { id: "contracts", label: "Contracts", icon: FileSignature, to: "/procurement/area/$area", params: { area: "contracts" }, roles: ["buyer", "proc_admin", "auditor"] },
-    { id: "purchasing", label: "Purchasing", icon: Truck, to: "/procurement/area/$area", params: { area: "purchasing" }, roles: ["buyer", "receiver", "proc_admin", "auditor"] },
-    { id: "invoices", label: "Invoices", icon: Receipt, to: "/procurement/area/$area", params: { area: "invoices" }, roles: ["ap_processor", "buyer", "proc_admin", "auditor"] },
-    { id: "reports", label: "Reports", icon: BarChart3, to: "/procurement/area/$area", params: { area: "reports" }, roles: OPS },
+    { id: "evaluations", label: "Evaluations", icon: ClipboardCheck, to: "/procurement/evaluations", roles: ["buyer", "proc_admin", "auditor"] },
+    { id: "contracts", label: "Contracts", icon: FileSignature, to: "/procurement/contracts", roles: ["buyer", "proc_admin", "auditor"] },
+    { id: "purchasing", label: "Purchase orders", icon: Truck, to: "/procurement/orders", roles: ["buyer", "receiver", "proc_admin", "auditor"] },
+    { id: "receiving", label: "Receiving", icon: Package, to: "/procurement/receiving", roles: ["receiver", "buyer", "proc_admin", "auditor"] },
+    { id: "invoices", label: "Invoices", icon: Receipt, to: "/procurement/invoices", roles: ["ap_processor", "buyer", "proc_admin", "auditor"] },
+    { id: "reports", label: "Reports", icon: BarChart3, to: "/procurement/reports", roles: OPS },
     { id: "configuration", label: "Configuration", icon: Settings, to: "/procurement/configuration", roles: ["proc_admin"] },
   ],
 };

@@ -47,12 +47,12 @@ const pol = (id: string, label: string, outcome: PolicyResult["outcome"], detail
 export const approvalTasks: ApprovalTask[] = [
   {
     id: "AT-301", subject: "Laptops for Engineering", recordType: "Purchase request", recordId: "PR-2026-1042",
-    amount: { value: 18450, currency: "EUR" }, requester: "Sanne de Vries", assignee: "Lukas Brandt", state: "Assigned",
+    amount: { value: 18450, currency: "EUR" }, requester: "Amara Chukwuemeka-Van der Berghe", assignee: "Lukas Brandt", state: "Completed",
     sla: { due: "2026-10-08 17:00", hoursLeft: 30 }, policyVersion: "Approval policy v4 (effective 1 Jul 2026)",
     stages: [
       { name: "Line manager", mode: "Sequential", approvers: [{ name: "Joost Meijer", state: "Approved", at: "2026-10-02 09:12", entity: "NL" }] },
-      { name: "Budget holder + IT", mode: "Parallel", quorum: 2, current: true, approvers: [{ name: "Lukas Brandt", state: "Pending", entity: "NL" }, { name: "Ines Vogel (IT)", state: "Approved", at: "2026-10-02 14:40", entity: "NL" }] },
-      { name: "Procurement", mode: "Sequential", approvers: [{ name: "Priya Raman", state: "Pending", entity: "NL" }] },
+      { name: "Budget holder + IT", mode: "Parallel", quorum: 2, approvers: [{ name: "Lukas Brandt", state: "Approved", at: "2026-10-01 15:40", entity: "NL" }, { name: "Ines Vogel (IT)", state: "Approved", at: "2026-10-02 14:40", entity: "NL" }] },
+      { name: "Procurement", mode: "Sequential", approvers: [{ name: "Priya Raman", state: "Approved", at: "2026-10-01 16:10", entity: "NL" }] },
     ],
     policy: [pol("p1", "3 quotes above €10,000", "pass", "3 quotes attached"), pol("p2", "Supplier status", "warn", "Northwind insurance certificate expires 20 Oct")],
     conflicts: [], documents: ["Quote Northwind.pdf", "Quote Contoso.pdf", "Quote Dell.pdf"],
@@ -72,13 +72,12 @@ export const approvalTasks: ApprovalTask[] = [
   },
   {
     id: "AT-303", subject: "Office chairs (version 2)", recordType: "Purchase request", recordId: "PR-2026-1038",
-    amount: { value: 7200, currency: "EUR" }, requester: "Lukas Brandt", assignee: "Lukas Brandt", state: "Assigned",
-    sla: { due: "2026-10-09 17:00", hoursLeft: 52, paused: "Paused while waiting for requester correction" }, policyVersion: "Approval policy v4",
-    stages: [{ name: "Budget holder", mode: "Sequential", current: true, approvers: [{ name: "Lukas Brandt", state: "Pending", entity: "NL" }] }],
-    policy: [pol("p1", "Segregation of duties", "fail", "You requested this — you can't give the final approval.")],
-    conflicts: ["You are the requester."], documents: ["Chair spec.pdf"],
-    budget: { kind: "unavailable", source: "Finance budget service", at: "2026-10-03 18:02", detail: "Service didn't respond. Decision can wait or proceed on advisory basis only." },
-    stale: "Quantity changed 25 → 20 after the previous approval on 22 Sep. That approval no longer counts.",
+    amount: { value: 7200, currency: "EUR" }, requester: "Lukas Brandt", assignee: "Lukas Brandt", state: "Completed",
+    sla: { due: "2026-09-24 17:00", hoursLeft: 0 }, policyVersion: "Approval policy v4",
+    stages: [{ name: "Budget holder", mode: "Sequential", approvers: [{ name: "Lukas Brandt", state: "Skipped", at: "2026-09-24 09:00", entity: "NL" }, { name: "Marieke Hoek", state: "Approved", at: "2026-09-24 10:12", entity: "NL" }] }],
+    policy: [pol("p1", "Segregation of duties", "pass", "Conflicted approver skipped; independent authority approved the request.")],
+    conflicts: [], documents: ["Chair spec.pdf"],
+    budget: { kind: "advisory", result: "pass", source: "Finance budget service", at: "2026-09-24 09:05", detail: "Revised quantity 20 checked within the approved budget." },
     authorityLimit: 25000, approverEntity: "Meridian Netherlands B.V.", recordEntity: "Meridian Netherlands B.V.", consequential: false,
   },
   {

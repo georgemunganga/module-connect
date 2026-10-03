@@ -7,6 +7,8 @@ import { workspaces } from "@/mock/data";
 import type { Role } from "@/mock/types";
 import { procApi } from "@/modules/procurement/data";
 import { useProcurement, resetProcurement } from "@/modules/procurement/store";
+import { useCommercial, resetCommercial } from "@/modules/procurement/commercial/store";
+import { usePayables, resetPayables } from "@/modules/procurement/payables/store";
 import { sameEntity } from "@/modules/procurement/access";
 import type { ProcWorkItem } from "@/modules/procurement/types";
 import { useApp } from "@/platform/app-context";
@@ -37,19 +39,19 @@ type Card = { label: string; value: string; hint: string; to: string; params?: R
 const cardsByView: Record<string, Card[]> = {
   requester: [
     { label: "My open requests", value: "3", hint: "1 returned to you", to: "/procurement/requests" },
-    { label: "Deliveries to confirm", value: "1", hint: "Office chairs, Amsterdam", to: "/procurement/area/$area", params: { area: "deliveries" } },
+    { label: "Order and delivery progress", value: "1", hint: "Track your request lines", to: "/procurement/requests" },
     { label: "Drafts", value: "1", hint: "Welcome packs, saved 2 Oct", to: "/procurement/requests" },
   ],
   approver: [
-    { label: "Decisions pending", value: "2", hint: "Earliest due 8 Oct", to: "/procurement/requests" },
-    { label: "Value awaiting you (EUR)", value: "€18,450", hint: "1 request", to: "/procurement/requests" },
-    { label: "Value awaiting you (KES)", value: "KES 386,000", hint: "1 request", to: "/procurement/requests" },
+    { label: "Decisions pending", value: "2", hint: "Earliest due 8 Oct", to: "/procurement/approvals" },
+    { label: "Value awaiting you (EUR)", value: "€18,450", hint: "1 request", to: "/procurement/approvals" },
+    { label: "Value awaiting you (KES)", value: "KES 386,000", hint: "1 request", to: "/procurement/approvals" },
   ],
   buyer: [
     { label: "Approved lines to process", value: "2", hint: "Not yet sourced or ordered", to: "/procurement/requests" },
-    { label: "Sourcing deadlines", value: "1", hint: "RFQ closes 9 Oct", to: "/procurement/area/$area", params: { area: "sourcing" } },
-    { label: "POs awaiting issue", value: "1", hint: "Chairs, €7,200", to: "/procurement/area/$area", params: { area: "purchasing" } },
-    { label: "Invoice exceptions", value: "2", hint: "Price variance above tolerance", to: "/procurement/area/$area", params: { area: "invoices" } },
+    { label: "Sourcing deadlines", value: "1", hint: "RFQ closes 9 Oct", to: "/procurement/sourcing" },
+    { label: "POs awaiting issue", value: "1", hint: "Chairs, €7,200", to: "/procurement/orders" },
+    { label: "Invoice exceptions", value: "2", hint: "Price variance above tolerance", to: "/procurement/invoices" },
     { label: "Supplier onboarding", value: "1", hint: "Missing tax ID and bank letter", to: "/procurement/suppliers" },
   ],
   steward: [
@@ -57,10 +59,10 @@ const cardsByView: Record<string, Card[]> = {
     { label: "Suppliers on hold", value: "1", hint: "Review 12 Oct", to: "/procurement/suppliers" },
   ],
   receiver: [
-    { label: "Deliveries expected", value: "2", hint: "This week", to: "/procurement/area/$area", params: { area: "purchasing" } },
+    { label: "Deliveries expected", value: "2", hint: "This week", to: "/procurement/receiving" },
   ],
   ap: [
-    { label: "Invoice exceptions", value: "2", hint: "Awaiting match decision", to: "/procurement/area/$area", params: { area: "invoices" } },
+    { label: "Invoice exceptions", value: "2", hint: "Awaiting match decision", to: "/procurement/invoices" },
   ],
 };
 
@@ -95,6 +97,8 @@ const activity = [
 function ProcHome() {
   const { role, entityId } = useApp();
   const demo = useProcurement();
+  const commercial = useCommercial();
+  const payables = usePayables();
   const view = viewFor(role);
   const queue = useMock(() => procApi.workQueue(role), [role]);
   const ws = workspaces.find((w) => w.id === role)!;
@@ -104,9 +108,12 @@ function ProcHome() {
   const cardValue = (card: Card) => {
     if (card.label === "My open requests") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && !["Closed", "Cancelled", "Rejected"].includes(request.status)).length);
     if (card.label === "Drafts") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && request.status === "Draft").length);
+    if (card.label === "Order and delivery progress") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && (demo.metadata[request.id]?.lines ?? []).some((line) => line.orderedQty > line.receivedQty)).length);
     if (card.label === "Decisions pending") return String(visibleApprovals.length);
     if (card.label === "Value awaiting you (EUR)" || card.label === "Value awaiting you (KES)") { const currency = card.label.includes("EUR") ? "EUR" : "KES"; return new Intl.NumberFormat("en", { style: "currency", currency, maximumFractionDigits: 0 }).format(visibleApprovals.filter((task) => task.amount?.currency === currency).reduce((sum, task) => sum + (task.amount?.value ?? 0), 0)); }
     if (card.label === "Approved lines to process") return String(visibleRequests.filter((request) => request.status === "Approved").flatMap((request) => demo.metadata[request.id]?.lines ?? []).filter((line) => line.approval === "Approved" && line.approvedQty > line.allocatedQty + line.orderedQty + line.cancelledQty).length);
+    if (card.label === "POs awaiting issue") return String(commercial.orders.filter((order) => sameEntity(order.entity, entityId) && order.status === "Approved").length);
+    if (card.label === "Invoice exceptions") return String(payables.invoices.filter((invoice) => invoice.entityId === entityId && invoice.status === "Exception").length);
     if (card.label === "Supplier onboarding" || card.label === "Onboarding in progress") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && ["Proposed", "Under diligence", "More information required", "Conditional"].includes(supplier.status)).length);
     if (card.label === "Suppliers on hold") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && supplier.status === "Suspended").length);
     return card.value;
@@ -117,7 +124,7 @@ function ProcHome() {
     if (!request) return false;
     if (item.id === "q2") return request.status === "In review";
     if (item.id === "q3") return request.status === "Submitted";
-    if (item.id === "q4") return request.status === "Approved";
+    if (item.id === "q4") return request.status === "Approved" && (demo.metadata[request.id]?.lines ?? []).some((line) => line.approvedQty > line.allocatedQty + line.orderedQty + line.cancelledQty);
     return true;
   });
 
@@ -127,7 +134,7 @@ function ProcHome() {
         <PageHeader eyebrow={`${ws.label} workspace`} title="Procurement home" />
         <RestrictedState
           title="Suppliers use the supplier portal"
-          body="This internal workspace isn't available to supplier accounts. The supplier portal, with its own navigation, arrives in Milestone 15."
+          body="This internal workspace isn't available to supplier accounts. Open the supplier portal to view shared opportunities, orders and invoices."
         />
       </AppShell>
     );
@@ -148,7 +155,7 @@ function ProcHome() {
         }
       />
 
-      {role === "proc_admin" ? <div className="mb-4"><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Reset all Procurement demo transactions to their starting data?")) resetProcurement(); }}>Reset Procurement demo</Button></div> : null}
+      {role === "proc_admin" ? <div className="mb-4"><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Reset all Procurement demo transactions to their starting data?")) { resetProcurement(); resetCommercial(); resetPayables(); } }}>Reset Procurement demo</Button></div> : null}
 
       {view === "auditor" ? (
         <AuditorHome />
@@ -157,7 +164,7 @@ function ProcHome() {
           <section aria-labelledby="summary-h">
             <h2 id="summary-h" className="sr-only">Summary</h2>
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {cardsByView[view].filter((c) => c.to !== "/procurement/area/$area").map((c) => (
+              {cardsByView[view].map((c) => (
                 <li key={c.label}>
                   <Link
                     to={c.to}

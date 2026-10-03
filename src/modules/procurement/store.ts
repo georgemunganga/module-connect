@@ -10,6 +10,7 @@ import type { ApprovalTask } from "./approvals";
 import type { SupplierRecord } from "./suppliers";
 import type { SourcingEvent } from "./sourcing";
 import type { Role } from "@/mock/types";
+import { updateCommercial } from "./commercial/store";
 
 export interface ProcurementState {
   requests: PurchaseRequest[];
@@ -19,7 +20,7 @@ export interface ProcurementState {
   sourcing: SourcingEvent[];
 }
 
-const KEY = "erp.procurement.demo.v1";
+const KEY = "erp.procurement.demo.v3";
 const seed = (): ProcurementState => {
   const state: ProcurementState = structuredClone({ requests: purchaseRequests, metadata: reqMeta, approvals: approvalTasks, suppliers: supplierRecords, sourcing: sourcingEvents });
   state.requests = state.requests.map((request) => {
@@ -69,13 +70,13 @@ export function useProcurement() {
 
 const stamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
 
-export function submitRequest(input: { title: string; requester: string; department: string; entity: string; currency: string; neededBy: string; lines: { description: string; qty: number; unitPrice: number }[] }) {
+export function submitRequest(input: { title: string; requester: string; department: string; entity: string; currency: string; neededBy: string; lines: { description: string; qty: number; unitPrice: number; supplier?: string }[] }) {
   const state = getProcurement();
   const next = Math.max(1044, ...state.requests.map((r) => Number(r.id.split("-").at(-1)) || 0)) + 1;
   const id = `PR-2026-${next}`;
   const amount = input.lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0);
   const request: PurchaseRequest = { id, title: input.title, requester: input.requester, department: input.department, currency: input.currency, amount, neededBy: input.neededBy, status: "Submitted", owner: "Budget holder", nextAction: "Budget holder decision", dueDate: input.neededBy, submittedAt: stamp(), policy: [], timeline: [{ id: crypto.randomUUID(), at: stamp(), actor: input.requester, event: "Request submitted" }], conflicts: [], lines: input.lines };
-  const meta: ReqMeta = { entity: input.entity, category: "Mixed", exceptions: [], versions: [{ version: 1, date: stamp(), by: input.requester, note: "Submitted" }], lines: input.lines.map((line, index) => ({ id: `${next}-${index + 1}`, description: line.description, category: "Unclassified", qty: line.qty, unitPrice: line.unitPrice, approval: "Pending", approvedQty: 0, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] })) };
+  const meta: ReqMeta = { entity: input.entity, category: "Mixed", exceptions: [], versions: [{ version: 1, date: stamp(), by: input.requester, note: "Submitted" }], lines: input.lines.map((line, index) => ({ id: `${next}-${index + 1}`, description: line.description, category: "Unclassified", qty: line.qty, unitPrice: line.unitPrice, preferredSupplier: line.supplier && line.supplier !== "To be sourced by buyer" ? line.supplier : undefined, approval: "Pending", approvedQty: 0, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] })) };
   const task: ApprovalTask = { id: `AT-${next}`, subject: input.title, recordType: "Purchase request", recordId: id, amount: { value: amount, currency: input.currency }, requester: input.requester, assignee: "Lukas Brandt", state: "Assigned", sla: { due: input.neededBy, hoursLeft: 72 }, policyVersion: "Demo approval policy v1", stages: [{ name: "Budget holder", mode: "Sequential", current: true, approvers: [{ name: "Lukas Brandt", state: "Pending", entity: input.entity }] }], policy: [], conflicts: [], documents: [], budget: { kind: "advisory", result: "pass", source: "Demo budget check", at: stamp(), detail: "Indicative only. No funds reserved." }, authorityLimit: Number.MAX_SAFE_INTEGER, approverEntity: input.entity, recordEntity: input.entity, consequential: amount > 10000 };
   saveProcurement((s) => ({ ...s, requests: [request, ...s.requests], metadata: { ...s.metadata, [id]: meta }, approvals: [task, ...s.approvals] }));
   return id;
@@ -115,11 +116,15 @@ export function routeLine(requestId: string, lineId: string, route: LineRoute, q
   if (qty <= 0 || qty > available) throw new Error("Quantity exceeds the unallocated approved balance.");
   const kind = route === "RFQ / tender" ? "RFQ" : route === "Contract / framework" ? "Contract" : route === "Direct PO" ? "PO" : null;
   if (!kind) throw new Error("Choose Direct PO, RFQ or Contract for a new allocation.");
-  const ref = kind === "RFQ" ? `RFQ-DEMO-${Date.now()}` : kind === "PO" ? `PO-DRAFT-${Date.now()}` : `CONTRACT-RELEASE-${Date.now()}`;
+  const request = state.requests.find((item) => item.id === requestId)!;
+  const supplier = state.suppliers.find((item) => (line.preferredSupplier ? item.name === line.preferredSupplier : item.id === request.supplierId) && item.status === "Active");
+  if (kind === "PO" && !supplier) throw new Error("Choose an active approved supplier before creating a direct PO.");
+  const ref = kind === "RFQ" ? `RFQ-DEMO-${Date.now()}` : kind === "PO" ? `PO-2026-${Date.now()}` : `CONTRACT-RELEASE-${Date.now()}`;
   saveProcurement((s) => {
     const updated: ReqLine = { ...line, route, allocatedQty: line.allocatedQty + qty, related: [...line.related, { kind, ref }] };
     const event: SourcingEvent | undefined = kind === "RFQ" ? { id: ref, title: `${line.description} — ${qty} units`, method: "RFQ", state: "Draft", buyer: "Procurement buyer", entity: meta.entity, sourceLines: [`${requestId} / ${lineId}`], items: [{ description: line.description, qty, unit: "each" }], opensAt: "", closesAt: "", timeZone: "Europe/Amsterdam", opened: false, eligibility: "To be defined", terms: "To be defined", responseDocuments: [], criteria: [], invitations: [], qa: [], bids: [], amendments: [], nextAction: "Complete sourcing event", dueDate: "—" } : undefined;
     return { ...s, metadata: { ...s.metadata, [requestId]: { ...meta, lines: meta.lines.map((item) => item.id === lineId ? updated : item) } }, requests: s.requests.map((request) => request.id === requestId ? { ...request, nextAction: `${kind} allocation ${ref} created; ${kind === "PO" ? "draft not issued" : "not published"}`, timeline: [{ id: crypto.randomUUID(), at: stamp(), actor: "Procurement buyer (demo)", event: `${qty} × ${line.description} allocated to ${ref}` }, ...request.timeline] } : request), sourcing: event ? [event, ...s.sourcing] : s.sourcing };
   });
+  if (kind === "PO" && supplier) updateCommercial((commercial) => ({ ...commercial, orders: [{ id: ref, supplier: supplier.name, entity: meta.entity, source: `${requestId} / ${lineId}`, sourceApprovedValue: qty * line.unitPrice, status: "Draft", version: 1, currency: request.currency, shipTo: meta.entity.includes("Kenya") ? "Nairobi Office" : meta.entity.includes("Germany") ? "Hamburg Works" : "Rotterdam HQ", billTo: meta.entity, taxRef: "Confirm tax treatment", terms: "Net 30", due: request.neededBy, line: { description: line.description, qty, price: line.unitPrice, received: 0, invoiced: 0, unit: "each", type: "Goods" }, supplierActive: true, revisions: [], audit: [{ at: stamp(), actor: "Procurement buyer (demo)", action: "Created draft PO", detail: `${qty} units from ${requestId} / ${lineId}; no supplier commitment yet` }] }, ...commercial.orders] }));
   return ref;
 }

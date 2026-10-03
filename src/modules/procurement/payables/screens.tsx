@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useApp } from "@/platform/app-context";
+import { useCommercial } from "@/modules/procurement/commercial/store";
+import { sameEntity } from "@/modules/procurement/access";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -208,19 +210,25 @@ export function InvoiceQueue() {
 
 export function InvoiceCreate() {
   const { role, entityId } = useApp();
+  const commercial = useCommercial();
   const navigate = useNavigate();
   const [supplierId, setSupplierId] = useState("sup-001");
   const [number, setNumber] = useState("");
   const [po, setPo] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
-  const [accepted, setAccepted] = useState("0");
   const [tax, setTax] = useState("0");
   const [attachment, setAttachment] = useState("");
   const [source, setSource] = useState<IntakeSource>("Manual");
   const [error, setError] = useState("");
+  const order = commercial.orders.find((item) => item.id === po.trim());
+  const acceptedQuantity = order ? commercial.receipts.filter((receipt) => receipt.poId === order.id && ["Accepted", "Partially accepted"].includes(receipt.status)).reduce((sum, receipt) => sum + receipt.qty, 0) : 0;
   const save = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!order || !sameEntity(order.entity, entityId) || order.supplier !== (supplierId === "sup-001" ? "Northwind Devices B.V." : "Studio Zit") || !["Issued", "Acknowledged"].includes(order.status)) {
+      setError("Choose an issued PO for this entity and supplier. The PO must be available before invoice capture.");
+      return;
+    }
     if (
       !po.trim() ||
       !attachment.trim() ||
@@ -240,18 +248,18 @@ export function InvoiceCreate() {
       entityId,
       po: po.trim(),
       source,
-      currency: "EUR",
+      currency: order.currency,
       date: new Date().toISOString().slice(0, 10),
       due: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
       tax: Number(tax),
-      matchType: "3-way",
+      matchType: order.line.type === "Goods" ? "3-way" : "2-way",
       lines: [
         {
-          description: "Supplier line",
+          description: order.line.description,
           quantity: Number(quantity),
           unitPrice: Number(unitPrice),
-          acceptedQuantity: Number(accepted),
-          poUnitPrice: Number(unitPrice),
+          acceptedQuantity,
+          poUnitPrice: order.line.price,
         },
       ],
       owner: "AP processor",
@@ -320,13 +328,10 @@ export function InvoiceCreate() {
               onChange={setUnitPrice}
               required
             />
-            <Field
-              label="Accepted quantity"
-              type="number"
-              value={accepted}
-              onChange={setAccepted}
-              required
-            />
+            <div className="rounded-md border bg-muted p-3 text-sm">
+              <p className="font-medium">PO and receipt evidence</p>
+              <p className="mt-1 text-muted-foreground">{order ? `${order.line.qty} ordered · ${acceptedQuantity} accepted · ${money(order.line.price, order.currency)} PO unit price` : "Enter an issued PO reference to load its approved price and accepted quantity."}</p>
+            </div>
             <Field label="Tax total (EUR)" type="number" value={tax} onChange={setTax} required />
             <div className="sm:col-span-2">
               <Field
@@ -378,6 +383,7 @@ function Timeline({ invoice }: { invoice: Invoice }) {
 }
 export function InvoiceDetail({ id }: { id: string }) {
   const state = usePayables();
+  const commercial = useCommercial();
   const { role, entityId } = useApp();
   const invoice = state.invoices.find((i) => i.id === id && i.entityId === entityId);
   const [reason, setReason] = useState("");
@@ -571,6 +577,7 @@ export function InvoiceDetail({ id }: { id: string }) {
           <section className="rounded-xl border bg-surface p-5">
             <h2 className="font-semibold">Purchase order</h2>
             <p className="mt-3 text-sm">{invoice.po}</p>
+            {commercial.orders.some((order) => order.id === invoice.po && sameEntity(order.entity, entityId)) ? <Link to="/procurement/orders/$id" params={{ id: invoice.po }} className="text-sm text-primary underline">Open purchase order</Link> : null}
             {invoice.lines.map((line, idx) => (
               <p key={idx} className="mt-2 text-sm">
                 {line.description}: {line.quantity} invoiced ×{" "}
@@ -578,9 +585,7 @@ export function InvoiceDetail({ id }: { id: string }) {
                 {money(line.poUnitPrice, invoice.currency)}
               </p>
             ))}
-            <p className="mt-3 text-xs text-muted-foreground">
-              PO reference is illustrative local evidence, pending real PO adapter.
-            </p>
+            <p className="mt-3 text-xs text-muted-foreground">PO and receipt values are local demo evidence. A live ERP adapter is still required.</p>
           </section>
           <section className="rounded-xl border bg-surface p-5">
             <h2 className="font-semibold">Acceptance evidence</h2>

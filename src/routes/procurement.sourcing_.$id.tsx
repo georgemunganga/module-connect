@@ -12,6 +12,7 @@ import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { money } from "@/modules/procurement/catalog";
 import { useProcurement, saveProcurement } from "@/modules/procurement/store";
+import { useCommercial } from "@/modules/procurement/commercial/store";
 import { sourcingRole, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import type { BidReceipt, SourcingEvent } from "@/modules/procurement/sourcing";
@@ -28,6 +29,7 @@ function EventDetail() {
   const { id } = Route.useParams();
   const { role, entityId } = useApp();
   const e = useProcurement().sourcing.find((x) => x.id === id);
+  const evaluation = useCommercial().evaluations.find((item) => item.eventId === id);
   const setE = (value: SourcingEvent) => saveProcurement((state) => ({ ...state, sourcing: state.sourcing.map((item) => item.id === id ? value : item) }));
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [amending, setAmending] = useState(false);
@@ -52,6 +54,7 @@ function EventDetail() {
         <StatusBadge status={e.state} />
         <span>Closes <strong>{e.closesAt || "not set"}</strong> ({e.timeZone})</span>
         <span>Next: <strong>{e.nextAction}</strong> · due {e.dueDate}</span>
+        {evaluation ? <Link to="/procurement/evaluations/$id" params={{ id: evaluation.id }} className="font-medium text-primary underline">Open evaluation {evaluation.id}</Link> : null}
       </div>
       {e.portalOutage ? <Banner>{e.portalOutage}</Banner> : null}
       {amending ? <AmendForm onCancel={() => setAmending(false)} onDone={(change) => { setAmending(false); setE({ ...e, amendments: [...e.amendments, { no: e.amendments.length + 1, at: nowStr(), change, notified: false }] }); }} /> : null}
