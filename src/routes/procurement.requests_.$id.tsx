@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useProcurement, saveProcurement, routeLine, resubmitReturnedRequest, submitDraftRequest, withdrawRequest } from "@/modules/procurement/store";
 import { useCommercial } from "@/modules/procurement/commercial/store";
-import { requestVisible, demoRequester, sameEntity } from "@/modules/procurement/access";
+import { requestVisible, isDemoRequester, sameEntity } from "@/modules/procurement/access";
 import { deriveProgress, remaining } from "@/modules/procurement/requisition";
 import type { LineRoute, ReqLine } from "@/modules/procurement/requisition";
 import { useApp } from "@/platform/app-context";
@@ -58,7 +58,7 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
   const money = new Intl.NumberFormat("en", { style: "currency", currency: r.currency, maximumFractionDigits: 0 });
   const isBuyer = BUYERS.includes(role);
   const isApprover = APPROVERS.includes(role) && Boolean(taskForRequest && (role === "proc_admin" || taskForRequest.stages.some((stage) => stage.current && stage.approvers.some((approver) => approver.name === approvalActor && approver.state === "Pending"))));
-  const isRequester = ["employee", "manager", "hr_ops", "payroll", "hr_admin"].includes(role) && r.requester === demoRequester(role, entityId);
+  const isRequester = ["employee", "manager", "hr_ops", "payroll", "hr_admin"].includes(role) && isDemoRequester(r.requester, role, entityId);
   const progress = deriveProgress(lines);
   const changeRequest = (patch: Partial<typeof r>, event: string, reason?: string) => saveProcurement((state) => ({ ...state, requests: state.requests.map((item) => item.id === r.id ? { ...item, ...patch, timeline: [{ id: crypto.randomUUID(), at: now(), actor: "You (demo)", event, reason }, ...item.timeline] } : item) }));
   const updateLine = (id: string, patch: Partial<ReqLine>, event: string) => saveProcurement((state) => ({ ...state, metadata: { ...state.metadata, [r.id]: { ...state.metadata[r.id], lines: state.metadata[r.id].lines.map((line) => line.id === id ? { ...line, ...patch } : line) } }, requests: state.requests.map((item) => item.id === r.id ? { ...item, timeline: [{ id: crypto.randomUUID(), at: now(), actor: "You (demo)", event }, ...item.timeline] } : item) }));
