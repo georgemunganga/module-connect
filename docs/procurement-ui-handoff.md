@@ -47,6 +47,8 @@ The sidebar groups work by audience: Home, My Requests, Approvals, Items, Vendor
 
 Basic list pages now use centered, action-oriented empty states when the entity or selected view has no records. Search/filter misses show a separate recovery state. Vendors support browser-local Add, CSV Import, contact Add/Edit/Remove, suspension, and controlled deactivation; no record is physically deleted. Settings entries are marked Open or Reference, and Bill approval type choices are explicitly preview-only.
 
+The New Vendor page now has primary contact fields plus seven tabs: Other Details, Address, Contact Persons, Bank Details, Custom Fields, Reporting Tags and Remarks. It validates the required identity/contact fields, additional contacts and masked bank reference, then saves the details into a review-state vendor profile. Document selection is limited to 10 files of 10 MB each; only names, sizes and classifications are retained in this browser demo. Qualification evidence is still Missing until authorized review. Portal access is a request, not an active login.
+
 ## Connected demo record
 
 `PR-2026-1042` contains a laptop line and a docking-station line. Its laptop line links to `PO-2026-1042`, receipt `GRN-2026-1042`, and invoice `INV-1042`. The PO has 12 laptops at EUR 1,230; eight were accepted, while the supplier invoice bills ten. The invoice therefore shows a quantity exception. A buyer can also route the approved docking-station balance to a new draft PO. Its approval and issue update the PR's allocated and ordered quantities; recording a receipt updates accepted quantity.

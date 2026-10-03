@@ -8,6 +8,26 @@ export const lifecycleFilters: SupplierLifecycle[] = ["Proposed", "Under diligen
 
 export type Decision = { state: "Not started" | "Pending" | "Approved" | "Returned" | "Rejected"; by?: string; at?: string; reference?: string; note?: string };
 
+export interface VendorOnboardingDetails {
+  displayName: string;
+  salutation?: string;
+  firstName?: string;
+  lastName?: string;
+  workPhone?: string;
+  mobile?: string;
+  language?: string;
+  currency?: string;
+  paymentTerms?: string;
+  taxRateRef?: string;
+  portalAccessRequested?: boolean;
+  billingAddress?: { line1: string; line2?: string; city: string; region?: string; postalCode?: string; country: string };
+  shippingAddress?: { line1: string; line2?: string; city: string; region?: string; postalCode?: string; country: string };
+  bankName?: string;
+  customFields?: { name: string; value: string }[];
+  reportingTags?: { name: string; value: string }[];
+  remarks?: string;
+}
+
 export interface SupplierRecord {
   id: string;
   name: string;
@@ -15,6 +35,7 @@ export interface SupplierRecord {
   country: string;
   registration: string;
   taxRef?: string;
+  onboarding?: VendorOnboardingDetails;
   status: SupplierLifecycle;
   owner: string;
   nextAction: string;
@@ -23,7 +44,7 @@ export interface SupplierRecord {
   sites: { name: string; address: string }[];
   contacts: { name: string; role: string; email: string }[];
   qualifications: { name: string; status: "Valid" | "Expiring" | "Expired" | "Missing"; validTo?: string }[];
-  documents: { name: string; uploaded: string }[];
+  documents: { name: string; uploaded: string; size?: number; kind?: string }[];
   bank?: { masked: string; verification: Decision };
   procurementDecision: Decision;
   duplicates?: { name: string; reason: string }[];
