@@ -290,7 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </DropdownMenu>
 
           <span
-            className="hidden items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning-foreground sm:inline-flex"
+            className="hidden items-center gap-1.5 rounded-full border border-warning/40 bg-warning-soft px-2.5 py-1 text-xs font-medium text-foreground sm:inline-flex"
             title="All records, transitions and integrations on this screen are local demonstration data. Nothing is sent to a real backend, bank, supplier or finance system."
           >
             <span className="size-1.5 rounded-full bg-warning" aria-hidden />
