@@ -1,4 +1,16 @@
-export type Role = "employee" | "manager" | "hr_ops" | "payroll" | "hr_admin";
+export type Role =
+  | "employee"
+  | "manager"
+  | "hr_ops"
+  | "payroll"
+  | "hr_admin"
+  | "buyer"
+  | "supplier_steward"
+  | "receiver"
+  | "ap_processor"
+  | "proc_admin"
+  | "auditor"
+  | "supplier_user";
 
 export interface Workspace {
   id: Role;

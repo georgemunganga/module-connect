@@ -25,7 +25,7 @@ export const procurementModule: ModuleDefinition = {
       label: "Approvals",
       icon: ShieldCheck,
       to: "/procurement/requests",
-      roles: ["manager", "hr_ops", "hr_admin"],
+      roles: ["manager", "buyer", "proc_admin"],
     },
     { id: "receiving", label: "Receiving", icon: Truck, to: "/procurement/requests" },
     {
@@ -33,7 +33,7 @@ export const procurementModule: ModuleDefinition = {
       label: "Configuration",
       icon: Settings,
       to: "/procurement/configuration",
-      roles: ["hr_admin"],
+      roles: ["proc_admin"],
     },
   ],
 };
