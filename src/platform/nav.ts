@@ -19,6 +19,7 @@ export interface NavSection {
   label: string;
   icon: LucideIcon;
   to?: string;
+  params?: Record<string, string>;
   roles?: Role[];
   /** Flat list (max ~8 items) OR labelled sub-groups when it grows beyond that. */
   items?: NavItem[];
