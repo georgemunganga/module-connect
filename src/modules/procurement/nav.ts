@@ -1,40 +1,33 @@
-import { Home, Settings, ShieldCheck, ShoppingCart, Truck } from "lucide-react";
+import { BarChart3, BookOpen, Building2, FileSignature, FileText, Gavel, Home, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck } from "lucide-react";
 import type { ModuleDefinition } from "@/platform/nav";
 
 /**
  * Procurement module navigation. Same shell conventions as HRM: grouped,
  * role-aware sections and exactly ONE Configuration entry point.
  */
+const OPS: ModuleDefinition["sections"][number]["roles"] = ["buyer", "supplier_steward", "receiver", "ap_processor", "proc_admin", "auditor"];
+const REQUESTERS: ModuleDefinition["sections"][number]["roles"] = ["employee", "manager", "hr_ops", "payroll", "hr_admin"];
+
 export const procurementModule: ModuleDefinition = {
   id: "procurement",
   name: "Procurement",
   shortName: "PROC",
   sections: [
     { id: "home", label: "Home", icon: Home, to: "/procurement" },
-    {
-      id: "purchasing",
-      label: "Purchasing",
-      icon: ShoppingCart,
-      items: [
-        { label: "Purchase requests", to: "/procurement/requests" },
-        { label: "Suppliers", to: "/procurement/suppliers" },
-      ],
-    },
-    {
-      id: "approvals",
-      label: "Approvals",
-      icon: ShieldCheck,
-      to: "/procurement/requests",
-      roles: ["manager", "buyer", "proc_admin"],
-    },
-    { id: "receiving", label: "Receiving", icon: Truck, to: "/procurement/requests" },
-    {
-      id: "configuration",
-      label: "Configuration",
-      icon: Settings,
-      to: "/procurement/configuration",
-      roles: ["proc_admin"],
-    },
+    // Requester (employee) navigation
+    { id: "catalog", label: "Catalog", icon: BookOpen, to: "/procurement/area/$area", params: { area: "catalog" }, roles: REQUESTERS },
+    { id: "my-requests", label: "My requests", icon: FileText, to: "/procurement/requests", roles: REQUESTERS },
+    { id: "my-orders", label: "My orders & deliveries", icon: Package, to: "/procurement/area/$area", params: { area: "deliveries" }, roles: REQUESTERS },
+    { id: "approvals", label: "Approvals", icon: ShieldCheck, to: "/procurement/requests", roles: ["manager", "buyer", "proc_admin"] },
+    // Procurement operations navigation (max one sublink level)
+    { id: "buying", label: "Buying", icon: ShoppingCart, to: "/procurement/requests", roles: OPS },
+    { id: "suppliers", label: "Suppliers", icon: Building2, to: "/procurement/suppliers", roles: OPS },
+    { id: "sourcing", label: "Sourcing", icon: Gavel, to: "/procurement/area/$area", params: { area: "sourcing" }, roles: ["buyer", "proc_admin", "auditor"] },
+    { id: "contracts", label: "Contracts", icon: FileSignature, to: "/procurement/area/$area", params: { area: "contracts" }, roles: ["buyer", "proc_admin", "auditor"] },
+    { id: "purchasing", label: "Purchasing", icon: Truck, to: "/procurement/area/$area", params: { area: "purchasing" }, roles: ["buyer", "receiver", "proc_admin", "auditor"] },
+    { id: "invoices", label: "Invoices", icon: Receipt, to: "/procurement/area/$area", params: { area: "invoices" }, roles: ["ap_processor", "buyer", "proc_admin", "auditor"] },
+    { id: "reports", label: "Reports", icon: BarChart3, to: "/procurement/area/$area", params: { area: "reports" }, roles: OPS },
+    { id: "configuration", label: "Configuration", icon: Settings, to: "/procurement/configuration", roles: ["proc_admin"] },
   ],
 };
 
