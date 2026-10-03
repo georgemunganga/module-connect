@@ -86,9 +86,10 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate?: ()
     return (
       <Link
         to={section.to}
+        params={section.params as never}
         onClick={onNavigate}
         activeProps={{ className: "bg-rail-active text-rail-foreground" }}
-        activeOptions={{ exact: section.to === "/" }}
+        activeOptions={{ exact: section.to === "/" || section.to === "/procurement", includeSearch: false }}
         className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-rail-muted transition-colors hover:bg-rail-active hover:text-rail-foreground"
       >
         <Icon className="size-4 shrink-0" aria-hidden />
@@ -159,7 +160,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const mod = moduleRegistry[moduleId].def;
   const sections = useVisibleSections(mod, role);
   const links = sections.flatMap((s) =>
-    s.to ? [{ label: s.label, to: s.to, params: undefined }] : (s.items ?? []).map((i) => ({ label: `${s.label}: ${i.label}`, to: i.to, params: i.params })),
+    s.to ? [{ label: s.label, to: s.to, params: s.params }] : (s.items ?? []).map((i) => ({ label: `${s.label}: ${i.label}`, to: i.to, params: i.params })),
   );
 
   return (
