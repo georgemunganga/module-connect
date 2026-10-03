@@ -15,7 +15,7 @@ export const procurementModule: ModuleDefinition = {
   sections: [
     { id: "home", label: "Home", icon: Home, to: "/procurement" },
     // Requester (employee) navigation
-    { id: "catalog", label: "Catalog", icon: BookOpen, to: "/procurement/area/$area", params: { area: "catalog" }, roles: REQUESTERS },
+    { id: "catalog", label: "Catalog", icon: BookOpen, to: "/procurement/catalog", roles: [...(REQUESTERS ?? []), "buyer", "proc_admin"] },
     { id: "my-requests", label: "My requests", icon: FileText, to: "/procurement/requests", roles: REQUESTERS },
     { id: "my-orders", label: "My orders & deliveries", icon: Package, to: "/procurement/area/$area", params: { area: "deliveries" }, roles: REQUESTERS },
     { id: "approvals", label: "Approvals", icon: ShieldCheck, to: "/procurement/requests", roles: ["manager", "buyer", "proc_admin"] },

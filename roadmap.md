@@ -5,7 +5,7 @@ Milestones follow the uploaded prompt pack, applied in order. HRM stays paused a
 - [x] 00 — Procurement UI foundation: 9 role presets, Demo data indicator, typed mock boundary, shared patterns, route list
 - [x] 01 — Role-aware navigation and Home (employee vs buyer vs approver vs auditor views)
 - [x] 02 — Guided buying entry (Create Request: goods/service/asset/subscription, catalog-first, drafts)
-- [ ] 03 — Items and catalog (`/procurement/catalog`)
+- [x] 03 — Items and catalog (`/procurement/catalog`)
 - [ ] 04 — Supplier onboarding, profile, risk, performance
 - [ ] 05 — Procurement planning workspace (`/procurement/plans`)
 - [ ] 06 — Requisition workspace and line routing
