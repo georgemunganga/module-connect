@@ -22,6 +22,7 @@ import { Route as LeaveIndexRouteImport } from './routes/leave.index'
 import { Route as AttendanceIndexRouteImport } from './routes/attendance.index'
 import { Route as WorkersIdRouteImport } from './routes/workers.$id'
 import { Route as RequestsNewRouteImport } from './routes/requests.new'
+import { Route as RequestsIdRouteImport } from './routes/requests.$id'
 import { Route as LeaveNewRouteImport } from './routes/leave.new'
 import { Route as LeaveIdRouteImport } from './routes/leave.$id'
 
@@ -90,6 +91,11 @@ const RequestsNewRoute = RequestsNewRouteImport.update({
   path: '/requests/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RequestsIdRoute = RequestsIdRouteImport.update({
+  id: '/requests/$id',
+  path: '/requests/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeaveNewRoute = LeaveNewRouteImport.update({
   id: '/leave/new',
   path: '/leave/new',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/requests/$id': typeof RequestsIdRoute
   '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
   '/attendance/': typeof AttendanceIndexRoute
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/requests/$id': typeof RequestsIdRoute
   '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
   '/attendance': typeof AttendanceIndexRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/requests/$id': typeof RequestsIdRoute
   '/requests/new': typeof RequestsNewRoute
   '/workers/$id': typeof WorkersIdRoute
   '/attendance/': typeof AttendanceIndexRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/requests/$id'
     | '/requests/new'
     | '/workers/$id'
     | '/attendance/'
@@ -181,6 +191,7 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/requests/$id'
     | '/requests/new'
     | '/workers/$id'
     | '/attendance'
@@ -198,6 +209,7 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/requests/$id'
     | '/requests/new'
     | '/workers/$id'
     | '/attendance/'
@@ -216,6 +228,7 @@ export interface RootRouteChildren {
   SpeakUpRoute: typeof SpeakUpRoute
   LeaveIdRoute: typeof LeaveIdRoute
   LeaveNewRoute: typeof LeaveNewRoute
+  RequestsIdRoute: typeof RequestsIdRoute
   RequestsNewRoute: typeof RequestsNewRoute
   WorkersIdRoute: typeof WorkersIdRoute
   AttendanceIndexRoute: typeof AttendanceIndexRoute
@@ -318,6 +331,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RequestsNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/requests/$id': {
+      id: '/requests/$id'
+      path: '/requests/$id'
+      fullPath: '/requests/$id'
+      preLoaderRoute: typeof RequestsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leave/new': {
       id: '/leave/new'
       path: '/leave/new'
@@ -344,6 +364,7 @@ const rootRouteChildren: RootRouteChildren = {
   SpeakUpRoute: SpeakUpRoute,
   LeaveIdRoute: LeaveIdRoute,
   LeaveNewRoute: LeaveNewRoute,
+  RequestsIdRoute: RequestsIdRoute,
   RequestsNewRoute: RequestsNewRoute,
   WorkersIdRoute: WorkersIdRoute,
   AttendanceIndexRoute: AttendanceIndexRoute,
@@ -355,3 +376,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
