@@ -35,7 +35,7 @@ function RequestList() {
         eyebrow="Purchasing"
         title="Purchase requests"
         description="Nothing here is a bare status: each row shows who owns it, what happens next and when it's due."
-        primaryAction={<Button disabled title="Guided request flow lands in the next slice">New purchase request</Button>}
+        primaryAction={<Button asChild><Link to="/procurement/requests/new">Create request</Link></Button>}
       />
       <Async state={state}>
         {(rows) => (
