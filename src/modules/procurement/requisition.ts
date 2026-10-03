@@ -12,6 +12,7 @@ export interface ReqLine {
   qty: number;
   unitPrice: number;
   preferredSupplier?: string;
+  kind?: "Goods" | "Service" | "Asset" | "Subscription";
   approval: LineApproval;
   approvedQty: number;
   allocatedQty: number;

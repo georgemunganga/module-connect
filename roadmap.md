@@ -7,18 +7,20 @@ Milestones follow the uploaded prompt pack, applied in order. HRM stays paused a
 - [x] 02 — Guided buying entry (Create Request: goods/service/asset/subscription, catalog-first, drafts)
 - [x] 03 — Items and catalog (`/procurement/catalog`)
 - [x] 04 — Supplier onboarding, profile, risk, performance
-- [x] 05 — Procurement planning workspace (`/procurement/plans`)
+- [x] 05 — Procurement planning workspace (`/procurement/planning`)
 - [x] 06 — Requisition workspace and line routing
 - [x] 07 — Approvals and budget control
 - [x] 08 — Sourcing, RFx and bids (`/procurement/sourcing`)
-- [ ] 09 — Bid evaluation, comparison, award
-- [ ] 10 — Contracts, frameworks, recurring commitments
-- [ ] 11 — Purchase orders and amendments (`/procurement/orders`)
-- [ ] 12 — Receiving, inspection, returns (`/procurement/receiving`)
-- [ ] 13 — Invoice intake and supplier adjustments (`/procurement/invoices`)
-- [ ] 14 — Match workbench, AP handoff, payment visibility
-- [ ] 15 — Supplier portal (`/supplier`, separate shell)
-- [ ] 16 — Reports, collaboration, audit (`/procurement/reports`)
-- [ ] 17 — Configuration and policy simulator
-- [ ] 18 — Responsive, accessibility, recovery pass
-- [ ] 19 — Final end-to-end integration journey
+- [x] 09 — Bid evaluation, comparison, award
+- [x] 10 — Contracts, frameworks, recurring commitments
+- [x] 11 — Purchase orders and amendments (`/procurement/orders`)
+- [x] 12 — Receiving, inspection, returns (`/procurement/receiving`)
+- [x] 13 — Invoice intake and supplier adjustments (`/procurement/invoices`)
+- [x] 14 — Match workbench, AP handoff, payment visibility
+- [x] 15 — Supplier portal (`/supplier`, separate shell)
+- [x] 16 — Reports, collaboration, audit (`/procurement/reports`)
+- [x] 17 — Configuration and policy simulator
+- [x] 18 — Responsive layout, keyboard labels, and recovery states pass
+- [x] 19 — Final browser demo journeys across requisition, sourcing, purchasing, receipt, and invoice
+
+These checks describe the browser-local UI prototype. Production integrations and server-side authorization remain separate implementation work.

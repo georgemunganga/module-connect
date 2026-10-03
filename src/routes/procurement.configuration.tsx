@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useApp } from "@/platform/app-context";
 import { RestrictedState } from "@/platform/components/States";
 import { procConfigurationGroups } from "@/modules/procurement/nav";
@@ -35,16 +35,22 @@ function ProcConfiguration() {
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {g.items.map((i) => (
                 <li key={i.label}>
-                  <button
-                    type="button" disabled title="Configuration editor is UI preview only"
-                    className="flex w-full items-center justify-between gap-3 rounded-lg border bg-surface p-3 text-left opacity-75"
+                  {"to" in i ? <Link
+                    to={i.to}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border bg-surface p-3 text-left hover:border-primary"
                   >
                     <span className="min-w-0">
                       <span className="block text-sm font-medium">{i.label}</span>
                       <span className="block truncate text-xs text-muted-foreground">{i.detail}</span>
                     </span>
+                    <span className="shrink-0 text-xs text-primary">Open</span>
+                  </Link> : <div className="flex w-full items-center justify-between gap-3 rounded-lg border bg-surface p-3 text-left opacity-75">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">{i.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{i.detail}</span>
+                    </span>
                     <span className="shrink-0 text-xs text-muted-foreground">Preview</span>
-                  </button>
+                  </div>}
                 </li>
               ))}
             </ul>

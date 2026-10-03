@@ -34,6 +34,7 @@ function EventDetail() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [amending, setAmending] = useState(false);
   const [surrogate, setSurrogate] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
   const isBuyer = role === "buyer" || role === "proc_admin";
 
   if (!e || !sourcingRole(role) || !sameEntity(e.entity, entityId)) return <AppShell><RestrictedState /></AppShell>;
@@ -56,6 +57,11 @@ function EventDetail() {
         <span>Next: <strong>{e.nextAction}</strong> · due {e.dueDate}</span>
         {evaluation ? <Link to="/procurement/evaluations/$id" params={{ id: evaluation.id }} className="font-medium text-primary underline">Open evaluation {evaluation.id}</Link> : null}
       </div>
+      {e.state === "Published" && isBuyer ? <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border bg-surface p-3">
+        <div><Label htmlFor="close-reason">Early closing reason (required before deadline)</Label><Input id="close-reason" value={closeReason} onChange={(event) => setCloseReason(event.target.value)} placeholder="Committee decision reference" /></div>
+        <Button variant="outline" disabled={new Date(e.closesAt).getTime() > Date.now() && (role !== "proc_admin" || !closeReason.trim())} onClick={() => { if (new Date(e.closesAt).getTime() > Date.now() && (!closeReason.trim() || role !== "proc_admin")) return; setE({ ...e, state: "Closed", nextAction: "Authorise sealed bid opening", dueDate: new Date().toISOString().slice(0, 10), amendments: new Date(e.closesAt).getTime() > Date.now() ? [...e.amendments, { no: e.amendments.length + 1, at: nowStr(), change: `Closed early by ${role}: ${closeReason}`, notified: false }] : e.amendments }); }}>Close event</Button>
+        {new Date(e.closesAt).getTime() > Date.now() ? <span className="text-xs text-muted-foreground">Before the deadline, only Procurement admin may close with a reason. Supplier notification remains pending in this demo.</span> : null}
+      </div> : null}
       {e.portalOutage ? <Banner>{e.portalOutage}</Banner> : null}
       {amending ? <AmendForm onCancel={() => setAmending(false)} onDone={(change) => { setAmending(false); setE({ ...e, amendments: [...e.amendments, { no: e.amendments.length + 1, at: nowStr(), change, notified: false }] }); }} /> : null}
 

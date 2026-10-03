@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useApp } from "@/platform/app-context";
+import { useProcurement, saveProcurement } from "@/modules/procurement/store";
+import { updateCommercial } from "@/modules/procurement/commercial/store";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import {
@@ -132,11 +134,28 @@ function SupplierInvoiceSubmission() {
 export function SupplierPortal() {
   const { role, setRole } = useApp();
   const state = usePayables();
+  const sourcing = useProcurement().sourcing;
   const [tab, setTab] = useState("Home");
   const [message, setMessage] = useState("");
   const [comment, setComment] = useState("");
+  const [bidAmount, setBidAmount] = useState("");
+  const [bidLead, setBidLead] = useState("5");
+  const [bidNote, setBidNote] = useState("");
   // The demo identity is pinned to sup-001. Switching ERP entity or URL cannot change supplier scope.
   const supplierId = "sup-001";
+  const submitBid = (reference: string) => {
+    const event = sourcing.find((item) => item.id === reference);
+    if (!event || event.state !== "Published" || !event.invitations.some((invite) => invite.supplier === "Northwind Devices B.V.") || new Date(event.closesAt).getTime() < Date.now()) return setMessage("This invitation is closed or unavailable to this supplier.");
+    if (Number(bidAmount) <= 0 || Number(bidLead) <= 0 || !bidNote.trim()) return setMessage("Enter a positive total, lead time, and proposal note.");
+    const version = 1 + Math.max(0, ...event.bids.filter((bid) => bid.supplier === "Northwind Devices B.V.").map((bid) => bid.version));
+    const bid = { id: crypto.randomUUID(), supplier: "Northwind Devices B.V.", version, receivedAt: new Date().toISOString(), channel: "Supplier portal" as const, late: false, sealedContent: { total: Number(bidAmount), currency: "EUR", leadTimeDays: Number(bidLead), notes: bidNote.trim() } };
+    saveProcurement((current) => ({ ...current, sourcing: current.sourcing.map((item) => item.id === reference ? { ...item, bids: [...item.bids, bid] } : item) }));
+    updateCommercial((current) => ({ ...current, evaluations: current.evaluations.map((evaluation) => evaluation.eventId === reference ? { ...evaluation, bids: [...evaluation.bids, { id: bid.id, supplier: bid.supplier, compliant: null, reason: "", score: null, conflict: false, deliveryCost: 0, tax: 0 }] } : evaluation) }));
+    const opportunity = state.supplierItems.find((item) => item.reference === reference && item.supplierId === supplierId);
+    if (opportunity) updateSupplierItem(opportunity.id, "Submitted");
+    setMessage(`${reference} quotation v${version} submitted and sealed. Receipt ${bid.id}.`);
+    setBidAmount(""); setBidNote("");
+  };
   if (role !== "supplier_user")
     return (
       <main className="min-h-screen bg-background p-6">
@@ -222,10 +241,7 @@ export function SupplierPortal() {
                   <p className="text-sm">
                     {i.status} · due {i.due}
                   </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Quotation submission requires the sourcing backend; this demo records interest
-                    only.
-                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">Quotations remain sealed until Procurement authorises opening. This submission is retained in this browser.</p>
                   <Button
                     className="mt-3"
                     disabled={i.status !== "Open"}
@@ -236,6 +252,12 @@ export function SupplierPortal() {
                   >
                     Record interest
                   </Button>
+                  {sourcing.some((event) => event.id === i.reference && event.state === "Published" && event.invitations.some((invite) => invite.supplier === "Northwind Devices B.V.")) ? <div className="mt-4 grid gap-3 border-t pt-4 sm:grid-cols-2">
+                    <div><Label htmlFor={`bid-amount-${i.id}`}>Quoted total (EUR)</Label><Input id={`bid-amount-${i.id}`} type="number" min="0.01" value={bidAmount} onChange={(event) => setBidAmount(event.target.value)} /></div>
+                    <div><Label htmlFor={`bid-lead-${i.id}`}>Delivery lead time (days)</Label><Input id={`bid-lead-${i.id}`} type="number" min="1" value={bidLead} onChange={(event) => setBidLead(event.target.value)} /></div>
+                    <div className="sm:col-span-2"><Label htmlFor={`bid-note-${i.id}`}>Proposal note / document reference</Label><Textarea id={`bid-note-${i.id}`} value={bidNote} onChange={(event) => setBidNote(event.target.value)} /></div>
+                    <Button className="sm:col-span-2" onClick={() => submitBid(i.reference)}>Submit sealed quotation</Button>
+                  </div> : null}
                 </Box>
               ))}
           </div>

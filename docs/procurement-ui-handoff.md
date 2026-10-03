@@ -42,14 +42,16 @@ The internal route groups are `/procurement/catalog`, `/procurement/requests`, `
 
 `PR-2026-1042` contains a laptop line and a docking-station line. Its laptop line links to `PO-2026-1042`, receipt `GRN-2026-1042`, and invoice `INV-1042`. The PO has 12 laptops at EUR 1,230; eight were accepted, while the supplier invoice bills ten. The invoice therefore shows a quantity exception. A buyer can also route the approved docking-station balance to a new draft PO. Its approval and issue update the PR's allocated and ordered quantities; recording a receipt updates accepted quantity.
 
-The source records are browser-local demo data. A fresh browser starts from the seeded data; the Procurement admin can reset Procurement transactions from Home. For production, replace the three local stores with API adapters and enforce every permission, approval, entity boundary, supplier scope, and concurrency rule on the server.
+Other connected paths are available for review: `CON-2026-0030` is an active Northwind framework that can release a draft PO; `RFQ-2026-0061` has a quotation ready for evaluation, award approval, and draft PO creation; `RFQ-2026-0062` accepts a sealed Northwind quotation from the supplier portal, then supports a controlled close/open step and evaluation. A guided subscription request can route its approved line against the active framework. These routes keep source references on the generated transaction.
+
+The source records are browser-local demo data. A fresh browser starts from the seeded data; the Procurement admin can reset Procurement transactions from Home. For production, replace the browser stores with API adapters and enforce every permission, approval, entity boundary, supplier scope, and concurrency rule on the server.
 
 ## Frontend verification
 
 - Production build, TypeScript check, and semantic ESLint check pass under Node 22.
-- Browser route sweep covered buyer, AP, supplier, and procurement-admin views. Internal records are hidden from supplier role; commercial detail screens apply entity scope; the supplier portal pins its demo identity to one supplier.
-- At a 390 px phone viewport, the PO and receiving details had no horizontal page overflow. The side navigation collapses behind the mobile menu.
-- Browser flow verified: approved PR line → direct PO draft → procurement-admin PO approval → issue → PR ordered quantity updated. No page errors occurred.
+- Browser route checks covered buyer, AP, supplier, and procurement-admin views. Internal records are hidden from supplier role; commercial detail screens apply entity scope; the supplier portal pins its demo identity to one supplier.
+- The responsive pass includes phone-width list tables, planning, PO and receiving detail. Wide data tables scroll within their own cards and the side navigation collapses behind the mobile menu.
+- Browser journeys verified approved PR line → direct PO draft → procurement-admin approval → issue → PR ordered quantity, real PO based invoice capture and matching, active framework → draft PO, RFQ evaluation → approved award → draft PO, and supplier portal bid → sealed response → controlled opening → evaluation. No page errors occurred in those journeys.
 
 ## Remaining production boundaries
 

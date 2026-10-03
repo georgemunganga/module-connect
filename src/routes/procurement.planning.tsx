@@ -139,7 +139,7 @@ function PlanningPage() {
       {shown.locked && !shown.snapshot ? <p role="note" className="mb-3 rounded-md border border-warning/40 bg-warning-soft p-3 text-sm">Line snapshot was not provided for this imported demo version. Its decision record remains locked; current lines are not shown as history.</p> : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <section aria-labelledby="lines-h">
+        <section aria-labelledby="lines-h" className="min-w-0">
           <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
             <h2 id="lines-h" className="text-sm font-semibold">Plan lines</h2>
             {editable ? <Button size="sm" variant="outline" onClick={() => { try { const id = addPlanLine(plan.id, role); setEditing({ id, requirement: "", category: "", estimate: 0, currency: ccy, expected: "", funding: "", method: "Catalog", owner: plan.owner, status: "Planned" }); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not add a line."); } }}>Add requirement</Button> : null}
@@ -154,7 +154,7 @@ function PlanningPage() {
               </select>
             </div>
           </div>
-          <div className="overflow-x-auto rounded-lg border bg-surface">
+          <div className="overflow-x-auto rounded-lg border bg-surface" style={{ contain: "paint" }}>
             <table className="w-full text-sm">
               <thead className="border-b text-left text-xs text-muted-foreground">
                 <tr><th className="p-3">Requirement</th><th className="p-3">Estimate</th><th className="p-3">Expected</th><th className="p-3">Method</th><th className="p-3">Funding</th><th className="p-3">{view === "procurement" ? "Variance / request" : "Owner"}</th><th className="p-3">Status / action</th></tr>

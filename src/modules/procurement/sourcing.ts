@@ -123,6 +123,25 @@ export const sourcingEvents: SourcingEvent[] = [
     invitations: [{ supplier: "Contoso Tech GmbH", delivery: "Delivered" }], qa: [], bids: [], amendments: [{ no: 1, at: "2026-08-25", change: "Cancelled — requirement withdrawn by requester", notified: true }],
     nextAction: "None — can be reopened by buyer", dueDate: "—",
   },
+  {
+    id: "RFQ-2026-0061", title: "Warranty service capacity for 2027", method: "RFQ", state: "Closed", buyer: "Priya Raman", entity: "Meridian Netherlands B.V.",
+    sourceLines: ["Plan line PLAN-ENG-2027 / l3"], items: [{ description: "Warranty service milestones", qty: 12, unit: "month" }],
+    opensAt: "2026-09-01 09:00", closesAt: "2026-09-30 17:00", timeZone: "Europe/Amsterdam", opened: true, openingAuthorisedBy: "Opening committee · 2026-10-01 09:00",
+    eligibility: "Active suppliers with a service agreement", terms: "Meridian standard service terms v3 (demo)", responseDocuments: ["Service proposal", "Price schedule"],
+    criteria: [{ name: "Service capacity", weight: 40 }, { name: "Price", weight: 40 }, { name: "Response time", weight: 20 }],
+    invitations: [{ supplier: "Northwind Devices B.V.", delivery: "Opened", at: "2026-09-01 09:10" }], qa: [],
+    bids: [{ id: "b61", supplier: "Northwind Devices B.V.", version: 1, receivedAt: "2026-09-29 15:00", channel: "Supplier portal", late: false, sealedContent: { total: 12000, currency: "EUR", leadTimeDays: 5, notes: "Monthly warranty milestone and service response" } }],
+    amendments: [], nextAction: "Evaluate and recommend award", dueDate: "2026-10-10",
+  },
+  {
+    id: "RFQ-2026-0062", title: "Laptop docking replenishment", method: "RFQ", state: "Published", buyer: "Priya Raman", entity: "Meridian Netherlands B.V.",
+    sourceLines: ["Plan line PLAN-ENG-2027 / l4"], items: [{ description: "Docking station", qty: 12, unit: "each" }],
+    opensAt: "2026-10-01 09:00", closesAt: "2026-10-12 17:00", timeZone: "Europe/Amsterdam", opened: false,
+    eligibility: "Active IT hardware suppliers", terms: "Meridian standard purchase terms v3 (demo)", responseDocuments: ["Price schedule"],
+    criteria: [{ name: "Price", weight: 70 }, { name: "Delivery", weight: 30 }],
+    invitations: [{ supplier: "Northwind Devices B.V.", delivery: "Opened", at: "2026-10-01 09:15" }], qa: [], bids: [], amendments: [],
+    nextAction: "Collect sealed supplier quotations", dueDate: "2026-10-12",
+  },
 ];
 
 /** Methods allowed for an estimated value (demo thresholds — not confirmed policy). */

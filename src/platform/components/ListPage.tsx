@@ -194,7 +194,7 @@ export function ListPage<T extends { id: string }>({
       {filtered.length === 0 ? (
         <NoResultsState title="No matching records" body={emptyBody} />
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-surface">
+        <div className="overflow-x-auto rounded-lg border bg-surface" style={{ contain: "paint" }}>
           <table className="w-full min-w-[42rem] text-left text-sm">
             <thead className="border-b bg-surface-muted">
               <tr>

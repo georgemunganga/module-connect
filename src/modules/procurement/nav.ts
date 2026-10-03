@@ -52,9 +52,9 @@ export const procConfigurationGroups = [
     label: "Process design",
     description: "How spend moves: thresholds, quotes and approval routes.",
     items: [
-      { label: "Spend thresholds and quote rules", detail: "3-quote rule above €10,000" },
-      { label: "Approval routing", detail: "4 routes" },
-      { label: "Receiving and three-way match", detail: "Match tolerance 2%" },
+      { label: "Spend thresholds and quote rules", detail: "Versioned demo policy", to: "/procurement/configuration/policy" },
+      { label: "Approval routing", detail: "Review in policy studio", to: "/procurement/configuration/policy" },
+      { label: "Receiving and three-way match", detail: "Review tolerances in policy studio", to: "/procurement/configuration/policy" },
     ],
   },
   {

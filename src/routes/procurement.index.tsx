@@ -9,6 +9,7 @@ import { procApi } from "@/modules/procurement/data";
 import { useProcurement, resetProcurement } from "@/modules/procurement/store";
 import { useCommercial, resetCommercial } from "@/modules/procurement/commercial/store";
 import { usePayables, resetPayables } from "@/modules/procurement/payables/store";
+import { resetPlans } from "@/modules/procurement/planning";
 import { sameEntity } from "@/modules/procurement/access";
 import type { ProcWorkItem } from "@/modules/procurement/types";
 import { useApp } from "@/platform/app-context";
@@ -155,7 +156,7 @@ function ProcHome() {
         }
       />
 
-      {role === "proc_admin" ? <div className="mb-4"><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Reset all Procurement demo transactions to their starting data?")) { resetProcurement(); resetCommercial(); resetPayables(); } }}>Reset Procurement demo</Button></div> : null}
+      {role === "proc_admin" ? <div className="mb-4"><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Reset all Procurement demo transactions to their starting data?")) { resetProcurement(); resetCommercial(); resetPayables(); resetPlans(); } }}>Reset Procurement demo</Button></div> : null}
 
       {view === "auditor" ? (
         <AuditorHome />

@@ -31,7 +31,7 @@ export const Route = createFileRoute("/procurement/requests_/new")({
 });
 
 type Kind = "Goods" | "Service" | "Asset" | "Subscription";
-type Line = { id: string; description: string; qty: number; unitPrice: number; source: "Catalog" | "Contract" | "Non-catalog"; supplier: string };
+type Line = { id: string; description: string; qty: number; unitPrice: number; source: "Catalog" | "Contract" | "Non-catalog"; supplier: string; kind: Kind };
 
 type Draft = { kind: Kind | null; lines: Line[]; purpose: string; neededBy: string; deliverTo: string; costCentre: string; project: string; evidence: string[] };
 const empty: Draft = { kind: null, lines: [], purpose: "", neededBy: "", deliverTo: "Amsterdam HQ, Keizersgracht 100", costCentre: "", project: "", evidence: [] };
@@ -52,7 +52,9 @@ function NewRequest() {
   const [d, setD] = useState<Draft>(empty);
   const [loaded, setLoaded] = useState(false);
   const [q, setQ] = useState("");
+  const [allKinds, setAllKinds] = useState(false);
   const [nc, setNc] = useState({ description: "", qty: 1, unitPrice: 0, reason: "" });
+  const [ncKind, setNcKind] = useState<Kind>("Service");
   const [ref, setRef] = useState<string | null>(null);
   const [budgetDown, setBudgetDown] = useState(false);
 
@@ -68,8 +70,8 @@ function NewRequest() {
   const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
   const total = d.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
   const results = useMemo(
-    () => catalog.filter((c) => (!d.kind || c.kind === d.kind) && c.name.toLowerCase().includes(q.toLowerCase())),
-    [q, d.kind, catalog],
+    () => catalog.filter((c) => (allKinds || !d.kind || c.kind === d.kind) && c.name.toLowerCase().includes(q.toLowerCase())),
+    [q, d.kind, catalog, allKinds],
   );
   const missing = [
     !d.kind && "what you're buying",
@@ -110,6 +112,7 @@ function NewRequest() {
           <div>
             <Label htmlFor="cat-q">Search catalog and contract offers</Label>
             <Input id="cat-q" className="mt-1" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. chair, laptop, freight" />
+            <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={allKinds} onChange={(event) => setAllKinds(event.target.checked)} />Include other item types in this request</label>
           </div>
           {results.length ? (
             <ul className="space-y-2">
@@ -121,7 +124,7 @@ function NewRequest() {
                       <p className="text-xs text-muted-foreground">{c.source} · {c.supplier} · {fmt(c.price)} each (indicative)</p>
                     </div>
                     <Button size="sm" variant="outline" disabled={!!c.block}
-                      onClick={() => set({ lines: [...d.lines, { id: crypto.randomUUID(), description: c.name, qty: 1, unitPrice: c.price, source: c.source, supplier: c.supplier }] })}>
+                      onClick={() => set({ lines: [...d.lines, { id: crypto.randomUUID(), description: c.name, qty: 1, unitPrice: c.price, source: c.source, supplier: c.supplier, kind: c.kind }] })}>
                       <Plus className="size-4" aria-hidden /> Add
                     </Button>
                   </div>
@@ -137,13 +140,14 @@ function NewRequest() {
           <details className="rounded-lg border p-3">
             <summary className="cursor-pointer text-sm font-medium">Nothing fits? Add a non-catalog line</summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2"><Label htmlFor="nc-kind">Line type</Label><select id="nc-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={ncKind} onChange={(event) => setNcKind(event.target.value as Kind)}>{(["Goods", "Service", "Asset", "Subscription"] as Kind[]).map((kind) => <option key={kind}>{kind}</option>)}</select></div>
               <div className="sm:col-span-2"><Label htmlFor="nc-d">Description</Label><Input id="nc-d" className="mt-1" value={nc.description} onChange={(e) => setNc({ ...nc, description: e.target.value })} /></div>
               <div><Label htmlFor="nc-q">Quantity</Label><Input id="nc-q" type="number" min={1} className="mt-1" value={nc.qty} onChange={(e) => setNc({ ...nc, qty: Number(e.target.value) })} /></div>
               <div><Label htmlFor="nc-p">Estimated unit price ({CCY})</Label><Input id="nc-p" type="number" min={0} className="mt-1" value={nc.unitPrice} onChange={(e) => setNc({ ...nc, unitPrice: Number(e.target.value) })} /></div>
               <div className="sm:col-span-2"><Label htmlFor="nc-r">Why isn't a catalog item suitable? (required)</Label><Textarea id="nc-r" className="mt-1" value={nc.reason} onChange={(e) => setNc({ ...nc, reason: e.target.value })} /></div>
             </div>
             <Button size="sm" className="mt-3" disabled={!nc.description || nc.qty < 1 || nc.unitPrice <= 0 || !nc.reason.trim()}
-              onClick={() => { set({ lines: [...d.lines, { id: crypto.randomUUID(), description: nc.description, qty: nc.qty, unitPrice: nc.unitPrice, source: "Non-catalog", supplier: "To be sourced by buyer" }] }); setNc({ description: "", qty: 1, unitPrice: 0, reason: "" }); }}>
+              onClick={() => { set({ lines: [...d.lines, { id: crypto.randomUUID(), description: nc.description, qty: nc.qty, unitPrice: nc.unitPrice, source: "Non-catalog", supplier: "To be sourced by buyer", kind: ncKind }] }); setNc({ description: "", qty: 1, unitPrice: 0, reason: "" }); }}>
               Add non-catalog line
             </Button>
           </details>
@@ -243,7 +247,7 @@ function NewRequest() {
           onSubmit={async () => {
             if (missing.length) return;
             await new Promise((r) => setTimeout(r, 600));
-            setRef(submitRequest({ title: d.purpose.trim(), requester: "Amara Chukwuemeka-Van der Berghe", department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: entity.country, currency: CCY, neededBy: d.neededBy, lines: d.lines.map(({ description, qty, unitPrice, supplier }) => ({ description, qty, unitPrice, supplier })) }));
+            setRef(submitRequest({ title: d.purpose.trim(), requester: "Amara Chukwuemeka-Van der Berghe", department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: entity.country, currency: CCY, neededBy: d.neededBy, lines: d.lines.map(({ description, qty, unitPrice, supplier, kind }) => ({ description, qty, unitPrice, supplier, kind })) }));
             sessionStorage.removeItem(KEY);
             sessionStorage.removeItem("flow:proc-request-new");
           }}
@@ -296,7 +300,7 @@ function LineEditor({ d, set, currency }: { d: Draft; set: (p: Partial<Draft>) =
       <ul className="mt-2 space-y-2">
         {d.lines.map((l) => (
           <li key={l.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
-            <span className="min-w-0 flex-1"><span className="block font-medium">{l.description}</span><span className="text-xs text-muted-foreground">{l.source} · {l.supplier}</span></span>
+            <span className="min-w-0 flex-1"><span className="block font-medium">{l.description}</span><span className="text-xs text-muted-foreground">{l.kind ?? "Goods"} · {l.source} · {l.supplier}</span></span>
             <Label htmlFor={`q-${l.id}`} className="sr-only">Quantity for {l.description}</Label>
             <Input id={`q-${l.id}`} type="number" min={1} className="w-20" value={l.qty} onChange={(e) => set({ lines: d.lines.map((x) => (x.id === l.id ? { ...x, qty: Math.max(1, Number(e.target.value)) } : x)) })} />
             <span className="w-24 text-right tabular-nums">{fmt(l.qty * l.unitPrice)}</span>

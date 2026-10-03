@@ -214,7 +214,7 @@ export const initialPayables: PayablesState = {
       id: "sp-1",
       supplierId: "sup-001",
       kind: "Opportunity",
-      reference: "RFQ-2026-1042",
+      reference: "RFQ-2026-0062",
       title: "Workplace equipment",
       status: "Open",
       due: "2026-10-12",
@@ -259,7 +259,7 @@ export const initialPayables: PayablesState = {
   },
   comments: {},
 };
-const key = "meridian.procurement.payables.v3";
+const key = "meridian.procurement.payables.v4";
 let snapshot = initialPayables;
 const listeners = new Set<() => void>();
 let loaded = false;
