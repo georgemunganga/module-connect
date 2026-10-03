@@ -209,7 +209,7 @@ export function InvoiceQueue() {
 export function InvoiceCreate() {
   const { role, entityId } = useApp();
   const navigate = useNavigate();
-  const [supplierId, setSupplierId] = useState("sup-1");
+  const [supplierId, setSupplierId] = useState("sup-001");
   const [number, setNumber] = useState("");
   const [po, setPo] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -236,7 +236,7 @@ export function InvoiceCreate() {
     const result = addInvoice({
       number: number.trim(),
       supplierId,
-      supplier: supplierId === "sup-1" ? "Atlas Computers" : "Northstar Services",
+      supplier: supplierId === "sup-001" ? "Northwind Devices B.V." : "Studio Zit",
       entityId,
       po: po.trim(),
       source,
@@ -298,8 +298,10 @@ export function InvoiceCreate() {
                 value={supplierId}
                 onChange={(e) => setSupplierId(e.target.value)}
               >
-                <option value="sup-1">Atlas Computers</option>
-                <option value="sup-2">Northstar Services</option>
+                <option value="sup-001">Northwind Devices B.V. · Active</option>
+                <option value="sup-003" disabled>
+                  Studio Zit · Suspended
+                </option>
               </select>
             </div>
             <Field label="Invoice number" value={number} onChange={setNumber} required />

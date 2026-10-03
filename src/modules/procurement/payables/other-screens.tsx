@@ -51,8 +51,8 @@ function SupplierInvoiceSubmission() {
           }
           const response = addInvoice({
             number: number.trim(),
-            supplierId: "sup-1",
-            supplier: "Atlas Computers",
+            supplierId: "sup-001",
+            supplier: "Northwind Devices B.V.",
             entityId: "ent-nl",
             po: po.trim(),
             source: "Supplier portal",
@@ -135,8 +135,8 @@ export function SupplierPortal() {
   const [tab, setTab] = useState("Home");
   const [message, setMessage] = useState("");
   const [comment, setComment] = useState("");
-  // The demo identity is pinned to sup-1. Switching ERP entity or URL cannot change supplier scope.
-  const supplierId = "sup-1";
+  // The demo identity is pinned to sup-001. Switching ERP entity or URL cannot change supplier scope.
+  const supplierId = "sup-001";
   if (role !== "supplier_user")
     return (
       <main className="min-h-screen bg-background p-6">
@@ -159,7 +159,7 @@ export function SupplierPortal() {
             <p className="text-xs font-semibold uppercase text-muted-foreground">
               Meridian supplier portal · Demo data
             </p>
-            <h1 className="text-xl font-semibold">Atlas Computers</h1>
+            <h1 className="text-xl font-semibold">Northwind Devices B.V.</h1>
           </div>
           <Button variant="outline" asChild>
             <Link to="/procurement">ERP home</Link>
@@ -368,7 +368,7 @@ export function SupplierPortal() {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!comment.trim()) return;
-                addComment("PO-2026-1042", "Atlas Computers", comment.trim(), "Supplier");
+                addComment("PO-2026-1042", "Northwind Devices B.V.", comment.trim(), "Supplier");
                 setComment("");
                 setMessage("Message saved locally.");
               }}
@@ -386,7 +386,7 @@ export function SupplierPortal() {
         )}
         {tab === "Company profile" && (
           <Box title="Company profile">
-            <p className="text-sm">Atlas Computers · Supplier ID sup-1 · Active</p>
+            <p className="text-sm">Northwind Devices B.V. · Supplier ID sup-001 · Active</p>
             <p className="mt-2 text-xs text-muted-foreground">
               Payment instructions and internal risk notes are intentionally absent. Profile changes
               require a verified onboarding workflow.

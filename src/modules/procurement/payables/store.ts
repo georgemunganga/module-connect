@@ -92,9 +92,9 @@ export const initialPayables: PayablesState = {
   invoices: [
     {
       id: "INV-1042",
-      number: "AC-6781",
-      supplierId: "sup-1",
-      supplier: "Atlas Computers",
+      number: "NW-6781",
+      supplierId: "sup-001",
+      supplier: "Northwind Devices B.V.",
       entityId: "ent-nl",
       po: "PO-2026-1042",
       source: "Supplier portal",
@@ -114,7 +114,7 @@ export const initialPayables: PayablesState = {
         },
       ],
       owner: "AP processor",
-      attachment: "AC-6781.pdf",
+      attachment: "NW-6781.pdf",
       version: 1,
       exception: {
         type: "Quantity",
@@ -126,7 +126,7 @@ export const initialPayables: PayablesState = {
       timeline: [
         {
           at: "2026-10-01T09:30:00Z",
-          actor: "Atlas Computers",
+          actor: "Northwind Devices B.V.",
           action: "Invoice submitted",
           audience: "Supplier",
         },
@@ -141,8 +141,8 @@ export const initialPayables: PayablesState = {
     {
       id: "INV-1043",
       number: "SERV-220",
-      supplierId: "sup-2",
-      supplier: "Northstar Services",
+      supplierId: "sup-001",
+      supplier: "Northwind Devices B.V.",
       entityId: "ent-nl",
       po: "PO-2026-1043",
       source: "Manual",
@@ -154,7 +154,7 @@ export const initialPayables: PayablesState = {
       matchType: "2-way",
       lines: [
         {
-          description: "Maintenance milestone",
+          description: "Warranty service milestone",
           quantity: 1,
           unitPrice: 200,
           acceptedQuantity: 1,
@@ -171,29 +171,29 @@ export const initialPayables: PayablesState = {
     },
     {
       id: "INV-1044",
-      number: "AC-6700",
-      supplierId: "sup-1",
-      supplier: "Atlas Computers",
+      number: "SZ-6700",
+      supplierId: "sup-003",
+      supplier: "Studio Zit",
       entityId: "ent-nl",
-      po: "PO-2026-1002",
+      po: "PO-2026-0311",
       source: "Supplier portal",
       currency: "EUR",
       date: "2026-09-08",
       due: "2026-10-08",
-      tax: 84,
+      tax: 151.2,
       status: "Paid",
       matchType: "3-way",
       lines: [
         {
-          description: "Monitor",
+          description: "Ergonomic office chair",
           quantity: 2,
-          unitPrice: 200,
+          unitPrice: 360,
           acceptedQuantity: 2,
-          poUnitPrice: 200,
+          poUnitPrice: 360,
         },
       ],
       owner: "Finance",
-      attachment: "AC-6700.pdf",
+      attachment: "SZ-6700.pdf",
       version: 1,
       apAttempts: 1,
       apKey: "AP-INV-1044-v1",
@@ -211,7 +211,7 @@ export const initialPayables: PayablesState = {
   supplierItems: [
     {
       id: "sp-1",
-      supplierId: "sup-1",
+      supplierId: "sup-001",
       kind: "Opportunity",
       reference: "RFQ-2026-1042",
       title: "Workplace equipment",
@@ -220,7 +220,7 @@ export const initialPayables: PayablesState = {
     },
     {
       id: "sp-2",
-      supplierId: "sup-1",
+      supplierId: "sup-001",
       kind: "Order",
       reference: "PO-2026-1042",
       title: "Laptops",
@@ -229,7 +229,7 @@ export const initialPayables: PayablesState = {
     },
     {
       id: "sp-3",
-      supplierId: "sup-1",
+      supplierId: "sup-001",
       kind: "Document",
       reference: "DOC-12",
       title: "Insurance certificate",
@@ -238,10 +238,10 @@ export const initialPayables: PayablesState = {
     },
     {
       id: "sp-4",
-      supplierId: "sup-2",
+      supplierId: "sup-001",
       kind: "Order",
       reference: "PO-2026-1043",
-      title: "Maintenance",
+      title: "Warranty service",
       status: "Acknowledged",
       due: "2026-10-25",
     },
