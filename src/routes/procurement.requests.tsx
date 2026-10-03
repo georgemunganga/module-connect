@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { deriveProgress, reqMeta } from "@/modules/procurement/requisition";
 import { procApi } from "@/modules/procurement/data";
 import type { PurchaseRequest } from "@/modules/procurement/types";
 import { AppShell } from "@/platform/components/AppShell";
@@ -53,6 +54,9 @@ function RequestList() {
             filters={[
               { id: "dept", label: "Department", options: ["Engineering", "Operations", "Facilities", "Logistics", "People"], match: (r, v) => r.department === v },
               { id: "status", label: "Status", options: ["Draft", "Submitted", "In review", "Approved", "Returned"], match: (r, v) => r.status === v },
+              { id: "entity", label: "Entity", options: ["Meridian Netherlands B.V.", "Meridian Kenya Ltd"], match: (r, v) => reqMeta[r.id]?.entity === v },
+              { id: "category", label: "Category", options: ["IT hardware", "Safety equipment", "Furniture", "Logistics", "Office supplies"], match: (r, v) => reqMeta[r.id]?.category === v },
+              { id: "exception", label: "Exception", options: ["Any exception", "Insufficient balance", "Concurrent conversion", "Supplier not onboarded", "Supplier on hold"], match: (r, v) => { const ex = reqMeta[r.id]?.exceptions ?? []; return v === "Any exception" ? ex.length > 0 : ex.includes(v); } },
             ]}
             bulkActions={[{ label: "Export selection", onSelect: () => undefined }]}
             columns={[
@@ -62,7 +66,10 @@ function RequestList() {
               { id: "amount", header: "Amount", cell: (r) => <span className="tabular">{fmt(r)}</span> },
               { id: "status", header: "Status", cell: (r) => <StatusBadge status={r.status} /> },
               { id: "next", header: "Next action", cell: (r) => <span className="block max-w-56 truncate text-xs">{r.nextAction} · due {r.dueDate}</span> },
+              { id: "progress", header: "Line progress", cell: (r) => <span className="text-xs">{deriveProgress(reqMeta[r.id]?.lines ?? [])}</span> },
               { id: "owner", header: "Owner", defaultVisible: false, cell: (r) => r.owner },
+              { id: "requester", header: "Requester", defaultVisible: false, cell: (r) => r.requester },
+              { id: "date", header: "Submitted", defaultVisible: false, cell: (r) => r.submittedAt },
               { id: "needed", header: "Needed by", defaultVisible: false, cell: (r) => r.neededBy },
             ]}
           />
