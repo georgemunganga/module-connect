@@ -7,10 +7,9 @@ import { ApprovalPanel } from "@/platform/components/ApprovalPanel";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
-import { approvalBlockers, approvalTasks } from "@/modules/procurement/approvals";
+import { approvalBlockers, approvalTasks, slaLabel } from "@/modules/procurement/approvals";
 import type { ApprovalTask } from "@/modules/procurement/approvals";
 import { money } from "@/modules/procurement/catalog";
-import { slaLabel } from "./procurement.approvals";
 
 export const Route = createFileRoute("/procurement/approvals_/$id")({
   head: ({ params }) => {

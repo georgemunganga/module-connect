@@ -3,7 +3,7 @@ import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
-import { approvalTasks } from "@/modules/procurement/approvals";
+import { approvalTasks, slaLabel } from "@/modules/procurement/approvals";
 import type { ApprovalTask, TaskState } from "@/modules/procurement/approvals";
 import { money } from "@/modules/procurement/catalog";
 
@@ -28,12 +28,6 @@ export const Route = createFileRoute("/procurement/approvals")({
 const inTab = (t: ApprovalTask, tab: TaskState) =>
   tab === "Overdue" ? t.state !== "Completed" && t.sla.hoursLeft < 0 && !t.sla.paused : tab === "Assigned" ? t.state === "Assigned" : t.state === tab;
 
-export function slaLabel(t: ApprovalTask) {
-  if (t.state === "Completed") return { text: "Done", tone: "text-muted-foreground" };
-  if (t.sla.paused) return { text: `Paused — ${t.sla.paused}`, tone: "text-muted-foreground" };
-  if (t.sla.hoursLeft < 0) return { text: `Breached ${-t.sla.hoursLeft} h ago (due ${t.sla.due})`, tone: "text-danger" };
-  return { text: `${t.sla.hoursLeft} h left (due ${t.sla.due})`, tone: t.sla.hoursLeft < 8 ? "text-warning" : "text-muted-foreground" };
-}
 
 function ApprovalsPage() {
   const { tab = "Assigned" } = Route.useSearch();

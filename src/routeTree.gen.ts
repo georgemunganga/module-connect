@@ -21,6 +21,7 @@ import { Route as LeaveIdRouteImport } from './routes/leave.$id'
 import { Route as LeaveNewRouteImport } from './routes/leave.new'
 import { Route as PayslipsIndexRouteImport } from './routes/payslips.index'
 import { Route as ProcurementIndexRouteImport } from './routes/procurement.index'
+import { Route as ProcurementApprovalsRouteImport } from './routes/procurement.approvals'
 import { Route as ProcurementCatalogRouteImport } from './routes/procurement.catalog'
 import { Route as ProcurementConfigurationRouteImport } from './routes/procurement.configuration'
 import { Route as ProcurementPlanningRouteImport } from './routes/procurement.planning'
@@ -31,6 +32,7 @@ import { Route as RequestsIdRouteImport } from './routes/requests.$id'
 import { Route as RequestsNewRouteImport } from './routes/requests.new'
 import { Route as WorkersIndexRouteImport } from './routes/workers.index'
 import { Route as WorkersIdRouteImport } from './routes/workers.$id'
+import { Route as ProcurementApprovalsIdRouteImport } from './routes/procurement.approvals_.$id'
 import { Route as ProcurementAreaAreaRouteImport } from './routes/procurement.area.$area'
 import { Route as ProcurementCatalogIdRouteImport } from './routes/procurement.catalog_.$id'
 import { Route as ProcurementRequestsIdRouteImport } from './routes/procurement.requests.$id'
@@ -98,6 +100,11 @@ const ProcurementIndexRoute = ProcurementIndexRouteImport.update({
   path: '/procurement/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementApprovalsRoute = ProcurementApprovalsRouteImport.update({
+  id: '/procurement/approvals',
+  path: '/procurement/approvals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProcurementCatalogRoute = ProcurementCatalogRouteImport.update({
   id: '/procurement/catalog',
   path: '/procurement/catalog',
@@ -149,6 +156,11 @@ const WorkersIdRoute = WorkersIdRouteImport.update({
   path: '/workers/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementApprovalsIdRoute = ProcurementApprovalsIdRouteImport.update({
+  id: '/procurement/approvals_/$id',
+  path: '/procurement/approvals/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProcurementAreaAreaRoute = ProcurementAreaAreaRouteImport.update({
   id: '/procurement/area/$area',
   path: '/procurement/area/$area',
@@ -189,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/procurement/approvals': typeof ProcurementApprovalsRoute
   '/procurement/catalog': typeof ProcurementCatalogRoute
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/planning': typeof ProcurementPlanningRoute
@@ -203,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/procurement/': typeof ProcurementIndexRoute
   '/requests/': typeof RequestsIndexRoute
   '/workers/': typeof WorkersIndexRoute
+  '/procurement/approvals/$id': typeof ProcurementApprovalsIdRoute
   '/procurement/area/$area': typeof ProcurementAreaAreaRoute
   '/procurement/catalog/$id': typeof ProcurementCatalogIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
@@ -219,6 +233,7 @@ export interface FileRoutesByTo {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/procurement/approvals': typeof ProcurementApprovalsRoute
   '/procurement/catalog': typeof ProcurementCatalogRoute
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/planning': typeof ProcurementPlanningRoute
@@ -233,6 +248,7 @@ export interface FileRoutesByTo {
   '/procurement': typeof ProcurementIndexRoute
   '/requests': typeof RequestsIndexRoute
   '/workers': typeof WorkersIndexRoute
+  '/procurement/approvals/$id': typeof ProcurementApprovalsIdRoute
   '/procurement/area/$area': typeof ProcurementAreaAreaRoute
   '/procurement/catalog/$id': typeof ProcurementCatalogIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
@@ -250,6 +266,7 @@ export interface FileRoutesById {
   '/speak-up': typeof SpeakUpRoute
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
+  '/procurement/approvals': typeof ProcurementApprovalsRoute
   '/procurement/catalog': typeof ProcurementCatalogRoute
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/planning': typeof ProcurementPlanningRoute
@@ -264,6 +281,7 @@ export interface FileRoutesById {
   '/procurement/': typeof ProcurementIndexRoute
   '/requests/': typeof RequestsIndexRoute
   '/workers/': typeof WorkersIndexRoute
+  '/procurement/approvals_/$id': typeof ProcurementApprovalsIdRoute
   '/procurement/area/$area': typeof ProcurementAreaAreaRoute
   '/procurement/catalog_/$id': typeof ProcurementCatalogIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
@@ -282,6 +300,7 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/procurement/approvals'
     | '/procurement/catalog'
     | '/procurement/configuration'
     | '/procurement/planning'
@@ -296,6 +315,7 @@ export interface FileRouteTypes {
     | '/procurement/'
     | '/requests/'
     | '/workers/'
+    | '/procurement/approvals/$id'
     | '/procurement/area/$area'
     | '/procurement/catalog/$id'
     | '/procurement/requests/$id'
@@ -312,6 +332,7 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/procurement/approvals'
     | '/procurement/catalog'
     | '/procurement/configuration'
     | '/procurement/planning'
@@ -326,6 +347,7 @@ export interface FileRouteTypes {
     | '/procurement'
     | '/requests'
     | '/workers'
+    | '/procurement/approvals/$id'
     | '/procurement/area/$area'
     | '/procurement/catalog/$id'
     | '/procurement/requests/$id'
@@ -342,6 +364,7 @@ export interface FileRouteTypes {
     | '/speak-up'
     | '/leave/$id'
     | '/leave/new'
+    | '/procurement/approvals'
     | '/procurement/catalog'
     | '/procurement/configuration'
     | '/procurement/planning'
@@ -356,6 +379,7 @@ export interface FileRouteTypes {
     | '/procurement/'
     | '/requests/'
     | '/workers/'
+    | '/procurement/approvals_/$id'
     | '/procurement/area/$area'
     | '/procurement/catalog_/$id'
     | '/procurement/requests/$id'
@@ -373,6 +397,7 @@ export interface RootRouteChildren {
   SpeakUpRoute: typeof SpeakUpRoute
   LeaveIdRoute: typeof LeaveIdRoute
   LeaveNewRoute: typeof LeaveNewRoute
+  ProcurementApprovalsRoute: typeof ProcurementApprovalsRoute
   ProcurementCatalogRoute: typeof ProcurementCatalogRoute
   ProcurementConfigurationRoute: typeof ProcurementConfigurationRoute
   ProcurementPlanningRoute: typeof ProcurementPlanningRoute
@@ -387,6 +412,7 @@ export interface RootRouteChildren {
   ProcurementIndexRoute: typeof ProcurementIndexRoute
   RequestsIndexRoute: typeof RequestsIndexRoute
   WorkersIndexRoute: typeof WorkersIndexRoute
+  ProcurementApprovalsIdRoute: typeof ProcurementApprovalsIdRoute
   ProcurementAreaAreaRoute: typeof ProcurementAreaAreaRoute
   ProcurementCatalogIdRoute: typeof ProcurementCatalogIdRoute
   ProcurementSuppliersIdRoute: typeof ProcurementSuppliersIdRoute
@@ -479,6 +505,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProcurementIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/approvals': {
+      id: '/procurement/approvals'
+      path: '/procurement/approvals'
+      fullPath: '/procurement/approvals'
+      preLoaderRoute: typeof ProcurementApprovalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/procurement/catalog': {
       id: '/procurement/catalog'
       path: '/procurement/catalog'
@@ -549,6 +582,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/approvals_/$id': {
+      id: '/procurement/approvals_/$id'
+      path: '/procurement/approvals/$id'
+      fullPath: '/procurement/approvals/$id'
+      preLoaderRoute: typeof ProcurementApprovalsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/procurement/area/$area': {
       id: '/procurement/area/$area'
       path: '/procurement/area/$area'
@@ -616,6 +656,7 @@ const rootRouteChildren: RootRouteChildren = {
   SpeakUpRoute: SpeakUpRoute,
   LeaveIdRoute: LeaveIdRoute,
   LeaveNewRoute: LeaveNewRoute,
+  ProcurementApprovalsRoute: ProcurementApprovalsRoute,
   ProcurementCatalogRoute: ProcurementCatalogRoute,
   ProcurementConfigurationRoute: ProcurementConfigurationRoute,
   ProcurementPlanningRoute: ProcurementPlanningRoute,
@@ -630,6 +671,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProcurementIndexRoute: ProcurementIndexRoute,
   RequestsIndexRoute: RequestsIndexRoute,
   WorkersIndexRoute: WorkersIndexRoute,
+  ProcurementApprovalsIdRoute: ProcurementApprovalsIdRoute,
   ProcurementAreaAreaRoute: ProcurementAreaAreaRoute,
   ProcurementCatalogIdRoute: ProcurementCatalogIdRoute,
   ProcurementSuppliersIdRoute: ProcurementSuppliersIdRoute,

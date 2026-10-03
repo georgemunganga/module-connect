@@ -116,3 +116,10 @@ export function approvalBlockers(t: ApprovalTask, me = "Lukas Brandt"): string[]
   if (t.stale) b.push("A material change made the earlier approval stale; review the change first.");
   return b;
 }
+
+export function slaLabel(t: ApprovalTask) {
+  if (t.state === "Completed") return { text: "Done", tone: "text-muted-foreground" };
+  if (t.sla.paused) return { text: `Paused — ${t.sla.paused}`, tone: "text-muted-foreground" };
+  if (t.sla.hoursLeft < 0) return { text: `Breached ${-t.sla.hoursLeft} h ago (due ${t.sla.due})`, tone: "text-danger" };
+  return { text: `${t.sla.hoursLeft} h left (due ${t.sla.due})`, tone: t.sla.hoursLeft < 8 ? "text-warning" : "text-muted-foreground" };
+}
