@@ -10,7 +10,7 @@ The Procurement navigation, role-specific home, catalog, supplier, request, appr
 
 | Prompts | Browser-local UI coverage | Remaining frontend acceptance work |
 | --- | --- | --- |
-| 00–01 Foundation and navigation | Internal and supplier shells, role switcher, entity context, demo marker, navigation and main queues; administrator Getting started guide with three review steps and per-entity browser progress | Route-by-route keyboard and narrow-screen pass; confirm every home task uses current records rather than seed-only tiles; replace review markers with server-backed setup readiness when available |
+| 00–01 Foundation and navigation | Internal and supplier shells, role switcher, entity context, demo marker, navigation and main queues; administrator Getting started guide with three review steps and per-entity browser progress; grouped Procurement and Payables sidebar with role-scoped children | Route-by-route keyboard and narrow-screen pass; confirm every home task uses current records rather than seed-only tiles; replace review markers with server-backed setup readiness when available |
 | 02–03 Guided buying and catalog | Catalog search/detail, buyer item editor, contract offers, catalog-to-request, draft request | Complete attachment failure and unavailable budget examples; verify all catalog edge states across entities |
 | 04 Supplier onboarding | Queue, onboarding, evidence, duplicate review, portal change review, separate Procurement and Finance reference, activation and suspension | Qualify full expiry and affected-obligation review states |
 | 05 Planning | Plan list/detail, versions, changes and linked request views | Confirm all plan-to-request links and review state permissions with each role |
@@ -30,6 +30,7 @@ The Procurement navigation, role-specific home, catalog, supplier, request, appr
 ## Verified in this review
 
 - The Procurement administrator can open a three-step Getting started guide from Home or the side menu. It links to policy, supplier, catalog, requests, approvals, orders, invoices and configuration; review acknowledgements persist per entity. It does not claim to enable Finance integrations or payment execution.
+- The sidebar presents a short Employee menu and grouped Procurement and Payables menus for authorized operations roles. Invoice Inbox, all Bills and Payment Status are separate views, while Budgets lists only recorded check results and Finance reservation references. Recurring bills and batch payment execution are not represented as live Procurement features.
 - Catalog item creation and catalog-to-request preselection work in the browser; requester-only actions are hidden from admin roles.
 - A Kenya supplier cannot be activated until the independent Finance verification reference is recorded. Once active, the linked draft PO displays the approved boots quantity and value.
 - An approved request line set to RFQ opens the sourcing wizard with that line selected; an incomplete RFQ draft is no longer created from the request screen.

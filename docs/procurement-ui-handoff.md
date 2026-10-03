@@ -22,6 +22,8 @@ The internal route groups are `/procurement/getting-started`, `/procurement/cata
 
 The administrator's first-use guide groups nine real route links into three steps: buying controls, first purchase, and invoices/Finance. A review acknowledgement is saved per entity in the current browser. It is a guide progress marker, not evidence that a policy or integration has been activated. Finance remains the owner of payment methods and payment execution.
 
+The sidebar groups work by audience: Home, My Requests, Approvals, Items, Vendors, Procurement, Payables, Budgets and Analytics, with Configuration for administrators. Procurement expands to requests, quotes, evaluations, orders, receipts, contracts and planning according to role. Payables expands to Inbox, Bills and Payment Status. `Budgets` displays recorded Finance check results and reservation references; it does not invent a live balance. Recurring bills, batch payments and payment execution remain Finance-owned capabilities and have no misleading live links in the Procurement demo.
+
 ## Feature-to-screen map
 
 | Specification | Frontend surface |
@@ -59,6 +61,7 @@ The source records are browser-local demo data. A fresh browser starts from the 
 - The responsive pass includes phone-width list tables, planning, PO and receiving detail. Wide data tables scroll within their own cards and the side navigation collapses behind the mobile menu.
 - Browser journeys verified a single three-line PR across RFQ, direct PO, and contract release; supplier bid → sealed response → controlled opening → evaluation → award PO; PO issue → supplier acknowledgment → goods receipt → supplier invoice → match → AP handoff → simulated Finance Paid; and source PR quantity reconciliation. No page errors occurred in the final connected run.
 - The Getting started guide was checked at phone width: Home links to the guide, review progress persists after reload, and progress is separate for Netherlands and Kenya. An employee role cannot open the administrator guide.
+- The grouped sidebar was checked for Procurement admin and employee roles; the mobile drawer opened Payables → Inbox at 390 px without page errors. The Invoice Inbox, Bills, Payment Status and Budgets destinations display distinct views.
 
 ## Remaining production boundaries
 

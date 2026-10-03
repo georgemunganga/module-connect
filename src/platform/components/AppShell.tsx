@@ -54,7 +54,14 @@ const moduleRegistry: Record<ModuleId, { def: ModuleDefinition; home: string; av
 const comingSoon = ["Finance", "Inventory", "Accounting"];
 
 function useVisibleSections(mod: ModuleDefinition, role: Role) {
-  return mod.sections.filter((s) => !s.roles || s.roles.includes(role));
+  return mod.sections
+    .filter((s) => !s.roles || s.roles.includes(role))
+    .map((s) => ({
+      ...s,
+      items: s.items?.filter((item) => !item.roles || item.roles.includes(role)),
+      groups: s.groups?.map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || item.roles.includes(role)) })).filter((group) => group.items.length),
+    }))
+    .filter((s) => Boolean(s.to || s.items?.length || s.groups?.length));
 }
 
 function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
@@ -76,7 +83,7 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate?: ()
   const Icon = section.icon;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const childActive =
-    section.items?.some((i) => pathname.startsWith(i.to.split("/$")[0])) ?? false;
+    section.items?.some((i) => pathname.startsWith(i.to.split("/$")[0])) || section.groups?.some((g) => g.items.some((i) => pathname.startsWith(i.to.split("/$")[0]))) || false;
   const [open, setOpen] = useState(childActive);
   useEffect(() => {
     if (childActive) setOpen(true);
@@ -160,7 +167,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const mod = moduleRegistry[moduleId].def;
   const sections = useVisibleSections(mod, role);
   const links = sections.flatMap((s) =>
-    s.to ? [{ label: s.label, to: s.to, params: s.params }] : (s.items ?? []).map((i) => ({ label: `${s.label}: ${i.label}`, to: i.to, params: i.params })),
+    s.to ? [{ label: s.label, to: s.to, params: s.params }] : [...(s.items ?? []), ...(s.groups ?? []).flatMap((group) => group.items)].map((i) => ({ label: `${s.label}: ${i.label}`, to: i.to, params: i.params })),
   );
 
   return (

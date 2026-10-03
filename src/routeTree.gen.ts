@@ -22,6 +22,7 @@ import { Route as LeaveNewRouteImport } from './routes/leave.new'
 import { Route as PayslipsIndexRouteImport } from './routes/payslips.index'
 import { Route as ProcurementIndexRouteImport } from './routes/procurement.index'
 import { Route as ProcurementApprovalsRouteImport } from './routes/procurement.approvals'
+import { Route as ProcurementBudgetsRouteImport } from './routes/procurement.budgets'
 import { Route as ProcurementCatalogRouteImport } from './routes/procurement.catalog'
 import { Route as ProcurementConfigurationRouteImport } from './routes/procurement.configuration'
 import { Route as ProcurementContractsRouteImport } from './routes/procurement.contracts'
@@ -50,6 +51,8 @@ import { Route as ProcurementEvaluationsIdRouteImport } from './routes/procureme
 import { Route as ProcurementInvoicesIdRouteImport } from './routes/procurement.invoices_.$id'
 import { Route as ProcurementInvoicesNewRouteImport } from './routes/procurement.invoices_.new'
 import { Route as ProcurementOrdersIdRouteImport } from './routes/procurement.orders_.$id'
+import { Route as ProcurementPayablesInboxRouteImport } from './routes/procurement.payables.inbox'
+import { Route as ProcurementPayablesPaymentStatusRouteImport } from './routes/procurement.payables.payment-status'
 import { Route as ProcurementReceivingIdRouteImport } from './routes/procurement.receiving_.$id'
 import { Route as ProcurementRequestsIdRouteImport } from './routes/procurement.requests_.$id'
 import { Route as ProcurementRequestsNewRouteImport } from './routes/procurement.requests_.new'
@@ -121,6 +124,11 @@ const ProcurementIndexRoute = ProcurementIndexRouteImport.update({
 const ProcurementApprovalsRoute = ProcurementApprovalsRouteImport.update({
   id: '/procurement/approvals',
   path: '/procurement/approvals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementBudgetsRoute = ProcurementBudgetsRouteImport.update({
+  id: '/procurement/budgets',
+  path: '/procurement/budgets',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProcurementCatalogRoute = ProcurementCatalogRouteImport.update({
@@ -267,6 +275,18 @@ const ProcurementOrdersIdRoute = ProcurementOrdersIdRouteImport.update({
   path: '/procurement/orders/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementPayablesInboxRoute =
+  ProcurementPayablesInboxRouteImport.update({
+    id: '/procurement/payables/inbox',
+    path: '/procurement/payables/inbox',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ProcurementPayablesPaymentStatusRoute =
+  ProcurementPayablesPaymentStatusRouteImport.update({
+    id: '/procurement/payables/payment-status',
+    path: '/procurement/payables/payment-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProcurementReceivingIdRoute = ProcurementReceivingIdRouteImport.update({
   id: '/procurement/receiving_/$id',
   path: '/procurement/receiving/$id',
@@ -313,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
   '/procurement/approvals': typeof ProcurementApprovalsRoute
+  '/procurement/budgets': typeof ProcurementBudgetsRoute
   '/procurement/catalog': typeof ProcurementCatalogRoute
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/contracts': typeof ProcurementContractsRoute
@@ -345,6 +366,8 @@ export interface FileRoutesByFullPath {
   '/procurement/invoices/$id': typeof ProcurementInvoicesIdRoute
   '/procurement/invoices/new': typeof ProcurementInvoicesNewRoute
   '/procurement/orders/$id': typeof ProcurementOrdersIdRoute
+  '/procurement/payables/inbox': typeof ProcurementPayablesInboxRoute
+  '/procurement/payables/payment-status': typeof ProcurementPayablesPaymentStatusRoute
   '/procurement/receiving/$id': typeof ProcurementReceivingIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests/new': typeof ProcurementRequestsNewRoute
@@ -363,6 +386,7 @@ export interface FileRoutesByTo {
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
   '/procurement/approvals': typeof ProcurementApprovalsRoute
+  '/procurement/budgets': typeof ProcurementBudgetsRoute
   '/procurement/catalog': typeof ProcurementCatalogRoute
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/contracts': typeof ProcurementContractsRoute
@@ -395,6 +419,8 @@ export interface FileRoutesByTo {
   '/procurement/invoices/$id': typeof ProcurementInvoicesIdRoute
   '/procurement/invoices/new': typeof ProcurementInvoicesNewRoute
   '/procurement/orders/$id': typeof ProcurementOrdersIdRoute
+  '/procurement/payables/inbox': typeof ProcurementPayablesInboxRoute
+  '/procurement/payables/payment-status': typeof ProcurementPayablesPaymentStatusRoute
   '/procurement/receiving/$id': typeof ProcurementReceivingIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests/new': typeof ProcurementRequestsNewRoute
@@ -414,6 +440,7 @@ export interface FileRoutesById {
   '/leave/$id': typeof LeaveIdRoute
   '/leave/new': typeof LeaveNewRoute
   '/procurement/approvals': typeof ProcurementApprovalsRoute
+  '/procurement/budgets': typeof ProcurementBudgetsRoute
   '/procurement/catalog': typeof ProcurementCatalogRoute
   '/procurement/configuration': typeof ProcurementConfigurationRoute
   '/procurement/contracts': typeof ProcurementContractsRoute
@@ -446,6 +473,8 @@ export interface FileRoutesById {
   '/procurement/invoices_/$id': typeof ProcurementInvoicesIdRoute
   '/procurement/invoices_/new': typeof ProcurementInvoicesNewRoute
   '/procurement/orders_/$id': typeof ProcurementOrdersIdRoute
+  '/procurement/payables/inbox': typeof ProcurementPayablesInboxRoute
+  '/procurement/payables/payment-status': typeof ProcurementPayablesPaymentStatusRoute
   '/procurement/receiving_/$id': typeof ProcurementReceivingIdRoute
   '/procurement/requests_/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests_/new': typeof ProcurementRequestsNewRoute
@@ -466,6 +495,7 @@ export interface FileRouteTypes {
     | '/leave/$id'
     | '/leave/new'
     | '/procurement/approvals'
+    | '/procurement/budgets'
     | '/procurement/catalog'
     | '/procurement/configuration'
     | '/procurement/contracts'
@@ -498,6 +528,8 @@ export interface FileRouteTypes {
     | '/procurement/invoices/$id'
     | '/procurement/invoices/new'
     | '/procurement/orders/$id'
+    | '/procurement/payables/inbox'
+    | '/procurement/payables/payment-status'
     | '/procurement/receiving/$id'
     | '/procurement/requests/$id'
     | '/procurement/requests/new'
@@ -516,6 +548,7 @@ export interface FileRouteTypes {
     | '/leave/$id'
     | '/leave/new'
     | '/procurement/approvals'
+    | '/procurement/budgets'
     | '/procurement/catalog'
     | '/procurement/configuration'
     | '/procurement/contracts'
@@ -548,6 +581,8 @@ export interface FileRouteTypes {
     | '/procurement/invoices/$id'
     | '/procurement/invoices/new'
     | '/procurement/orders/$id'
+    | '/procurement/payables/inbox'
+    | '/procurement/payables/payment-status'
     | '/procurement/receiving/$id'
     | '/procurement/requests/$id'
     | '/procurement/requests/new'
@@ -566,6 +601,7 @@ export interface FileRouteTypes {
     | '/leave/$id'
     | '/leave/new'
     | '/procurement/approvals'
+    | '/procurement/budgets'
     | '/procurement/catalog'
     | '/procurement/configuration'
     | '/procurement/contracts'
@@ -598,6 +634,8 @@ export interface FileRouteTypes {
     | '/procurement/invoices_/$id'
     | '/procurement/invoices_/new'
     | '/procurement/orders_/$id'
+    | '/procurement/payables/inbox'
+    | '/procurement/payables/payment-status'
     | '/procurement/receiving_/$id'
     | '/procurement/requests_/$id'
     | '/procurement/requests_/new'
@@ -617,6 +655,7 @@ export interface RootRouteChildren {
   LeaveIdRoute: typeof LeaveIdRoute
   LeaveNewRoute: typeof LeaveNewRoute
   ProcurementApprovalsRoute: typeof ProcurementApprovalsRoute
+  ProcurementBudgetsRoute: typeof ProcurementBudgetsRoute
   ProcurementCatalogRoute: typeof ProcurementCatalogRoute
   ProcurementConfigurationRoute: typeof ProcurementConfigurationRoute
   ProcurementContractsRoute: typeof ProcurementContractsRoute
@@ -649,6 +688,8 @@ export interface RootRouteChildren {
   ProcurementInvoicesIdRoute: typeof ProcurementInvoicesIdRoute
   ProcurementInvoicesNewRoute: typeof ProcurementInvoicesNewRoute
   ProcurementOrdersIdRoute: typeof ProcurementOrdersIdRoute
+  ProcurementPayablesInboxRoute: typeof ProcurementPayablesInboxRoute
+  ProcurementPayablesPaymentStatusRoute: typeof ProcurementPayablesPaymentStatusRoute
   ProcurementReceivingIdRoute: typeof ProcurementReceivingIdRoute
   ProcurementRequestsIdRoute: typeof ProcurementRequestsIdRoute
   ProcurementRequestsNewRoute: typeof ProcurementRequestsNewRoute
@@ -749,6 +790,13 @@ declare module '@tanstack/react-router' {
       path: '/procurement/approvals'
       fullPath: '/procurement/approvals'
       preLoaderRoute: typeof ProcurementApprovalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/budgets': {
+      id: '/procurement/budgets'
+      path: '/procurement/budgets'
+      fullPath: '/procurement/budgets'
+      preLoaderRoute: typeof ProcurementBudgetsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/procurement/catalog': {
@@ -947,6 +995,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProcurementOrdersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/payables/inbox': {
+      id: '/procurement/payables/inbox'
+      path: '/procurement/payables/inbox'
+      fullPath: '/procurement/payables/inbox'
+      preLoaderRoute: typeof ProcurementPayablesInboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/payables/payment-status': {
+      id: '/procurement/payables/payment-status'
+      path: '/procurement/payables/payment-status'
+      fullPath: '/procurement/payables/payment-status'
+      preLoaderRoute: typeof ProcurementPayablesPaymentStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/procurement/receiving_/$id': {
       id: '/procurement/receiving_/$id'
       path: '/procurement/receiving/$id'
@@ -1009,6 +1071,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaveIdRoute: LeaveIdRoute,
   LeaveNewRoute: LeaveNewRoute,
   ProcurementApprovalsRoute: ProcurementApprovalsRoute,
+  ProcurementBudgetsRoute: ProcurementBudgetsRoute,
   ProcurementCatalogRoute: ProcurementCatalogRoute,
   ProcurementConfigurationRoute: ProcurementConfigurationRoute,
   ProcurementContractsRoute: ProcurementContractsRoute,
@@ -1041,6 +1104,8 @@ const rootRouteChildren: RootRouteChildren = {
   ProcurementInvoicesIdRoute: ProcurementInvoicesIdRoute,
   ProcurementInvoicesNewRoute: ProcurementInvoicesNewRoute,
   ProcurementOrdersIdRoute: ProcurementOrdersIdRoute,
+  ProcurementPayablesInboxRoute: ProcurementPayablesInboxRoute,
+  ProcurementPayablesPaymentStatusRoute: ProcurementPayablesPaymentStatusRoute,
   ProcurementReceivingIdRoute: ProcurementReceivingIdRoute,
   ProcurementRequestsIdRoute: ProcurementRequestsIdRoute,
   ProcurementRequestsNewRoute: ProcurementRequestsNewRoute,

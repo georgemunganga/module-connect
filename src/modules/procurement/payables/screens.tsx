@@ -88,26 +88,33 @@ function Field({
   );
 }
 
-export function InvoiceQueue() {
+export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payments" }) {
   const state = usePayables();
   const { entityId, role } = useApp();
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const statusInView = (status: Invoice["status"]) => view === "inbox" ? !["Posted", "Partially paid", "Paid", "Voided", "Cancelled"].includes(status) : view === "payments" ? ["Handed to AP", "AP rejected", "Posted", "Partially paid", "Paid"].includes(status) : true;
   const rows = state.invoices.filter(
     (i) =>
       i.entityId === entityId &&
+      statusInView(i.status) &&
       (filter === "All" || i.status === filter) &&
       `${i.number} ${i.supplier} ${i.po}`.toLowerCase().includes(search.toLowerCase()),
   );
+  const summary = view === "inbox"
+    ? [{ label: "Awaiting review", value: rows.filter((i) => i.status === "Received").length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception" || i.status === "AP rejected").length }, { label: "Ready for AP", value: rows.filter((i) => i.status === "Validated").length }]
+    : view === "payments"
+      ? [{ label: "Handed to AP", value: rows.filter((i) => i.status === "Handed to AP").length }, { label: "AP rejected", value: rows.filter((i) => i.status === "AP rejected").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }]
+      : [{ label: "Bills", value: rows.length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }];
   return (
     <Gate allowed={invoiceRoles}>
       <AppShell>
         <PageHeader
-          eyebrow="Procurement / Invoices"
-          title="Invoice inbox"
-          description="Validate supplier invoices, resolve match exceptions and hand validated records to Finance. Demo data only."
+          eyebrow="Payables"
+          title={view === "inbox" ? "Invoice inbox" : view === "payments" ? "Payment status" : "Bills"}
+          description={view === "payments" ? "Finance-confirmed posting and payment status for procurement invoices. This screen cannot execute payment." : view === "inbox" ? "Validate incoming supplier invoices, resolve match exceptions and hand validated records to Finance. Demo data only." : "All supplier invoices and their procurement validation history for this entity."}
           primaryAction={
-            role === "auditor" ? undefined : (
+            role === "auditor" || view === "payments" ? undefined : (
               <Button asChild>
                 <Link to="/procurement/invoices/new">Capture invoice</Link>
               </Button>
@@ -115,24 +122,7 @@ export function InvoiceQueue() {
           }
         />
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border bg-surface p-4">
-            <p className="text-xs text-muted-foreground">Needs resolution</p>
-            <p className="text-2xl font-semibold">
-              {rows.filter((i) => i.status === "Exception").length}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-surface p-4">
-            <p className="text-xs text-muted-foreground">Ready for AP</p>
-            <p className="text-2xl font-semibold">
-              {rows.filter((i) => i.status === "Validated").length}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-surface p-4">
-            <p className="text-xs text-muted-foreground">Finance confirmed paid</p>
-            <p className="text-2xl font-semibold">
-              {rows.filter((i) => i.status === "Paid").length}
-            </p>
-          </div>
+          {summary.map((card) => <div key={card.label} className="rounded-lg border bg-surface p-4"><p className="text-xs text-muted-foreground">{card.label}</p><p className="text-2xl font-semibold">{card.value}</p></div>)}
         </div>
         <div className="mb-4 flex flex-wrap gap-2">
           <Input
@@ -157,8 +147,9 @@ export function InvoiceQueue() {
               "Handed to AP",
               "AP rejected",
               "Posted",
+              "Partially paid",
               "Paid",
-            ].map((s) => (
+            ].filter((status) => status === "All" || statusInView(status as Invoice["status"])).map((s) => (
               <option key={s}>{s}</option>
             ))}
           </select>
