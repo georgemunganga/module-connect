@@ -26,7 +26,7 @@ export const procurementModule: ModuleDefinition = {
     // Procurement operations navigation (max one sublink level)
     { id: "buying", label: "Buying", icon: ShoppingCart, to: "/procurement/requests", roles: OPS },
     { id: "suppliers", label: "Suppliers", icon: Building2, to: "/procurement/suppliers", roles: OPS },
-    { id: "sourcing", label: "Sourcing", icon: Gavel, to: "/procurement/area/$area", params: { area: "sourcing" }, roles: ["buyer", "proc_admin", "auditor"] },
+    { id: "sourcing", label: "Sourcing", icon: Gavel, to: "/procurement/sourcing", roles: ["buyer", "proc_admin", "auditor"] },
     { id: "contracts", label: "Contracts", icon: FileSignature, to: "/procurement/area/$area", params: { area: "contracts" }, roles: ["buyer", "proc_admin", "auditor"] },
     { id: "purchasing", label: "Purchasing", icon: Truck, to: "/procurement/area/$area", params: { area: "purchasing" }, roles: ["buyer", "receiver", "proc_admin", "auditor"] },
     { id: "invoices", label: "Invoices", icon: Receipt, to: "/procurement/area/$area", params: { area: "invoices" }, roles: ["ap_processor", "buyer", "proc_admin", "auditor"] },
