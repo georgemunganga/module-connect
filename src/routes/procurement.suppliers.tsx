@@ -37,13 +37,13 @@ function SupplierList() {
       <PageHeader
         eyebrow="Suppliers"
         title="Vendors"
-        description="Create, review and manage vendors and their contact persons. Each record shows its next action and owner."
+        description="Add vendors, keep their contact details, and see what needs to happen next."
         primaryAction={actions}
       />
       <ListPage<SupplierRecord>
         rows={rows}
         emptyState={{ title: "Every purchase starts with a vendor", body: "Create and manage your vendors and their contact persons, all in one place.", icon: <Building2 className="size-10" aria-hidden />, action: actions }}
-        searchPlaceholder="Search supplier, registration or category"
+        searchPlaceholder="Search vendor name, company ID or category"
         searchFields={(s) => `${s.name} ${s.legalName} ${s.registration} ${s.categories.join(" ")}`}
         filters={[
           { id: "status", label: "Status", options: lifecycleFilters, match: (s, v) => s.status === v },
@@ -53,7 +53,7 @@ function SupplierList() {
           { id: "name", header: "Supplier", cell: (s) => <span className="block max-w-64 truncate font-medium">{s.name}</span> },
           { id: "status", header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
           { id: "owner", header: "Owner", cell: (s) => s.owner },
-          { id: "next", header: "Next action", cell: (s) => <span className="block max-w-72 truncate">{s.nextAction}</span> },
+          { id: "next", header: "What happens next", cell: (s) => <span className="block max-w-72 truncate">{s.nextAction}</span> },
           { id: "due", header: "Due", cell: (s) => s.dueDate },
           { id: "country", header: "Country", cell: (s) => s.country },
           { id: "cat", header: "Categories", defaultVisible: false, cell: (s) => s.categories.join(", ") },

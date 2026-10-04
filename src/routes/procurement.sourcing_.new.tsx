@@ -57,11 +57,11 @@ function NewEvent() {
   const needsJustification = method === "Single source" || method === "Emergency";
 
   const steps: FlowStep[] = [
-    { id: "lines", title: "Approved lines", purpose: "Only approved lines with remaining quantity can be sourced.", render: () => (
+    { id: "lines", title: "What needs a quote?", purpose: "Choose approved items that still need to be bought.", render: () => (
       approvedLines.length ? <ul className="space-y-2">{approvedLines.map((l) => (
         <li key={l.key}><label className="flex items-start gap-3 rounded-lg border p-3 text-sm"><input type="checkbox" className="mt-1" checked={lines.includes(l.key)} onChange={(e) => setLines(e.target.checked ? [...lines, l.key] : lines.filter((x) => x !== l.key))} /><span><span className="font-medium">{l.label}</span><span className="block text-xs text-muted-foreground">{l.pr} · {l.qty} remaining · {money(l.value, l.ccy)}</span></span></label></li>
-      ))}</ul> : <p className="text-sm text-muted-foreground">No approved lines are waiting for sourcing.</p>) },
-    { id: "method", title: "Method", purpose: "Allowed methods depend on value and policy. Thresholds here are demo values, not confirmed policy.", render: () => (
+      ))}</ul> : <p className="text-sm text-muted-foreground">No approved items need quotes right now.</p>) },
+    { id: "method", title: "How will you buy?", purpose: "The choices depend on the estimated amount. These sample limits are for this demo only.", render: () => (
       <div className="space-y-2">
         {permittedMethods(estEur).map((m) => (
           <label key={m.method} className={`flex items-start gap-3 rounded-lg border p-3 text-sm ${!m.allowed ? "opacity-60" : ""}`}>
@@ -69,16 +69,16 @@ function NewEvent() {
             <span><span className="font-medium">{m.method}</span><span className="block text-xs text-muted-foreground">{m.allowed ? m.why : `Not allowed for this value — ${m.why}`}</span></span>
           </label>
         ))}
-        {needsJustification ? <div><Label htmlFor="just">Justification (required)</Label><Input id="just" className="mt-1" value={justification} onChange={(e) => setJustification(e.target.value)} /></div> : null}
+        {needsJustification ? <div><Label htmlFor="just">Why is this method needed? *</Label><Input id="just" className="mt-1" value={justification} onChange={(e) => setJustification(e.target.value)} /></div> : null}
       </div>) },
     { id: "deadline", title: "Deadline", purpose: "Suppliers see the deadline in this time zone.", render: () => (
       <div className="grid max-w-md gap-4">
         <div><Label htmlFor="cl">Closes at</Label><Input id="cl" type="datetime-local" className="mt-1" value={closes} onChange={(e) => setCloses(e.target.value)} /></div>
         <div><Label htmlFor="tz">Time zone</Label><select id="tz" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={tz} onChange={(e) => setTz(e.target.value)}><option>Europe/Amsterdam</option><option>Europe/Berlin</option><option>Africa/Nairobi</option></select></div>
       </div>) },
-    { id: "suppliers", title: "Invite suppliers", purpose: "Only active, eligible suppliers can be invited.", render: () => (
+    { id: "suppliers", title: "Invite vendors", purpose: "Only approved vendors can be invited.", render: () => (
       <ul className="space-y-2">{suppliersPool.map((s) => <li key={s}><label className="flex items-center gap-3 rounded-lg border p-3 text-sm"><input type="checkbox" checked={invited.includes(s)} onChange={(e) => setInvited(e.target.checked ? [...invited, s] : invited.filter((x) => x !== s))} />{s}</label></li>)}</ul>) },
-    { id: "criteria", title: "Evaluation criteria", purpose: "Criteria and weights are fixed once published, so everyone is judged the same way.", render: () => (
+    { id: "criteria", title: "How will you compare replies?", purpose: "Choose how much price, delivery and quality matter. These percentages cannot change after the request is sent.", render: () => (
       <div className="space-y-2">
         {criteria.map((c, i) => (
           <div key={c.name} className="flex items-center gap-3 text-sm">
@@ -89,7 +89,7 @@ function NewEvent() {
         ))}
         <p className={`text-sm ${weightTotal === 100 ? "text-success" : "text-danger"}`}>Total {weightTotal}% {weightTotal === 100 ? "" : "— must be 100%"}</p>
       </div>) },
-    { id: "review", title: "Review", purpose: "Publishing needs Procurement approval first.", render: () => {
+    { id: "review", title: "Review", purpose: "Another purchasing lead must approve this before vendors receive it.", render: () => {
       const problems = [!chosen.length && "choose at least one line", !method && "choose a method", needsJustification && !justification.trim() && "add a justification", !closes && "set a deadline", !invited.length && "invite at least one supplier", weightTotal !== 100 && "weights must total 100%"].filter(Boolean);
       return <div className="space-y-2 text-sm">{problems.length ? <p role="alert" className="rounded-md border border-danger/40 bg-danger-soft p-3">Still needed: {problems.join(", ")}.</p> : <p className="rounded-md border border-success/40 bg-success-soft p-3">Ready to send for approval.</p>}<p>{chosen.length} line(s) · {method ?? "—"} · closes {closes || "—"} ({tz}) · {invited.length} supplier(s)</p></div>;
     } },
@@ -98,7 +98,7 @@ function NewEvent() {
   if (!sourcingRole(role) || role === "auditor") return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
-      <PageHeader eyebrow="Sourcing" title="Create sourcing event" description="Saved as a draft as you go. Nothing is sent to suppliers until it's approved and published." />
+      <PageHeader eyebrow="Quotes" title="New quote request" description="Choose what you need and which vendors to ask. Nothing goes to vendors until it is approved and sent." />
       <GuidedFlow flowId="proc-sourcing-new" steps={steps} submitLabel="Send for approval"
         onSubmit={async () => {
           if (!chosen.length || !method || !closes || !invited.length || weightTotal !== 100 || (needsJustification && !justification.trim())) return;
@@ -115,7 +115,7 @@ function NewEvent() {
           setDone(ref);
           sessionStorage.removeItem("flow:proc-sourcing-new");
         }}
-        submitted={done ? <NextSteps reference={done} title="Sent for approval (demo)" steps={["A Procurement lead checks method, suppliers and criteria.", "Once approved, it's published and invitations go out — in this demo nothing is actually sent.", "Responses stay sealed until the authorised opening."]} actions={<Button asChild><Link to="/procurement/sourcing">Back to sourcing</Link></Button>} /> : undefined}
+        submitted={done ? <NextSteps reference={done} title="Sent for approval (demo)" steps={["A purchasing lead checks the buying method, vendors and scoring.", "Once approved, vendor invitations can be sent. This demo does not actually send them.", "Replies stay private until the closing time."]} actions={<Button asChild><Link to="/procurement/sourcing">Back to quote requests</Link></Button>} /> : undefined}
       />
     </AppShell>
   );

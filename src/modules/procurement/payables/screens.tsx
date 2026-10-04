@@ -11,6 +11,7 @@ import { sameEntity } from "@/modules/procurement/access";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { statusLabel } from "@/platform/components/StatusBadge";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
 import {
   addComment,
@@ -53,7 +54,7 @@ function Gate({ children, allowed }: { children: React.ReactNode; allowed: strin
       <PageHeader
         eyebrow="Procurement"
         title="Access restricted"
-        description="Switch to an authorised demo role to view this work area."
+        description="Switch to a demo role that can use this page."
       />
       <Notice>This role cannot access this record.</Notice>
     </AppShell>
@@ -114,12 +115,12 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
       <AppShell>
         <PageHeader
           eyebrow="Payables"
-          title={view === "inbox" ? "Invoice inbox" : view === "payments" ? "Payment status" : "Bills"}
-          description={view === "payments" ? "Finance-confirmed posting and payment status for procurement invoices. This screen cannot execute payment." : view === "inbox" ? "Validate incoming supplier invoices, resolve match exceptions and hand validated records to Finance. Demo data only." : "All supplier invoices and their procurement validation history for this entity."}
+          title={view === "inbox" ? "Bills to check" : view === "payments" ? "Payment updates" : "Bills"}
+          description={view === "payments" ? "See updates sent by Finance. Payments cannot be made here." : view === "inbox" ? "Check new bills against orders and deliveries, then send them to Finance." : "See every vendor bill and what happened to it."}
           primaryAction={
             role === "auditor" || view === "payments" ? undefined : (
               <Button asChild>
-                <Link to="/procurement/invoices/new">Capture invoice</Link>
+                <Link to="/procurement/invoices/new">Add bill</Link>
               </Button>
             )
           }
@@ -192,7 +193,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
             ))}
           </div>
         ) : !viewRows.length ? (
-          <EmptyState title={view === "payments" ? "No payment status yet" : view === "inbox" ? "Your invoice inbox is empty" : "No bills yet"} body={view === "payments" ? "Finance-confirmed posting and payment updates will appear after an invoice is handed to AP." : "Capture a supplier invoice to validate it against an order and receipt."} icon={<Inbox className="size-10" aria-hidden />} action={view !== "payments" && role !== "auditor" ? <Button asChild><Link to="/procurement/invoices/new">Capture invoice</Link></Button> : undefined} />
+          <EmptyState title={view === "payments" ? "No payment updates yet" : view === "inbox" ? "No bills to check" : "No bills yet"} body={view === "payments" ? "Finance updates will appear after a bill is sent there." : "Add a vendor bill to compare it with the order and delivery."} icon={<Inbox className="size-10" aria-hidden />} action={view !== "payments" && role !== "auditor" ? <Button asChild><Link to="/procurement/invoices/new">Add bill</Link></Button> : undefined} />
         ) : (
           <NoResultsState title="No matching invoices" body="Try a different search or status." action={<Button variant="outline" onClick={() => { setSearch(""); setFilter("All"); }}>Clear search and filter</Button>} />
         )}
@@ -277,13 +278,13 @@ export function InvoiceCreate() {
       <AppShell>
         <PageHeader
           eyebrow="Invoice inbox"
-          title="Capture invoice"
-          description="Save a local demo invoice. Email, API, OCR and Finance posting are not connected."
+          title="Add a bill"
+          description="Enter a vendor bill to check it against an order. This demo saves it in your browser."
         />
         <form onSubmit={save} className="max-w-3xl space-y-5">
           <div className="grid gap-4 rounded-xl border bg-surface p-5 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="source">Intake source</Label>
+              <Label htmlFor="source">How did the bill arrive?</Label>
               <select
                 id="source"
                 className="h-10 w-full rounded-md border bg-background px-3"
@@ -296,7 +297,7 @@ export function InvoiceCreate() {
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="supplier">Supplier</Label>
+              <Label htmlFor="supplier">Vendor</Label>
               <select
                 id="supplier"
                 className="h-10 w-full rounded-md border bg-background px-3"
@@ -310,7 +311,7 @@ export function InvoiceCreate() {
               </select>
             </div>
             <Field label="Invoice number" value={number} onChange={setNumber} required />
-            <Field label="PO reference" value={po} onChange={setPo} required />
+            <Field label="Purchase order number" value={po} onChange={setPo} required />
             <Field
               label="Quantity"
               type="number"
@@ -326,13 +327,13 @@ export function InvoiceCreate() {
               required
             />
             <div className="rounded-md border bg-muted p-3 text-sm">
-              <p className="font-medium">PO and receipt evidence</p>
-              <p className="mt-1 text-muted-foreground">{order ? `${order.line.qty} ordered · ${acceptedQuantity} accepted · ${money(order.line.price, order.currency)} PO unit price` : "Enter an issued PO reference to load its approved price and accepted quantity."}</p>
+              <p className="font-medium">What was ordered and delivered</p>
+              <p className="mt-1 text-muted-foreground">{order ? `${order.line.qty} ordered · ${acceptedQuantity} accepted · ${money(order.line.price, order.currency)} per item on the order` : "Enter a sent purchase order number to see its price and delivered quantity."}</p>
             </div>
             <Field label="Tax total (EUR)" type="number" value={tax} onChange={setTax} required />
             <div className="sm:col-span-2">
               <Field
-                label="Attachment filename or reference"
+                label="Bill document name"
                 value={attachment}
                 onChange={setAttachment}
                 required
@@ -341,14 +342,13 @@ export function InvoiceCreate() {
           </div>
           {error && <Notice tone="error">{error}</Notice>}
           <div className="flex gap-2">
-            <Button type="submit">Save demo invoice</Button>
+            <Button type="submit">Save bill</Button>
             <Button type="button" variant="outline" asChild>
               <Link to="/procurement/invoices">Cancel</Link>
             </Button>
           </div>
           <Notice>
-            Duplicate check uses supplier + invoice number + entity + currency. No document is
-            uploaded to an external service.
+            We check for another bill with the same vendor and invoice number. This demo does not upload the document.
           </Notice>
         </form>
       </AppShell>
@@ -545,7 +545,7 @@ export function InvoiceDetail({ id }: { id: string }) {
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
           <section className="rounded-xl border bg-surface p-5">
-            <h2 className="font-semibold">Supplier invoice</h2>
+            <h2 className="font-semibold">Vendor bill</h2>
             <p className="mt-3 text-sm">
               Invoice {invoice.number} · {invoice.date}
             </p>
@@ -571,10 +571,10 @@ export function InvoiceDetail({ id }: { id: string }) {
                 {money(line.poUnitPrice, invoice.currency)}
               </p>
             ))}
-            <p className="mt-3 text-xs text-muted-foreground">PO and receipt values are local demo evidence. A live ERP adapter is still required.</p>
+            <p className="mt-3 text-xs text-muted-foreground">Order and delivery details in this demo come from this browser.</p>
           </section>
           <section className="rounded-xl border bg-surface p-5">
-            <h2 className="font-semibold">Acceptance evidence</h2>
+            <h2 className="font-semibold">What was accepted</h2>
             {invoice.lines.map((line, idx) => (
               <p key={idx} className="mt-3 text-sm">
                 {line.description}: {line.acceptedQuantity} accepted;{" "}
@@ -582,15 +582,14 @@ export function InvoiceDetail({ id }: { id: string }) {
               </p>
             ))}
             <p className="mt-3 text-xs text-muted-foreground">
-              {invoice.matchType} match · policy v{state.policy.version} · illustrative tolerance{" "}
-              {state.policy.tolerance}%
+              {invoice.matchType === "3-way" ? "Compared with the order and delivery" : "Compared with the order"} · allowed difference in this demo: {state.policy.tolerance}%
             </p>
           </section>
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
           <section className="rounded-xl border bg-surface p-5">
-            <h2 className="font-semibold">Match & exception</h2>
-            {duplicate && <Notice tone="error">Duplicate invoice key detected.</Notice>}
+            <h2 className="font-semibold">Check the bill</h2>
+            {duplicate && <Notice tone="error">This bill may already be recorded.</Notice>}
             {issues.length ? (
               <ul className="mt-3 list-inside list-disc text-sm text-red-800">
                 {issues.map((issue) => (
@@ -599,8 +598,7 @@ export function InvoiceDetail({ id }: { id: string }) {
               </ul>
             ) : (
               <Notice tone="success">
-                Quantity and price checks pass under illustrative policy. Tax requires Finance
-                validation.
+                The quantity and price look right. Finance still needs to check the tax.
               </Notice>
             )}
             {invoice.exception && (
@@ -611,52 +609,52 @@ export function InvoiceDetail({ id }: { id: string }) {
             )}
             {canAct && (
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={match}>Run match</Button>
+                <Button onClick={match}>Check against order</Button>
                 <Button variant="outline" onClick={correct} disabled={!issues.length}>
-                  Request supplier correction
+                  Ask vendor to correct bill
                 </Button>
               </div>
             )}
             <div className="mt-3">
-              <Label htmlFor="reason">Reason for correction, AP rejection, or credit review</Label>
+              <Label htmlFor="reason">Why does this need a change?</Label>
               <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Correction requests preserve this invoice. A supplier replacement is a separate linked record.
+              The original bill stays in the history. A corrected bill is saved separately.
             </p>
           </section>
           <section className="rounded-xl border bg-surface p-5">
-            <h2 className="font-semibold">Finance handoff & payment visibility</h2>
+            <h2 className="font-semibold">Finance and payment updates</h2>
             <p className="mt-2 text-sm">
-              Status: {invoice.status}.{" "}
+              Status: {statusLabel(invoice.status)}.{" "}
               {invoice.financeAt
                 ? `Last Finance demo confirmation ${new Date(invoice.financeAt).toLocaleString()}`
                 : "No Finance confirmation yet."}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Idempotency key: {invoice.apKey ?? "Not assigned"} · attempts: {invoice.apAttempts}
+              Finance reference: {invoice.apKey ?? "Not assigned"} · send attempts: {invoice.apAttempts}
             </p>
             {canAct && (
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button onClick={handoff} disabled={invoice.status !== "Validated"}>
-                  Queue AP handoff
+                  Send to Finance
                 </Button>
                 <Button variant="outline" onClick={() => finance("Handed to AP")}>
-                  Demo AP accepts
+                  Demo: Finance accepts
                 </Button>
                 <Button variant="outline" onClick={() => finance("AP rejected")}>
-                  Demo AP rejects
+                  Demo: Finance sends back
                 </Button>
                 <Button variant="outline" onClick={() => finance("Posted")}>
-                  Demo posted
+                  Demo: Finance records bill
                 </Button>
                 <Button variant="outline" onClick={() => finance("Paid")}>
-                  Demo paid
+                  Demo: Finance marks paid
                 </Button>
               </div>
             )}
             <p className="mt-3 text-xs text-muted-foreground">
-              These controls simulate inbound Finance status. They never initiate payment.
+              These buttons show sample Finance updates. They do not make a payment.
             </p>
           </section>
         </div>
@@ -674,7 +672,7 @@ export function InvoiceDetail({ id }: { id: string }) {
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <Timeline invoice={invoice} />
           <section className="min-w-0 rounded-xl border bg-surface p-5">
-            <h2 className="font-semibold">Commercial credits</h2>
+            <h2 className="font-semibold">Vendor credits</h2>
             {(state.credits ?? [])
               .filter((credit) => credit.invoiceId === id)
               .map((credit) => (
@@ -711,7 +709,7 @@ export function InvoiceDetail({ id }: { id: string }) {
             </p>
           </section>
           <section className="min-w-0 rounded-xl border bg-surface p-5">
-            <h2 className="font-semibold">Record collaboration</h2>
+            <h2 className="font-semibold">Messages about this bill</h2>
             <div className="mt-3 space-y-2">
               {(state.comments[id] ?? []).map((c, n) => (
                 <p key={n} className="rounded-lg border p-2 text-sm">

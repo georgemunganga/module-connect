@@ -26,12 +26,12 @@ export const procurementModule: ModuleDefinition = {
       id: "procurement", label: "Procurement", icon: ShoppingCart, roles: PROCUREMENT,
       items: [
         { label: "Purchase Requests", to: "/procurement/requests", roles: ["buyer", "proc_admin", "auditor"] },
-        { label: "Requests for Quotes", to: "/procurement/sourcing", roles: ["buyer", "proc_admin", "auditor"] },
-        { label: "Evaluations", to: "/procurement/evaluations", roles: ["buyer", "proc_admin", "auditor"] },
+        { label: "Get Quotes", to: "/procurement/sourcing", roles: ["buyer", "proc_admin", "auditor"] },
+        { label: "Compare Quotes", to: "/procurement/evaluations", roles: ["buyer", "proc_admin", "auditor"] },
         { label: "Purchase Orders", to: "/procurement/orders", roles: ["buyer", "receiver", "proc_admin", "auditor"] },
-        { label: "Purchase Receipts", to: "/procurement/receiving", roles: ["buyer", "receiver", "proc_admin", "auditor"] },
+        { label: "Deliveries & Services", to: "/procurement/receiving", roles: ["buyer", "receiver", "proc_admin", "auditor"] },
         { label: "Contracts", to: "/procurement/contracts", roles: ["buyer", "proc_admin", "auditor"] },
-        ...(PLANNING_ENABLED ? [{ label: "Planning", to: "/procurement/planning", roles: ["manager", "buyer", "proc_admin", "auditor"] as NonNullable<ModuleDefinition["sections"][number]["roles"]> }] : []),
+        ...(PLANNING_ENABLED ? [{ label: "Purchase Plans", to: "/procurement/planning", roles: ["manager", "buyer", "proc_admin", "auditor"] as NonNullable<ModuleDefinition["sections"][number]["roles"]> }] : []),
       ],
     },
     { id: "payables", label: "Payables", icon: Receipt, roles: PAYABLES, items: [
@@ -41,6 +41,6 @@ export const procurementModule: ModuleDefinition = {
     ] },
     { id: "budgets", label: "Budgets", icon: Wallet, to: "/procurement/budgets", roles: ["manager", "buyer", "proc_admin", "auditor"] },
     { id: "analytics", label: "Analytics", icon: BarChart3, to: "/procurement/reports", roles: OPS },
-    { id: "configuration", label: "Configuration", icon: Settings, to: "/procurement/configuration", roles: ["proc_admin"] },
+    { id: "configuration", label: "Settings", icon: Settings, to: "/procurement/configuration", roles: ["proc_admin"] },
   ],
 };

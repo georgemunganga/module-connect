@@ -33,11 +33,11 @@ export function CatalogItemEditor({ item, onSaved, onCancel }: { item?: CatalogI
 
   const save = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!name.trim() || !category.trim() || !unit.trim() || !spec.trim() || !taxRef.trim() || !entities.length || !activeFrom) return setError("Complete the item, classification, tax reference, and eligible entity fields.");
+    if (!name.trim() || !category.trim() || !unit.trim() || !spec.trim() || !taxRef.trim() || !entities.length || !activeFrom) return setError("Enter the item name, category, unit, details, tax code, company, and start date.");
     if (activeTo && activeTo < activeFrom) return setError("The end date cannot be before the start date.");
-    if (item && !reason.trim()) return setError("Give a reason for this versioned change.");
-    if (offerSupplier && (Number(offerPrice) <= 0 || !offerValidTo)) return setError("An offer needs a positive price and validity date.");
-    if (!item && getCatalog().some((candidate) => candidate.name.toLowerCase() === name.trim().toLowerCase() && candidate.entities.some((entity) => entities.includes(entity)))) return setError("An item with this name already exists for an eligible entity.");
+    if (item && !reason.trim()) return setError("Enter a reason for this change.");
+    if (offerSupplier && (Number(offerPrice) <= 0 || !offerValidTo)) return setError("Enter a price above zero and a valid-until date.");
+    if (!item && getCatalog().some((candidate) => candidate.name.toLowerCase() === name.trim().toLowerCase() && candidate.entities.some((entity) => entities.includes(entity)))) return setError("An item with this name already exists for this company.");
 
     const id = item?.id ?? `itm-${crypto.randomUUID()}`;
     const offers = [...(item?.offers ?? [])];
@@ -60,30 +60,30 @@ export function CatalogItemEditor({ item, onSaved, onCancel }: { item?: CatalogI
 
   return (
     <form onSubmit={save} className="rounded-xl border bg-surface p-5">
-      <h2 className="text-lg font-semibold">{item ? `Revise ${item.name}` : "Add item reference"}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">Changes stay in this browser. Price and eligibility edits create a retained version; stock and asset registers remain with their owning ERP modules.</p>
+      <h2 className="text-lg font-semibold">{item ? `Edit ${item.name}` : "Add item"}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">Changes are saved in this browser. Earlier prices and company access remain in the change history.</p>
       {error ? <p role="alert" className="mt-3 rounded border border-destructive p-2 text-sm text-destructive">{error}</p> : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div><Label htmlFor="item-name">Item name</Label><Input id="item-name" value={name} onChange={(event) => setName(event.target.value)} /></div>
         <div><Label htmlFor="item-kind">Type</Label><select id="item-kind" className="h-10 w-full rounded-md border bg-background px-3" value={kind} onChange={(event) => setKind(event.target.value as ItemKind)}>{kinds.map((value) => <option key={value}>{value}</option>)}</select></div>
         <div><Label htmlFor="item-category">Category</Label><Input id="item-category" value={category} onChange={(event) => setCategory(event.target.value)} /></div>
         <div><Label htmlFor="item-unit">Unit</Label><Input id="item-unit" value={unit} onChange={(event) => setUnit(event.target.value)} /></div>
-        <div className="sm:col-span-2"><Label htmlFor="item-spec">Specification</Label><Textarea id="item-spec" value={spec} onChange={(event) => setSpec(event.target.value)} /></div>
-        <div><Label htmlFor="item-tax">Tax reference</Label><Input id="item-tax" value={taxRef} onChange={(event) => setTaxRef(event.target.value)} /></div>
+        <div className="sm:col-span-2"><Label htmlFor="item-spec">Description and details</Label><Textarea id="item-spec" value={spec} onChange={(event) => setSpec(event.target.value)} /></div>
+        <div><Label htmlFor="item-tax">Tax code</Label><Input id="item-tax" value={taxRef} onChange={(event) => setTaxRef(event.target.value)} /></div>
         <div><Label htmlFor="item-status">Availability</Label><select id="item-status" className="h-10 w-full rounded-md border bg-background px-3" value={status} onChange={(event) => setStatus(event.target.value as CatalogItem["status"])}><option>Active</option><option>Inactive</option></select></div>
         <div><Label htmlFor="item-from">Active from</Label><Input id="item-from" type="date" value={activeFrom} onChange={(event) => setActiveFrom(event.target.value)} /></div>
         <div><Label htmlFor="item-to">Active until (optional)</Label><Input id="item-to" type="date" value={activeTo} onChange={(event) => setActiveTo(event.target.value)} /></div>
       </div>
-      <fieldset className="mt-4"><legend className="text-sm font-medium">Eligible entities</legend><div className="mt-2 flex flex-wrap gap-3">{catalogEntities.map((entity) => <label key={entity} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={entities.includes(entity)} onChange={(event) => setEntities((current) => event.target.checked ? [...current, entity] : current.filter((value) => value !== entity))} />{entity}</label>)}</div></fieldset>
-      <fieldset className="mt-5 border-t pt-4"><legend className="text-sm font-medium">Add or update supplier offer</legend><p className="text-xs text-muted-foreground">Leave supplier blank to keep existing offers. Only approved active suppliers are offered for new pricing.</p><div className="mt-2 grid gap-3 sm:grid-cols-3">
-        <div><Label htmlFor="offer-supplier">Supplier</Label><select id="offer-supplier" className="h-10 w-full rounded-md border bg-background px-3" value={offerSupplier} onChange={(event) => setOfferSupplier(event.target.value)}><option value="">No offer change</option>{suppliers.filter((supplier) => supplier.status === "Active").map((supplier) => <option key={supplier.id} value={supplier.name}>{supplier.name}</option>)}</select></div>
+      <fieldset className="mt-4"><legend className="text-sm font-medium">Available to these companies</legend><div className="mt-2 flex flex-wrap gap-3">{catalogEntities.map((entity) => <label key={entity} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={entities.includes(entity)} onChange={(event) => setEntities((current) => event.target.checked ? [...current, entity] : current.filter((value) => value !== entity))} />{entity}</label>)}</div></fieldset>
+      <fieldset className="mt-5 border-t pt-4"><legend className="text-sm font-medium">Add or change a vendor price</legend><p className="text-xs text-muted-foreground">Leave vendor blank to keep existing prices. You can add prices only for approved vendors.</p><div className="mt-2 grid gap-3 sm:grid-cols-3">
+        <div><Label htmlFor="offer-supplier">Vendor</Label><select id="offer-supplier" className="h-10 w-full rounded-md border bg-background px-3" value={offerSupplier} onChange={(event) => setOfferSupplier(event.target.value)}><option value="">Keep current price</option>{suppliers.filter((supplier) => supplier.status === "Active").map((supplier) => <option key={supplier.id} value={supplier.name}>{supplier.name}</option>)}</select></div>
         <div><Label htmlFor="offer-price">Unit price</Label><Input id="offer-price" type="number" min="0.01" step="0.01" value={offerPrice} onChange={(event) => setOfferPrice(event.target.value)} /></div>
         <div><Label htmlFor="offer-currency">Currency</Label><select id="offer-currency" className="h-10 w-full rounded-md border bg-background px-3" value={offerCurrency} onChange={(event) => setOfferCurrency(event.target.value)}><option>EUR</option><option>KES</option></select></div>
         <div><Label htmlFor="offer-source">Price source</Label><select id="offer-source" className="h-10 w-full rounded-md border bg-background px-3" value={offerSource} onChange={(event) => setOfferSource(event.target.value as SupplierOffer["source"])}><option>Catalog</option><option>Contract</option></select></div>
         <div><Label htmlFor="offer-valid">Valid until</Label><Input id="offer-valid" type="date" value={offerValidTo} onChange={(event) => setOfferValidTo(event.target.value)} /></div>
       </div></fieldset>
       {item ? <div className="mt-4"><Label htmlFor="item-reason">Reason for change</Label><Textarea id="item-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></div> : null}
-      <div className="mt-5 flex gap-2"><Button type="submit">{item ? "Save version" : "Create item"}</Button><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button></div>
+      <div className="mt-5 flex gap-2"><Button type="submit">{item ? "Save changes" : "Create item"}</Button><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button></div>
     </form>
   );
 }

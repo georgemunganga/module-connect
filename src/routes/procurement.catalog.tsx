@@ -67,7 +67,7 @@ function CatalogPage() {
       <PageHeader
         eyebrow="Procurement"
         title="Catalog"
-        description="Approved items and contract offers. Prices are indicative unless marked Contract."
+        description="Find goods and services you can request. Prices are estimates unless shown as contract prices."
         primaryAction={requesterRole(role) ? <Button asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Create request</Link></Button> : undefined}
       />
       {maintainer ? (
@@ -81,11 +81,11 @@ function CatalogPage() {
         </div>
       ) : null}
 
-      {maintainer && view === "manage" ? <div className="mb-4"><Button onClick={() => setAdding(true)}>Add item reference</Button></div> : null}
+      {maintainer && view === "manage" ? <div className="mb-4"><Button onClick={() => setAdding(true)}>Add item</Button></div> : null}
       {adding ? <div className="mb-5"><CatalogItemEditor onSaved={(id) => navigate({ to: "/procurement/catalog/$id", params: { id } })} onCancel={() => setAdding(false)} /></div> : null}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <div><Label htmlFor="q">Search</Label><Input id="q" className="mt-1" value={search.q ?? ""} placeholder="Item, category or spec" onChange={(e) => setS({ q: e.target.value || undefined })} /></div>
+        <div><Label htmlFor="q">Search</Label><Input id="q" className="mt-1" value={search.q ?? ""} placeholder="Item name, type or details" onChange={(e) => setS({ q: e.target.value || undefined })} /></div>
         <div>
           <Label htmlFor="k">Type</Label>
           <select id="k" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={search.kind ?? ""} onChange={(e) => setS({ kind: e.target.value || undefined })}>
@@ -93,7 +93,7 @@ function CatalogPage() {
           </select>
         </div>
         <div>
-          <Label htmlFor="e">Eligible for entity</Label>
+          <Label htmlFor="e">Company</Label>
           <select id="e" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={search.entity ?? ""} onChange={(e) => setS({ entity: e.target.value || undefined })}>
             <option value="">All entities</option>{catalogEntities.map((k) => <option key={k}>{k}</option>)}
           </select>
@@ -101,14 +101,14 @@ function CatalogPage() {
       </div>
 
       {!rows.length && !search.q && !search.kind && !search.entity ? (
-        <EmptyState title="No items in this catalog yet" body="Add approved goods or services so employees can find and request them here." icon={<Package className="size-10" aria-hidden />} action={maintainer ? <Button onClick={() => { setView("manage"); setAdding(true); }}>Add item</Button> : requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request non-catalog item</Link></Button> : undefined} />
+        <EmptyState title="No items yet" body="Add goods or services so employees can find and request them here." icon={<Package className="size-10" aria-hidden />} action={maintainer ? <Button onClick={() => { setView("manage"); setAdding(true); }}>Add item</Button> : requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request something else</Link></Button> : undefined} />
       ) : !rows.length ? (
-        <NoResultsState title="No items match" body="Try fewer filters. If nothing fits, an employee can request a non-catalog item with a reason." action={requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request non-catalog item</Link></Button> : undefined} />
+        <NoResultsState title="No matching items" body="Try a different search or request an item that is not listed." action={requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request something else</Link></Button> : undefined} />
       ) : view === "manage" ? (
         <div className="overflow-x-auto rounded-lg border bg-surface">
           <table className="w-full text-sm">
             <thead className="border-b text-left text-xs text-muted-foreground">
-              <tr><th className="p-3">Item</th><th className="p-3">Category / unit</th><th className="p-3">Tax ref.</th><th className="p-3">Offers</th><th className="p-3">Active</th><th className="p-3">Owner</th></tr>
+              <tr><th className="p-3">Item</th><th className="p-3">Category / unit</th><th className="p-3">Tax code</th><th className="p-3">Prices</th><th className="p-3">Available from</th><th className="p-3">Managed by</th></tr>
             </thead>
             <tbody className="divide-y">
               {rows.map((i) => (

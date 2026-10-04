@@ -42,30 +42,30 @@ type Card = { label: string; value: string; hint: string; to: string; params?: R
 const cardsByView: Record<string, Card[]> = {
   requester: [
     { label: "My open requests", value: "3", hint: "1 returned to you", to: "/procurement/requests" },
-    { label: "Order and delivery progress", value: "1", hint: "Track your request lines", to: "/procurement/requests" },
+    { label: "My orders and deliveries", value: "1", hint: "See what has been ordered", to: "/procurement/requests" },
     { label: "Drafts", value: "1", hint: "Welcome packs, saved 2 Oct", to: "/procurement/requests" },
   ],
   approver: [
-    { label: "Decisions pending", value: "2", hint: "Earliest due 8 Oct", to: "/procurement/approvals" },
+    { label: "Waiting for your approval", value: "2", hint: "Earliest due 8 Oct", to: "/procurement/approvals" },
     { label: "Value awaiting you (EUR)", value: "€18,450", hint: "1 request", to: "/procurement/approvals" },
     { label: "Value awaiting you (KES)", value: "KES 386,000", hint: "1 request", to: "/procurement/approvals" },
   ],
   buyer: [
-    { label: "Approved lines to process", value: "2", hint: "Not yet sourced or ordered", to: "/procurement/requests" },
-    { label: "Sourcing deadlines", value: "1", hint: "RFQ closes 9 Oct", to: "/procurement/sourcing" },
-    { label: "POs awaiting issue", value: "1", hint: "Chairs, €7,200", to: "/procurement/orders" },
-    { label: "Invoice exceptions", value: "2", hint: "Price variance above tolerance", to: "/procurement/invoices" },
-    { label: "Supplier onboarding", value: "1", hint: "Missing tax ID and bank letter", to: "/procurement/suppliers" },
+    { label: "Approved items to buy", value: "2", hint: "Not yet ordered", to: "/procurement/requests" },
+    { label: "Quote deadlines", value: "1", hint: "Quote request closes 9 Oct", to: "/procurement/sourcing" },
+    { label: "Orders ready to send", value: "1", hint: "Chairs, €7,200", to: "/procurement/orders" },
+    { label: "Bills needing review", value: "2", hint: "Price is higher than the allowed amount", to: "/procurement/invoices" },
+    { label: "New vendors to review", value: "1", hint: "Missing tax ID and bank letter", to: "/procurement/suppliers" },
   ],
   steward: [
-    { label: "Onboarding in progress", value: "1", hint: "More information required", to: "/procurement/suppliers" },
-    { label: "Suppliers on hold", value: "1", hint: "Review 12 Oct", to: "/procurement/suppliers" },
+    { label: "Vendors being set up", value: "1", hint: "More details needed", to: "/procurement/suppliers" },
+    { label: "Vendors on hold", value: "1", hint: "Review 12 Oct", to: "/procurement/suppliers" },
   ],
   receiver: [
     { label: "Deliveries expected", value: "2", hint: "This week", to: "/procurement/receiving" },
   ],
   ap: [
-    { label: "Invoice exceptions", value: "2", hint: "Awaiting match decision", to: "/procurement/invoices" },
+    { label: "Bills needing review", value: "2", hint: "Check the order and delivery", to: "/procurement/invoices" },
   ],
 };
 
@@ -92,7 +92,7 @@ function viewFor(role: Role): keyof typeof cardsByView | "auditor" | "supplier" 
 }
 
 const activity = [
-  { when: "3 Oct, 16:12", who: "Grace Wanjiru", what: "Returned PR-2026-1035 — supplier not onboarded" },
+  { when: "3 Oct, 16:12", who: "Grace Wanjiru", what: "Returned PR-2026-1035 — vendor not approved yet" },
   { when: "2 Oct, 10:40", who: "Lukas Brandt", what: "Approved PR-2026-1038 (€7,200)" },
   { when: "1 Oct, 09:05", who: "Sanne de Vries", what: "Submitted PR-2026-1042 (€18,450)" },
 ];
@@ -112,14 +112,14 @@ function ProcHome() {
   const cardValue = (card: Card) => {
     if (card.label === "My open requests") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && !["Closed", "Cancelled", "Rejected"].includes(request.status)).length);
     if (card.label === "Drafts") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && request.status === "Draft").length);
-    if (card.label === "Order and delivery progress") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && (demo.metadata[request.id]?.lines ?? []).some((line) => line.orderedQty > line.receivedQty)).length);
-    if (card.label === "Decisions pending") return String(visibleApprovals.length);
+    if (card.label === "My orders and deliveries") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && (demo.metadata[request.id]?.lines ?? []).some((line) => line.orderedQty > line.receivedQty)).length);
+    if (card.label === "Waiting for your approval") return String(visibleApprovals.length);
     if (card.label === "Value awaiting you (EUR)" || card.label === "Value awaiting you (KES)") { const currency = card.label.includes("EUR") ? "EUR" : "KES"; return new Intl.NumberFormat("en", { style: "currency", currency, maximumFractionDigits: 0 }).format(visibleApprovals.filter((task) => task.amount?.currency === currency).reduce((sum, task) => sum + (task.amount?.value ?? 0), 0)); }
-    if (card.label === "Approved lines to process") return String(visibleRequests.filter((request) => request.status === "Approved").flatMap((request) => demo.metadata[request.id]?.lines ?? []).filter((line) => line.approval === "Approved" && line.approvedQty > line.allocatedQty + line.orderedQty + line.cancelledQty).length);
-    if (card.label === "POs awaiting issue") return String(commercial.orders.filter((order) => sameEntity(order.entity, entityId) && order.status === "Approved").length);
-    if (card.label === "Invoice exceptions") return String(payables.invoices.filter((invoice) => invoice.entityId === entityId && invoice.status === "Exception").length);
-    if (card.label === "Supplier onboarding" || card.label === "Onboarding in progress") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && ["Proposed", "Under diligence", "More information required", "Conditional"].includes(supplier.status)).length);
-    if (card.label === "Suppliers on hold") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && supplier.status === "Suspended").length);
+    if (card.label === "Approved items to buy") return String(visibleRequests.filter((request) => request.status === "Approved").flatMap((request) => demo.metadata[request.id]?.lines ?? []).filter((line) => line.approval === "Approved" && line.approvedQty > line.allocatedQty + line.orderedQty + line.cancelledQty).length);
+    if (card.label === "Orders ready to send") return String(commercial.orders.filter((order) => sameEntity(order.entity, entityId) && order.status === "Approved").length);
+    if (card.label === "Bills needing review") return String(payables.invoices.filter((invoice) => invoice.entityId === entityId && invoice.status === "Exception").length);
+    if (card.label === "New vendors to review" || card.label === "Vendors being set up") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && ["Proposed", "Under diligence", "More information required", "Conditional"].includes(supplier.status)).length);
+    if (card.label === "Vendors on hold") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && supplier.status === "Suspended").length);
     return card.value;
   };
   const visibleQueueItems = (items: ProcWorkItem[]) => items.filter((item) => {
@@ -148,8 +148,8 @@ function ProcHome() {
     <AppShell>
       <PageHeader
         eyebrow={`${ws.label} workspace`}
-        title="Procurement home"
-        description={view === "auditor" ? "Read-only. Search records and review recent activity." : `${ws.description}. Exceptions first, then decisions, then tasks.`}
+        title="Purchasing home"
+        description={view === "auditor" ? "Search records and review recent activity. You cannot make changes here." : "See what needs your attention and what happens next."}
         primaryAction={
           canRequest ? (
             <Button asChild>
@@ -160,7 +160,7 @@ function ProcHome() {
       />
 
       {role === "proc_admin" && gettingStarted.loaded ? <section className="mb-5 rounded-xl border border-primary/25 bg-primary/5 p-4" aria-labelledby="proc-start-h">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-primary">First use</p><h2 id="proc-start-h" className="mt-1 text-lg font-semibold">{gettingStarted.reviewedCount === 3 ? "Revisit Procurement setup" : "Start your Procurement journey"}</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Review buying controls, run a first purchase, and connect invoice and Finance workflows in three steps.</p><p className="mt-2 text-xs text-muted-foreground">{gettingStarted.reviewedCount} of 3 steps reviewed · progress is saved for this entity in this browser</p></div><Button asChild><Link to="/procurement/getting-started">{gettingStarted.reviewedCount === 3 ? "Open guide" : "Get started"}</Link></Button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-primary">First use</p><h2 id="proc-start-h" className="mt-1 text-lg font-semibold">{gettingStarted.reviewedCount === 3 ? "Review purchasing setup" : "Set up purchasing"}</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Check buying rules, try a first purchase, and see how bills reach Finance.</p><p className="mt-2 text-xs text-muted-foreground">{gettingStarted.reviewedCount} of 3 steps reviewed · saved in this browser for this company</p></div><Button asChild><Link to="/procurement/getting-started">{gettingStarted.reviewedCount === 3 ? "Open guide" : "Get started"}</Link></Button></div>
       </section> : null}
 
       {role === "proc_admin" ? <div className="mb-4"><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Reset all Procurement demo transactions to their starting data?")) { resetProcurement(); resetCommercial(); resetPayables(); resetPlans(); resetCatalog(); } }}>Reset Procurement demo</Button></div> : null}
@@ -197,7 +197,7 @@ function ProcHome() {
               ) : (
                 <EmptyState
                   title={view === "requester" ? "You haven't asked for anything yet" : "Nothing needs you right now"}
-                  body={view === "requester" ? "Start a request for goods, a service or a subscription. You'll see its status and next step here." : "New exceptions, approvals and tasks will appear here."}
+                  body={view === "requester" ? "Ask for goods, a service or a subscription. You'll see what happens next here." : "New requests, approvals and tasks will appear here."}
                 />
               )
             }

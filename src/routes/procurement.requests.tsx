@@ -40,7 +40,7 @@ function RequestList() {
       <PageHeader
         eyebrow="Purchasing"
         title="Purchase requests"
-        description="Nothing here is a bare status: each row shows who owns it, what happens next and when it's due."
+        description="See what you asked for, who is handling it, and what happens next."
         primaryAction={requesterRole(role) ? <Button asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Create request</Link></Button> : undefined}
       />
           <ListPage<PurchaseRequest>
@@ -69,7 +69,7 @@ function RequestList() {
               { id: "amount", header: "Amount", cell: (r) => <span className="tabular">{fmt(r)}</span> },
               { id: "status", header: "Status", cell: (r) => <StatusBadge status={r.status} /> },
               { id: "next", header: "Next action", cell: (r) => <span className="block max-w-56 truncate text-xs">{r.nextAction} · due {r.dueDate}</span> },
-              { id: "progress", header: "Line progress", cell: (r) => <span className="text-xs">{deriveProgress(metadata[r.id]?.lines ?? [])}</span> },
+              { id: "progress", header: "Buying progress", cell: (r) => <span className="text-xs">{deriveProgress(metadata[r.id]?.lines ?? [])}</span> },
               { id: "owner", header: "Owner", defaultVisible: false, cell: (r) => r.owner },
               { id: "requester", header: "Requester", defaultVisible: false, cell: (r) => r.requester },
               { id: "date", header: "Submitted", defaultVisible: false, cell: (r) => r.submittedAt },

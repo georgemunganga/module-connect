@@ -28,27 +28,27 @@ const steps: {
     id: "controls", title: "Set buying controls", icon: Settings2,
     summary: "Review what people may buy, who can supply it, and who may approve it.",
     tasks: [
-      { title: "Review policy and approvals", detail: "Configure thresholds, sourcing rules, tolerances and decision routes.", href: "/procurement/configuration/policy", action: "Open policy studio" },
-      { title: "Review suppliers", detail: "Check status, diligence and independent payment-detail verification.", href: "/procurement/suppliers", action: "Open suppliers" },
-      { title: "Review items and offers", detail: "Make approved goods and services easy for employees to find.", href: "/procurement/catalog", action: "Open catalog" },
+      { title: "Check buying rules and approvals", detail: "Choose spending limits, when quotes are needed, and who approves a purchase.", href: "/procurement/configuration/policy", action: "Open buying rules" },
+      { title: "Check vendors", detail: "See which vendors are approved and whether Finance has checked their payment details.", href: "/procurement/suppliers", action: "Open vendors" },
+      { title: "Check items", detail: "Make approved goods and services easy for employees to find.", href: "/procurement/catalog", action: "Open items" },
     ],
   },
   {
     id: "first-purchase", title: "Run a first purchase", icon: ClipboardList,
-    summary: "Follow one request through approval, sourcing or direct ordering, and receipt.",
+    summary: "Follow one request from approval to an order and delivery.",
     tasks: [
-      { title: "Start with a purchase request", detail: "Use the Employee workspace to create a catalog or non-catalog request.", href: "/procurement/requests", action: "Open requests" },
-      { title: "Review the decision queue", detail: "Use the Manager workspace to approve, return or reject; policy blockers remain visible.", href: "/procurement/approvals", action: "Open approvals" },
-      { title: "Follow fulfilment", detail: "See sourced lines, purchase orders and goods or service acceptance.", href: "/procurement/orders", action: "Open orders" },
+      { title: "Ask to buy something", detail: "Create a request from an item on the list, or describe something new.", href: "/procurement/requests", action: "Open requests" },
+      { title: "Review an approval", detail: "A manager can approve, send back or decline a request and see what needs fixing.", href: "/procurement/approvals", action: "Open approvals" },
+      { title: "Follow the order", detail: "See what was ordered and what has arrived or been completed.", href: "/procurement/orders", action: "Open orders" },
     ],
   },
   {
-    id: "finance", title: "Connect invoices and Finance", icon: CreditCard,
-    summary: "Understand invoice intake, matching, AP handoff and payment-status ownership.",
+    id: "finance", title: "Check bills and payments", icon: CreditCard,
+    summary: "See how a bill is checked, sent to Finance, and marked paid.",
     tasks: [
-      { title: "Use the invoice inbox", detail: "Capture an invoice, detect duplicates and compare it with an order and receipt.", href: "/procurement/invoices", action: "Open invoice inbox" },
-      { title: "Review matching and approval rules", detail: "Set category-specific two-way or three-way matching and exception approvals.", href: "/procurement/configuration/policy", action: "Review policy" },
-      { title: "Plan the Finance connection", detail: "Finance owns AP posting, payment methods and payment execution. This demo only simulates status callbacks.", href: "/procurement/configuration", action: "Open configuration" },
+      { title: "Check incoming bills", detail: "Add a bill and compare it with the order and delivery. The system also checks for duplicates.", href: "/procurement/invoices", action: "Open bills" },
+      { title: "Check bill rules", detail: "Decide when a delivery must be checked and who handles differences.", href: "/procurement/configuration/policy", action: "Open buying rules" },
+      { title: "Check the Finance connection", detail: "Finance records and pays bills. This demo shows sample updates only.", href: "/procurement/configuration", action: "Open settings" },
     ],
   },
 ];
@@ -68,7 +68,7 @@ function GettingStarted() {
     <section className="mt-5 rounded-xl border bg-surface p-4" aria-label="Setup progress">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><p className="font-medium">{loaded ? `${reviewedCount} of 3 steps reviewed` : "Loading progress"}</p><p className="text-muted-foreground">{entity.name}</p></div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${reviewedCount / 3 * 100}%` }} /></div>
-      <p className="mt-2 text-xs text-muted-foreground">A reviewed step means you have checked the guidance. It does not publish policy, turn on an integration or authorize spending.</p>
+      <p className="mt-2 text-xs text-muted-foreground">Marking a step reviewed only tracks your progress. It does not turn on a rule or approve spending.</p>
     </section>
 
     <div className="mt-5 grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
@@ -93,6 +93,6 @@ function GettingStarted() {
       </section>
     </div>
 
-    <aside className="mt-5 flex items-start gap-3 rounded-lg border bg-surface-muted p-4 text-sm"><CircleHelp className="mt-0.5 size-4 shrink-0" aria-hidden /><p><strong>Need help?</strong> Start with the three linked work areas above. The Finance and external integration cards in Configuration show the current demo boundary; no real vendor, bank or accounting message is sent from this prototype.</p></aside>
+    <aside className="mt-5 flex items-start gap-3 rounded-lg border bg-surface-muted p-4 text-sm"><CircleHelp className="mt-0.5 size-4 shrink-0" aria-hidden /><p><strong>Need help?</strong> Start with the links above. This is a demo: it does not send real bank, vendor or accounting messages.</p></aside>
   </AppShell>;
 }

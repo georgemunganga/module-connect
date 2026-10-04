@@ -49,12 +49,12 @@ function Decision() {
         {t.delegatedFrom ? <span>Acting for <strong>{t.delegatedFrom.name}</strong> {t.delegatedFrom.from} → {t.delegatedFrom.to}, limit {money(t.delegatedFrom.limit, t.delegatedFrom.currency)}</span> : null}
       </div>
       {t.reassignedNote ? <Note tone="info">{t.reassignedNote}</Note> : null}
-      {t.stale ? <Note tone="warning">Stale approval: {t.stale}</Note> : null}
+      {t.stale ? <Note tone="warning">This approval needs a fresh check: {t.stale}</Note> : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-4">
           <section aria-labelledby="stages-h" className="rounded-lg border bg-surface p-4">
-            <h2 id="stages-h" className="text-sm font-semibold">Decision stages</h2>
+            <h2 id="stages-h" className="text-sm font-semibold">Who approves, and when</h2>
             <ol className="mt-3 space-y-3">
               {t.stages.map((s, i) => (
                 <li key={s.name} className={`rounded-md border p-3 ${s.current ? "border-primary" : ""}`}>
@@ -79,19 +79,19 @@ function Decision() {
         <div className="space-y-4">
           {blockers.length && t.state !== "Completed" ? (
             <div role="alert" className="rounded-lg border border-danger/40 bg-danger-soft p-4 text-sm">
-              <p className="font-medium">Approve isn't available</p>
+              <p className="font-medium">You cannot approve this yet</p>
               <ul className="mt-1 list-disc pl-5">{blockers.map((b) => <li key={b}>{b}</li>)}</ul>
               <p className="mt-2 text-xs">You can still return, reject or delegate with a reason.</p>
             </div>
           ) : null}
-          {role === "proc_admin" && t.state !== "Completed" && t.approverEntity !== t.recordEntity ? <section className="rounded-lg border bg-surface p-4 text-sm"><h2 className="font-semibold">Repair cross-entity assignment</h2><p className="mt-1 text-muted-foreground">This is an administrator reassignment, not delegated approval. The task keeps its budget failure until Finance resolves it.</p><div className="mt-3"><Label htmlFor="new-approver">Approver in {t.recordEntity}</Label><select id="new-approver" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={replacement} onChange={(event) => setReplacement(event.target.value)}><option value="">Choose an approver</option>{(t.recordEntity.includes("Kenya") ? ["Grace Wanjiru", "Daniel Otieno"] : ["Marieke Hoek", "Joost Meijer", "Priya Raman", "Lukas Brandt"]).filter((name) => name !== t.requester).map((name) => <option key={name}>{name}</option>)}</select></div><div className="mt-3"><Label htmlFor="reassign-reason">Reason</Label><Textarea id="reassign-reason" value={reassignmentReason} onChange={(event) => setReassignmentReason(event.target.value)} /></div><Button className="mt-3" onClick={() => { try { reassignApproval(t.id, replacement, reassignmentReason, role); setResult(`Reassigned to ${replacement}. The original assignment remains in the request timeline.`); setReplacement(""); setReassignmentReason(""); } catch (error) { setResult(error instanceof Error ? error.message : "Could not reassign."); } }}>Reassign task</Button></section> : null}
+          {role === "proc_admin" && t.state !== "Completed" && t.approverEntity !== t.recordEntity ? <section className="rounded-lg border bg-surface p-4 text-sm"><h2 className="font-semibold">Choose an approver in the right company</h2><p className="mt-1 text-muted-foreground">This task was sent to someone in another company. Choose a new approver here. Finance must still resolve any budget problem.</p><div className="mt-3"><Label htmlFor="new-approver">Approver in {t.recordEntity}</Label><select id="new-approver" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={replacement} onChange={(event) => setReplacement(event.target.value)}><option value="">Choose an approver</option>{(t.recordEntity.includes("Kenya") ? ["Grace Wanjiru", "Daniel Otieno"] : ["Marieke Hoek", "Joost Meijer", "Priya Raman", "Lukas Brandt"]).filter((name) => name !== t.requester).map((name) => <option key={name}>{name}</option>)}</select></div><div className="mt-3"><Label htmlFor="reassign-reason">Reason</Label><Textarea id="reassign-reason" value={reassignmentReason} onChange={(event) => setReassignmentReason(event.target.value)} /></div><Button className="mt-3" onClick={() => { try { reassignApproval(t.id, replacement, reassignmentReason, role); setResult(`Sent to ${replacement}. The previous assignment remains in the request history.`); setReplacement(""); setReassignmentReason(""); } catch (error) { setResult(error instanceof Error ? error.message : "Could not change the approver."); } }}>Change approver</Button></section> : null}
           {result ? <Note tone="info">{result}</Note> : null}
           {t.state === "Completed" ? (
             <Note tone="info">Decided. See stages for who decided and when.</Note>
           ) : confirming ? (
             <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm">
               <p className="font-medium">Confirm approval of {amount}?</p>
-              <p className="mt-1">This moves {t.recordId} to the next stage. It doesn't reserve budget or send anything to a supplier.</p>
+              <p className="mt-1">This sends {t.recordId} to the next person. It does not set money aside or contact a vendor.</p>
               <div className="mt-3 flex gap-2"><Button onClick={() => { setConfirming(false); try { decideApproval(t.id, "approve", "Approved in demo", role, actor); setResult("Approval recorded. Request and task updated."); } catch (error) { setResult(error instanceof Error ? error.message : "Could not approve."); } }}>Yes, approve</Button><Button variant="outline" onClick={() => setConfirming(false)}>Cancel</Button></div>
             </div>
           ) : (
@@ -120,10 +120,10 @@ function Decision() {
 function BudgetCard({ t }: { t: ApprovalTask }) {
   const b = t.budget;
   const map = {
-    advisory: { icon: Info, title: "Advisory budget check", tone: "border-info/40 bg-info-soft" },
-    reservation: { icon: CheckCircle2, title: "Finance reservation", tone: "border-success/40 bg-success-soft" },
+    advisory: { icon: Info, title: "Estimated budget check", tone: "border-info/40 bg-info-soft" },
+    reservation: { icon: CheckCircle2, title: "Finance set money aside", tone: "border-success/40 bg-success-soft" },
     "hard-fail": { icon: XCircle, title: "Budget check failed", tone: "border-danger/40 bg-danger-soft" },
-    unavailable: { icon: AlertTriangle, title: "Budget service unavailable", tone: "border-warning/40 bg-warning-soft" },
+    unavailable: { icon: AlertTriangle, title: "Could not check the budget", tone: "border-warning/40 bg-warning-soft" },
   } as const;
   const m = map[b.kind];
   const Icon = m.icon;

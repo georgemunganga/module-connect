@@ -38,19 +38,19 @@ function EventDetail() {
   const isBuyer = role === "buyer" || role === "proc_admin";
 
   if (!e || !sourcingRole(role) || !sameEntity(e.entity, entityId)) return <AppShell><RestrictedState /></AppShell>;
-  if (!e) return <AppShell><EmptyState title="Event not found" body="Check the reference or browse the sourcing queue." action={<Button variant="outline" asChild><Link to="/procurement/sourcing">Back to sourcing</Link></Button>} /></AppShell>;
+  if (!e) return <AppShell><EmptyState title="Quote request not found" body="Check the number or open the quote request list." action={<Button variant="outline" asChild><Link to="/procurement/sourcing">Back to quote requests</Link></Button>} /></AppShell>;
 
   const primary = !isBuyer ? undefined
     : e.state === "Draft" ? <Button onClick={() => setE({ ...e, state: "Pending approval", nextAction: "Procurement lead to approve publication" })}>Send for approval</Button>
-    : e.state === "Pending approval" ? <Button onClick={() => { setE({ ...e, state: "Published", opensAt: e.opensAt || nowStr(), nextAction: "Collect responses until closing", invitations: e.invitations.map((invitation) => ({ ...invitation, delivery: "Delivered", at: nowStr(), note: "Visible in local supplier portal demo; no external message sent" })) }); ensureEvaluation(e.id); }}>Approve and publish (demo)</Button>
-    : e.state === "Published" ? <Button variant="outline" onClick={() => setAmending(true)}>Issue amendment</Button>
-    : e.state === "Closed" && !e.opened ? <Button onClick={() => setE({ ...e, opened: true, openingAuthorisedBy: `You (demo) · ${nowStr()}` })}>Authorise opening</Button>
-    : e.state === "Cancelled" ? <Button variant="outline" onClick={() => setE({ ...e, state: "Reopened", nextAction: "Review dates and re-publish" })}>Reopen event</Button>
+    : e.state === "Pending approval" ? <Button onClick={() => { setE({ ...e, state: "Published", opensAt: e.opensAt || nowStr(), nextAction: "Collect responses until closing", invitations: e.invitations.map((invitation) => ({ ...invitation, delivery: "Delivered", at: nowStr(), note: "Visible in local supplier portal demo; no external message sent" })) }); ensureEvaluation(e.id); }}>Approve and send (demo)</Button>
+    : e.state === "Published" ? <Button variant="outline" onClick={() => setAmending(true)}>Change quote request</Button>
+    : e.state === "Closed" && !e.opened ? <Button onClick={() => setE({ ...e, opened: true, openingAuthorisedBy: `You (demo) · ${nowStr()}` })}>Open vendor replies</Button>
+    : e.state === "Cancelled" ? <Button variant="outline" onClick={() => setE({ ...e, state: "Reopened", nextAction: "Review dates and re-publish" })}>Reopen quote request</Button>
     : undefined;
 
   return (
     <AppShell>
-      <PageHeader eyebrow={`Sourcing · ${e.method}`} title={e.title} description={`${e.id} · ${e.entity} · buyer ${e.buyer}`} primaryAction={primary} />
+      <PageHeader eyebrow={`Quotes · ${e.method}`} title={e.title} description={`${e.id} · ${e.entity} · handled by ${e.buyer}`} primaryAction={primary} />
       <div className="mb-4 flex flex-wrap gap-3 text-sm">
         <StatusBadge status={e.state} />
         <span>Closes <strong>{e.closesAt || "not set"}</strong> ({e.timeZone})</span>
@@ -59,7 +59,7 @@ function EventDetail() {
       </div>
       {e.state === "Published" && isBuyer ? <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border bg-surface p-3">
         <div><Label htmlFor="close-reason">Early closing reason (required before deadline)</Label><Input id="close-reason" value={closeReason} onChange={(event) => setCloseReason(event.target.value)} placeholder="Committee decision reference" /></div>
-        <Button variant="outline" disabled={new Date(e.closesAt).getTime() > Date.now() && (role !== "proc_admin" || !closeReason.trim())} onClick={() => { if (new Date(e.closesAt).getTime() > Date.now() && (!closeReason.trim() || role !== "proc_admin")) return; setE({ ...e, state: "Closed", nextAction: "Authorise sealed bid opening", dueDate: new Date().toISOString().slice(0, 10), amendments: new Date(e.closesAt).getTime() > Date.now() ? [...e.amendments, { no: e.amendments.length + 1, at: nowStr(), change: `Closed early by ${role}: ${closeReason}`, notified: false }] : e.amendments }); }}>Close event</Button>
+        <Button variant="outline" disabled={new Date(e.closesAt).getTime() > Date.now() && (role !== "proc_admin" || !closeReason.trim())} onClick={() => { if (new Date(e.closesAt).getTime() > Date.now() && (!closeReason.trim() || role !== "proc_admin")) return; setE({ ...e, state: "Closed", nextAction: "Authorise sealed bid opening", dueDate: new Date().toISOString().slice(0, 10), amendments: new Date(e.closesAt).getTime() > Date.now() ? [...e.amendments, { no: e.amendments.length + 1, at: nowStr(), change: `Closed early by ${role}: ${closeReason}`, notified: false }] : e.amendments }); }}>Close quote request</Button>
         {new Date(e.closesAt).getTime() > Date.now() ? <span className="text-xs text-muted-foreground">Before the deadline, only Procurement admin may close with a reason. Supplier notification remains pending in this demo.</span> : null}
       </div> : null}
       {e.portalOutage ? <Banner>{e.portalOutage}</Banner> : null}
@@ -150,11 +150,11 @@ function AmendForm({ onCancel, onDone }: { onCancel: () => void; onDone: (c: str
   const [c, setC] = useState("");
   return (
     <section className="mb-4 rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm">
-      <h2 className="font-semibold">Issue amendment</h2>
+      <h2 className="font-semibold">Change this quote request</h2>
       <p className="mt-1">Published events can't be edited directly. Describe the change; supplier notification is pending integration.</p>
       <Label htmlFor="am" className="mt-3 block">Change (required)</Label>
       <Textarea id="am" className="mt-1 bg-background" value={c} onChange={(ev) => setC(ev.target.value)} />
-      <div className="mt-3 flex gap-2"><Button disabled={!c.trim()} onClick={() => onDone(c)}>Record amendment</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div>
+      <div className="mt-3 flex gap-2"><Button disabled={!c.trim()} onClick={() => onDone(c)}>Save change</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div>
     </section>
   );
 }
@@ -171,12 +171,12 @@ function SurrogateForm({ e, onCancel, onDone }: { e: SourcingEvent; onCancel: ()
         <div><Label htmlFor="sg-s">Supplier</Label><Input id="sg-s" className="mt-1" value={f.supplier} onChange={(x) => setF({ ...f, supplier: x.target.value })} /></div>
         <div><Label htmlFor="sg-c">Received via</Label><select id="sg-c" className="mt-1 h-9 w-full rounded-md border bg-background px-3" value={f.channel} onChange={(x) => setF({ ...f, channel: x.target.value as BidReceipt["channel"] })}><option>Email (surrogate)</option><option>Post (surrogate)</option><option>Hand delivery (surrogate)</option></select></div>
         <div><Label htmlFor="sg-r">Received at ({e.timeZone})</Label><Input id="sg-r" type="datetime-local" className="mt-1" value={f.receivedAt} onChange={(x) => setF({ ...f, receivedAt: x.target.value })} /></div>
-        <div><Label htmlFor="sg-e">Original evidence</Label><Input id="sg-e" className="mt-1" placeholder="e.g. scanned envelope, original email" value={f.evidence} onChange={(x) => setF({ ...f, evidence: x.target.value })} /></div>
+        <div><Label htmlFor="sg-e">Where is the original reply?</Label><Input id="sg-e" className="mt-1" placeholder="e.g. original email or scanned letter" value={f.evidence} onChange={(x) => setF({ ...f, evidence: x.target.value })} /></div>
         <div><Label htmlFor="sg-t">Total offered (sealed)</Label><Input id="sg-t" type="number" className="mt-1" value={f.total} onChange={(x) => setF({ ...f, total: x.target.value })} /></div>
       </div>
       {late ? <p className="mt-2 text-danger">Received after closing — it will be marked late and held for a committee decision.</p> : null}
       <div className="mt-3 flex gap-2">
-        <Button disabled={!ok} onClick={() => onDone({ id: crypto.randomUUID(), supplier: f.supplier, version: 1, receivedAt: f.receivedAt.replace("T", " "), channel: f.channel, late, enteredBy: "You (demo)", enteredAt: nowStr(), evidence: f.evidence, sealedContent: { total: Number(f.total), currency: e.entity.includes("Kenya") ? "KES" : "EUR", leadTimeDays: 0, notes: "Entered by buyer" } })}>Save and lock</Button>
+        <Button disabled={!ok} onClick={() => onDone({ id: crypto.randomUUID(), supplier: f.supplier, version: 1, receivedAt: f.receivedAt.replace("T", " "), channel: f.channel, late, enteredBy: "You (demo)", enteredAt: nowStr(), evidence: f.evidence, sealedContent: { total: Number(f.total), currency: e.entity.includes("Kenya") ? "KES" : "EUR", leadTimeDays: 0, notes: "Entered by buyer" } })}>Save reply privately</Button>
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
       </div>
     </section>

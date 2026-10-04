@@ -23,7 +23,7 @@ export const Route = createFileRoute("/procurement/suppliers_/$id")({
   component: SupplierProfile,
 });
 
-const tabs = ["Overview", "Sites & contacts", "Categories", "Qualifications", "Risk & performance", "Documents", "Related orders", "Activity"] as const;
+const tabs = ["Overview", "Addresses & contacts", "Categories", "Required checks", "Performance", "Documents", "Orders & bills", "Activity"] as const;
 
 function SupplierProfile() {
   const { id } = Route.useParams();
@@ -63,7 +63,7 @@ function SupplierProfile() {
         <span>Owner <strong>{s.owner}</strong></span>
         <span>Next: <strong>{s.nextAction}</strong></span>
         <span>Due <strong>{s.dueDate}</strong></span>
-        {readOnly ? <span className="flex items-center gap-1 text-muted-foreground"><Lock className="size-3.5" aria-hidden />Read-only (auditor)</span> : null}
+        {readOnly ? <span className="flex items-center gap-1 text-muted-foreground"><Lock className="size-3.5" aria-hidden />You can view but cannot change this vendor</span> : null}
       </div>
 
       {suspending ? <SuspendForm s={s} openOrders={openOrders.length} openInvoices={openInvoices.length} onCancel={() => setSuspending(false)} onDone={(reason, date) => { setSuspending(false); setS({ ...s, status: "Suspended", nextAction: `Review ${openOrders.length} open PO(s) and ${openInvoices.length} invoice(s)`, timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString().slice(0, 16).replace("T", " "), actor: "You (demo)", event: "Suspended", reason, before: "Active", after: `Suspended (effective ${date})` }, ...s.timeline] }); }} /> : null}
@@ -79,19 +79,19 @@ function SupplierProfile() {
       <div role="tabpanel" aria-label={tab}>
         {tab === "Overview" ? (
           <div className="grid gap-4 lg:grid-cols-2">
-            <DecisionCard title="Procurement approval" d={s.procurementDecision} />
-            <DecisionCard title="Finance verification of payment details" d={s.bank?.verification ?? { state: "Not started" }} />
+            <DecisionCard title="Purchasing team approval" d={s.procurementDecision} />
+            <DecisionCard title="Finance check of payment details" d={s.bank?.verification ?? { state: "Not started" }} />
             {s.onboarding ? <section className="rounded-lg border bg-surface p-4 text-sm lg:col-span-2"><h2 className="font-semibold">Vendor details</h2><dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-xs text-muted-foreground">Display name</dt><dd>{s.onboarding.displayName}</dd></div><div><dt className="text-xs text-muted-foreground">Company ID</dt><dd>{s.registration}</dd></div><div><dt className="text-xs text-muted-foreground">Primary contact</dt><dd>{[s.onboarding.salutation, s.onboarding.firstName, s.onboarding.lastName].filter(Boolean).join(" ") || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Work phone / mobile</dt><dd>{[s.onboarding.workPhone, s.onboarding.mobile].filter(Boolean).join(" · ") || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Language</dt><dd>{s.onboarding.language || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Currency / payment terms</dt><dd>{[s.onboarding.currency, s.onboarding.paymentTerms].filter(Boolean).join(" · ") || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Tax rate reference</dt><dd>{s.onboarding.taxRateRef || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Portal access</dt><dd>{s.onboarding.portalAccessRequested ? "Requested; pending approval" : "Not requested"}</dd></div><div><dt className="text-xs text-muted-foreground">Bank name</dt><dd>{s.onboarding.bankName || "—"}</dd></div></dl>{s.onboarding.customFields?.length ? <div className="mt-4"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Custom fields</h3><p className="mt-1">{s.onboarding.customFields.map((item) => `${item.name}: ${item.value}`).join(" · ")}</p></div> : null}{s.onboarding.reportingTags?.length ? <div className="mt-4"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Reporting tags</h3><p className="mt-1">{s.onboarding.reportingTags.map((item) => `${item.name}: ${item.value}`).join(" · ")}</p></div> : null}{s.onboarding.remarks ? <div className="mt-4"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Remarks</h3><p className="mt-1 whitespace-pre-wrap">{s.onboarding.remarks}</p></div> : null}</section> : null}
             {s.bank ? (
               <div className="rounded-lg border bg-surface p-4">
                 <h2 className="text-sm font-semibold">Payment details</h2>
                 <div className="mt-2"><p className="text-sm">{s.bank.masked}</p></div>
-                <p className="mt-2 text-xs text-muted-foreground">Changing payment details creates a new review version and needs Finance verification again.</p>
+                <p className="mt-2 text-xs text-muted-foreground">If payment details change, Finance must check them again.</p>
               </div>
             ) : null}
             {activationBlockers.length && s.status !== "Active" && s.status !== "Rejected" ? (
               <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm">
-                <p className="flex items-center gap-2 font-medium"><AlertTriangle className="size-4 text-warning" aria-hidden />Activation blocked</p>
+                <p className="flex items-center gap-2 font-medium"><AlertTriangle className="size-4 text-warning" aria-hidden />This vendor cannot be used yet</p>
                 <ul className="mt-1 list-disc pl-5">{activationBlockers.map((b) => <li key={b}>{b}</li>)}</ul>
               </div>
             ) : null}
@@ -105,13 +105,13 @@ function SupplierProfile() {
             {canDecide ? <SupplierReviewActions s={s} onChange={setS} role={role} /> : null}
             {s.portalUpdates?.length ? <PortalUpdateReview s={s} onChange={setS} canDecide={canDecide} /> : null}
           </div>
-        ) : tab === "Sites & contacts" ? (
+        ) : tab === "Addresses & contacts" ? (
           <div className="space-y-5"><section><h2 className="mb-2 font-semibold">Sites</h2><List empty="No sites yet." items={s.sites.map((x) => `${x.name} — ${x.address}`)} /></section><ContactManager s={s} canEdit={canDecide} role={role} onChange={setS} /></div>
         ) : tab === "Categories" ? (
           <List empty="No categories." items={s.categories} />
-        ) : tab === "Qualifications" ? (
-          <><ul className="space-y-2">{s.qualifications.length ? s.qualifications.map((q) => <li key={q.name} className="flex justify-between rounded-lg border bg-surface p-3 text-sm"><span>{q.name}{q.validTo ? <span className="block text-xs text-muted-foreground">Valid to {q.validTo}</span> : null}</span><StatusBadge status={q.status} /></li>) : <p className="text-sm text-muted-foreground">No qualifications required.</p>}</ul>{canDecide && s.qualifications.length ? <QualificationReview s={s} onChange={setS} /> : null}</>
-        ) : tab === "Risk & performance" ? (
+        ) : tab === "Required checks" ? (
+          <><ul className="space-y-2">{s.qualifications.length ? s.qualifications.map((q) => <li key={q.name} className="flex justify-between rounded-lg border bg-surface p-3 text-sm"><span>{q.name}{q.validTo ? <span className="block text-xs text-muted-foreground">Valid to {q.validTo}</span> : null}</span><StatusBadge status={q.status} /></li>) : <p className="text-sm text-muted-foreground">No extra checks needed.</p>}</ul>{canDecide && s.qualifications.length ? <QualificationReview s={s} onChange={setS} /> : null}</>
+        ) : tab === "Performance" ? (
           s.performance ? (
             <div className="rounded-lg border bg-surface p-4 text-sm">
               <p className="text-xs text-muted-foreground">{s.performance.period} · source: {s.performance.source}</p>
@@ -122,7 +122,7 @@ function SupplierProfile() {
           ) : <EmptyState title="Not enough data yet" body="Scores appear after at least 5 receipts or invoices in the period." />
         ) : tab === "Documents" ? (
           <><List empty="No documents recorded." items={s.documents.map((d) => `${d.name}${d.kind ? ` · ${d.kind}` : ""} — recorded ${d.uploaded}`)} />{s.onboarding ? <p className="mt-3 text-xs text-muted-foreground">This demo stores document names and classifications only. File contents are not uploaded.</p> : null}{s.portalUpdates?.length ? <PortalUpdateReview s={s} onChange={setS} canDecide={canDecide} /> : null}</>
-        ) : tab === "Related orders" ? (
+        ) : tab === "Orders & bills" ? (
           <div className="space-y-3 text-sm"><p>{openOrders.length} open purchase order(s) · {openInvoices.length} open invoice(s).</p>{orders.map((order) => <p key={order.id}><Link className="text-primary underline" to="/procurement/orders/$id" params={{ id: order.id }}>{order.id}</Link> · {order.status} · {order.line.description}</p>)}{invoices.map((invoice) => <p key={invoice.id}><Link className="text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.id}</Link> · {invoice.status} · {invoice.number}</p>)}</div>
         ) : (
           <StatusTimeline events={s.timeline} />
@@ -215,7 +215,7 @@ function SupplierReviewActions({ s, onChange, role }: { s: SupplierRecord; onCha
   const event = (action: string, detail: string, before?: string, after?: string) => ({ id: crypto.randomUUID(), at: timestamp(), actor: `${role} (demo)`, event: action, reason: detail, before, after });
   const decide = (state: "Approved" | "Returned" | "Rejected") => {
     if (!reason.trim()) return setError("Record the decision rationale.");
-    if (state === "Approved" && (s.qualifications.some((q) => q.status === "Missing" || q.status === "Expired" || Boolean(q.validTo && q.validTo < new Date().toISOString().slice(0, 10))) || (s.duplicates?.length && s.duplicateReview?.state !== "Cleared"))) return setError("Resolve missing/expired qualifications and duplicate candidates before approval.");
+    if (state === "Approved" && (s.qualifications.some((q) => q.status === "Missing" || q.status === "Expired" || Boolean(q.validTo && q.validTo < new Date().toISOString().slice(0, 10))) || (s.duplicates?.length && s.duplicateReview?.state !== "Cleared"))) return setError("Check missing or expired documents and possible duplicate vendors before approval.");
     const status = state === "Approved" ? "Conditional" : state === "Returned" ? "More information required" : "Rejected";
     onChange({ ...s, status, procurementDecision: { state, by: `${role} (demo)`, at: timestamp(), note: reason.trim() }, nextAction: state === "Approved" ? "Finance verification and activation" : state === "Returned" ? "Supplier to provide corrected information" : "None — application rejected", timeline: [event(`Procurement ${state.toLowerCase()}`, reason.trim(), s.status, status), ...s.timeline] });
     setReason(""); setError("");
@@ -258,7 +258,7 @@ function QualificationReview({ s, onChange }: { s: SupplierRecord; onChange: (su
   const [reference, setReference] = useState("");
   const [validTo, setValidTo] = useState("");
   const [error, setError] = useState("");
-  return <section className="mt-4 rounded-lg border bg-surface p-4 text-sm"><h2 className="font-semibold">Record qualification evidence</h2><p className="mt-1 text-xs text-muted-foreground">The document reference is stored locally; no file is uploaded or externally verified.</p>{error ? <p role="alert" className="mt-2 text-destructive">{error}</p> : null}<div className="mt-3 grid gap-2 sm:grid-cols-3"><div><Label htmlFor="qualification-name">Qualification</Label><select id="qualification-name" className="h-10 w-full rounded-md border bg-background px-3" value={name} onChange={(e) => setName(e.target.value)}>{s.qualifications.map((q) => <option key={q.name}>{q.name}</option>)}</select></div><div><Label htmlFor="qualification-ref">Evidence reference</Label><Input id="qualification-ref" value={reference} onChange={(e) => setReference(e.target.value)} /></div><div><Label htmlFor="qualification-valid">Valid until</Label><Input id="qualification-valid" type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} /></div></div><Button className="mt-3" size="sm" onClick={() => { if (!reference.trim() || !validTo || validTo < new Date().toISOString().slice(0, 10)) return setError("Enter a reference and a future validity date."); const qualifications = s.qualifications.map((q) => q.name === name ? { ...q, status: "Valid" as const, validTo } : q); onChange({ ...s, qualifications, documents: [...s.documents, { name: `${name}: ${reference.trim()}`, uploaded: new Date().toISOString().slice(0, 10) }], status: s.status === "More information required" ? "Under diligence" : s.status, nextAction: "Review qualification evidence and approvals", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString(), actor: "Supplier steward (demo)", event: `Qualification evidence recorded: ${name}`, reason: reference.trim() }, ...s.timeline] }); setReference(""); setValidTo(""); setError(""); }}>Record evidence reference</Button></section>;
+  return <section className="mt-4 rounded-lg border bg-surface p-4 text-sm"><h2 className="font-semibold">Record a required document</h2><p className="mt-1 text-xs text-muted-foreground">Only the document reference is saved here. No file is uploaded or checked outside this demo.</p>{error ? <p role="alert" className="mt-2 text-destructive">{error}</p> : null}<div className="mt-3 grid gap-2 sm:grid-cols-3"><div><Label htmlFor="qualification-name">Document</Label><select id="qualification-name" className="h-10 w-full rounded-md border bg-background px-3" value={name} onChange={(e) => setName(e.target.value)}>{s.qualifications.map((q) => <option key={q.name}>{q.name}</option>)}</select></div><div><Label htmlFor="qualification-ref">Document reference</Label><Input id="qualification-ref" value={reference} onChange={(e) => setReference(e.target.value)} /></div><div><Label htmlFor="qualification-valid">Valid until</Label><Input id="qualification-valid" type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} /></div></div><Button className="mt-3" size="sm" onClick={() => { if (!reference.trim() || !validTo || validTo < new Date().toISOString().slice(0, 10)) return setError("Enter a reference and a future validity date."); const qualifications = s.qualifications.map((q) => q.name === name ? { ...q, status: "Valid" as const, validTo } : q); onChange({ ...s, qualifications, documents: [...s.documents, { name: `${name}: ${reference.trim()}`, uploaded: new Date().toISOString().slice(0, 10) }], status: s.status === "More information required" ? "Under diligence" : s.status, nextAction: "Review qualification evidence and approvals", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString(), actor: "Supplier steward (demo)", event: `Qualification evidence recorded: ${name}`, reason: reference.trim() }, ...s.timeline] }); setReference(""); setValidTo(""); setError(""); }}>Save document reference</Button></section>;
 }
 
 function PortalUpdateReview({ s, onChange, canDecide }: { s: SupplierRecord; onChange: (supplier: SupplierRecord) => void; canDecide: boolean }) {

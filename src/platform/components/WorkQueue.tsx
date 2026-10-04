@@ -4,16 +4,16 @@ import type { WorkItem } from "@/mock/types";
 import { EmptyState } from "./States";
 
 const bands = [
-  { id: "exception", label: "Urgent exceptions", help: "Blocked or breaching — handle first.", icon: AlertOctagon, tone: "border-danger/40 bg-danger-soft" },
+  { id: "exception", label: "Needs attention", help: "These items are blocked or overdue. Start here.", icon: AlertOctagon, tone: "border-danger/40 bg-danger-soft" },
   { id: "approval", label: "Approvals due", help: "Someone is waiting on your decision.", icon: CheckSquare, tone: "border-warning/40 bg-warning-soft" },
   { id: "task", label: "Tasks", help: "Work assigned to you.", icon: ListChecks, tone: "border-border bg-surface" },
-  { id: "deadline", label: "Deadlines", help: "Dated commitments coming up.", icon: CalendarClock, tone: "border-info/40 bg-info-soft" },
+  { id: "deadline", label: "Coming up", help: "Due dates you should know about.", icon: CalendarClock, tone: "border-info/40 bg-info-soft" },
 ] as const;
 
 /** Prioritised work queue: exceptions > approvals > tasks > deadlines > metrics. */
 export function WorkQueue({ items, metrics }: { items: WorkItem[]; metrics?: { label: string; value: string; hint: string }[] }) {
   if (items.length === 0) {
-    return <EmptyState title="Nothing needs you right now" body="New exceptions, approvals and tasks for this workspace will appear here." />;
+    return <EmptyState title="Nothing needs you right now" body="New requests, approvals and tasks will appear here." />;
   }
 
   return (
@@ -60,7 +60,7 @@ export function WorkQueue({ items, metrics }: { items: WorkItem[]; metrics?: { l
       {metrics?.length ? (
         <section aria-labelledby="band-metrics">
           <h2 id="band-metrics" className="text-sm font-semibold">
-            Metrics
+            Key numbers
           </h2>
           <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {metrics.map((m) => (

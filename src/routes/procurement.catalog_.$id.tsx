@@ -39,22 +39,22 @@ function ItemDetail() {
       />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-6">
-          {i.status === "Inactive" ? <Notice tone="warning">Inactive since {i.activeTo}. Choose a current item or request a non-catalog item with a reason.</Notice> : null}
+          {i.status === "Inactive" ? <Notice tone="warning">This item is no longer available. Choose another item or make a new request.</Notice> : null}
           {i.block ? <Notice tone="warning">{i.block}</Notice> : null}
-          {!i.block && i.status === "Active" && !offer ? <Notice tone="warning">No current offer from an active supplier. Ask Procurement to refresh this item before requesting it.</Notice> : null}
+          {!i.block && i.status === "Active" && !offer ? <Notice tone="warning">There is no current price from an approved vendor. Ask the buying team to update it.</Notice> : null}
 
-          {(["buyer", "proc_admin"].includes(role)) ? <div className="flex gap-2"><Button variant="outline" onClick={() => setEditing((value) => !value)}>{editing ? "Close editor" : "Revise item"}</Button><Button variant="ghost" asChild><Link to="/procurement/catalog">Manage catalog</Link></Button></div> : null}
+          {(["buyer", "proc_admin"].includes(role)) ? <div className="flex gap-2"><Button variant="outline" onClick={() => setEditing((value) => !value)}>{editing ? "Close form" : "Edit item"}</Button><Button variant="ghost" asChild><Link to="/procurement/catalog">Back to catalog</Link></Button></div> : null}
           {editing ? <CatalogItemEditor key={`${i.id}-${i.versions[0]?.version}`} item={i} onSaved={() => setEditing(false)} onCancel={() => setEditing(false)} /> : null}
 
           <section className="rounded-lg border bg-surface p-4">
-            <h2 className="text-sm font-semibold">Supplier offers</h2>
+            <h2 className="text-sm font-semibold">Vendor prices</h2>
             {i.offers.length ? (
               <ul className="mt-3 divide-y text-sm">
                 {i.offers.map((o) => (
                   <li key={o.supplier} className="flex flex-wrap justify-between gap-2 py-2">
                     <span>
                       <span className="font-medium">{o.supplier}</span>{o.preferred ? <span className="ml-2 rounded-full bg-primary-soft px-2 text-xs text-primary">Preferred</span> : null}
-                      <span className="block text-xs text-muted-foreground">{o.source} · lead time {o.leadTimeDays} days · valid to {o.validTo}</span>
+                      <span className="block text-xs text-muted-foreground">{o.source} · delivery in {o.leadTimeDays} days · price valid until {o.validTo}</span>
                     </span>
                     <span className="text-right tabular-nums">
                       {money(o.price, o.currency)}
@@ -63,7 +63,7 @@ function ItemDetail() {
                   </li>
                 ))}
               </ul>
-            ) : <p className="mt-2 text-sm text-muted-foreground">No current offers.</p>}
+            ) : <p className="mt-2 text-sm text-muted-foreground">No prices yet.</p>}
           </section>
 
           <section className="rounded-lg border bg-surface p-4">
@@ -77,13 +77,13 @@ function ItemDetail() {
         <aside className="h-fit rounded-lg border bg-surface p-4 text-sm">
           <h2 className="font-semibold">Details</h2>
           <dl className="mt-3 space-y-2">
-            <Row k="Specification" v={i.spec} />
-            <Row k="Eligible entities" v={i.entities.join(", ")} />
-            <Row k="Tax reference" v={i.taxRef} />
-            <Row k="Active" v={`${i.activeFrom} → ${i.activeTo ?? "open"}`} />
+            <Row k="Description" v={i.spec} />
+            <Row k="Available to" v={i.entities.join(", ")} />
+            <Row k="Tax code" v={i.taxRef} />
+            <Row k="Available from" v={`${i.activeFrom} → ${i.activeTo ?? "no end date"}`} />
           </dl>
           {i.authoritativeOwner ? (
-            <p className="mt-3 flex gap-2 rounded-md bg-info-soft p-2 text-xs"><Info className="size-4 shrink-0" aria-hidden />Classification is owned by {i.authoritativeOwner}. Stock on hand isn't shown here.</p>
+            <p className="mt-3 flex gap-2 rounded-md bg-info-soft p-2 text-xs"><Info className="size-4 shrink-0" aria-hidden />{i.authoritativeOwner} manages this item type. Stock levels are shown in Inventory.</p>
           ) : null}
         </aside>
       </div>

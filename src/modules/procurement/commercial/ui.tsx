@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { statusLabel } from "@/platform/components/StatusBadge";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
 import { useApp } from "@/platform/app-context";
 import { sameEntity } from "@/modules/procurement/access";
@@ -18,10 +19,10 @@ import type { Evaluation, Contract, Order, Receipt } from "./store";
 
 type Area = "evaluations" | "contracts" | "orders" | "receiving";
 const titles: Record<Area, string> = {
-  evaluations: "Bid evaluation & award",
-  contracts: "Contracts & commitments",
+  evaluations: "Compare quotes & choose a vendor",
+  contracts: "Contracts",
   orders: "Purchase orders",
-  receiving: "Receiving & service acceptance",
+  receiving: "Deliveries & completed services",
 };
 const paths = {
   evaluations: "/procurement/evaluations",
@@ -75,7 +76,7 @@ function Header({ area, detail }: { area: Area; detail?: string }) {
     <PageHeader
       eyebrow="Procurement · Commercial"
       title={detail || titles[area]}
-      description="Local demo records · actions are retained in this browser only"
+      description="This demo saves changes in this browser only."
     />
   );
 }
@@ -117,8 +118,8 @@ function NotFound({ area }: { area: Area }) {
   return (
     <AppShell>
       <div className={section}>
-        <h1 className="font-semibold">Record unavailable</h1>
-        <p className="text-sm text-muted-foreground">Check the reference or your entity access.</p>
+        <h1 className="font-semibold">We couldn't open this record</h1>
+        <p className="text-sm text-muted-foreground">Check the reference number or switch to the right company.</p>
         <Link className="text-primary underline" to={paths[area]}>
           Back to {titles[area]}
         </Link>
@@ -172,26 +173,26 @@ export function CommercialList({ area }: { area: Area }) {
   );
   const entityRecords = records.filter((x) => entityAllowed(x.entity, entityId, role));
   const empty = {
-    evaluations: { title: "No evaluations yet", body: "Close a sourcing event and open its supplier responses to begin evaluation.", to: "/procurement/sourcing" as const, action: "Open sourcing", icon: <Trophy className="size-10" aria-hidden /> },
-    contracts: { title: "No contracts yet", body: "Approved awards and agreements will appear here for monitoring and release orders.", to: "/procurement/sourcing" as const, action: "Open sourcing", icon: <ScrollText className="size-10" aria-hidden /> },
-    orders: { title: "No purchase orders yet", body: "Approve demand or an award before creating a purchase order.", to: "/procurement/requests" as const, action: "Open requests", icon: <FileText className="size-10" aria-hidden /> },
-    receiving: { title: "No receipts yet", body: "Issue a purchase order before recording goods or service acceptance.", to: "/procurement/orders" as const, action: "Open orders", icon: <PackageCheck className="size-10" aria-hidden /> },
+    evaluations: { title: "No quotes to compare yet", body: "Close a quote request and open the vendor replies to begin comparing them.", to: "/procurement/sourcing" as const, action: "Open quote requests", icon: <Trophy className="size-10" aria-hidden /> },
+    contracts: { title: "No contracts yet", body: "Approved supplier agreements will appear here.", to: "/procurement/sourcing" as const, action: "Open quote requests", icon: <ScrollText className="size-10" aria-hidden /> },
+    orders: { title: "No purchase orders yet", body: "Start with an approved request or a chosen vendor.", to: "/procurement/requests" as const, action: "Open requests", icon: <FileText className="size-10" aria-hidden /> },
+    receiving: { title: "No deliveries yet", body: "Send a purchase order before recording what arrived or which services were completed.", to: "/procurement/orders" as const, action: "Open orders", icon: <PackageCheck className="size-10" aria-hidden /> },
   }[area];
   return (
     <Guard area={area}>
       <AppShell>
         <Header area={area} />
         <div className={section}>
-          <Label htmlFor="find-commercial">Find a record</Label>
+          <Label htmlFor="find-commercial">Search</Label>
           <Input
             id="find-commercial"
             className="mt-2 max-w-md"
-            placeholder="Reference or supplier"
+            placeholder="Number or vendor"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
           <p className="mt-2 text-xs text-muted-foreground">
-            Showing records in your entity. Open a record to act.
+            Showing records for your company. Open one to see details or take action.
           </p>
         </div>
         <div className="grid gap-3">
@@ -209,12 +210,12 @@ export function CommercialList({ area }: { area: Area }) {
                   </p>
                   <h2 className="mt-1 font-semibold">{x.name}</h2>
                 </div>
-                <Tag>{x.status}</Tag>
+                <Tag>{statusLabel(x.status)}</Tag>
               </div>
             </Link>
           ))}
           {!visible.length && !entityRecords.length ? <EmptyState title={empty.title} body={empty.body} icon={empty.icon} action={<Button variant="outline" asChild><Link to={empty.to}>{empty.action}</Link></Button>} /> : null}
-          {!visible.length && entityRecords.length ? <NoResultsState title="No matching records" body="Try a different reference or supplier." action={<Button variant="outline" onClick={() => setQ("")}>Clear search</Button>} /> : null}
+          {!visible.length && entityRecords.length ? <NoResultsState title="No matches" body="Try a different number or vendor name." action={<Button variant="outline" onClick={() => setQ("")}>Clear search</Button>} /> : null}
         </div>
       </AppShell>
     </Guard>
@@ -500,7 +501,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
                 </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div>
-                    <Label>Mandatory compliance</Label>
+                    <Label>Required checks</Label>
                     <select
                       aria-label={`${b.supplier} compliance`}
                       disabled={!editable || item.state !== "In evaluation" || offer.late}
@@ -514,7 +515,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
                     </select>
                   </div>
                   <div>
-                    <Label htmlFor={`score-${b.id}`}>Evaluator score / 100</Label>
+                    <Label htmlFor={`score-${b.id}`}>Score out of 100</Label>
                     <Input
                       id={`score-${b.id}`}
                       type="number"
@@ -604,7 +605,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
       )}
       {item.state === "In evaluation" && editable && (
         <section className={section}>
-          <h2 className="font-semibold">Award recommendation</h2>
+          <h2 className="font-semibold">Recommended vendor</h2>
           <Label htmlFor="winner" className="mt-3 block">
             Recommended supplier
           </Label>
@@ -641,7 +642,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
             </p>
           )}
           <div className="mt-3 flex gap-2">
-            <Button onClick={rec}>Submit recommendation</Button>
+            <Button onClick={rec}>Send recommendation</Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -668,7 +669,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
       )}
       {item.state === "Recommendation pending" && (
         <section className={section}>
-          <h2 className="font-semibold">Pending independent approval</h2>
+          <h2 className="font-semibold">Waiting for another person to approve</h2>
           <p className="text-sm">
             {item.rationale} ·{" "}
             {item.awardValue &&
@@ -691,7 +692,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
           <div className="mt-3 flex flex-wrap gap-2">
             {canEdit("evaluations", role) && (
               <>
-                <Button onClick={() => createFromAward("PO")}>Create draft PO</Button>
+                <Button onClick={() => createFromAward("PO")}>Start purchase order</Button>
                 <Button variant="outline" onClick={() => createFromAward("Contract")}>
                   Create draft contract
                 </Button>
@@ -929,7 +930,7 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
         )}
       </section>
       <section className={section}>
-        <h2 className="font-semibold">Lifecycle & renewal</h2>
+        <h2 className="font-semibold">Contract dates and renewal</h2>
         {item.state === "Awaiting signature" && (
           <p className="mt-2 text-sm text-amber-700">
             Approved terms are not yet an executed agreement. No release is allowed.
@@ -1001,7 +1002,7 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
       </section>
       {item.kind === "Framework" && (
         <section className={section}>
-          <h2 className="font-semibold">Framework utilization</h2>
+          <h2 className="font-semibold">Contract spending</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Contract ceiling is separate from a blanket PO limit and Finance budget. A release
             creates a draft PO; commercial commitment is recorded only when issued.
@@ -1020,7 +1021,7 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
           {edit && (
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <div>
-                <Label htmlFor="release">Draft PO release amount</Label>
+                <Label htmlFor="release">Amount for the new order</Label>
                 <Input
                   id="release"
                   type="number"
@@ -1029,17 +1030,17 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
                   onChange={(e) => setRelease(Number(e.target.value))}
                 />
               </div>
-              <Button onClick={addRelease}>Create draft PO release</Button>
+              <Button onClick={addRelease}>Start order from contract</Button>
             </div>
           )}
         </section>
       )}
       {edit && (
         <section className={section}>
-          <h2 className="font-semibold">Controlled amendment</h2>
+          <h2 className="font-semibold">Change this contract</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="new-ceiling">Proposed ceiling</Label>
+              <Label htmlFor="new-ceiling">New spending limit</Label>
               <Input
                 id="new-ceiling"
                 type="number"
@@ -1403,7 +1404,7 @@ function OrderView({ item, role }: { item: Order; role: string }) {
       )}
       <div className="grid gap-4 md:grid-cols-2">
         <section className={section}>
-          <h2 className="font-semibold">Receipt progress</h2>
+          <h2 className="font-semibold">Delivery progress</h2>
           <p className="text-2xl font-semibold">
             {item.line.received} / {item.line.qty}
           </p>
@@ -1419,7 +1420,7 @@ function OrderView({ item, role }: { item: Order; role: string }) {
           </Link>
         </section>
         <section className={section}>
-          <h2 className="font-semibold">Invoice progress</h2>
+          <h2 className="font-semibold">Bill progress</h2>
           <p className="text-2xl font-semibold">
             {invoicedQty} / {item.line.qty}
           </p>
@@ -1440,7 +1441,7 @@ function OrderView({ item, role }: { item: Order; role: string }) {
       </div>
       {item.blanket && (
         <section className={section}>
-          <h2 className="font-semibold">Blanket PO limit</h2>
+          <h2 className="font-semibold">Standing order limit</h2>
           <p>
             {money(item.blanket.used, item.currency)} used /{" "}
             {money(item.blanket.ceiling, item.currency)} ceiling · ends {item.blanket.end}
@@ -1478,7 +1479,7 @@ function OrderView({ item, role }: { item: Order; role: string }) {
       )}
       {edit && (
         <section className={section}>
-          <h2 className="font-semibold">Commercial actions</h2>
+          <h2 className="font-semibold">Order actions</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {item.status === "Draft" && (
               <Button
@@ -1510,7 +1511,7 @@ function OrderView({ item, role }: { item: Order; role: string }) {
                 Approve PO
               </Button>
             )}
-            {item.status === "Approved" && <Button onClick={issue}>Issue approved version</Button>}
+            {item.status === "Approved" && <Button onClick={issue}>Send approved order</Button>}
             {item.status === "Issued" && (
               <Button
                 variant="outline"
@@ -1599,7 +1600,7 @@ function OrderView({ item, role }: { item: Order; role: string }) {
       )}
       {item.revisions.length > 0 && (
         <section className={section}>
-          <h2 className="font-semibold">Retained revisions</h2>
+          <h2 className="font-semibold">Earlier versions</h2>
           {item.revisions.map((r) => (
             <p key={r.version} className="mt-2 text-sm">
               v{r.version}: {r.before} → {r.after} · {r.reason}
@@ -1847,7 +1848,7 @@ function ReceivingView({
               <Input id="delivery-note" value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="evidence">Evidence reference</Label>
+              <Label htmlFor="evidence">Supporting document name</Label>
               <Input
                 id="evidence"
                 value={evidence}
@@ -1857,7 +1858,7 @@ function ReceivingView({
             </div>
             {kind === "Goods" ? (
               <div className="sm:col-span-2">
-                <Label htmlFor="inspection">Inspection result and defects</Label>
+                <Label htmlFor="inspection">Check result and any damage</Label>
                 <Textarea
                   id="inspection"
                   value={inspection}
@@ -1877,7 +1878,7 @@ function ReceivingView({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="deliverable">Verified deliverable</Label>
+                  <Label htmlFor="deliverable">Work completed</Label>
                   <Input
                     id="deliverable"
                     value={deliverable}
@@ -1898,9 +1899,9 @@ function ReceivingView({
         </section>
       )}
       <section className={section}>
-        <h2 className="font-semibold">Receipt and acceptance history</h2>
+        <h2 className="font-semibold">Delivery and service history</h2>
         {!receipts.length && (
-          <p className="mt-2 text-sm text-muted-foreground">No acceptance recorded.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Nothing has been accepted yet.</p>
         )}
         {receipts.map((r) => (
           <div key={r.id} className="mt-3 rounded-lg border p-3 text-sm">

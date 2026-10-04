@@ -18,7 +18,7 @@ export const Route = createFileRoute("/procurement/configuration")({
 function SettingCard({ item }: { item: SettingsItem }) {
   const content = <>
     <span className="min-w-0"><span className="block font-medium">{item.name}</span><span className="mt-0.5 block text-xs text-muted-foreground">{item.detail}</span></span>
-    <span className="flex shrink-0 flex-col items-end gap-1 text-xs"><span className="rounded-full border px-2 py-0.5 text-muted-foreground">{item.owner}</span><span className={item.to ? "text-primary" : "text-muted-foreground"}>{item.to ? "Open" : "Reference"}</span></span>
+    <span className="flex shrink-0 flex-col items-end gap-1 text-xs"><span className="rounded-full border px-2 py-0.5 text-muted-foreground">{item.owner}</span><span className={item.to ? "text-primary" : "text-muted-foreground"}>{item.to ? "Open" : "Coming later"}</span></span>
   </>;
   return item.to ? <Link to={item.to} className="flex min-h-20 items-start justify-between gap-4 rounded-lg border bg-surface p-3 text-sm hover:border-primary focus-visible:outline-2 focus-visible:outline-primary">{content}</Link>
     : <div className="flex min-h-20 items-start justify-between gap-4 rounded-lg border bg-surface p-3 text-sm">{content}</div>;
@@ -36,7 +36,7 @@ function ProcConfiguration() {
   const count = groups.reduce((sum, group) => sum + group.sections.reduce((sectionSum, section) => sectionSum + section.items.length, 0), 0);
 
   return <AppShell>
-    <PageHeader eyebrow="Procurement" title="Configuration" description="Find settings by business area. Procurement owns buying rules; ERP Core, Finance and shared services own their own records." />
+    <PageHeader eyebrow="Procurement" title="Settings" description="Find the rules and options you need. Some settings are managed by Finance or the main ERP." />
     <div className="mt-5"><label htmlFor="setting-search" className="text-sm font-medium">Find a setting</label><Input id="setting-search" className="mt-1 max-w-xl" type="search" placeholder="Search Bills, roles, taxes, workflow…" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
     <div className="mt-5 grid gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
       <nav aria-label="Configuration groups" className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
@@ -50,7 +50,7 @@ function ProcConfiguration() {
           <div className="mt-4 space-y-5">{group.sections.map((section) => <div key={section.name}><h3 className="mb-2 text-sm font-semibold">{section.name}</h3><div className="grid gap-2 sm:grid-cols-2">{section.items.map((item) => <SettingCard key={item.name} item={item} />)}</div></div>)}</div>
         </section>)}
         {!groups.length ? <p className="rounded-lg border bg-surface p-5 text-sm text-muted-foreground">No setting matches this search.</p> : null}
-        <p className="rounded-lg border bg-surface p-3 text-xs text-muted-foreground">“Reference” means the setting is owned elsewhere or still needs its ERP integration. Only “Open” destinations have a Procurement screen in this demo. Saving a preview does not activate an approval or payment workflow.</p>
+        <p className="rounded-lg border bg-surface p-3 text-xs text-muted-foreground">“Open” has a working screen here. “Coming later” shows where a setting will belong. Preview choices do not change how approvals or payments work.</p>
       </div>
     </div>
   </AppShell>;

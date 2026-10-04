@@ -32,6 +32,7 @@ export const Route = createFileRoute("/procurement/requests_/$id")({
 });
 
 const ROUTES: LineRoute[] = ["Direct PO", "RFQ / tender", "Contract / framework", "Deferred", "Cancelled"];
+const routeLabel: Record<LineRoute, string> = { "Direct PO": "Order directly", "RFQ / tender": "Ask for quotes", "Contract / framework": "Use an existing contract", Deferred: "Buy later", Cancelled: "Do not buy" , Unassigned: "Choose how to buy" };
 const BUYERS = ["buyer", "proc_admin"];
 const APPROVERS = ["manager", "proc_admin"];
 const now = () => new Date().toISOString().slice(0, 16).replace("T", " ");
@@ -67,15 +68,15 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
       const available = Math.max(0, line.approvedQty - line.allocatedQty - line.orderedQty - line.cancelledQty);
       const qty = partial ? Math.ceil(available / 2) : available;
       const value = qty * line.unitPrice;
-      if (meta?.budgetBalance && value > meta.budgetBalance.available) throw new Error(`Insufficient indicative balance: ${money.format(value)} exceeds ${money.format(meta.budgetBalance.available)}.`);
+      if (meta?.budgetBalance && value > meta.budgetBalance.available) throw new Error(`This may be over budget: ${money.format(value)} is more than the estimated available amount of ${money.format(meta.budgetBalance.available)}.`);
       const ref = routeLine(r.id, line.id, line.route, qty);
-      setNotice(`${ref} created as a demo draft. No supplier message or financial commitment occurred.`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not allocate this line."); }
+      setNotice(`${ref} is ready as a draft. It has not been sent to the vendor or Finance.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not start buying this item."); }
   };
 
   // Header actions with permitted-state checks
   const actions: { label: string; why: string; enabled: boolean; run: () => void; tone?: "primary" }[] = [
-    { label: "Withdraw", why: ["Submitted", "In review"].includes(status) && !lines.some((l) => l.allocatedQty || l.orderedQty || l.related.length) ? "Nothing has entered sourcing or ordering yet." : "Withdraw is only possible before sourcing or ordering starts.", enabled: isRequester && ["Submitted", "In review"].includes(status) && !lines.some((l) => l.allocatedQty || l.orderedQty || l.related.length), run: () => { try { withdrawRequest(r.id, r.requester); setNotice("Request withdrawn. Pending approval tasks were closed."); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not withdraw request."); } } },
+    { label: "Withdraw", why: ["Submitted", "In review"].includes(status) && !lines.some((l) => l.allocatedQty || l.orderedQty || l.related.length) ? "No quotes or orders have started yet." : "You can withdraw only before quotes or orders start.", enabled: isRequester && ["Submitted", "In review"].includes(status) && !lines.some((l) => l.allocatedQty || l.orderedQty || l.related.length), run: () => { try { withdrawRequest(r.id, r.requester); setNotice("Request withdrawn. Any open approval tasks were closed."); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not withdraw request."); } } },
     { label: "Close request", why: status !== "Approved" ? "Only an approved request can be closed." : lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred") ? "No remaining quantity to order." : "Can't close while approved quantity is still unordered.", enabled: isBuyer && status === "Approved" && lines.length > 0 && lines.every((l) => remaining(l) === 0 || l.route === "Cancelled" || l.route === "Deferred"), run: () => { changeRequest({ status: "Closed" as typeof status }, "Closed; remaining quantity cancelled"); } },
   ];
   const primary = actions.find((a) => a.enabled && a.tone === "primary") ?? actions.find((a) => a.enabled);
@@ -89,15 +90,15 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
       owner={r.owner}
       nextAction={`${r.nextAction} · due ${r.dueDate}`}
       summary={[
-        { label: "Line progress", value: progress },
-        { label: "Supplier", value: r.supplierId ? "Preference on file — verify before ordering" : "Not selected" },
+        { label: "Buying progress", value: progress },
+        { label: "Preferred vendor", value: r.supplierId ? "Suggested; check before ordering" : "Not selected" },
         { label: "Total requested", value: money.format(r.amount) },
         { label: "Needed by", value: r.neededBy },
         { label: "Deliver to", value: meta?.deliverTo ?? "Not recorded on seed request" },
         { label: "Cost centre", value: meta?.costCentre ?? "Not recorded on seed request" },
         { label: "Project", value: meta?.project || "Not linked" },
         { label: "Version", value: meta?.versions.length ? `v${meta.versions[0].version}` : "Draft" },
-        { label: "Indicative budget", value: meta?.budgetBalance ? `${money.format(meta.budgetBalance.available)} — not reserved` : "Not checked" },
+        { label: "Estimated budget", value: meta?.budgetBalance ? `${money.format(meta.budgetBalance.available)} — Finance has not set this aside` : "Not checked" },
       ]}
       timeline={<StatusTimeline title="History" events={events} />}
     >
@@ -117,15 +118,15 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
 
       {isRequester && ["Draft", "Returned"].includes(status) && meta ? <CorrectionEditor request={r} meta={meta} onResult={setNotice} /> : null}
 
-      {meta?.evidence?.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Supporting evidence references</h2><ul className="mt-2 list-disc pl-5 text-sm">{meta.evidence.map((reference) => <li key={reference}>{reference} · demo reference, no uploaded file</li>)}</ul></section> : null}
+      {meta?.evidence?.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Supporting files</h2><ul className="mt-2 list-disc pl-5 text-sm">{meta.evidence.map((reference) => <li key={reference}>{reference} · name only; no file uploaded in this demo</li>)}</ul></section> : null}
 
       <section aria-labelledby="lines-h" className="rounded-lg border bg-surface p-4">
-        <h2 id="lines-h" className="text-sm font-semibold">Lines</h2>
-        <p className="text-xs text-muted-foreground">Approved, ordered and received are separate facts. Header progress is worked out from these lines.</p>
+        <h2 id="lines-h" className="text-sm font-semibold">Items</h2>
+        <p className="text-xs text-muted-foreground">For each item, see how many were approved, ordered and delivered.</p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[56rem] text-sm">
             <thead className="border-b text-left text-xs text-muted-foreground">
-              <tr><th className="py-2 pr-3">Line</th><th className="py-2 pr-3">Approval</th><th className="py-2 pr-3 text-right">Requested</th><th className="py-2 pr-3 text-right">Approved</th><th className="py-2 pr-3 text-right">Allocated</th><th className="py-2 pr-3 text-right">Ordered</th><th className="py-2 pr-3 text-right">Received</th><th className="py-2 pr-3 text-right">Remaining</th><th className="py-2 pr-3">Route</th><th className="py-2">Buyer actions</th></tr>
+              <tr><th className="py-2 pr-3">Item</th><th className="py-2 pr-3">Approval</th><th className="py-2 pr-3 text-right">Asked for</th><th className="py-2 pr-3 text-right">Approved</th><th className="py-2 pr-3 text-right">Being bought</th><th className="py-2 pr-3 text-right">Ordered</th><th className="py-2 pr-3 text-right">Delivered</th><th className="py-2 pr-3 text-right">Left to buy</th><th className="py-2 pr-3">How to buy</th><th className="py-2">Next step</th></tr>
             </thead>
             <tbody className="divide-y">
               {lines.map((l) => (
@@ -151,18 +152,18 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
                         <Label htmlFor={`rt-${l.id}`} className="sr-only">Route for {l.description}</Label>
                         <select id={`rt-${l.id}`} className="h-8 rounded-md border bg-background px-2 text-xs" value={l.route}
                           disabled={status !== "Approved" || l.approval !== "Approved" || remaining(l) === 0} onChange={(e) => updateLine(l.id, { route: e.target.value as LineRoute }, `Line route selected: ${e.target.value}`)}>
-                          <option disabled>Unassigned</option>{ROUTES.map((x) => <option key={x}>{x}</option>)}
+                          <option value="Unassigned" disabled>{routeLabel.Unassigned}</option>{ROUTES.map((x) => <option key={x} value={x}>{routeLabel[x]}</option>)}
                         </select>
                         <Label htmlFor={`supplier-${l.id}`} className="sr-only">Supplier for {l.description}</Label>
                         <select id={`supplier-${l.id}`} className="mt-1 h-8 max-w-40 rounded-md border bg-background px-2 text-xs" value={l.preferredSupplier ?? ""} disabled={status !== "Approved" || l.approval !== "Approved" || l.orderedQty > 0 || l.allocatedQty > 0} onChange={(event) => updateLine(l.id, { preferredSupplier: event.target.value || undefined }, `Supplier preference set for ${l.description}: ${event.target.value || "none"}`)}><option value="">Choose active supplier</option>{suppliers.filter((supplier) => supplier.status === "Active" && sameEntity(supplier.country, entityId)).map((supplier) => <option key={supplier.id}>{supplier.name}</option>)}</select>
                       </>
-                    ) : l.route}
+                    ) : routeLabel[l.route]}
                   </td>
                   <td className="py-2">
                     {isBuyer ? (
                       <span className="flex flex-col gap-1">
-                        {l.route === "RFQ / tender" && status === "Approved" && l.approval === "Approved" && !l.lockedBy && remaining(l) > 0 ? <Button size="sm" variant="outline" asChild><Link to="/procurement/sourcing/new" search={{ requestId: r.id, lineId: l.id }}>Create RFQ</Link></Button> : <Button size="sm" variant="outline" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty <= 0 || !["Direct PO", "Contract / framework"].includes(l.route)} onClick={() => convert(l, false)}>Create {l.route === "Contract / framework" ? "contract release" : "draft PO"}</Button>}
-                        {l.route !== "RFQ / tender" ? <Button size="sm" variant="ghost" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty < 2 || !["Direct PO", "Contract / framework"].includes(l.route)} onClick={() => convert(l, true)}>Allocate half</Button> : null}
+                        {l.route === "RFQ / tender" && status === "Approved" && l.approval === "Approved" && !l.lockedBy && remaining(l) > 0 ? <Button size="sm" variant="outline" asChild><Link to="/procurement/sourcing/new" search={{ requestId: r.id, lineId: l.id }}>Ask for quotes</Link></Button> : <Button size="sm" variant="outline" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty <= 0 || !["Direct PO", "Contract / framework"].includes(l.route)} onClick={() => convert(l, false)}>{l.route === "Contract / framework" ? "Order from contract" : "Start order"}</Button>}
+                        {l.route !== "RFQ / tender" ? <Button size="sm" variant="ghost" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty < 2 || !["Direct PO", "Contract / framework"].includes(l.route)} onClick={() => convert(l, true)}>Process half</Button> : null}
                       </span>
                     ) : <span className="text-xs text-muted-foreground">Buyer only</span>}
                   </td>
@@ -197,7 +198,7 @@ function CorrectionEditor({ request, meta, onResult }: { request: import("@/modu
   const update = (id: string, patch: Partial<(typeof lines)[number]>) => setLines((current) => current.map((line) => line.id === id ? { ...line, ...patch } : line));
   return <section className="rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm" aria-labelledby="correct-h">
     <h2 id="correct-h" className="font-semibold">{isDraft ? "Complete and submit draft" : "Correct and resubmit"}</h2>
-    <p className="mt-1 text-muted-foreground">{isDraft ? "Complete the required fields before sending this request for approval." : "Review the return reason in History. Submitting saves a new version and creates a fresh approval task. Any unresolved policy or hard budget failure stays blocked."}</p>
+    <p className="mt-1 text-muted-foreground">{isDraft ? "Fill in the required details before asking for approval." : "Check the reason in History, fix the request, and send it again. If there is still a rule or budget problem, approval will stay blocked."}</p>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <div className="sm:col-span-2"><Label htmlFor="correct-title">Request title</Label><Input id="correct-title" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
       <div><Label htmlFor="correct-needed">Needed by</Label><Input id="correct-needed" type="date" value={neededBy.slice(0, 10)} onChange={(event) => setNeededBy(event.target.value)} /></div>

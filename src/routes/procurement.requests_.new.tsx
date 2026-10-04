@@ -104,7 +104,7 @@ function NewRequest() {
     {
       id: "kind",
       title: "What do you need?",
-      purpose: "This decides which catalog, rules and approvers apply.",
+      purpose: "This helps us show the right items and send your request to the right people.",
       render: () => (
         <fieldset className="grid gap-2 sm:grid-cols-2">
           <legend className="sr-only">Request type</legend>
@@ -125,7 +125,7 @@ function NewRequest() {
     {
       id: "items",
       title: "Find items",
-      purpose: "Catalog and contract items are faster and pre-approved on price. Use a non-catalog line only if nothing fits.",
+      purpose: "Choose from the listed items when you can. If nothing fits, describe what you need below.",
       render: () => (
         <div className="space-y-5">
           <div>
@@ -154,10 +154,10 @@ function NewRequest() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">No catalog items match. Add a non-catalog line below.</p>
+            <p className="text-sm text-muted-foreground">No listed items match. Describe what you need below.</p>
           )}
           <details className="rounded-lg border p-3">
-            <summary className="cursor-pointer text-sm font-medium">Nothing fits? Add a non-catalog line</summary>
+            <summary className="cursor-pointer text-sm font-medium">Can't find it? Add something new</summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2"><Label htmlFor="nc-kind">Line type</Label><select id="nc-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={ncKind} onChange={(event) => setNcKind(event.target.value as Kind)}>{(["Goods", "Service", "Asset", "Subscription"] as Kind[]).map((kind) => <option key={kind}>{kind}</option>)}</select></div>
               <div className="sm:col-span-2"><Label htmlFor="nc-d">Description</Label><Input id="nc-d" className="mt-1" value={nc.description} onChange={(e) => setNc({ ...nc, description: e.target.value })} /></div>
@@ -167,7 +167,7 @@ function NewRequest() {
             </div>
             <Button size="sm" className="mt-3" disabled={!nc.description || nc.qty < 1 || nc.unitPrice <= 0 || !nc.reason.trim()}
               onClick={() => { set({ lines: [...d.lines, { id: crypto.randomUUID(), description: nc.description, qty: nc.qty, unitPrice: nc.unitPrice, source: "Non-catalog", supplier: "To be sourced by buyer", kind: ncKind }] }); setNc({ description: "", qty: 1, unitPrice: 0, reason: "" }); }}>
-              Add non-catalog line
+              Add an item not listed
             </Button>
           </details>
           <LineEditor d={d} set={set} currency={CCY} />
@@ -177,7 +177,7 @@ function NewRequest() {
     {
       id: "delivery",
       title: "Purpose and delivery",
-      purpose: "Approvers read the purpose first. The date and place tell the buyer how fast to act.",
+      purpose: "Tell us why you need it, when you need it, and where it should go.",
       render: () => (
         <div className="grid max-w-lg gap-4">
           <div><Label htmlFor="p">Purpose</Label><Textarea id="p" className="mt-1" placeholder="What is this for, and who benefits?" value={d.purpose} onChange={(e) => set({ purpose: e.target.value })} /></div>
@@ -189,7 +189,7 @@ function NewRequest() {
     {
       id: "accounting",
       title: "Who pays",
-      purpose: "The cost centre decides which budget holder approves.",
+      purpose: "Choose the team budget that should pay for this purchase.",
       render: () => (
         <div className="grid max-w-lg gap-4">
           <div>
@@ -205,9 +205,9 @@ function NewRequest() {
     },
     {
       id: "evidence",
-      title: "Attach evidence",
+      title: "Add supporting files",
       optional: true,
-      purpose: "Quotes or specs help the buyer and approvers. Demo only — files aren't uploaded anywhere.",
+      purpose: "Quotes or product details can help reviewers. This demo lists sample file names only; it does not upload files.",
       render: () => (
         <div className="space-y-3">
           <Button variant="outline" onClick={() => set({ evidence: [...d.evidence, `quote-${d.evidence.length + 1}.pdf`] })}>Attach a file (demo)</Button>
@@ -229,22 +229,22 @@ function NewRequest() {
             </div>
           ) : null}
           <div className="rounded-md border p-3">
-            <p className="font-medium">Expected approvals</p>
+            <p className="font-medium">Who will check this?</p>
             <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-              <li>Budget holder for {d.costCentre || "the chosen cost centre"}</li>
-              {total > 10000 ? <li>Procurement: 3 quotes needed above {fmt(10000)} (demo rule, not yet confirmed)</li> : null}
-              {d.lines.some((l) => l.source === "Non-catalog") ? <li>Buyer reviews non-catalog lines before sourcing</li> : null}
+              <li>The person responsible for {d.costCentre || "the chosen team budget"}</li>
+              {total > 10000 ? <li>The purchasing team may ask for 3 quotes above {fmt(10000)} (sample rule)</li> : null}
+              {d.lines.some((l) => l.source === "Non-catalog") ? <li>The purchasing team will check items you added yourself</li> : null}
             </ul>
           </div>
           <div className="rounded-md border p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="font-medium">Budget</p>
-              <Button size="sm" variant="ghost" onClick={() => setBudgetDown((b) => !b)}>{budgetDown ? "Restore" : "Simulate"} budget service outage</Button>
+              <Button size="sm" variant="ghost" onClick={() => setBudgetDown((b) => !b)}>{budgetDown ? "Restore" : "Try"} budget check demo</Button>
             </div>
             {budgetDown ? (
               <p className="mt-1 flex gap-2 text-warning"><AlertTriangle className="size-4 shrink-0" aria-hidden />Budget check unavailable. You can still submit; the budget holder will check funds before approving.</p>
             ) : (
-              <p className="mt-1 flex gap-2 text-muted-foreground"><Info className="size-4 shrink-0" aria-hidden />Indicative: within remaining budget. Funds are <strong>not reserved</strong> — only Finance can confirm that.</p>
+              <p className="mt-1 flex gap-2 text-muted-foreground"><Info className="size-4 shrink-0" aria-hidden />This looks within budget. Finance has not set the money aside yet.</p>
             )}
           </div>
         </div>
@@ -276,7 +276,7 @@ function NewRequest() {
                 title="Request submitted (demo)"
                 steps={[
                   `The budget holder for ${d.costCentre} is asked to decide, normally within 3 working days.`,
-                  "If approved, a buyer sources or orders it. Nothing has been sent to a supplier yet.",
+                  "If approved, the purchasing team will get quotes or place an order. The vendor has not been contacted yet.",
                   "You'll see status, owner and next step on My requests.",
                 ]}
                 actions={<><Button onClick={() => navigate({ to: "/procurement/requests" })}>View my requests</Button><Button variant="outline" asChild><Link to="/procurement">Back to Home</Link></Button></>}
@@ -289,13 +289,13 @@ function NewRequest() {
             <h2 className="font-semibold">Summary</h2>
             <dl className="mt-3 space-y-2">
               <Row k="Type" v={d.kind ?? "—"} />
-              <Row k="Lines" v={String(d.lines.length)} />
+              <Row k="Items" v={String(d.lines.length)} />
               <Row k="Estimated total" v={`${fmt(total)} (${CCY})`} />
               <Row k="Needed by" v={d.neededBy || "—"} />
               <Row k="Deliver to" v={d.deliverTo || "—"} />
             </dl>
             <div className="mt-4 flex flex-wrap gap-2 border-t pt-3">
-              <Button size="sm" variant="outline" onClick={() => set({ lines: [...d.lines, ...d.lines.map((l) => ({ ...l, id: crypto.randomUUID() }))] })} disabled={!d.lines.length}><Copy className="size-4" aria-hidden />Duplicate lines</Button>
+              <Button size="sm" variant="outline" onClick={() => set({ lines: [...d.lines, ...d.lines.map((l) => ({ ...l, id: crypto.randomUUID() }))] })} disabled={!d.lines.length}><Copy className="size-4" aria-hidden />Copy items</Button>
               <Button size="sm" variant="ghost" onClick={() => { setD({ ...empty, deliverTo: entity.branches[0] }); sessionStorage.removeItem(draftKey); }}>Discard draft</Button>
             </div>
           </aside>
@@ -311,10 +311,10 @@ function Row({ k, v }: { k: string; v: string }) {
 
 function LineEditor({ d, set, currency }: { d: Draft; set: (p: Partial<Draft>) => void; currency: string }) {
   const fmt = (amount: number) => new Intl.NumberFormat("en-IE", { style: "currency", currency }).format(amount);
-  if (!d.lines.length) return <p className="text-sm text-muted-foreground">No lines yet.</p>;
+  if (!d.lines.length) return <p className="text-sm text-muted-foreground">No items added yet.</p>;
   return (
     <div>
-      <h3 className="text-sm font-semibold">Your lines</h3>
+      <h3 className="text-sm font-semibold">Your items</h3>
       <ul className="mt-2 space-y-2">
         {d.lines.map((l) => (
           <li key={l.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">

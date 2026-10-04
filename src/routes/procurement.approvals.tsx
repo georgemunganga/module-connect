@@ -46,15 +46,15 @@ function ApprovalsPage() {
   if (!["manager", "buyer", "proc_admin"].includes(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
-      <PageHeader eyebrow="Approvals" title="Tasks & approvals" description="Ordered by deadline. A breached deadline escalates to a person — nothing is approved automatically." />
-      {role === "manager" ? <div className="mb-4 rounded-lg border bg-surface p-3 text-sm"><label htmlFor="approval-persona" className="font-medium">Acting as demo approver</label><select id="approval-persona" className="ml-3 h-9 max-w-full rounded-md border bg-background px-2" value={approvalActor} onChange={(event) => setApprovalActor(event.target.value)}>{demoApprovalActors(entityId).map((name) => <option key={name}>{name}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Select a named demo person to review their own assigned or delegated task. This switch does not grant production access.</p></div> : null}
+      <PageHeader eyebrow="Approvals" title="Your approvals" description="Start with the earliest due date. If an approval is late, someone will be reminded; it will never approve itself." />
+      {role === "manager" ? <div className="mb-4 rounded-lg border bg-surface p-3 text-sm"><label htmlFor="approval-persona" className="font-medium">View tasks for</label><select id="approval-persona" className="ml-3 h-9 max-w-full rounded-md border bg-background px-2" value={approvalActor} onChange={(event) => setApprovalActor(event.target.value)}>{demoApprovalActors(entityId).map((name) => <option key={name}>{name}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Choose a sample person to see their tasks. This does not change real access.</p></div> : null}
       <nav aria-label="Task views" className="mb-4 flex gap-1 overflow-x-auto border-b">
         {TABS.map((t) => {
           const n = approvals.filter((x) => inTab(x, t)).length;
           return (
             <Link key={t} to="/procurement/approvals" search={{ tab: t }} aria-current={tab === t ? "page" : undefined}
               className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === t ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground"}`}>
-              {t} <span className="ml-1 rounded-full border px-1.5 text-xs">{n}</span>
+              {{ Assigned: "To do", Delegated: "Passed on", Overdue: "Late", Escalated: "Sent on", Completed: "Done" }[t]} <span className="ml-1 rounded-full border px-1.5 text-xs">{n}</span>
             </Link>
           );
         })}
@@ -68,7 +68,7 @@ function ApprovalsPage() {
                 <Link to="/procurement/approvals/$id" params={{ id: t.id }} className="grid gap-2 rounded-lg border bg-surface p-3 hover:border-border-strong sm:grid-cols-[minmax(0,1fr)_auto]">
                   <span className="min-w-0">
                     <span className="block font-medium">{t.subject} <span className="font-mono text-xs text-muted-foreground">{t.recordId}</span></span>
-                    <span className="block text-xs text-muted-foreground">{t.recordType} · requested by {t.requester} · stage: {t.stages.find((x) => x.current)?.name ?? "—"}{t.delegatedFrom ? ` · on behalf of ${t.delegatedFrom.name}` : ""}</span>
+                    <span className="block text-xs text-muted-foreground">{t.recordType} · asked by {t.requester} · waiting for: {t.stages.find((x) => x.current)?.name ?? "—"}{t.delegatedFrom ? ` · on behalf of ${t.delegatedFrom.name}` : ""}</span>
                     <span className={`mt-1 block text-xs font-medium ${s.tone}`}>{s.text}</span>
                   </span>
                   <span className="flex items-center gap-3 sm:flex-col sm:items-end">
@@ -80,7 +80,7 @@ function ApprovalsPage() {
             );
           })}
         </ul>
-      ) : <EmptyState title={`No ${tab.toLowerCase()} tasks`} body="When something needs your decision, it shows up here with its deadline." />}
+      ) : <EmptyState title="Nothing in this view" body="When something needs your decision, it will appear here with a due date." />}
     </AppShell>
   );
 }

@@ -26,6 +26,31 @@ const toneClass: Record<Tone, string> = {
   danger: "bg-danger-soft text-danger border-danger/30",
 };
 
+/** Keep stored workflow values stable while giving people a clearer label. */
+const plainLabels: Record<string, string> = {
+  Proposed: "New",
+  "Under diligence": "Being checked",
+  "More information required": "More details needed",
+  Conditional: "Approved with conditions",
+  Suspended: "On hold",
+  "Pending approval": "Waiting for approval",
+  "Under evaluation": "Being compared",
+  "Award pending": "Waiting for decision",
+  Awarded: "Supplier chosen",
+  "Partially received": "Part delivered",
+  "Fully received": "Delivered",
+  "Partially invoiced": "Part billed",
+  "Fully invoiced": "Fully billed",
+  "Handoff pending": "Sending to Finance",
+  "Handed to AP": "Sent to Finance",
+  "AP rejected": "Returned by Finance",
+  Exception: "Needs review",
+  "Partially paid": "Part paid",
+  Escalated: "Sent to another approver",
+};
+
+export const statusLabel = (status: string) => plainLabels[status] ?? status;
+
 /** Status is never colour-only: every badge carries an icon and a text label. */
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const conf = map[status] ?? { tone: "neutral" as Tone, icon: Clock };
@@ -39,7 +64,7 @@ export function StatusBadge({ status, className }: { status: string; className?:
       )}
     >
       <Icon aria-hidden className="size-3.5 shrink-0" />
-      {status}
+      {statusLabel(status)}
     </span>
   );
 }

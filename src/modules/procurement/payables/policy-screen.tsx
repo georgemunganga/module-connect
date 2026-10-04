@@ -82,8 +82,8 @@ export function ProcurementPolicyScreen() {
       <AppShell>
         <PageHeader
           eyebrow="Procurement"
-          title="Configuration restricted"
-          description="This role cannot view procurement policies."
+          title="Settings unavailable"
+          description="You do not have access to purchasing rules."
         />
       </AppShell>
     );
@@ -293,17 +293,16 @@ export function ProcurementPolicyScreen() {
   return (
     <AppShell>
       <PageHeader
-        eyebrow="Procurement / Configuration"
-        title="Procurement configuration"
-        description="Draft, validate, review and publish versioned rules in configuration demo state for one legal entity. Transaction adapters are not connected. ERP Core owns identity, currencies, tax, workflow and audit infrastructure."
+        eyebrow="Procurement / Settings"
+        title="Purchasing rules"
+        description="Set and review how purchasing works for each company. Changes in this demo stay in your browser and are not connected to live transactions."
       />
       {entityId !== published.entityId && (
         <div
           role="status"
           className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
         >
-          No published Procurement package exists for the selected entity in this demo. Cross-entity
-          fallback is blocked. Switch to Meridian Netherlands to review this sample package.
+          No purchasing rules have been published for this company in the demo. Switch to Meridian Netherlands to see the sample rules.
         </div>
       )}
       <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -323,7 +322,7 @@ export function ProcurementPolicyScreen() {
         <div className="space-y-5">
           <Panel title={`${section} · v${draft.version} ${candidate?.status ?? "unsaved draft"}`}>
             <p className="mb-4 text-sm text-muted-foreground">
-              Scope: {draft.entityId ?? published.entityId} · {draft.category ?? "All"} categories ·{" "}
+              Company: {draft.entityId ?? published.entityId} · {draft.category ?? "All"} categories ·{" "}
               {draft.currency}. Values shown here are illustrative.
             </p>
             {section === "Methods & categories" && (

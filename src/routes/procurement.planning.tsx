@@ -52,7 +52,7 @@ function PlanningPage() {
   const plan = search.plan ? visiblePlans.find((candidate) => candidate.id === search.plan) : visiblePlans[0];
   const setS = (p: Partial<Search>) => navigate({ search: (s: Search) => ({ ...s, ...p }), replace: true });
 
-  if (!PLANNING_ENABLED) return <AppShell><EmptyState title="Planning isn't switched on" body="A Procurement admin can turn it on in Configuration → Process design." /></AppShell>;
+  if (!PLANNING_ENABLED) return <AppShell><EmptyState title="Purchase planning is off" body="A Procurement admin can turn it on in Settings." /></AppShell>;
   if (!["manager", "buyer", "proc_admin", "auditor"].includes(role) || !plan) return <AppShell><RestrictedState /></AppShell>;
 
   const current = plan.versions[0];
@@ -85,17 +85,17 @@ function PlanningPage() {
 
   return (
     <AppShell>
-      <PageHeader eyebrow={`Planning · ${plan.period}`} title={`${plan.department} plan`} description={`${plan.entity} · version ${current.version}`} primaryAction={primary} />
+      <PageHeader eyebrow={`Purchase plans · ${plan.period}`} title={`${plan.department} plan`} description={`${plan.entity} · version ${current.version}`} primaryAction={primary} />
 
       <p role="note" className="mb-4 flex gap-2 rounded-md border border-info/40 bg-info-soft p-3 text-sm">
-        <Info className="size-4 shrink-0" aria-hidden />Planning estimate, not a budget reservation. An approved plan can start a request but never issues an order itself.
+        <Info className="size-4 shrink-0" aria-hidden />This is an estimate. It does not set money aside. Once approved, you can create a purchase request from it.
       </p>
       {role === "proc_admin" ? <Button size="sm" variant="outline" className="mb-4" onClick={() => { if (window.confirm("Reset all Procurement planning demo changes?")) { resetPlans(); setVersionShown(null); setNotice("Planning demo reset."); } }}>Reset planning demo</Button> : null}
       {notice ? <p role="status" className="mb-4 rounded-md border bg-surface p-3 text-sm">{notice}</p> : null}
       {pending ? (
         <section className="mb-4 rounded-lg border bg-surface p-4 text-sm">
           <h2 className="font-semibold">{pending} {plan.id}?</h2>
-          <p className="mt-1 text-muted-foreground">Current state: {plan.state}. This records a demo workflow decision and retains the revision history.</p>
+          <p className="mt-1 text-muted-foreground">Current status: {plan.state}. Your decision will be saved in the history.</p>
           <Label htmlFor="plan-reason" className="mt-3 block">Reason {pending === "Revised" || pending === "Closed" ? "(required)" : "(optional)"}</Label>
           <Textarea id="plan-reason" className="mt-1" value={reason} onChange={(event) => setReason(event.target.value)} />
           <div className="mt-3 flex gap-2"><Button onClick={confirm} disabled={(["Revised", "Closed"].includes(pending) && !reason.trim())}>Confirm {pending.toLowerCase()}</Button><Button variant="outline" onClick={() => setPending(null)}>Cancel</Button></div>
@@ -112,7 +112,7 @@ function PlanningPage() {
         <div role="tablist" aria-label="Review view" className="inline-flex rounded-md border p-1">
           {(["department", "procurement"] as const).map((v) => (
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className={`rounded px-3 py-1.5 text-sm ${view === v ? "bg-primary-soft font-medium text-primary" : "text-muted-foreground"}`}>
-              {v === "department" ? "Department view" : "Procurement review"}
+              {v === "department" ? "My department" : "Buyer review"}
             </button>
           ))}
         </div>
@@ -127,7 +127,7 @@ function PlanningPage() {
       {transitions.length > 1 ? <div className="mb-4 flex flex-wrap gap-2">{transitions.slice(1).map((next) => <Button key={next} variant="outline" onClick={() => act(next)}>{next === "Revised" ? "Start revision" : `${next} plan`}</Button>)}</div> : null}
 
       <dl className="mb-4 grid gap-3 sm:grid-cols-3">
-        <Stat k={`Planned total (${ccy})`} v={money(total, ccy)} hint="Excludes cancelled lines" />
+        <Stat k={`Planned total (${ccy})`} v={money(total, ccy)} hint="Excludes cancelled items" />
         <Stat k={`Requested so far (${ccy})`} v={money(requested, ccy)} hint={`${live.filter((l) => l.linkedRequest).length} linked request(s)`} />
         <Stat k={`Remaining to request (${ccy})`} v={money(total - requested, ccy)} hint="Estimate only" />
       </dl>
@@ -141,7 +141,7 @@ function PlanningPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <section aria-labelledby="lines-h" className="min-w-0">
           <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
-            <h2 id="lines-h" className="text-sm font-semibold">Plan lines</h2>
+            <h2 id="lines-h" className="text-sm font-semibold">Things to buy</h2>
             {editable ? <Button size="sm" variant="outline" onClick={() => { try { const id = addPlanLine(plan.id, role); setEditing({ id, requirement: "", category: "", estimate: 0, currency: ccy, expected: "", funding: "", method: "Catalog", owner: plan.owner, status: "Planned" }); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not add a line."); } }}>Add requirement</Button> : null}
             <div className="flex gap-2">
               <label className="sr-only" htmlFor="fs">Status</label>
@@ -157,7 +157,7 @@ function PlanningPage() {
           <div className="overflow-x-auto rounded-lg border bg-surface" style={{ contain: "paint" }}>
             <table className="w-full text-sm">
               <thead className="border-b text-left text-xs text-muted-foreground">
-                <tr><th className="p-3">Requirement</th><th className="p-3">Estimate</th><th className="p-3">Expected</th><th className="p-3">Method</th><th className="p-3">Funding</th><th className="p-3">{view === "procurement" ? "Variance / request" : "Owner"}</th><th className="p-3">Status / action</th></tr>
+                <tr><th className="p-3">What is needed</th><th className="p-3">Estimated cost</th><th className="p-3">Needed by</th><th className="p-3">How to buy</th><th className="p-3">Funding</th><th className="p-3">{view === "procurement" ? "Difference / request" : "Owner"}</th><th className="p-3">Status / action</th></tr>
               </thead>
               <tbody className="divide-y">
                 {lines.map((l) => (
@@ -180,9 +180,9 @@ function PlanningPage() {
                 ))}
               </tbody>
             </table>
-            {!lines.length ? <p className="p-4 text-sm text-muted-foreground">No lines match these filters.</p> : null}
+            {!lines.length ? <p className="p-4 text-sm text-muted-foreground">No items match these filters.</p> : null}
           </div>
-          {editing && editable ? <LineEditor line={editing} setLine={setEditing} onCancel={() => setEditing(null)} onSave={() => { try { updatePlanLine(plan.id, editing.id, editing, role); setEditing(null); setNotice("Plan line saved in the current version."); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save line."); } }} /> : null}
+          {editing && editable ? <LineEditor line={editing} setLine={setEditing} onCancel={() => setEditing(null)} onSave={() => { try { updatePlanLine(plan.id, editing.id, editing, role); setEditing(null); setNotice("Item saved in the current plan."); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save item."); } }} /> : null}
         </section>
 
         <aside aria-labelledby="ver-h" className="h-fit rounded-lg border bg-surface p-4 text-sm">
