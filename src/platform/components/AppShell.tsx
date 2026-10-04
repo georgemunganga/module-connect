@@ -9,6 +9,8 @@ import {
   LogOut,
   Menu,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Sun,
   UserRound,
@@ -73,13 +75,14 @@ function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void 
       activeProps={{ className: "bg-rail-active text-rail-foreground font-medium" }}
       activeOptions={{ exact: true }}
       className="block rounded-md px-3 py-1.5 text-sm text-rail-muted transition-colors hover:bg-rail-active hover:text-rail-foreground"
+      title={item.label}
     >
       {item.label}
     </Link>
   );
 }
 
-function Section({ section, onNavigate }: { section: NavSection; onNavigate?: () => void }) {
+function Section({ section, onNavigate, collapsed = false }: { section: NavSection; onNavigate?: () => void; collapsed?: boolean }) {
   const Icon = section.icon;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const childActive =
@@ -97,11 +100,56 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate?: ()
         onClick={onNavigate}
         activeProps={{ className: "bg-rail-active text-rail-foreground" }}
         activeOptions={{ exact: section.to === "/" || section.to === "/procurement", includeSearch: false }}
-        className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-rail-muted transition-colors hover:bg-rail-active hover:text-rail-foreground"
+        className={cn(
+          "flex items-center gap-2.5 rounded-md py-2 text-sm font-medium text-rail-muted transition-colors hover:bg-rail-active hover:text-rail-foreground",
+          collapsed ? "justify-center px-2" : "px-2.5",
+        )}
+        title={section.label}
       >
         <Icon className="size-4 shrink-0" aria-hidden />
-        {section.label}
+        {collapsed ? <span className="sr-only">{section.label}</span> : section.label}
       </Link>
+    );
+  }
+
+  if (collapsed) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={section.label}
+            title={section.label}
+            className={cn(
+              "mx-auto flex size-10 items-center justify-center rounded-md text-rail-muted transition-colors hover:bg-rail-active hover:text-rail-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-active",
+              childActive && "bg-rail-active text-rail-foreground",
+            )}
+          >
+            <Icon className="size-4" aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="start" sideOffset={10} className="w-72 p-2">
+          <DropdownMenuLabel>{section.label}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <div className="max-h-[70vh] overflow-y-auto">
+            {section.items?.map((item) => (
+              <DropdownMenuItem key={item.to + item.label} asChild>
+                <Link to={item.to} params={item.params as never} onClick={onNavigate}>{item.label}</Link>
+              </DropdownMenuItem>
+            ))}
+            {section.groups?.map((group) => (
+              <div key={group.label}>
+                <DropdownMenuLabel className="text-xs text-muted-foreground">{group.label}</DropdownMenuLabel>
+                {group.items.map((item) => (
+                  <DropdownMenuItem key={item.to + item.label} asChild>
+                    <Link to={item.to} params={item.params as never} onClick={onNavigate}>{item.label}</Link>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            ))}
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   }
 
@@ -134,7 +182,7 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate?: ()
   );
 }
 
-function RailContent({ onNavigate }: { onNavigate?: () => void }) {
+function RailContent({ onNavigate, collapsed = false, onToggleCollapsed }: { onNavigate?: () => void; collapsed?: boolean; onToggleCollapsed?: () => void }) {
   const { role, moduleId } = useApp();
   const mod = moduleRegistry[moduleId].def;
   const sections = useVisibleSections(mod, role);
@@ -143,17 +191,36 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="px-3 py-4">
-        <p className="px-2 text-xs font-semibold uppercase tracking-wide text-rail-muted">Module</p>
-        <p className="px-2 text-sm font-semibold text-rail-foreground">{mod.name}</p>
+      <div className={cn("flex items-center gap-2 px-3 py-4", collapsed ? "flex-col px-2" : "justify-between")}>
+        {collapsed ? (
+          <span className="flex size-9 items-center justify-center rounded-md bg-rail-active text-sm font-semibold" title={mod.name}>{mod.shortName}</span>
+        ) : (
+          <div>
+            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-rail-muted">Module</p>
+            <p className="px-2 text-sm font-semibold text-rail-foreground">{mod.name}</p>
+          </div>
+        )}
+        {onToggleCollapsed ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="hidden size-8 text-rail-muted hover:bg-rail-active hover:text-rail-foreground lg:inline-flex"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? "Expand side menu" : "Collapse side menu"}
+            title={collapsed ? "Expand side menu" : "Collapse side menu"}
+          >
+            {collapsed ? <PanelLeftOpen className="size-4" aria-hidden /> : <PanelLeftClose className="size-4" aria-hidden />}
+          </Button>
+        ) : null}
       </div>
-      <nav aria-label="Main" className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-        {main.map((s) => <Section key={s.id} section={s} onNavigate={onNavigate} />)}
+      <nav aria-label="Main" className={cn("flex-1 space-y-1 overflow-y-auto pb-4", collapsed ? "px-2" : "px-3")}>
+        {main.map((s) => <Section key={s.id} section={s} onNavigate={onNavigate} collapsed={collapsed} />)}
       </nav>
       {config ? (
-        <div className="border-t border-rail-active px-3 py-3">
-          <Section section={config} onNavigate={onNavigate} />
-          <p className="px-2.5 pt-1 text-[11px] text-rail-muted">
+        <div className={cn("border-t border-rail-active py-3", collapsed ? "px-2" : "px-3")}>
+          <Section section={config} onNavigate={onNavigate} collapsed={collapsed} />
+          <p className={cn("px-2.5 pt-1 text-[11px] text-rail-muted", collapsed && "sr-only")}>
             All setup and admin lives here.
           </p>
         </div>
@@ -215,8 +282,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { role, setRole, entityId, setEntityId, branch, setBranch, theme, toggleTheme, moduleId, setModuleId } = useApp();
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const entity = entities.find((e) => e.id === entityId)!;
   const unread = notifications.filter((n) => n.unread).length;
+
+  useEffect(() => {
+    setRailCollapsed(window.localStorage.getItem("erp.procurement.rail.collapsed") === "true");
+  }, []);
+
+  const toggleRail = () => {
+    setRailCollapsed((current) => {
+      window.localStorage.setItem("erp.procurement.rail.collapsed", String(!current));
+      return !current;
+    });
+  };
 
   const switchModule = (id: ModuleId) => {
     if (id === "hrm" && window.location.hostname === "erp.amizopower.co.zm") {
@@ -249,7 +329,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <header className="sticky top-0 z-40 border-b bg-surface">
         <div className="flex h-14 items-center gap-2 px-3">
-          <Sheet>
+          <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
                 <Menu className="size-5" aria-hidden />
@@ -259,7 +339,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <SheetHeader className="sr-only">
                 <SheetTitle>Navigation</SheetTitle>
               </SheetHeader>
-              <RailContent />
+              <RailContent onNavigate={() => setNavigationOpen(false)} />
             </SheetContent>
           </Sheet>
 
@@ -347,7 +427,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button
               variant="outline"
               size="sm"
-              className="gap-2 text-muted-foreground"
+              className="gap-2 text-muted-foreground max-sm:w-11 max-sm:px-0"
               onClick={() => setPaletteOpen(true)}
             >
               <Search className="size-4" aria-hidden />
@@ -356,9 +436,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Button>
 
             <Button asChild variant="ghost" size="icon" className="relative" aria-label="Tasks and approvals">
-              <Link to="/approvals">
+              <Link to={moduleId === "procurement" ? "/procurement/approvals" : "/approvals"}>
                 <CheckSquare className="size-5" aria-hidden />
-                <span className="absolute right-1 top-1 rounded-full bg-warning px-1 text-[10px] font-semibold text-warning-foreground">3</span>
               </Link>
             </Button>
 
@@ -385,13 +464,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button variant="ghost" size="icon" aria-label="Help" asChild>
+            <Button variant="ghost" size="icon" className="hidden sm:inline-flex" aria-label="Help" asChild>
               <Link to="/help">
                 <CircleHelp className="size-5" aria-hidden />
               </Link>
             </Button>
 
-            <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>
+            <Button variant="ghost" size="icon" className="hidden sm:inline-flex" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>
               {theme === "light" ? <Moon className="size-5" aria-hidden /> : <Sun className="size-5" aria-hidden />}
             </Button>
 
@@ -415,6 +494,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenuItem asChild>
                   <Link to="/setup">Setup guide</Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/help">Help</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={toggleTheme}>
+                  {theme === "light" ? <Moon className="size-4" aria-hidden /> : <Sun className="size-4" aria-hidden />}
+                  Switch to {theme === "light" ? "dark" : "light"} mode
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <LogOut className="size-4" aria-hidden /> Sign out (mock)
@@ -427,8 +513,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className="flex">
-        <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-64 shrink-0 bg-rail text-rail-foreground lg:block">
-          <RailContent />
+        <aside className={cn("sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 bg-rail text-rail-foreground transition-[width] duration-200 lg:block", railCollapsed ? "w-16" : "w-64")}>
+          <RailContent collapsed={railCollapsed} onToggleCollapsed={toggleRail} />
         </aside>
         <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-6xl space-y-6">{children}</div>
