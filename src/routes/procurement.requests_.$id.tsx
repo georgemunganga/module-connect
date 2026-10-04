@@ -55,6 +55,7 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
   const events = r.timeline;
   const status = r.status;
   const [notice, setNotice] = useState<string | null>(null);
+  const [section, setSection] = useState<"Items" | "Details" | "History">("Items");
 
   const money = new Intl.NumberFormat("en", { style: "currency", currency: r.currency, maximumFractionDigits: 0 });
   const isBuyer = BUYERS.includes(role);
@@ -89,99 +90,76 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
       status={status}
       owner={r.owner}
       nextAction={`${r.nextAction} · due ${r.dueDate}`}
+      primaryAction={primary ? <Button onClick={primary.run}>{primary.label}</Button> : undefined}
       summary={[
-        { label: "Buying progress", value: progress },
-        { label: "Preferred vendor", value: r.supplierId ? "Suggested; check before ordering" : "Not selected" },
         { label: "Total requested", value: money.format(r.amount) },
         { label: "Needed by", value: r.neededBy },
         { label: "Deliver to", value: meta?.deliverTo ?? "Not recorded on seed request" },
-        { label: "Cost centre", value: meta?.costCentre ?? "Not recorded on seed request" },
-        { label: "Project", value: meta?.project || "Not linked" },
-        { label: "Version", value: meta?.versions.length ? `v${meta.versions[0].version}` : "Draft" },
-        { label: "Estimated budget", value: meta?.budgetBalance ? `${money.format(meta.budgetBalance.available)} — Finance has not set this aside` : "Not checked" },
+        { label: "Buying progress", value: progress },
       ]}
-      timeline={<StatusTimeline title="History" events={events} />}
     >
-      <section aria-labelledby="actions-h" className="rounded-lg border bg-surface p-4">
-        <h2 id="actions-h" className="text-sm font-semibold">Actions</h2>
-        <ul className="mt-3 space-y-2 text-sm">
-          {actions.map((a) => (
-            <li key={a.label} className="flex flex-wrap items-center justify-between gap-2">
-              <span className="min-w-0"><span className="font-medium">{a.label}</span><span className="block text-xs text-muted-foreground">{a.why}</span></span>
-              <Button size="sm" variant={a === primary ? "default" : "outline"} disabled={!a.enabled} onClick={a.run}>{a.label}</Button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
       {notice ? <p role="alert" className="flex gap-2 rounded-md border border-danger/40 bg-danger-soft p-3 text-sm"><AlertTriangle className="size-4 shrink-0 text-danger" aria-hidden />{notice}</p> : null}
+
+      <div role="tablist" aria-label="Purchase request sections" className="flex gap-1 overflow-x-auto border-b">
+        {(["Items", "Details", "History"] as const).map((name) => <button key={name} type="button" role="tab" aria-selected={section === name} onClick={() => setSection(name)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium ${section === name ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{name}{name === "Items" ? ` (${lines.length})` : ""}</button>)}
+      </div>
+
+      {section === "Items" ? <div role="tabpanel" aria-label="Items" className="space-y-6">
 
       {isRequester && ["Draft", "Returned"].includes(status) && meta ? <CorrectionEditor request={r} meta={meta} onResult={setNotice} /> : null}
 
-      {meta?.evidence?.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Supporting files</h2><ul className="mt-2 list-disc pl-5 text-sm">{meta.evidence.map((reference) => <li key={reference}>{reference} · name only; no file uploaded in this demo</li>)}</ul></section> : null}
-
-      <section aria-labelledby="lines-h" className="rounded-lg border bg-surface p-4">
-        <h2 id="lines-h" className="text-sm font-semibold">Items</h2>
-        <p className="text-xs text-muted-foreground">For each item, see how many were approved, ordered and delivered.</p>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[56rem] text-sm">
-            <thead className="border-b text-left text-xs text-muted-foreground">
-              <tr><th className="py-2 pr-3">Item</th><th className="py-2 pr-3">Approval</th><th className="py-2 pr-3 text-right">Asked for</th><th className="py-2 pr-3 text-right">Approved</th><th className="py-2 pr-3 text-right">Being bought</th><th className="py-2 pr-3 text-right">Ordered</th><th className="py-2 pr-3 text-right">Delivered</th><th className="py-2 pr-3 text-right">Left to buy</th><th className="py-2 pr-3">How to buy</th><th className="py-2">Next step</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {lines.map((l) => (
-                <tr key={l.id} className="align-top">
-                  <td className="py-2 pr-3">
-                    <span className="font-medium">{l.description}</span>
-                    <span className="block text-xs text-muted-foreground">{money.format(l.unitPrice)} each · {money.format(l.qty * l.unitPrice)}</span>
-                    {l.splitNote ? <span className="block text-xs">{l.splitNote}</span> : null}
-                    {l.cancelledQty ? <span className="block text-xs text-muted-foreground">{l.cancelledQty} cancelled (remainder)</span> : null}
-                    {l.related.length ? <span className="mt-1 flex flex-wrap gap-1">{l.related.map((x) => x.kind === "RFQ" ? <Link key={x.ref} to="/procurement/sourcing/$id" params={{ id: x.ref }} className="rounded border px-1.5 text-xs text-primary underline">RFQ {x.ref}</Link> : x.kind === "PO" && !x.ref.includes("DRAFT") ? <Link key={x.ref} to="/procurement/orders/$id" params={{ id: x.ref }} className="rounded border px-1.5 text-xs text-primary underline">PO {x.ref}</Link> : x.kind === "Receipt" && receipts.some((receipt) => receipt.id === x.ref) ? <Link key={x.ref} to="/procurement/receiving/$id" params={{ id: receipts.find((receipt) => receipt.id === x.ref)!.poId }} className="rounded border px-1.5 text-xs text-primary underline">Receipt {x.ref}</Link> : <span key={x.ref} className="rounded border px-1.5 text-xs">{x.kind} {x.ref} {x.ref.includes("DRAFT") ? "· draft" : ""}</span>)}</span> : null}
-                    {l.lockedBy ? <span className="mt-1 flex items-center gap-1 text-xs text-warning"><AlertTriangle className="size-3" aria-hidden />{l.lockedBy} is converting this line</span> : null}
-                  </td>
-                  <td className="py-2 pr-3"><StatusBadge status={l.approval} /></td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{l.qty}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{l.approvedQty}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{l.allocatedQty}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{l.orderedQty}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{l.receivedQty}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{remaining(l)}<span className="block text-xs text-muted-foreground">{money.format(remaining(l) * l.unitPrice)}</span></td>
-                  <td className="py-2 pr-3">
-                    {isBuyer ? (
-                      <>
-                        <Label htmlFor={`rt-${l.id}`} className="sr-only">Route for {l.description}</Label>
-                        <select id={`rt-${l.id}`} className="h-8 rounded-md border bg-background px-2 text-xs" value={l.route}
-                          disabled={status !== "Approved" || l.approval !== "Approved" || remaining(l) === 0} onChange={(e) => updateLine(l.id, { route: e.target.value as LineRoute }, `Line route selected: ${e.target.value}`)}>
-                          <option value="Unassigned" disabled>{routeLabel.Unassigned}</option>{ROUTES.map((x) => <option key={x} value={x}>{routeLabel[x]}</option>)}
-                        </select>
-                        <Label htmlFor={`supplier-${l.id}`} className="sr-only">Supplier for {l.description}</Label>
-                        <select id={`supplier-${l.id}`} className="mt-1 h-8 max-w-40 rounded-md border bg-background px-2 text-xs" value={l.preferredSupplier ?? ""} disabled={status !== "Approved" || l.approval !== "Approved" || l.orderedQty > 0 || l.allocatedQty > 0} onChange={(event) => updateLine(l.id, { preferredSupplier: event.target.value || undefined }, `Supplier preference set for ${l.description}: ${event.target.value || "none"}`)}><option value="">Choose active supplier</option>{suppliers.filter((supplier) => supplier.status === "Active" && sameEntity(supplier.country, entityId)).map((supplier) => <option key={supplier.id}>{supplier.name}</option>)}</select>
-                      </>
-                    ) : routeLabel[l.route]}
-                  </td>
-                  <td className="py-2">
-                    {isBuyer ? (
-                      <span className="flex flex-col gap-1">
-                        {l.route === "RFQ / tender" && status === "Approved" && l.approval === "Approved" && !l.lockedBy && remaining(l) > 0 ? <Button size="sm" variant="outline" asChild><Link to="/procurement/sourcing/new" search={{ requestId: r.id, lineId: l.id }}>Ask for quotes</Link></Button> : <Button size="sm" variant="outline" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty <= 0 || !["Direct PO", "Contract / framework"].includes(l.route)} onClick={() => convert(l, false)}>{l.route === "Contract / framework" ? "Order from contract" : "Start order"}</Button>}
-                        {l.route !== "RFQ / tender" ? <Button size="sm" variant="ghost" disabled={status !== "Approved" || l.approval !== "Approved" || l.lockedBy !== undefined || l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty < 2 || !["Direct PO", "Contract / framework"].includes(l.route)} onClick={() => convert(l, true)}>Process half</Button> : null}
-                      </span>
-                    ) : <span className="text-xs text-muted-foreground">Buyer only</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <section aria-labelledby="lines-h" className="space-y-3">
+        <h2 id="lines-h" className="text-base font-semibold">Items in this request</h2>
+        {lines.map((l) => (
+          <article key={l.id} className="rounded-lg border bg-surface p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">{l.description}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{money.format(l.unitPrice)} each · {money.format(l.qty * l.unitPrice)} estimated total</p>
+              </div>
+              <StatusBadge status={l.approval} />
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-4 border-t pt-4 text-sm sm:grid-cols-4">
+              <div><dt className="text-muted-foreground">Requested</dt><dd className="mt-1 text-lg font-semibold">{l.qty}</dd></div>
+              <div><dt className="text-muted-foreground">Approved</dt><dd className="mt-1 text-lg font-semibold">{l.approvedQty}</dd></div>
+              <div><dt className="text-muted-foreground">Ordered</dt><dd className="mt-1 text-lg font-semibold">{l.orderedQty}</dd></div>
+              <div><dt className="text-muted-foreground">Left to buy</dt><dd className="mt-1 text-lg font-semibold">{remaining(l)}</dd></div>
+            </dl>
+            {isBuyer ? <div className="mt-4 flex flex-wrap items-end gap-3 border-t pt-4">
+              <div><Label htmlFor={`rt-${l.id}`}>How to buy</Label><select id={`rt-${l.id}`} className="mt-1 h-9 rounded-md border bg-background px-3 text-sm" value={l.route} disabled={status !== "Approved" || l.approval !== "Approved" || remaining(l) === 0} onChange={(e) => updateLine(l.id, { route: e.target.value as LineRoute }, `Line route selected: ${e.target.value}`)}><option value="Unassigned" disabled>{routeLabel.Unassigned}</option>{ROUTES.map((x) => <option key={x} value={x}>{routeLabel[x]}</option>)}</select></div>
+              <div><Label htmlFor={`supplier-${l.id}`}>Preferred vendor</Label><select id={`supplier-${l.id}`} className="mt-1 h-9 max-w-52 rounded-md border bg-background px-3 text-sm" value={l.preferredSupplier ?? ""} disabled={status !== "Approved" || l.approval !== "Approved" || l.orderedQty > 0 || l.allocatedQty > 0} onChange={(event) => updateLine(l.id, { preferredSupplier: event.target.value || undefined }, `Supplier preference set for ${l.description}: ${event.target.value || "none"}`)}><option value="">Choose approved vendor</option>{suppliers.filter((supplier) => supplier.status === "Active" && sameEntity(supplier.country, entityId)).map((supplier) => <option key={supplier.id}>{supplier.name}</option>)}</select></div>
+              {l.route === "RFQ / tender" && status === "Approved" && l.approval === "Approved" && !l.lockedBy && remaining(l) > 0 ? <Button asChild><Link to="/procurement/sourcing/new" search={{ requestId: r.id, lineId: l.id }}>Ask for quotes</Link></Button> : ["Direct PO", "Contract / framework"].includes(l.route) && status === "Approved" && l.approval === "Approved" && !l.lockedBy && remaining(l) > 0 ? <Button onClick={() => convert(l, false)}>{l.route === "Contract / framework" ? "Order from contract" : "Start order"}</Button> : null}
+              {l.route !== "RFQ / tender" && ["Direct PO", "Contract / framework"].includes(l.route) && status === "Approved" && l.approval === "Approved" && !l.lockedBy && l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty >= 2 ? <Button variant="outline" onClick={() => convert(l, true)}>Buy part of this</Button> : null}
+            </div> : <p className="mt-4 border-t pt-3 text-sm text-muted-foreground">Buying route: {routeLabel[l.route]}</p>}
+            <details className="mt-4 rounded-md bg-surface-muted px-3 py-2 text-sm">
+              <summary className="cursor-pointer font-medium">See delivery and linked records</summary>
+              <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><div><dt className="text-muted-foreground">Being bought</dt><dd>{l.allocatedQty}</dd></div><div><dt className="text-muted-foreground">Delivered</dt><dd>{l.receivedQty}</dd></div><div><dt className="text-muted-foreground">Cancelled</dt><dd>{l.cancelledQty}</dd></div><div><dt className="text-muted-foreground">Value left to buy</dt><dd>{money.format(remaining(l) * l.unitPrice)}</dd></div></dl>
+              {l.splitNote ? <p className="mt-2">{l.splitNote}</p> : null}
+              {l.lockedBy ? <p className="mt-2 text-warning">{l.lockedBy} is working on this item</p> : null}
+              {l.related.length ? <div className="mt-3 flex flex-wrap gap-2">{l.related.map((x) => x.kind === "RFQ" ? <Link key={x.ref} to="/procurement/sourcing/$id" params={{ id: x.ref }} className="text-primary underline">Quote request {x.ref}</Link> : x.kind === "PO" && !x.ref.includes("DRAFT") ? <Link key={x.ref} to="/procurement/orders/$id" params={{ id: x.ref }} className="text-primary underline">Order {x.ref}</Link> : x.kind === "Receipt" && receipts.some((receipt) => receipt.id === x.ref) ? <Link key={x.ref} to="/procurement/receiving/$id" params={{ id: receipts.find((receipt) => receipt.id === x.ref)!.poId }} className="text-primary underline">Delivery {x.ref}</Link> : <span key={x.ref}>{x.kind} {x.ref} {x.ref.includes("DRAFT") ? "· draft" : ""}</span>)}</div> : <p className="mt-2 text-muted-foreground">No linked quotes, orders or deliveries yet.</p>}
+            </details>
+          </article>
+        ))}
       </section>
 
-      {meta?.versions.length ? (
-        <section className="rounded-lg border bg-surface p-4 text-sm">
-          <h2 className="font-semibold">Versions</h2>
-          <ul className="mt-2 space-y-2">{meta.versions.map((v) => <li key={v.version}><span className="font-medium">v{v.version} · {v.note}</span> <span className="text-xs text-muted-foreground">— {v.by}, {v.date}</span>{v.snapshot ? <span className="block text-xs text-muted-foreground">{v.snapshot.title} · {v.snapshot.lines.map((line) => `${line.qty} × ${line.description}`).join("; ")} · {v.snapshot.costCentre}</span> : null}</li>)}</ul>
-        </section>
-      ) : null}
-
       {isApprover && ["Submitted", "In review"].includes(status) && taskForRequest ? <section className="rounded-lg border bg-surface p-4 text-sm"><h2 className="font-semibold">Approval decision</h2><p className="mt-1 text-muted-foreground">Review the current stage, budget result and policy blockers before deciding.</p><Button className="mt-3" asChild><Link to="/procurement/approvals/$id" params={{ id: taskForRequest.id }}>Open approval task</Link></Button></section> : null}
+      </div> : null}
+
+      {section === "Details" ? <section role="tabpanel" aria-label="Details" className="rounded-lg border bg-surface p-5">
+        <h2 className="text-base font-semibold">More about this request</h2>
+        <dl className="mt-4 grid gap-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <div><dt className="text-muted-foreground">Requested by</dt><dd className="mt-1 font-medium">{r.requester}</dd></div>
+          <div><dt className="text-muted-foreground">Department</dt><dd className="mt-1 font-medium">{r.department}</dd></div>
+          <div><dt className="text-muted-foreground">Preferred vendor</dt><dd className="mt-1 font-medium">{r.supplierId ? "Suggested; check before ordering" : "Not selected"}</dd></div>
+          <div><dt className="text-muted-foreground">Cost centre</dt><dd className="mt-1 font-medium">{meta?.costCentre ?? "Not recorded"}</dd></div>
+          <div><dt className="text-muted-foreground">Project</dt><dd className="mt-1 font-medium">{meta?.project || "Not linked"}</dd></div>
+          <div><dt className="text-muted-foreground">Budget check</dt><dd className="mt-1 font-medium">{meta?.budgetBalance ? `${money.format(meta.budgetBalance.available)} available; Finance has not set this aside` : "Not checked"}</dd></div>
+        </dl>
+        {meta?.evidence?.length ? <div className="mt-6 border-t pt-4"><h3 className="font-semibold">Supporting files</h3><ul className="mt-2 list-disc pl-5 text-sm">{meta.evidence.map((reference) => <li key={reference}>{reference} · name only; no file uploaded in this demo</li>)}</ul></div> : null}
+        {meta?.versions.length ? <div className="mt-6 border-t pt-4"><h3 className="font-semibold">Changes to this request</h3><ul className="mt-2 space-y-2 text-sm">{meta.versions.map((v) => <li key={v.version}><span className="font-medium">Version {v.version} · {v.note}</span><span className="block text-muted-foreground">{v.by} · {v.date}</span></li>)}</ul></div> : null}
+      </section> : null}
+
+      {section === "History" ? <div role="tabpanel" aria-label="History" className="rounded-lg border bg-surface p-5"><StatusTimeline title="History" events={events} /></div> : null}
     </RecordDetail>
   );
 }

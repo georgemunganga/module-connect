@@ -23,7 +23,7 @@ export const Route = createFileRoute("/procurement/suppliers_/$id")({
   component: SupplierProfile,
 });
 
-const tabs = ["Overview", "Addresses & contacts", "Categories", "Required checks", "Performance", "Documents", "Orders & bills", "Activity"] as const;
+const tabs = ["Overview", "Contacts", "Checks & documents", "Performance", "Orders & bills", "Activity"] as const;
 
 function SupplierProfile() {
   const { id } = Route.useParams();
@@ -44,20 +44,20 @@ function SupplierProfile() {
   const missingEvidence = s.qualifications.filter((q) => q.status === "Missing" || q.status === "Expired" || Boolean(q.validTo && q.validTo < new Date().toISOString().slice(0, 10))).map((q) => q.name);
   const financeOk = s.bank?.verification.state === "Approved";
   const procOk = s.procurementDecision.state === "Approved";
-  const activationBlockers = [...missingEvidence.map((m) => `${m} missing`), s.duplicates?.length && s.duplicateReview?.state !== "Cleared" && "Unresolved duplicate review", !procOk && "Procurement approval", !financeOk && "Finance verification of payment details"].filter(Boolean) as string[];
+  const activationBlockers = [...missingEvidence.map((m) => `${m} missing`), s.duplicates?.length && s.duplicateReview?.state !== "Cleared" && "Check possible duplicate vendors", !procOk && "Buying team approval needed", !financeOk && "Finance must check payment details"].filter(Boolean) as string[];
 
   const primary = readOnly ? undefined
-    : s.status === "Active" && canDecide ? <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setSuspending(true)}>Suspend supplier</Button><Button variant="outline" onClick={() => setDeactivating(true)}>Deactivate vendor</Button></div>
+    : s.status === "Active" && canDecide ? <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setSuspending(true)}>Put on hold</Button><Button variant="outline" onClick={() => setDeactivating(true)}>Deactivate vendor</Button></div>
     : ["Conditional", "Under diligence", "More information required"].includes(s.status) && canDecide ? (
       <Button disabled={activationBlockers.length > 0} title={activationBlockers.length ? `Blocked: ${activationBlockers.join(", ")}` : undefined}
         onClick={() => setS({ ...s, status: "Active", nextAction: "Annual review", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString().slice(0, 16).replace("T", " "), actor: "You (demo)", event: "Activated", before: s.status, after: "Active" }, ...s.timeline] })}>
-        Activate supplier
+        Activate vendor
       </Button>
     ) : undefined;
 
   return (
     <AppShell>
-      <PageHeader eyebrow={`Supplier · review v${s.reviewVersion}`} title={s.name} description={`${s.legalName} · ${s.country} · ${s.registration}`} primaryAction={primary} />
+      <PageHeader eyebrow="Vendor" title={s.name} description={`${s.legalName} · ${s.country} · ${s.registration}`} primaryAction={primary} />
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <StatusBadge status={s.status} />
         <span>Owner <strong>{s.owner}</strong></span>
@@ -79,8 +79,22 @@ function SupplierProfile() {
       <div role="tabpanel" aria-label={tab}>
         {tab === "Overview" ? (
           <div className="grid gap-4 lg:grid-cols-2">
-            <DecisionCard title="Purchasing team approval" d={s.procurementDecision} />
-            <DecisionCard title="Finance check of payment details" d={s.bank?.verification ?? { state: "Not started" }} />
+            <section className="rounded-lg border border-primary/30 bg-primary-soft p-5 text-sm lg:col-span-2">
+              <h2 className="font-semibold">What happens next?</h2>
+              <p className="mt-1">{s.nextAction}</p>
+              <p className="mt-2 text-muted-foreground">{openOrders.length} open order{openOrders.length === 1 ? "" : "s"} · {openInvoices.length} open bill{openInvoices.length === 1 ? "" : "s"}</p>
+              {(orders.length || invoices.length) ? <button type="button" className="mt-2 font-medium text-primary underline" onClick={() => setTab("Orders & bills")}>View orders and bills</button> : null}
+            </section>
+            <section className="rounded-lg border bg-surface p-5 text-sm lg:col-span-2">
+              <h2 className="font-semibold">At a glance</h2>
+              <dl className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div><dt className="text-muted-foreground">Main contact</dt><dd className="mt-1 font-medium">{s.contacts[0]?.name || [s.onboarding?.firstName, s.onboarding?.lastName].filter(Boolean).join(" ") || "Not added"}</dd></div>
+                <div><dt className="text-muted-foreground">Email</dt><dd className="mt-1 break-all font-medium">{s.contacts[0]?.email || "Not added"}</dd></div>
+                <div><dt className="text-muted-foreground">Country</dt><dd className="mt-1 font-medium">{s.country}</dd></div>
+                <div><dt className="text-muted-foreground">Managed by</dt><dd className="mt-1 font-medium">{s.owner}</dd></div>
+              </dl>
+            </section>
+            {s.status === "Active" ? <details className="rounded-lg border bg-surface p-4 text-sm lg:col-span-2"><summary className="cursor-pointer font-medium">See approval checks</summary><div className="mt-3 grid gap-4 lg:grid-cols-2"><DecisionCard title="Buying team approval" d={s.procurementDecision} /><DecisionCard title="Finance payment details check" d={s.bank?.verification ?? { state: "Not started" }} /></div></details> : <><DecisionCard title="Buying team approval" d={s.procurementDecision} /><DecisionCard title="Finance payment details check" d={s.bank?.verification ?? { state: "Not started" }} /></>}
             {s.onboarding ? <section className="rounded-lg border bg-surface p-4 text-sm lg:col-span-2"><h2 className="font-semibold">Vendor details</h2><dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-xs text-muted-foreground">Display name</dt><dd>{s.onboarding.displayName}</dd></div><div><dt className="text-xs text-muted-foreground">Company ID</dt><dd>{s.registration}</dd></div><div><dt className="text-xs text-muted-foreground">Primary contact</dt><dd>{[s.onboarding.salutation, s.onboarding.firstName, s.onboarding.lastName].filter(Boolean).join(" ") || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Work phone / mobile</dt><dd>{[s.onboarding.workPhone, s.onboarding.mobile].filter(Boolean).join(" · ") || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Language</dt><dd>{s.onboarding.language || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Currency / payment terms</dt><dd>{[s.onboarding.currency, s.onboarding.paymentTerms].filter(Boolean).join(" · ") || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Tax rate reference</dt><dd>{s.onboarding.taxRateRef || "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Portal access</dt><dd>{s.onboarding.portalAccessRequested ? "Requested; pending approval" : "Not requested"}</dd></div><div><dt className="text-xs text-muted-foreground">Bank name</dt><dd>{s.onboarding.bankName || "—"}</dd></div></dl>{s.onboarding.customFields?.length ? <div className="mt-4"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Custom fields</h3><p className="mt-1">{s.onboarding.customFields.map((item) => `${item.name}: ${item.value}`).join(" · ")}</p></div> : null}{s.onboarding.reportingTags?.length ? <div className="mt-4"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Reporting tags</h3><p className="mt-1">{s.onboarding.reportingTags.map((item) => `${item.name}: ${item.value}`).join(" · ")}</p></div> : null}{s.onboarding.remarks ? <div className="mt-4"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Remarks</h3><p className="mt-1 whitespace-pre-wrap">{s.onboarding.remarks}</p></div> : null}</section> : null}
             {s.bank ? (
               <div className="rounded-lg border bg-surface p-4">
@@ -102,15 +116,13 @@ function SupplierProfile() {
                 <p className="mt-2">Review: {s.duplicateReview ? `${s.duplicateReview.state} · ${s.duplicateReview.reason}` : "Pending human review"}. Records are never merged automatically.</p>
               </div>
             ) : null}
-            {canDecide ? <SupplierReviewActions s={s} onChange={setS} role={role} /> : null}
+            {canDecide && s.status === "Active" ? <details className="rounded-lg border bg-surface p-4 lg:col-span-2"><summary className="cursor-pointer text-sm font-medium">Manage vendor review</summary><div className="mt-3"><SupplierReviewActions s={s} onChange={setS} role={role} /></div></details> : canDecide ? <SupplierReviewActions s={s} onChange={setS} role={role} /> : null}
             {s.portalUpdates?.length ? <PortalUpdateReview s={s} onChange={setS} canDecide={canDecide} /> : null}
           </div>
-        ) : tab === "Addresses & contacts" ? (
-          <div className="space-y-5"><section><h2 className="mb-2 font-semibold">Sites</h2><List empty="No sites yet." items={s.sites.map((x) => `${x.name} — ${x.address}`)} /></section><ContactManager s={s} canEdit={canDecide} role={role} onChange={setS} /></div>
-        ) : tab === "Categories" ? (
-          <List empty="No categories." items={s.categories} />
-        ) : tab === "Required checks" ? (
-          <><ul className="space-y-2">{s.qualifications.length ? s.qualifications.map((q) => <li key={q.name} className="flex justify-between rounded-lg border bg-surface p-3 text-sm"><span>{q.name}{q.validTo ? <span className="block text-xs text-muted-foreground">Valid to {q.validTo}</span> : null}</span><StatusBadge status={q.status} /></li>) : <p className="text-sm text-muted-foreground">No extra checks needed.</p>}</ul>{canDecide && s.qualifications.length ? <QualificationReview s={s} onChange={setS} /> : null}</>
+        ) : tab === "Contacts" ? (
+          <div className="space-y-5"><section><h2 className="mb-2 font-semibold">Addresses</h2><List empty="No addresses yet." items={s.sites.map((x) => `${x.name} — ${x.address}`)} /></section><ContactManager s={s} canEdit={canDecide} role={role} onChange={setS} /><section><h2 className="mb-2 font-semibold">What this vendor supplies</h2><List empty="No categories yet." items={s.categories} /></section></div>
+        ) : tab === "Checks & documents" ? (
+          <div className="space-y-6"><section><h2 className="mb-2 font-semibold">Required checks</h2><ul className="space-y-2">{s.qualifications.length ? s.qualifications.map((q) => <li key={q.name} className="flex justify-between rounded-lg border bg-surface p-3 text-sm"><span>{q.name}{q.validTo ? <span className="block text-xs text-muted-foreground">Valid to {q.validTo}</span> : null}</span><StatusBadge status={q.status} /></li>) : <p className="text-sm text-muted-foreground">No extra checks needed.</p>}</ul>{canDecide && s.qualifications.length ? <QualificationReview s={s} onChange={setS} /> : null}</section><section><h2 className="mb-2 font-semibold">Documents</h2><List empty="No documents recorded." items={s.documents.map((d) => `${d.name}${d.kind ? ` · ${d.kind}` : ""} — recorded ${d.uploaded}`)} />{s.onboarding ? <p className="mt-3 text-xs text-muted-foreground">This demo stores document names only. Files are not uploaded.</p> : null}{s.portalUpdates?.length ? <PortalUpdateReview s={s} onChange={setS} canDecide={canDecide} /> : null}</section></div>
         ) : tab === "Performance" ? (
           s.performance ? (
             <div className="rounded-lg border bg-surface p-4 text-sm">
@@ -120,8 +132,6 @@ function SupplierProfile() {
               </dl>
             </div>
           ) : <EmptyState title="Not enough data yet" body="Scores appear after at least 5 receipts or invoices in the period." />
-        ) : tab === "Documents" ? (
-          <><List empty="No documents recorded." items={s.documents.map((d) => `${d.name}${d.kind ? ` · ${d.kind}` : ""} — recorded ${d.uploaded}`)} />{s.onboarding ? <p className="mt-3 text-xs text-muted-foreground">This demo stores document names and classifications only. File contents are not uploaded.</p> : null}{s.portalUpdates?.length ? <PortalUpdateReview s={s} onChange={setS} canDecide={canDecide} /> : null}</>
         ) : tab === "Orders & bills" ? (
           <div className="space-y-3 text-sm"><p>{openOrders.length} open purchase order(s) · {openInvoices.length} open invoice(s).</p>{orders.map((order) => <p key={order.id}><Link className="text-primary underline" to="/procurement/orders/$id" params={{ id: order.id }}>{order.id}</Link> · {order.status} · {order.line.description}</p>)}{invoices.map((invoice) => <p key={invoice.id}><Link className="text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.id}</Link> · {invoice.status} · {invoice.number}</p>)}</div>
         ) : (
