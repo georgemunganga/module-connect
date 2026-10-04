@@ -6,9 +6,11 @@ import { AppShell } from "@/platform/components/AppShell";
 import { ListPage } from "@/platform/components/ListPage";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { DataExportButton } from "@/platform/components/DataTransfer";
 import { lifecycleFilters } from "@/modules/procurement/suppliers";
+import { vendorExportRows, vendorFields } from "@/modules/procurement/data-transfer";
 import { useProcurement } from "@/modules/procurement/store";
-import { supplierRole, sameEntity } from "@/modules/procurement/access";
+import { procurementEntity, supplierRole, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import type { SupplierRecord } from "@/modules/procurement/suppliers";
 
@@ -28,9 +30,9 @@ export const Route = createFileRoute("/procurement/suppliers")({
 
 function SupplierList() {
   const { role, entityId } = useApp();
-  const canPropose = role !== "auditor";
-  const actions = canPropose ? <div className="flex flex-wrap gap-2"><Button asChild><Link to="/procurement/suppliers/new">Add vendor</Link></Button><Button variant="outline" asChild><Link to="/procurement/suppliers/import"><Upload className="mr-2 size-4" aria-hidden />Import vendors</Link></Button></div> : undefined;
+  const canPropose = ["buyer", "supplier_steward", "proc_admin"].includes(role);
   const rows = useProcurement().suppliers.filter((supplier) => sameEntity(supplier.country, entityId));
+  const actions = canPropose ? <div className="flex flex-wrap gap-2"><Button asChild><Link to="/procurement/suppliers/new">Add vendor</Link></Button><Button variant="outline" asChild><Link to="/procurement/suppliers/import"><Upload className="mr-2 size-4" aria-hidden />Import vendors</Link></Button><DataExportButton fileName="vendors.csv" fields={vendorFields} rows={vendorExportRows(procurementEntity(entityId))} label="Export vendors CSV" /></div> : undefined;
   if (!supplierRole(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>

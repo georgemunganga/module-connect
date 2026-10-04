@@ -1,17 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ChevronRight, Package } from "lucide-react";
+import { AlertTriangle, ChevronRight, Package, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/platform/app-context";
-import { internalRole, requesterRole, sameEntity } from "@/modules/procurement/access";
+import { internalRole, procurementEntityName, requesterRole, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { DataExportButton } from "@/platform/components/DataTransfer";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
 import { bestOffer, catalogEntities, isExpired, money, useCatalog } from "@/modules/procurement/catalog";
 import { CatalogItemEditor } from "@/modules/procurement/CatalogItemEditor";
+import { itemExportRows, itemFields } from "@/modules/procurement/data-transfer";
 import type { ItemKind } from "@/modules/procurement/catalog";
 
 type Search = { q?: string; kind?: string; entity?: string };
@@ -81,7 +83,7 @@ function CatalogPage() {
         </div>
       ) : null}
 
-      {maintainer && view === "manage" ? <div className="mb-4"><Button onClick={() => setAdding(true)}>Add item</Button></div> : null}
+      {maintainer && view === "manage" ? <div className="mb-4 flex flex-wrap gap-2"><Button onClick={() => setAdding(true)}>Add item</Button><Button variant="outline" asChild><Link to="/procurement/catalog/import"><Upload className="size-4" aria-hidden />Import items</Link></Button><DataExportButton fileName="items.csv" fields={itemFields} rows={itemExportRows(procurementEntityName(entityId))} label="Export items CSV" /></div> : null}
       {adding ? <div className="mb-5"><CatalogItemEditor onSaved={(id) => navigate({ to: "/procurement/catalog/$id", params: { id } })} onCancel={() => setAdding(false)} /></div> : null}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
