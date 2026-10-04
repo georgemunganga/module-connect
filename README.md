@@ -1,5 +1,21 @@
 # Module Connect
 
+## Procurement live identity bridge
+
+Procurement remains a demo unless the build sets `VITE_PROCUREMENT_LIVE_MODE=1`.
+With the flag off, screens use local sample records and show **Demo data**. With it on,
+the browser checks the same-origin ERP session at `/api/hrm/auth/me`, then checks
+`/api/procurement/v1/context` with cookies included. A verified company shows
+**Live account · screens pending**; existing demo transaction screens are hidden.
+The separate supplier portal also shows a holding state in live mode until supplier identity is connected.
+Missing sign-in, denied Procurement access, or a failed context request shows
+**Procurement unavailable** and never falls back to sample records.
+
+Activate the flag only after the Procurement database migration, API routes,
+authentication and company scope are available at the ERP origin. Live Vendor,
+Item and Purchase Request screens need separate API wiring before users can
+work with real records.
+
 Build a frontend-only, mock-data UI/UX dashboard for an ERP application, starting with the HRM
 
 module. This is the first of several modules (HRM, Finance, Procurement, Inventory, Accounting)

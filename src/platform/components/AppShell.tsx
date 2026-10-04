@@ -44,6 +44,7 @@ import { hrmModule } from "@/modules/hrm/nav";
 import { procurementModule } from "@/modules/procurement/nav";
 import type { ModuleDefinition, NavItem, NavSection } from "@/platform/nav";
 import { useApp } from "@/platform/app-context";
+import { useProcurementSession } from "@/platform/procurement-session";
 import type { ModuleId } from "@/platform/app-context";
 import { cn } from "@/lib/utils";
 
@@ -280,6 +281,10 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { role, setRole, entityId, setEntityId, branch, setBranch, theme, toggleTheme, moduleId, setModuleId } = useApp();
+  const session = useProcurementSession();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const procurementScreen = pathname.startsWith("/procurement");
+  const demoScreen = !procurementScreen || session.mode === "demo";
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -329,7 +334,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <header className="sticky top-0 z-40 border-b bg-surface">
         <div className="flex h-14 items-center gap-2 px-3">
-          <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
+          {demoScreen ? <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
                 <Menu className="size-5" aria-hidden />
@@ -341,7 +346,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </SheetHeader>
               <RailContent onNavigate={() => setNavigationOpen(false)} />
             </SheetContent>
-          </Sheet>
+          </Sheet> : null}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -369,28 +374,21 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <span className="ml-auto text-xs text-muted-foreground">Not enabled</span>
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>Workspace</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={role} onValueChange={(v) => setRole(v as Role)}>
-                {workspaces.map((w) => (
-                  <DropdownMenuRadioItem key={w.id} value={w.id}>
-                    {w.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
+              {demoScreen ? <><DropdownMenuSeparator />
+                <DropdownMenuLabel>Demo workspace</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={role} onValueChange={(v) => setRole(v as Role)}>
+                  {workspaces.map((w) => <DropdownMenuRadioItem key={w.id} value={w.id}>{w.label}</DropdownMenuRadioItem>)}
+                </DropdownMenuRadioGroup></> : null}
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <span
-            className="hidden items-center gap-1.5 rounded-full border border-warning/40 bg-warning-soft px-2.5 py-1 text-xs font-medium text-foreground sm:inline-flex"
-            title="All records, transitions and integrations on this screen are local demonstration data. Nothing is sent to a real backend, bank, supplier or finance system."
-          >
+          <span role="status" className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning-soft px-2.5 py-1 text-xs font-medium text-foreground">
             <span className="size-1.5 rounded-full bg-warning" aria-hidden />
-            Demo data
+            {procurementScreen ? session.mode === "live" ? "Live account · screens pending" : session.mode === "unavailable" ? "Procurement unavailable" : session.mode === "loading" ? "Checking access" : "Demo data" : "Demo data"}
           </span>
 
 
-          <DropdownMenu>
+          {demoScreen ? <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="hidden min-w-0 gap-2 md:flex">
                 <Building2 className="size-4 shrink-0" aria-hidden />
@@ -421,9 +419,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ))}
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu> : session.mode === "live" ? <div className="hidden items-center gap-2 rounded-md border px-3 py-1.5 text-sm md:flex"><Building2 className="size-4" aria-hidden /><span className="max-w-48 truncate">{session.context.company.name}</span></div> : null}
 
           <div className="ml-auto flex items-center gap-1">
+            {demoScreen ? <>
             <Button
               variant="outline"
               size="sm"
@@ -470,6 +469,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             </Button>
 
+            </> : null}
             <Button variant="ghost" size="icon" className="hidden sm:inline-flex" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>
               {theme === "light" ? <Moon className="size-5" aria-hidden /> : <Sun className="size-5" aria-hidden />}
             </Button>
@@ -482,12 +482,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuLabel className="flex flex-col">
-                  <span>Amara Chukwuemeka-Van der Berghe</span>
+                  <span>{procurementScreen && session.mode === "live" ? session.user.displayName : procurementScreen && session.mode !== "demo" ? "ERP account" : "Amara Chukwuemeka-Van der Berghe"}</span>
                   <span className="text-xs font-normal text-muted-foreground">
-                    Acting as {workspaces.find((w) => w.id === role)?.label}
+                    {procurementScreen && session.mode === "live" ? session.user.email : procurementScreen && session.mode !== "demo" ? "Access is being checked" : `Acting as ${workspaces.find((w) => w.id === role)?.label}`}
                   </span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {demoScreen ? <>
                 <DropdownMenuItem asChild>
                   <Link to="/workers/$id" params={{ id: "w-1001" }}>My profile</Link>
                 </DropdownMenuItem>
@@ -505,6 +506,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenuItem>
                   <LogOut className="size-4" aria-hidden /> Sign out (mock)
                 </DropdownMenuItem>
+                </> : null}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -513,15 +515,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className="flex">
-        <aside className={cn("sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 bg-rail text-rail-foreground transition-[width] duration-200 lg:block", railCollapsed ? "w-16" : "w-64")}>
+        {demoScreen ? <aside className={cn("sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 bg-rail text-rail-foreground transition-[width] duration-200 lg:block", railCollapsed ? "w-16" : "w-64")}>
           <RailContent collapsed={railCollapsed} onToggleCollapsed={toggleRail} />
-        </aside>
+        </aside> : null}
         <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-6xl space-y-6">{children}</div>
+          <div className="mx-auto max-w-6xl space-y-6">
+            {!procurementScreen || session.mode === "demo" ? children : session.mode === "loading" ?
+              <div role="status" className="rounded-lg border bg-surface p-8">Checking your ERP access…</div> : session.mode === "live" ?
+              <div role="status" className="max-w-2xl rounded-lg border bg-surface p-8"><h1 className="text-xl font-semibold">Live Procurement account connected</h1><p className="mt-2 text-sm text-muted-foreground">Signed in as {session.user.displayName} for {session.context.company.name}. The purchasing screens are still demo workflows and are hidden until they use live records.</p></div> :
+              <div role="alert" className="max-w-2xl rounded-lg border bg-surface p-8"><h1 className="text-xl font-semibold">Procurement is unavailable</h1><p className="mt-2 text-sm text-muted-foreground">{session.reason} Your demo workspace has not been opened as a fallback.</p><div className="mt-4 flex gap-2"><Button variant="outline" onClick={() => window.location.reload()}>Try again</Button><Button variant="outline" asChild><a href="/sign-in">Sign in to ERP</a></Button></div></div>}
+          </div>
         </main>
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {demoScreen ? <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} /> : null}
     </div>
   );
 }
