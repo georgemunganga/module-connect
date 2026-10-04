@@ -262,6 +262,7 @@ function NewRequest() {
           flowId={`proc-request-new:${entity.id}`}
           steps={steps}
           submitLabel="Submit request"
+          submitDisabled={missing.length > 0}
           onSubmit={async () => {
             if (missing.length) return;
             await new Promise((r) => setTimeout(r, 600));

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProcurement, saveProcurement } from "@/modules/procurement/store";
 import { useApp } from "@/platform/app-context";
 import { sourcingRole, sameEntity } from "@/modules/procurement/access";
@@ -50,11 +50,34 @@ function NewEvent() {
   const [invited, setInvited] = useState<string[]>([]);
   const [criteria, setCriteria] = useState([{ name: "Price", weight: 60 }, { name: "Delivery time", weight: 20 }, { name: "Quality", weight: 20 }]);
   const [done, setDone] = useState<string | null>(null);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const draftKey = `proc:quote-draft:${entityId}`;
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(draftKey) || "null");
+      if (saved) {
+        setLines([...new Set([...(Array.isArray(saved.lines) ? saved.lines : []), ...(lineId ? [lineId] : [])])]);
+        setMethod(saved.method ?? null);
+        setJustification(saved.justification ?? "");
+        setCloses(saved.closes ?? "");
+        setTz(saved.tz ?? "Europe/Amsterdam");
+        setInvited(Array.isArray(saved.invited) ? saved.invited : []);
+        setCriteria(Array.isArray(saved.criteria) && saved.criteria.length ? saved.criteria : [{ name: "Price", weight: 60 }, { name: "Delivery time", weight: 20 }, { name: "Quality", weight: 20 }]);
+      }
+    } catch { /* An invalid draft can be replaced by a new one. */ }
+    setDraftLoaded(true);
+  }, [draftKey, lineId]);
+
+  useEffect(() => {
+    if (draftLoaded && !done) sessionStorage.setItem(draftKey, JSON.stringify({ lines, method, justification, closes, tz, invited, criteria }));
+  }, [draftLoaded, done, draftKey, lines, method, justification, closes, tz, invited, criteria]);
 
   const chosen = approvedLines.filter((l) => lines.includes(l.key));
   const estEur = chosen.filter((l) => l.ccy === "EUR").reduce((s, l) => s + l.value, 0) + chosen.filter((l) => l.ccy === "KES").reduce((s, l) => s + l.value / 140, 0);
   const weightTotal = criteria.reduce((s, c) => s + c.weight, 0);
   const needsJustification = method === "Single source" || method === "Emergency";
+  const problems = [!chosen.length && "choose at least one item", !method && "choose how to buy", needsJustification && !justification.trim() && "explain why", !closes && "set a deadline", !invited.length && "invite at least one vendor", weightTotal !== 100 && "comparison percentages must total 100%"].filter(Boolean) as string[];
 
   const steps: FlowStep[] = [
     { id: "lines", title: "What needs a quote?", purpose: "Choose approved items that still need to be bought.", render: () => (
@@ -90,7 +113,6 @@ function NewEvent() {
         <p className={`text-sm ${weightTotal === 100 ? "text-success" : "text-danger"}`}>Total {weightTotal}% {weightTotal === 100 ? "" : "— must be 100%"}</p>
       </div>) },
     { id: "review", title: "Review", purpose: "Another purchasing lead must approve this before vendors receive it.", render: () => {
-      const problems = [!chosen.length && "choose at least one line", !method && "choose a method", needsJustification && !justification.trim() && "add a justification", !closes && "set a deadline", !invited.length && "invite at least one supplier", weightTotal !== 100 && "weights must total 100%"].filter(Boolean);
       return <div className="space-y-2 text-sm">{problems.length ? <p role="alert" className="rounded-md border border-danger/40 bg-danger-soft p-3">Still needed: {problems.join(", ")}.</p> : <p className="rounded-md border border-success/40 bg-success-soft p-3">Ready to send for approval.</p>}<p>{chosen.length} line(s) · {method ?? "—"} · closes {closes || "—"} ({tz}) · {invited.length} supplier(s)</p></div>;
     } },
   ];
@@ -99,7 +121,7 @@ function NewEvent() {
   return (
     <AppShell>
       <PageHeader eyebrow="Quotes" title="New quote request" description="Choose what you need and which vendors to ask. Nothing goes to vendors until it is approved and sent." />
-      <GuidedFlow flowId="proc-sourcing-new" steps={steps} submitLabel="Send for approval"
+      <GuidedFlow flowId={`proc-sourcing-new:${entityId}`} steps={steps} submitLabel="Send for approval" submitDisabled={problems.length > 0}
         onSubmit={async () => {
           if (!chosen.length || !method || !closes || !invited.length || weightTotal !== 100 || (needsJustification && !justification.trim())) return;
           const ref = `RFQ-DEMO-${Date.now()}`;
@@ -113,7 +135,8 @@ function NewEvent() {
           }));
           ensureEvaluation(ref);
           setDone(ref);
-          sessionStorage.removeItem("flow:proc-sourcing-new");
+          sessionStorage.removeItem(`flow:proc-sourcing-new:${entityId}`);
+          sessionStorage.removeItem(draftKey);
         }}
         submitted={done ? <NextSteps reference={done} title="Sent for approval (demo)" steps={["A purchasing lead checks the buying method, vendors and scoring.", "Once approved, vendor invitations can be sent. This demo does not actually send them.", "Replies stay private until the closing time."]} actions={<Button asChild><Link to="/procurement/sourcing">Back to quote requests</Link></Button>} /> : undefined}
       />

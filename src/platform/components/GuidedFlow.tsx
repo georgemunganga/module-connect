@@ -24,6 +24,7 @@ export function GuidedFlow({
   submitLabel = "Submit",
   submitted,
   allowSkip,
+  submitDisabled = false,
 }: {
   flowId: string;
   steps: FlowStep[];
@@ -31,6 +32,7 @@ export function GuidedFlow({
   submitLabel?: string;
   submitted?: ReactNode;
   allowSkip?: boolean;
+  submitDisabled?: boolean;
 }) {
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -89,7 +91,7 @@ export function GuidedFlow({
           })}
         </ol>
         <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
-          Saved as draft{savedAt ? ` at ${savedAt}` : ""}. You can leave and resume later.
+          Your place is saved in this browser{savedAt ? ` at ${savedAt}` : ""}. Check your entries before submitting.
         </p>
       </nav>
 
@@ -108,7 +110,7 @@ export function GuidedFlow({
           </Button>
           {last ? (
             <Button
-              disabled={busy}
+              disabled={busy || submitDisabled}
               onClick={async () => {
                 setBusy(true);
                 await onSubmit();

@@ -10,6 +10,7 @@ import { audit, updateCommercial, useCommercial, type Order } from "@/modules/pr
 import { procurementEntityName } from "@/modules/procurement/access";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { statusLabel } from "@/platform/components/StatusBadge";
 import {
   addComment,
   addCreditRef,
@@ -469,12 +470,26 @@ export function SupplierPortal() {
   );
 }
 
+const reportLabels: Record<string, string> = {
+  "Request backlog": "Requests still open",
+  "Sourcing coverage": "Purchases with quotes",
+  "Supplier delivery": "Deliveries on time",
+  "Open PO commitments": "Open order value",
+  "Contract utilization": "Contract spending",
+  "Invoice first-pass match": "Bills matched first time",
+  "Exception aging": "Bills needing review",
+  "AP handoff": "Bills sent to Finance",
+  "Emergency / sole-source": "Special purchases",
+  "Budget vs actual": "Budget vs spending",
+};
+
 export function ProcurementReports() {
   const { role, entityId } = useApp();
   const state = usePayables();
   const procurement = useProcurement();
   const commercial = useCommercial();
   const [metric, setMetric] = useState("Invoice first-pass match");
+  const [reportQuery, setReportQuery] = useState("");
   const [period, setPeriod] = useState("2026-10");
   const [notice, setNotice] = useState("");
   if (
@@ -552,64 +567,36 @@ export function ProcurementReports() {
     <AppShell>
       <PageHeader
         eyebrow="Procurement"
-        title="Reports & controls"
-        description="Each measure shows its scope, definition and source. Demo data only."
+        title="Reports"
+        description="Choose a report to see what is happening with requests, orders, vendors, and bills."
       />
-      <div className="mb-4 flex flex-wrap gap-3">
-        <select
-          aria-label="Metric"
-          className="rounded-md border bg-surface p-2"
-          value={metric}
-          onChange={(e) => setMetric(e.target.value)}
-        >
-          {Object.keys(definitions).map((m) => (
-            <option key={m}>{m}</option>
-          ))}
-        </select>
-        <select
-          aria-label="Reporting period"
-          className="rounded-md border bg-surface p-2"
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-        >
-          <option value="2026-10">October 2026</option>
-          <option value="2026-09">September 2026</option>
-        </select>
-        <Button variant="outline" onClick={exportReport}>Export summary CSV</Button>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Box title={metric}>
-          <p className="text-3xl font-semibold">{value}</p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Entity {entityName} · {period} · Sources: browser-local procurement, commercial and invoice records · refreshed in this browser
-          </p>
-        </Box>
-        <Box title="Definition">
-          <p className="text-sm">{definitions[metric]}</p>
-        </Box>
-        <Box title="Control notes">
-          <p className="text-sm">
-            Currency totals are omitted because mixed currencies cannot be added without a defined
-            FX basis. Finance status may be stale until confirmation arrives.
-          </p>
-        </Box>
-      </div>
-      {value.includes("/ 0") && (
-        <div className="mt-4">
-          <Block text="No eligible records in this period and entity. The ratio is an empty result, not a performance score." />
-        </div>
-      )}
-      {notice && (
-        <p role="status" className="mt-4 text-sm">
-          {notice}
-        </p>
-      )}
-      <Box title="Records behind this measure">
+      <div className="mt-5 grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <aside className="h-fit rounded-lg border bg-surface p-4" aria-label="Choose a report">
+          <label htmlFor="report-search" className="text-sm font-semibold">Find a report</label>
+          <Input id="report-search" className="mt-2" placeholder="Search reports" value={reportQuery} onChange={(event) => setReportQuery(event.target.value)} />
+          <nav aria-label="Reports" className="mt-4 space-y-1">
+            {Object.keys(definitions).filter((key) => reportLabels[key].toLowerCase().includes(reportQuery.toLowerCase())).map((key) => <button key={key} type="button" aria-current={metric === key ? "page" : undefined} onClick={() => setMetric(key)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${metric === key ? "bg-primary-soft font-medium text-primary" : "hover:bg-surface-muted"}`}>{reportLabels[key]}</button>)}
+            {!Object.keys(definitions).some((key) => reportLabels[key].toLowerCase().includes(reportQuery.toLowerCase())) ? <p className="px-3 py-2 text-sm text-muted-foreground">No reports match. Try another word.</p> : null}
+          </nav>
+        </aside>
+        <div className="min-w-0 space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div><p className="text-sm text-muted-foreground">Showing results for</p><h2 className="text-xl font-semibold">{reportLabels[metric]}</h2></div>
+            <div className="flex flex-wrap gap-2"><select aria-label="Reporting period" className="rounded-md border bg-surface p-2 text-sm" value={period} onChange={(e) => setPeriod(e.target.value)}><option value="2026-10">October 2026</option><option value="2026-09">September 2026</option></select><Button variant="outline" onClick={exportReport}>Export CSV</Button></div>
+          </div>
+          <div className="rounded-lg border bg-surface p-6">
+            <p className="text-3xl font-semibold">{value}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{entityName} · {period} · Demo data saved in this browser</p>
+            {value.includes("/ 0") ? <p className="mt-3 text-sm text-muted-foreground">There are no matching records for this period yet.</p> : null}
+          </div>
+          <details className="rounded-lg border bg-surface p-4 text-sm"><summary className="cursor-pointer font-medium">How this report is calculated</summary><p className="mt-3">{definitions[metric]}</p><p className="mt-2 text-muted-foreground">Amounts in different currencies are kept separate. Finance payment information may change after confirmation.</p></details>
+          {notice ? <p role="status" className="rounded-md border bg-surface p-3 text-sm">{notice}</p> : null}
+      <Box title="Records in this report">
         <div className="space-y-2">
-          {metric === "Request backlog" && requests.map((request) => <Link to="/procurement/requests/$id" params={{ id: request.id }} key={request.id} className="block rounded-lg border p-3 text-sm hover:border-primary">{request.id} · {request.status} · {request.timeline.length} events</Link>)}
+          {metric === "Request backlog" && requests.map((request) => <Link to="/procurement/requests/$id" params={{ id: request.id }} key={request.id} className="block rounded-lg border p-3 text-sm hover:border-primary">{request.id} · {statusLabel(request.status)}</Link>)}
           {["Sourcing coverage", "Emergency / sole-source"].includes(metric) && events.map((event) => <Link to="/procurement/sourcing/$id" params={{ id: event.id }} key={event.id} className="block rounded-lg border p-3 text-sm hover:border-primary">{event.id} · {event.method} · {event.state}</Link>)}
-          {metric === "Supplier delivery" && receipts.map((receipt) => <Link to="/procurement/receiving/$id" params={{ id: receipt.id }} key={receipt.id} className="block rounded-lg border p-3 text-sm hover:border-primary">{receipt.id} · {receipt.status} · {receipt.date}</Link>)}
-          {metric === "Open PO commitments" && orders.map((order) => <Link to="/procurement/orders/$id" params={{ id: order.id }} key={order.id} className="block rounded-lg border p-3 text-sm hover:border-primary">{order.id} · {order.status} · {order.currency}</Link>)}
+          {metric === "Supplier delivery" && receipts.map((receipt) => <Link to="/procurement/receiving/$id" params={{ id: receipt.poId }} key={receipt.id} className="block rounded-lg border p-3 text-sm hover:border-primary">{receipt.id} · {statusLabel(receipt.status)} · {receipt.date}</Link>)}
+          {metric === "Open PO commitments" && orders.map((order) => <Link to="/procurement/orders/$id" params={{ id: order.id }} key={order.id} className="block rounded-lg border p-3 text-sm hover:border-primary">{order.id} · {statusLabel(order.status)} · {order.currency}</Link>)}
           {metric === "Contract utilization" && contracts.map((contract) => <Link to="/procurement/contracts/$id" params={{ id: contract.id }} key={contract.id} className="block rounded-lg border p-3 text-sm hover:border-primary">{contract.id} · {contract.state} · v{contract.version}</Link>)}
           {["Invoice first-pass match", "Exception aging", "AP handoff"].includes(metric) &&
             rows.map((i) => (
@@ -619,12 +606,14 @@ export function ProcurementReports() {
                 key={i.id}
                 className="block rounded-lg border p-3 text-sm hover:border-primary"
               >
-                {i.id} · {i.supplier} · {i.status} · {i.timeline.length} recorded events
+                {i.id} · {i.supplier} · {statusLabel(i.status)}
               </Link>
             ))}
           {metric === "Budget vs actual" && <Block text="Finance has not supplied confirmed commitments and actuals for this demo." />}
         </div>
       </Box>
+        </div>
+      </div>
     </AppShell>
   );
 }

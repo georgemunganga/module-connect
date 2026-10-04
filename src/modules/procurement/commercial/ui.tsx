@@ -24,6 +24,12 @@ const titles: Record<Area, string> = {
   orders: "Purchase orders",
   receiving: "Deliveries & completed services",
 };
+const descriptions: Record<Area, string> = {
+  evaluations: "Review vendor replies and record why a vendor was chosen.",
+  contracts: "See agreed prices, dates, and how much has been used.",
+  orders: "See what was ordered, from whom, and when it is due.",
+  receiving: "Open an order to record goods delivered or confirm completed work.",
+};
 const paths = {
   evaluations: "/procurement/evaluations",
   contracts: "/procurement/contracts",
@@ -74,9 +80,9 @@ function Guard({ area, children }: { area: Area; children: React.ReactNode }) {
 function Header({ area, detail }: { area: Area; detail?: string }) {
   return (
     <PageHeader
-      eyebrow="Procurement · Commercial"
+      eyebrow="Procurement"
       title={detail || titles[area]}
-      description="This demo saves changes in this browser only."
+      description={detail ? "Changes in this demo are saved in this browser." : descriptions[area]}
     />
   );
 }
@@ -141,6 +147,7 @@ export function CommercialList({ area }: { area: Area }) {
       ? data.evaluations.map((x) => ({
           id: x.id,
           name: sourcingEvents.find((e) => e.id === x.eventId)?.title || x.eventId,
+          detail: `${x.bids.length} vendor ${x.bids.length === 1 ? "reply" : "replies"}`,
           status: x.state,
           entity: sourcingEvents.find((e) => e.id === x.eventId)?.entity || "",
         }))
@@ -148,6 +155,7 @@ export function CommercialList({ area }: { area: Area }) {
         ? data.contracts.map((x) => ({
             id: x.id,
             name: x.supplier,
+            detail: `${x.category} · ${money(x.committed, x.currency)} used of ${money(x.ceiling, x.currency)}`,
             status: x.state,
             entity: x.entity,
           }))
@@ -155,6 +163,7 @@ export function CommercialList({ area }: { area: Area }) {
           ? data.orders.map((x) => ({
               id: x.id,
               name: x.supplier,
+              detail: `${x.line.description} · ${x.line.qty} ${x.line.unit} · due ${x.due}`,
               status: x.status,
               entity: x.entity,
             }))
@@ -163,13 +172,14 @@ export function CommercialList({ area }: { area: Area }) {
               .map((x) => ({
                 id: x.id,
                 name: x.line.description,
+                detail: `${x.supplier} · ${x.line.received} of ${x.line.qty} delivered · due ${x.due}`,
                 status: `${x.line.received} / ${x.line.qty} accepted`,
                 entity: x.entity,
               }));
   const visible = records.filter(
     (x) =>
       entityAllowed(x.entity, entityId, role) &&
-      `${x.id} ${x.name}`.toLowerCase().includes(q.toLowerCase()),
+      `${x.id} ${x.name} ${x.detail}`.toLowerCase().includes(q.toLowerCase()),
   );
   const entityRecords = records.filter((x) => entityAllowed(x.entity, entityId, role));
   const empty = {
@@ -187,7 +197,7 @@ export function CommercialList({ area }: { area: Area }) {
           <Input
             id="find-commercial"
             className="mt-2 max-w-md"
-            placeholder="Number or vendor"
+            placeholder="Number, vendor or item"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -209,6 +219,7 @@ export function CommercialList({ area }: { area: Area }) {
                     {x.id} · {x.entity}
                   </p>
                   <h2 className="mt-1 font-semibold">{x.name}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{x.detail}</p>
                 </div>
                 <Tag>{statusLabel(x.status)}</Tag>
               </div>
