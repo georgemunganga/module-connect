@@ -247,7 +247,7 @@ export function AppShell() {
                   Fictional demo organization
                 </p>
                 <Badge>Procurement admin</Badge>
-                <a href="/core/organization" className="mt-3 block text-sm text-blue-500">
+                <a href="/core/workspace/settings/organization" className="mt-3 block text-sm text-blue-500">
                   Organization profile
                 </a>
                 <a href="/" className="mt-3 block text-sm text-blue-500">Back to ERP</a>

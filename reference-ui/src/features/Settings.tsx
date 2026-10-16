@@ -527,15 +527,15 @@ function SettingsRouteContent({
       </div>
     );
   const sharedDestinations: Record<string, string> = {
-    "/settings/profile": "/core/organization",
-    "/settings/branding": "/core/branding",
-    "/settings/locations": "/core/organization#locations",
-    "/settings/users": "/core/users",
-    "/settings/roles": "/core/roles",
-    "/settings/departments": "/core/organization#departments",
+    "/settings/profile": "/core/workspace/settings/organization",
+    "/settings/branding": "/core/workspace/settings/branding",
+    "/settings/locations": "/core/workspace/settings/organization#locations",
+    "/settings/users": "/core/workspace/settings/users",
+    "/settings/roles": "/core/workspace/settings/roles",
+    "/settings/departments": "/core/workspace/settings/organization#departments",
   };
   if (sharedDestinations[path] || path === "/settings/general" || path.startsWith("/settings/automation/") || ["/settings/transaction-number-series", "/settings/customization/pdf-templates", "/settings/customization/email-notifications", "/settings/web-tabs"].includes(path)) {
-    const destination = sharedDestinations[path] || `/core/settings/${path.split("/").at(-1)}`;
+    const destination = sharedDestinations[path] || `/core/workspace/settings/${path.split("/").at(-1)}`;
     return <SharedSettingsRedirect destination={destination} />;
   }
   if (["/settings/currencies", "/settings/payment-terms", "/settings/taxes", "/settings/tds", "/settings/reporting-tags"].includes(path)) {
