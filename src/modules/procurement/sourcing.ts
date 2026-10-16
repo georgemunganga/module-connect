@@ -30,6 +30,8 @@ export interface SourcingEvent {
   method: SourcingMethod;
   state: EventState;
   buyer: string;
+  /** HRMS worker references for planning only; access and approval still come from ERP roles. */
+  collaboratorIds?: string[];
   entity: string;
   sourceLines: string[];
   items: { description: string; qty: number; unit: string }[];

@@ -16,6 +16,7 @@ import { useCommercial, ensureEvaluation, updateCommercial } from "@/modules/pro
 import { sourcingRole, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import type { BidReceipt, SourcingEvent } from "@/modules/procurement/sourcing";
+import { workers } from "@/mock/data";
 
 export const Route = createFileRoute("/procurement/sourcing_/$id")({
   head: () => ({ meta: [{ title: "Sourcing event — Meridian ERP" }, { name: "description", content: "Restricted sourcing event" }] }),
@@ -89,6 +90,7 @@ function EventDetail() {
               {e.criteria.length ? <ul>{e.criteria.map((c) => <li key={c.name} className="flex justify-between"><span>{c.name}</span><span className="tabular-nums">{c.weight}%</span></li>)}</ul> : <p className="text-muted-foreground">Not set yet.</p>}
             </Card>
             <Card title="Eligibility and terms"><p>{e.eligibility || "Not set yet."}</p><p className="mt-1 text-muted-foreground">{e.terms}</p></Card>
+            <Card title="Internal colleagues"><p className="text-xs text-muted-foreground">Planning participants only. ERP permissions and approval routing remain separate.</p>{e.collaboratorIds?.length ? <ul className="mt-2 space-y-1 text-sm">{e.collaboratorIds.map((workerId) => { const person = workers.find((worker) => worker.id === workerId && worker.entityId === entityId); return <li key={workerId}>{person ? `${person.fullName} · ${person.department}` : `${workerId} · unavailable in this company`}</li>; })}</ul> : <p className="mt-2 text-sm text-muted-foreground">No colleagues added.</p>}</Card>
             <Card title="Response documents required">{e.responseDocuments.length ? <ul className="list-disc pl-5">{e.responseDocuments.map((d) => <li key={d}>{d}</li>)}</ul> : <p className="text-muted-foreground">None set.</p>}</Card>
           </div>
         ) : tab === "Invitations" ? (

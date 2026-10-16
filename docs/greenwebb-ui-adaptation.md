@@ -11,7 +11,7 @@
 | Vendor Overview, Comments, Transactions, Mails, Statement | `src/routes/procurement.suppliers_.$id.tsx` | Keep diligence/Finance checks; notes and message drafts stay local, statement is a procurement-side preview limited by linked invoice entity. | Adapted; browser acceptance pending |
 | Vendor seven-tab create/edit | `src/routes/procurement.suppliers_.new.tsx` | Keep legal identity, contacts, sites, masked bank reference, custom fields, tags and remarks; edited profiles retain ID/history and return to review. | Create and guarded edit adapted |
 | Item list/detail/edit | Catalog routes and `CatalogItemEditor` | Preserve item type, entity eligibility and unpublished offers. Item detail has overview, ID-linked requests, orders, deliveries, authorized bills and history tabs. New direct and single-line award orders carry the catalog item ID. | Adapted for demo; older orders without an item ID remain unlinked |
-| One resumable six-stage RFQ wizard, nested approved-item picker | Sourcing new/detail routes | Save draft, select partial approved quantities, name and describe the request, set a future deadline, preview supplier-facing information, return to source request, and recheck eligibility before submission. Team assignment still needs the shared identity directory. | Approved-item flow adapted; team picker pending |
+| One resumable six-stage RFQ wizard, nested approved-item picker | Sourcing new/detail routes | Save draft, select partial approved quantities, name and describe the request, set a future deadline, preview supplier-facing information, return to source request, and recheck eligibility before submission. A nested colleague picker uses active same-company HRMS demo worker IDs for planning without granting access. | Adapted for demo; live identity directory pending |
 | Canonical list → detail → edit and return to origin | Procurement record routes | Carry source queue/tab and draft context; keep stable IDs. | Partial |
 | Purchase Request list controls | `src/routes/procurement.requests.tsx` | Sort and export the current or selected company-scoped view; keep existing saved views, filters and detail links. | Adapted |
 | PO, receive, bill, recurring bill, credit and batch editors | Commercial and payables areas | Commercial lists retain cards and add shared table controls; recurring purchases and vendor credit references have scoped views. Finance owns recurring payables, batch payments and payment execution. | List and reference views adapted; editors partial |
@@ -29,7 +29,7 @@ The reference's generic `AppRecord`/string metadata, direct React Router tree an
 ## Next integration slices
 
 1. Apply the shared list controls to remaining transaction management lists while preserving each record's existing actions and state rules.
-2. Add a team selector to RFQ using the shared identity directory; keep the current approved-item picker and pre-submit validation.
+2. Replace the demo worker projection in the RFQ colleague selector with the shared identity directory and enforce live role checks when collaborators are assigned.
 3. Carry queue/tab return context through all detail/edit/new routes, including supplier creation from a transaction.
 4. Extend stable supplier IDs and line-level item IDs through all multi-line orders before presenting every vendor or item transaction as linked.
 5. Connect approval, policy, documents, audit and Finance/AP status through the ERP APIs. The reference project has no backend to salvage for these flows.
