@@ -91,7 +91,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
           <span>Primary: {branding?.primaryColor || "ERP default"}</span>
           <span>Accent: {branding?.accentColor || "ERP default"}</span>
         </div>
-        <a href="/hrm/configuration/branding" className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">Open company branding settings</a>
+        <a href="/core/branding" className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">Open company branding settings</a>
         <p className="text-xs text-muted-foreground">Company branding is managed in one place in the current ERP configuration.</p>
       </div>
     </Panel>;

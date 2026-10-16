@@ -48,10 +48,27 @@ import {
   type ModuleSettingsConfig,
 } from "../data/settings";
 
+const procurementModules = moduleSettings.filter((module) =>
+  !["projects", "accounts", "customers", "recurring-bills", "payments-made"].includes(module.slug),
+);
+
 import { SetupConfig } from "./SetupConfig";
 import { CurrencySettings, TaxSettings } from "./SettingsLists";
 
-const NAV_BLUE = "text-primary";
+const sharedDestination = (path: string): string | null => {
+  const destinations: Record<string, string> = {
+    "/settings/profile": "/core/organization",
+    "/settings/branding": "/core/branding",
+    "/settings/locations": "/core/organization#locations",
+    "/settings/users": "/core/users",
+    "/settings/roles": "/core/roles",
+    "/settings/departments": "/core/organization#departments",
+  };
+  if (destinations[path]) return destinations[path];
+  if (["/settings/taxes", "/settings/tds", "/settings/reporting-tags", "/settings/general", "/settings/currencies", "/settings/payment-terms", "/settings/transaction-number-series", "/settings/web-tabs"].includes(path)) return "/core";
+  if (path.startsWith("/settings/customization/")) return "/core";
+  return null;
+};
 
 type SavePreview = (label: string) => void;
 
@@ -161,6 +178,10 @@ export function Settings() {
     setMobileNavOpen(false);
   }, [location.pathname]);
   const currentPath = location.pathname.replace(/\/$/, "") || "/settings";
+  const coreDestination = sharedDestination(currentPath);
+  useEffect(() => {
+    if (coreDestination) window.location.replace(coreDestination);
+  }, [coreDestination]);
   const isIndex = currentPath === "/settings";
   const content = isIndex ? (
     <SettingsIndex search={search} />
@@ -178,6 +199,8 @@ export function Settings() {
       return [];
     }
   }, [preview.snapshot]);
+
+  if (coreDestination) return <div className="p-8 text-sm text-muted-foreground">Opening ERP Core settings…</div>;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -280,11 +303,11 @@ function SettingsSidebar({
   const moduleGroups = [
     {
       title: "General",
-      items: moduleSettings.filter((item) => item.group === "General"),
+      items: procurementModules.filter((item) => item.group === "General"),
     },
     {
       title: "Purchases",
-      items: moduleSettings.filter((item) => item.group === "Purchases"),
+      items: procurementModules.filter((item) => item.group === "Purchases"),
     },
   ];
   return (
@@ -305,45 +328,12 @@ function SettingsSidebar({
             <X size={18} />
           </button>
         </div>
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">
-          Organization settings
-        </p>
-        <SidebarGroup
-          title="Organization"
-          path={path}
-          links={organizationLinks.slice(1)}
-          icon={groupIcons.Organization}
-        />
-        <SidebarGroup
-          title="Users & Roles"
-          path={path}
-          links={userLinks}
-          icon={groupIcons["Users & Roles"]}
-        />
-        <SidebarGroup
-          title="Taxes & Compliance"
-          path={path}
-          links={taxLinks}
-          icon={groupIcons["Taxes & Compliance"]}
-        />
-        <SidebarGroup
-          title="Setup & Configurations"
-          path={path}
-          links={setupLinks}
-          icon={groupIcons["Setup & Configurations"]}
-        />
-        <SidebarGroup
-          title="Customization"
-          path={path}
-          links={customizationLinks}
-          icon={groupIcons.Customization}
-        />
-        <SidebarGroup
-          title="Automation"
-          path={path}
-          links={automationLinks}
-          icon={groupIcons.Automation}
-        />
+        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Shared ERP settings</p>
+        <a href="/core" className="mb-5 block rounded-md px-3 py-2 text-[13px] font-medium text-rail-foreground hover:bg-rail-active">Organization &amp; Settings →</a>
+        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Procurement setup</p>
+        <SidebarLink label="Vendor Portal" href="/settings/vendor-portal" path={path} />
+        <SidebarLink label="Punchout Catalogs" href="/settings/punchout-catalogs" path={path} />
+        <SidebarGroup title="Automation" path={path} links={automationLinks} icon={groupIcons.Automation} />
         <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">
           Module settings
         </p>
@@ -470,150 +460,24 @@ function SidebarLink({
 }
 
 function SettingsIndex({ search }: { search: string }) {
-  const cards = [
-    {
-      title: "Organization",
-      tone: "mint",
-      icon: <Building2 size={17} />,
-      links: [
-        ["Profile", "/settings/profile"],
-        ["Branding", "/settings/branding"],
-        ["Locations", "/settings/locations"],
-        ["General", "/settings/general"],
-      ],
-    },
-    {
-      title: "Users & Roles",
-      tone: "rose",
-      icon: <Users size={17} />,
-      links: [
-        ["Users", "/settings/users"],
-        ["Roles", "/settings/roles"],
-        ["Departments", "/settings/departments"],
-      ],
-    },
-    {
-      title: "Taxes & Compliance",
-      tone: "blue",
-      icon: <ShieldCheck size={17} />,
-      links: [
-        ["Taxes", "/settings/taxes"],
-        ["TDS", "/settings/tds"],
-        ["Reporting Tags", "/settings/reporting-tags"],
-      ],
-    },
-    {
-      title: "Setup & Configurations",
-      tone: "amber",
-      icon: <Settings2 size={17} />,
-      links: [
-        ["Currencies", "/settings/currencies"],
-        ["Payment Terms", "/settings/payment-terms"],
-        ["Vendor Portal", "/settings/vendor-portal"],
-        ["Punchout Catalogs", "/settings/punchout-catalogs"],
-      ],
-    },
-    {
-      title: "Customization",
-      tone: "violet",
-      icon: <Sparkles size={17} />,
-      links: [
-        ["Transaction Number Series", "/settings/transaction-number-series"],
-        ["PDF Templates", "/settings/customization/pdf-templates"],
-        ["Email Notifications", "/settings/customization/email-notifications"],
-        ["Web Tabs", "/settings/web-tabs"],
-      ],
-    },
-    {
-      title: "Automation",
-      tone: "rose",
-      icon: <Zap size={17} />,
-      links: [
-        ["Workflow Rules", "/settings/automation/workflow-rules"],
-        ["Workflow Actions", "/settings/automation/workflow-actions"],
-        ["Workflow Logs", "/settings/automation/workflow-logs"],
-        ["Schedules", "/settings/automation/schedules"],
-      ],
-    },
-  ];
-  const matches = (label: string) =>
-    !search.trim() ||
-    label.toLowerCase().includes(search.toLowerCase()) ||
-    "settings".includes(search.toLowerCase());
-  return (
-    <div className="mx-auto max-w-[1240px]">
-      <PageHeader
-        title="Organization Settings"
-        subtitle="Configure your procurement workspace without leaving this frontend demo."
-        actions={<Badge>Demo workspace</Badge>}
-      />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => (
-          <section
-            key={card.title}
-            className="rounded-xl border border-border bg-surface p-5 shadow-[0_4px_16px_rgba(30,45,70,.04)]"
-          >
-            <div
-              className={`mb-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${card.tone === "mint" ? "bg-emerald-50 text-emerald-700" : card.tone === "rose" ? "bg-rose-50 text-rose-700" : card.tone === "amber" ? "bg-amber-50 text-amber-700" : card.tone === "violet" ? "bg-violet-50 text-violet-700" : "bg-primary-soft text-primary"}`}
-            >
-              {card.icon}
-              {card.title}
-            </div>
-            <div className="space-y-0.5">
-              {card.links
-                .filter(([label]) => matches(label))
-                .map(([label, href]) => (
-                  <Link
-                    key={href}
-                    to={href}
-                    className="flex items-center justify-between rounded-md px-1 py-2 text-[13px] text-muted-foreground hover:bg-surface-muted hover:text-primary"
-                  >
-                    {label}
-                    <ArrowRight size={14} className="text-muted-foreground" />
-                  </Link>
-                ))}
-            </div>
-          </section>
-        ))}
-      </div>
-      <section className="mt-8 rounded-xl border border-border bg-surface p-5 shadow-[0_4px_16px_rgba(30,45,70,.04)]">
-        <h2 className="mb-4 text-lg font-semibold text-foreground">
-          Module Settings
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {["General", "Purchases"].map((group) => (
-            <div
-              key={group}
-              className="rounded-lg border border-border bg-surface-muted/60 p-4"
-            >
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                {group === "General" ? (
-                  <LayoutGrid size={16} className={NAV_BLUE} />
-                ) : (
-                  <Receipt size={16} className="text-emerald-600" />
-                )}
-                {group}
-              </div>
-              <div className="space-y-0.5">
-                {moduleSettings
-                  .filter((module) => module.group === group)
-                  .map((module) => (
-                    <Link
-                      key={module.slug}
-                      to={`/settings/modules/${module.slug}/${module.tabs[0].slug}`}
-                      className="flex items-center justify-between rounded px-1 py-2 text-[13px] text-muted-foreground hover:bg-surface hover:text-primary"
-                    >
-                      {module.title}
-                      <ChevronRight size={14} className="text-muted-foreground" />
-                    </Link>
-                  ))}
-              </div>
-            </div>
-          ))}
+  const groups = ["General", "Purchases"];
+  const query = search.trim().toLowerCase();
+  return <div className="mx-auto max-w-[1240px]">
+    <PageHeader title="Procurement settings" subtitle="Manage buying preferences here. Company identity and shared defaults live in ERP Core." actions={<Badge>Demo workspace</Badge>} />
+    <section className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface p-5">
+      <div><h2 className="font-semibold">Organization &amp; shared settings</h2><p className="mt-1 text-sm text-muted-foreground">Company profile, branding, locations, users and shared configuration have one ERP-wide home.</p></div>
+      <a href="/core" className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Open ERP Core <ArrowRight size={15} /></a>
+    </section>
+    <div className="grid gap-4 md:grid-cols-2">
+      {groups.map((group) => <section key={group} className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="mb-3 flex items-center gap-2 font-semibold">{group === "General" ? <LayoutGrid size={17} className="text-primary" /> : <Receipt size={17} className="text-primary" />}{group}</h2>
+        <div className="divide-y border-t border-border">
+          {procurementModules.filter((module) => module.group === group && (!query || module.title.toLowerCase().includes(query))).map((module) => <Link key={module.slug} to={`/settings/modules/${module.slug}/${module.tabs[0].slug}`} className="flex items-center justify-between py-3 text-sm text-muted-foreground hover:text-primary"><span>{module.title}</span><ChevronRight size={15} /></Link>)}
         </div>
-      </section>
+      </section>)}
     </div>
-  );
+    <div className="mt-5 flex flex-wrap gap-3 text-sm"><Link to="/settings/vendor-portal" className="text-primary underline underline-offset-2">Vendor Portal</Link><Link to="/settings/punchout-catalogs" className="text-primary underline underline-offset-2">Punchout Catalogs</Link></div>
+  </div>;
 }
 
 function SettingsRouteContent({
