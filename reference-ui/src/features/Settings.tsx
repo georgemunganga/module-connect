@@ -43,7 +43,10 @@ import { useApp, useStoredState } from "../lib/store";
 import { BrandMark, useErpShell } from "../lib/erpShell";
 import {
   findModule,
+  moduleOwner,
   moduleSettings,
+  procurementModuleGroups,
+  procurementModuleSlugs,
   settingsRoutes,
   type ModuleSettingsConfig,
 } from "../data/settings";
@@ -51,14 +54,7 @@ import {
 import { SetupConfig } from "./SetupConfig";
 import { CurrencySettings, TaxSettings } from "./SettingsLists";
 
-const NAV_BLUE = "text-primary";
-
 type SavePreview = (label: string) => void;
-
-const setupLinks = [
-  ["Vendor Portal", "/settings/vendor-portal"],
-  ["Punchout Catalogs", "/settings/punchout-catalogs"],
-];
 
 const groupIcons: Record<string, ReactNode> = {
   Organization: <Building2 size={16} />,
@@ -204,11 +200,11 @@ export function Settings() {
           path={currentPath}
           onClose={() => setMobileNavOpen(false)}
         />
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-7 lg:px-10">
+        <main className="min-w-0 flex-1 px-4 py-6 pb-20 sm:px-7 lg:px-10">
           {content}
         </main>
       </div>
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-surface/95 px-4 py-2.5 text-center text-[11px] text-muted-foreground backdrop-blur sm:text-left sm:px-7">
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-surface/95 px-4 py-2.5 text-center text-[11px] text-muted-foreground backdrop-blur sm:text-left sm:px-7 lg:left-64">
         <span className="font-semibold text-foreground">Frontend demo</span> ·
         only saved preview snapshots stay in this browser. No live
         configuration, automation, or emails are applied.
@@ -254,16 +250,10 @@ function SettingsSidebar({
   path: string;
   onClose: () => void;
 }) {
-  const moduleGroups = [
-    {
-      title: "General",
-      items: moduleSettings.filter((item) => item.group === "General"),
-    },
-    {
-      title: "Purchases",
-      items: moduleSettings.filter((item) => item.group === "Purchases"),
-    },
-  ];
+  const moduleGroups = procurementModuleGroups.map((group) => ({
+    title: group.title,
+    items: group.slugs.map((slug) => findModule(slug)).filter((item): item is ModuleSettingsConfig => Boolean(item)),
+  }));
   return (
     <>
       {open && (
@@ -283,65 +273,16 @@ function SettingsSidebar({
           </button>
         </div>
         <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Procurement settings</p>
-        <SidebarGroup
-          title="Supplier access & catalogs"
-          path={path}
-          links={setupLinks}
-          icon={groupIcons["Setup & Configurations"]}
-        />
-        <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Transaction settings</p>
         {moduleGroups.map((group) => (
           <ModuleSidebarGroup
             key={group.title}
             {...group}
             path={path}
-            icon={groupIcons[group.title]}
+            icon={group.title.includes("Supplier") ? groupIcons.General : groupIcons.Purchases}
           />
         ))}
       </aside>
     </>
-  );
-}
-
-function SidebarGroup({
-  title,
-  links,
-  path,
-  icon,
-}: {
-  title: string;
-  links: string[][];
-  path: string;
-  icon: ReactNode;
-}) {
-  const active = links.some(
-    ([, href]) => path === href || path.startsWith(`${href}/`),
-  );
-  const [open, setOpen] = useState(active);
-  const expanded = active || open;
-  return (
-    <div className="mb-1">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={expanded}
-        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium hover:bg-rail-active ${expanded ? "text-rail-foreground" : "text-rail-muted"}`}
-      >
-        {icon}
-        <span>{title}</span>
-        <ChevronRight
-          size={14}
-          className={`ml-auto text-rail-muted transition-transform ${expanded ? "rotate-90" : ""}`}
-        />
-      </button>
-      {expanded && (
-        <div className="ml-3 border-l border-rail-active pl-2">
-          {links.map(([label, href]) => (
-            <SidebarLink key={href} label={label} href={href} path={path} />
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -356,9 +297,7 @@ function ModuleSidebarGroup({
   path: string;
   icon: ReactNode;
 }) {
-  const active = items.some((item) =>
-    path.startsWith(`/settings/modules/${item.slug}`),
-  );
+  const active = items.some((item) => path.startsWith(`/settings/modules/${item.slug}`)) || (title.includes("Supplier") && ["/settings/vendor-portal", "/settings/punchout-catalogs"].includes(path));
   const [open, setOpen] = useState(active);
   const expanded = active || open;
   return (
@@ -378,6 +317,7 @@ function ModuleSidebarGroup({
       </button>
       {expanded && (
         <div className="ml-3 border-l border-rail-active pl-2">
+          {title.includes("Supplier") && <><SidebarLink label="Vendor Portal" href="/settings/vendor-portal" path={path} /><SidebarLink label="Punchout Catalogs" href="/settings/punchout-catalogs" path={path} /></>}
           {items.map((item) => (
             <SidebarLink
               key={item.slug}
@@ -413,21 +353,16 @@ function SidebarLink({
 }
 
 function SettingsIndex({ search }: { search: string }) {
-  const cards = [
-    {
-      title: "Supplier access & catalogs",
-      tone: "amber",
-      icon: <Settings2 size={17} />,
-      links: [
-        ["Vendor Portal", "/settings/vendor-portal"],
-        ["Punchout Catalogs", "/settings/punchout-catalogs"],
-      ],
-    },
-  ];
-  const matches = (label: string) =>
-    !search.trim() ||
-    label.toLowerCase().includes(search.toLowerCase()) ||
-    "settings".includes(search.toLowerCase());
+  const cards = procurementModuleGroups.map((group) => ({
+    title: group.title,
+    icon: group.title.includes("Supplier") ? <Users size={17} /> : group.title.includes("Sourcing") ? <FileText size={17} /> : <Receipt size={17} />,
+    links: [
+      ...(group.title.includes("Supplier") ? [["Vendor Portal", "/settings/vendor-portal"], ["Punchout Catalogs", "/settings/punchout-catalogs"]] : []),
+      ...group.slugs.map((slug) => { const module = findModule(slug); return [module?.title ?? slug, `/settings/modules/${slug}/${module?.tabs[0].slug ?? "preferences"}`]; }),
+    ],
+  }));
+  const term = search.trim().toLowerCase();
+  const visibleCards = cards.map((card) => ({ ...card, links: card.links.filter(([label]) => !term || `${card.title} ${label}`.toLowerCase().includes(term)) })).filter((card) => card.links.length);
   return (
     <div className="mx-auto max-w-[1240px]">
       <PageHeader
@@ -436,70 +371,34 @@ function SettingsIndex({ search }: { search: string }) {
         actions={<Badge>Demo workspace</Badge>}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => (
+        {visibleCards.map((card) => (
           <section
             key={card.title}
             className="rounded-xl border border-border bg-surface p-5 shadow-[0_4px_16px_rgba(30,45,70,.04)]"
           >
             <div
-              className={`mb-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${card.tone === "mint" ? "bg-emerald-50 text-emerald-700" : card.tone === "rose" ? "bg-rose-50 text-rose-700" : card.tone === "amber" ? "bg-amber-50 text-amber-700" : card.tone === "violet" ? "bg-violet-50 text-violet-700" : "bg-primary-soft text-primary"}`}
+              className="mb-4 flex items-center gap-2 rounded-lg bg-primary-soft px-3 py-2 text-sm font-semibold text-primary"
             >
               {card.icon}
               {card.title}
             </div>
             <div className="space-y-0.5">
-              {card.links
-                .filter(([label]) => matches(label))
-                .map(([label, href]) => (
-                  <a
+              {card.links.map(([label, href]) => (
+                  <Link
                     key={href}
-                    href={href}
+                    to={href}
                     className="flex items-center justify-between rounded-md px-1 py-2 text-[13px] text-muted-foreground hover:bg-surface-muted hover:text-primary"
                   >
                     {label}
                     <ArrowRight size={14} className="text-muted-foreground" />
-                  </a>
+                  </Link>
                 ))}
             </div>
           </section>
         ))}
       </div>
-      <section className="mt-8 rounded-xl border border-border bg-surface p-5 shadow-[0_4px_16px_rgba(30,45,70,.04)]">
-        <h2 className="mb-4 text-lg font-semibold text-foreground">
-          Module Settings
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {["General", "Purchases"].map((group) => (
-            <div
-              key={group}
-              className="rounded-lg border border-border bg-surface-muted/60 p-4"
-            >
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                {group === "General" ? (
-                  <LayoutGrid size={16} className={NAV_BLUE} />
-                ) : (
-                  <Receipt size={16} className="text-emerald-600" />
-                )}
-                {group}
-              </div>
-              <div className="space-y-0.5">
-                {moduleSettings
-                  .filter((module) => module.group === group)
-                  .map((module) => (
-                    <Link
-                      key={module.slug}
-                      to={`/settings/modules/${module.slug}/${module.tabs[0].slug}`}
-                      className="flex items-center justify-between rounded px-1 py-2 text-[13px] text-muted-foreground hover:bg-surface hover:text-primary"
-                    >
-                      {module.title}
-                      <ChevronRight size={14} className="text-muted-foreground" />
-                    </Link>
-                  ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {!visibleCards.length && <div className="rounded-xl border border-border bg-surface p-10 text-center text-sm text-muted-foreground">No Procurement settings match “{search}”.</div>}
+      <p className="mt-6 text-xs text-muted-foreground">Company identity and access are managed in ERP Core. Accounting and payments are managed by Finance.</p>
     </div>
   );
 }
@@ -543,6 +442,9 @@ function SettingsRouteContent({
   }
   if (path.startsWith("/settings/modules/")) {
     const [, , , moduleSlug, tab = "preferences"] = path.split("/");
+    if (!procurementModuleSlugs.has(moduleSlug)) {
+      return <div className="mx-auto max-w-2xl rounded-xl border border-border bg-surface p-7"><Building2 size={28} className="text-primary" /><h1 className="mt-4 text-xl font-semibold">Managed outside Procurement</h1><p className="mt-2 text-sm text-muted-foreground">{findModule(moduleSlug)?.title ?? moduleSlug} is managed by {moduleOwner[moduleSlug] ?? "another ERP module"}. You can use its approved references in Procurement when that module is connected.</p><Link to="/settings" className="mt-5 inline-block text-sm font-semibold text-primary">Back to Procurement settings →</Link></div>;
+    }
     return (
       <ModulePage
         moduleSlug={moduleSlug}
@@ -1007,12 +909,12 @@ function PreferencesPanel({
     module.slug === "bills" ? (
       <>
         <ToggleRow
-          label="Match bills to purchase orders automatically"
-          hint="Suggest matching lines when a bill is opened."
+          label="Suggest invoice matches to purchase orders"
+          hint="Compare the invoice with its order before Finance receives it."
         />
         <ToggleRow
-          label="Require a receive before bill approval"
-          hint="Keep three-way reconciliation visible to reviewers."
+          label="Require a receipt where policy calls for one"
+          hint="Show a mismatch until the delivery or service is accepted."
         />
       </>
     ) : module.slug === "purchase-receives" ? (
@@ -1038,12 +940,19 @@ function PreferencesPanel({
         <ToggleRow label="Require an account for every item" />
         <ToggleRow label="Show inactive items in selectors" />
       </>
+    ) : module.slug === "purchase-orders" ? (
+      <><ToggleRow label="Require supplier acknowledgement" /><ToggleRow label="Send material order changes back for approval" /></>
+    ) : module.slug === "request-for-quotes" ? (
+      <><ToggleRow label="Require review before a quote request is sent" /><ToggleRow label="Keep supplier responses private until closing" /></>
+    ) : module.slug === "contracts" ? (
+      <><ToggleRow label="Remind owners before a contract expires" /><ToggleRow label="Prevent orders above the approved contract limit" /></>
+    ) : module.slug === "inspections" ? (
+      <><ToggleRow label="Require an inspection checklist" /><ToggleRow label="Keep photos of rejected goods with the receipt" /></>
+    ) : module.slug === "returns" ? (
+      <><ToggleRow label="Require a reason for every return" /><ToggleRow label="Link returns to a replacement or credit note" /></>
     ) : (
       <>
-        <ToggleRow
-          label={`Allow users to record advances for ${module.title}`}
-        />
-        <ToggleRow label="Allow vendors to accept or decline purchase orders via public links" />
+        <ToggleRow label={`Require review before ${module.title.toLowerCase()} are finalized`} />
       </>
     );
   return (
@@ -1053,9 +962,9 @@ function PreferencesPanel({
     >
       <div className="space-y-1 p-5">
         {specific}
-        <div className="mt-5 border-t border-border pt-5">
+        {module.slug === "purchase-orders" && <div className="mt-5 border-t border-border pt-5">
           <Field
-            label={`When should ${module.title} be closed?`}
+            label="When should a purchase order close?"
             hint="This selection is only reflected in this local demo preview."
           >
             <Select
@@ -1068,12 +977,12 @@ function PreferencesPanel({
               <option>Never automatically</option>
             </Select>
           </Field>
-        </div>
-        <Field label="Terms & conditions" className="mt-5">
+        </div>}
+        {["purchase-orders", "request-for-quotes", "contracts"].includes(module.slug) && <Field label="Terms & conditions" className="mt-5">
           <Textarea
             defaultValue={`Standard ${module.title.toLowerCase()} terms for Meridian Procurement Demo.\nDelivery and approval requirements apply.`}
           />
-        </Field>
+        </Field>}
       </div>
       <div className="flex flex-wrap gap-2 border-t border-border px-5 py-4">
         <Button onClick={() => onSavePreview(`${module.title} preferences`)}>

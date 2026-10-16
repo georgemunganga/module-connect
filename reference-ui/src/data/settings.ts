@@ -89,9 +89,37 @@ export const moduleSettings: ModuleSettingsConfig[] = [
   },
   {
     slug: "bills",
-    title: "Bills",
+    title: "Invoice Checks",
     group: "Purchases",
-    description: "Configure reconciliation and payable document preferences.",
+    description: "Configure procurement-side invoice matching before Finance receives the bill.",
+    tabs: [tab("preferences", "Preferences")],
+  },
+  {
+    slug: "request-for-quotes",
+    title: "Requests for Quotes",
+    group: "Purchases",
+    description: "Set supplier invitation, response, closing and evaluation preferences.",
+    tabs: [tab("preferences", "Preferences"), tab("approvals", "Approvals")],
+  },
+  {
+    slug: "contracts",
+    title: "Supplier Contracts",
+    group: "Purchases",
+    description: "Set contract review, renewal and utilization preferences.",
+    tabs: [tab("preferences", "Preferences"), tab("approvals", "Approvals")],
+  },
+  {
+    slug: "inspections",
+    title: "Inspections",
+    group: "Purchases",
+    description: "Set evidence and acceptance rules for received goods.",
+    tabs: [tab("preferences", "Preferences")],
+  },
+  {
+    slug: "returns",
+    title: "Returns",
+    group: "Purchases",
+    description: "Set approval and evidence rules for supplier returns.",
     tabs: [tab("preferences", "Preferences")],
   },
   {
@@ -109,6 +137,23 @@ export const moduleSettings: ModuleSettingsConfig[] = [
     tabs: [tab("approvals", "Approvals")],
   },
 ];
+
+/** Only Procurement-owned settings appear in the Procurement directory. */
+export const procurementModuleGroups = [
+  { title: "Suppliers & catalog", slugs: ["vendors", "items"] },
+  { title: "Buying", slugs: ["purchase-requests", "purchase-orders"] },
+  { title: "Sourcing & contracts", slugs: ["request-for-quotes", "contracts"] },
+  { title: "Receiving & invoice checks", slugs: ["purchase-receives", "inspections", "returns", "bills"] },
+] as const;
+
+export const procurementModuleSlugs: ReadonlySet<string> = new Set(procurementModuleGroups.flatMap((group) => group.slugs));
+export const moduleOwner: Record<string, string> = {
+  projects: "Projects",
+  accounts: "Finance",
+  customers: "Customer Management",
+  "recurring-bills": "Finance / Accounts Payable",
+  "payments-made": "Finance / Treasury",
+};
 
 const organizationRoutes: SettingsRoute[] = [
   { path: "/settings/general", title: "General" },
