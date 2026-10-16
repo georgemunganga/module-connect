@@ -25,6 +25,8 @@ export interface BidReceipt {
 export interface SourcingEvent {
   id: string;
   title: string;
+  /** Plain-language requirement summary shown to invited suppliers. */
+  description?: string;
   method: SourcingMethod;
   state: EventState;
   buyer: string;

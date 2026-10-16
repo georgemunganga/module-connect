@@ -50,6 +50,8 @@ function NewEvent() {
   const [candidateId, setCandidateId] = useState("");
   const [candidateQuantity, setCandidateQuantity] = useState("");
   const [method, setMethod] = useState<SourcingMethod | null>(null);
+  const [eventTitle, setEventTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [justification, setJustification] = useState("");
   const [closes, setCloses] = useState("");
   const [terms, setTerms] = useState("");
@@ -69,6 +71,8 @@ function NewEvent() {
         setLines([...new Set([...(Array.isArray(saved.lines) ? saved.lines : []), ...(lineId ? [lineId] : [])])]);
         setQuantities(saved.quantities && typeof saved.quantities === "object" ? saved.quantities : {});
         setMethod(saved.method ?? null);
+        setEventTitle(saved.eventTitle ?? "");
+        setDescription(saved.description ?? "");
         setJustification(saved.justification ?? "");
         setCloses(saved.closes ?? "");
         setTerms(saved.terms ?? "");
@@ -82,8 +86,8 @@ function NewEvent() {
   }, [draftKey, lineId]);
 
   useEffect(() => {
-    if (draftLoaded && !done) sessionStorage.setItem(draftKey, JSON.stringify({ lines, quantities, method, justification, closes, terms, requiredDocuments, tz, invited, criteria }));
-  }, [draftLoaded, done, draftKey, lines, quantities, method, justification, closes, terms, requiredDocuments, tz, invited, criteria]);
+    if (draftLoaded && !done) sessionStorage.setItem(draftKey, JSON.stringify({ lines, quantities, method, eventTitle, description, justification, closes, terms, requiredDocuments, tz, invited, criteria }));
+  }, [draftLoaded, done, draftKey, lines, quantities, method, eventTitle, description, justification, closes, terms, requiredDocuments, tz, invited, criteria]);
 
   const chosen = approvedLines.filter((l) => lines.includes(l.key)).map((line) => ({ ...line, selectedQty: quantities[line.key] ?? line.qty }));
   const candidate = approvedLines.find((line) => line.key === candidateId);
@@ -100,11 +104,15 @@ function NewEvent() {
   const estEur = chosen.filter((l) => l.ccy === "EUR").reduce((s, l) => s + l.selectedQty * (l.value / l.qty), 0) + chosen.filter((l) => l.ccy === "KES").reduce((s, l) => s + l.selectedQty * (l.value / l.qty) / 140, 0);
   const weightTotal = criteria.reduce((s, c) => s + c.weight, 0);
   const needsJustification = method === "Single source" || method === "Emergency";
-  const problems = [!chosen.length && "choose at least one item", chosen.length !== lines.length && "remove items that are no longer approved", chosen.some((line) => !Number.isInteger(line.selectedQty) || line.selectedQty < 1 || line.selectedQty > line.qty) && "check item quantities", !method && "choose how to buy", method && !permittedMethods(estEur).find((choice) => choice.method === method)?.allowed && "choose a buying method allowed for this value", needsJustification && !justification.trim() && "explain why", !terms.trim() && "add the buying terms", !closes && "set a deadline", !invited.length && "invite at least one vendor", invited.some((supplier) => !suppliersPool.includes(supplier)) && "remove vendors that are no longer approved", weightTotal !== 100 && "comparison percentages must total 100%"].filter(Boolean) as string[];
+  const problems = [!eventTitle.trim() && "name the quote request", !description.trim() && "describe what vendors should provide", !chosen.length && "choose at least one item", chosen.length !== lines.length && "remove items that are no longer approved", chosen.some((line) => !Number.isInteger(line.selectedQty) || line.selectedQty < 1 || line.selectedQty > line.qty) && "check item quantities", !method && "choose how to buy", method && !permittedMethods(estEur).find((choice) => choice.method === method)?.allowed && "choose a buying method allowed for this value", needsJustification && !justification.trim() && "explain why", !terms.trim() && "add the buying terms", !closes && "set a deadline", closes && new Date(closes).getTime() <= Date.now() && "choose a future deadline", !invited.length && "invite at least one vendor", invited.some((supplier) => !suppliersPool.includes(supplier)) && "remove vendors that are no longer approved", weightTotal !== 100 && "comparison percentages must total 100%"].filter(Boolean) as string[];
 
   const steps: FlowStep[] = [
     { id: "lines", title: "What needs a quote?", purpose: "Choose approved request items and how many to quote. You can split the remaining quantity across later purchases.", render: () => (
       approvedLines.length ? <div className="space-y-3">
+        <div className="grid gap-3 rounded-lg border bg-surface-muted p-4">
+          <div><Label htmlFor="quote-title">Name this quote request *</Label><Input id="quote-title" className="mt-1" maxLength={160} placeholder="For example, 10 laptops for the support team" value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} /></div>
+          <div><Label htmlFor="quote-description">What should vendors provide? *</Label><Textarea id="quote-description" className="mt-1" rows={3} placeholder="Describe the outcome, key specifications and delivery needs" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
+        </div>
         {lines.filter((id) => !approvedLines.some((line) => line.key === id)).map((id) => <div key={id} className="flex items-center justify-between gap-2 rounded-lg border border-danger/40 bg-danger-soft p-3 text-sm"><span>Request item {id} is no longer available.</span><Button variant="outline" size="sm" onClick={() => setLines((current) => current.filter((value) => value !== id))}>Remove</Button></div>)}
         {chosen.length ? <ul className="space-y-2">{chosen.map((line) => <li key={line.key} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"><div><span className="font-medium">{line.label}</span><span className="block text-xs text-muted-foreground">{line.pr} · {line.selectedQty} of {line.qty} remaining · {money(line.selectedQty * line.value / line.qty, line.ccy)}</span></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => { setCandidateId(line.key); setCandidateQuantity(String(line.selectedQty)); setItemPickerOpen(true); }}>Change</Button><Button variant="outline" size="sm" onClick={() => { setLines((current) => current.filter((id) => id !== line.key)); setQuantities((current) => { const next = { ...current }; delete next[line.key]; return next; }); }}>Remove</Button></div></li>)}</ul> : <p className="text-sm text-muted-foreground">No items selected yet.</p>}
         <Button variant="outline" onClick={() => { setCandidateId(approvedLines.find((line) => !lines.includes(line.key))?.key ?? approvedLines[0].key); setCandidateQuantity(""); setItemPickerOpen(true); }}>Add approved item</Button>
@@ -140,7 +148,11 @@ function NewEvent() {
         <p className={`text-sm ${weightTotal === 100 ? "text-success" : "text-danger"}`}>Total {weightTotal}% {weightTotal === 100 ? "" : "— must be 100%"}</p>
       </div>) },
     { id: "review", title: "Review", purpose: "Another purchasing lead must approve this before vendors receive it.", render: () => {
-      return <div className="space-y-2 text-sm">{problems.length ? <p role="alert" className="rounded-md border border-danger/40 bg-danger-soft p-3">Still needed: {problems.join(", ")}.</p> : <p className="rounded-md border border-success/40 bg-success-soft p-3">Ready to send for approval.</p>}<p>{chosen.length} line(s) · {method ?? "—"} · closes {closes || "—"} ({tz}) · {invited.length} supplier(s)</p></div>;
+      return <div className="space-y-4 text-sm">
+        {problems.length ? <p role="alert" className="rounded-md border border-danger/40 bg-danger-soft p-3">Still needed: {problems.join(", ")}.</p> : <p className="rounded-md border border-success/40 bg-success-soft p-3">Ready to send for approval.</p>}
+        <section className="rounded-lg border p-4"><h3 className="font-semibold">What vendors will see after approval</h3><p className="mt-2 text-base font-medium">{eventTitle || "Name not entered"}</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{description || "Description not entered"}</p><ul className="mt-3 list-disc pl-5">{chosen.map((line) => <li key={line.key}>{line.selectedQty} × {line.label}</li>)}</ul><p className="mt-3">{method ?? "Buying method not chosen"} · closes {closes || "not set"} ({tz})</p><p className="mt-2">Terms: {terms || "not entered"}</p><p className="mt-2">Required documents: {requiredDocuments || "none specified"}</p><p className="mt-2">Scoring: {criteria.map((item) => `${item.name} ${item.weight}%`).join(" · ")}</p></section>
+        <p className="text-muted-foreground">Invited vendors: {invited.length ? invited.join(", ") : "none selected"}. A purchasing lead checks this before any invitation is sent. Other vendors, internal budget and requester details stay private.</p>
+      </div>;
     } },
   ];
 
@@ -169,7 +181,7 @@ function NewEvent() {
               const selected = chosen.find((item) => item.pr === pr && item.key === line.id);
           return selected ? { ...line, route: "RFQ / tender" as const, allocatedQty: line.allocatedQty + selected.selectedQty, related: [...line.related, { kind: "RFQ" as const, ref }] } : line;
             }) }])),
-            sourcing: [{ id: ref, title: chosen.map((x) => x.label).join(", "), method, state: "Pending approval", buyer: "You (demo)", entity: store.metadata[chosen[0].pr].entity, sourceLines: chosen.map((x) => `${x.pr} / ${x.key}`), items: chosen.map((x) => ({ description: x.label, qty: x.selectedQty, unit: "each" })), opensAt: "", closesAt: closes, timeZone: tz, opened: false, eligibility: justification || "Active eligible suppliers", terms: terms.trim(), responseDocuments: requiredDocuments.split(",").map((entry) => entry.trim()).filter(Boolean), criteria, invitations: invited.map((supplier) => ({ supplier, delivery: "Not delivered" as const, note: "Pending publication" })), qa: [], bids: [], amendments: [], nextAction: "Procurement lead approval", dueDate: closes.slice(0, 10) }, ...store.sourcing],
+            sourcing: [{ id: ref, title: eventTitle.trim(), description: description.trim(), method, state: "Pending approval", buyer: "You (demo)", entity: store.metadata[chosen[0].pr].entity, sourceLines: chosen.map((x) => `${x.pr} / ${x.key}`), items: chosen.map((x) => ({ description: x.label, qty: x.selectedQty, unit: "each" })), opensAt: "", closesAt: closes, timeZone: tz, opened: false, eligibility: justification || "Active eligible suppliers", terms: terms.trim(), responseDocuments: requiredDocuments.split(",").map((entry) => entry.trim()).filter(Boolean), criteria, invitations: invited.map((supplier) => ({ supplier, delivery: "Not delivered" as const, note: "Pending publication" })), qa: [], bids: [], amendments: [], nextAction: "Procurement lead approval", dueDate: closes.slice(0, 10) }, ...store.sourcing],
           }));
           ensureEvaluation(ref);
           setDone(ref);

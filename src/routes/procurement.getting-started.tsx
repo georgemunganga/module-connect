@@ -86,13 +86,14 @@ function GettingStarted() {
       <p className="mt-2 text-xs text-muted-foreground">Marking a step reviewed only tracks your progress. It does not turn on a rule or approve spending.</p>
     </section>
 
-    <div className="mt-5 grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
-      <nav aria-label="Getting started steps" className="space-y-2">
+    <div className="mt-5 space-y-4">
+      <nav aria-label="Getting started steps" className="grid gap-3 md:grid-cols-3">
         {steps.map((step, index) => {
           const StepIcon = step.icon;
-          return <button key={step.id} type="button" onClick={() => setActive(step.id)} aria-current={active === step.id ? "step" : undefined} className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${active === step.id ? "border-primary bg-primary/5" : "bg-surface hover:border-border-strong"}`}>
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full border bg-background">{progress[step.id] ? <Check className="size-4 text-success" aria-hidden /> : <StepIcon className="size-4" aria-hidden />}</span>
-            <span className="min-w-0"><span className="block text-xs text-muted-foreground">Step {index + 1}</span><span className="block text-sm font-medium">{step.title}</span></span>
+          const stepChecks = checks.filter((check) => step.id === "controls" ? ["policy", "supplier", "item"].includes(check.key) : step.id === "first-purchase" ? check.key === "first-request" : check.key === "finance");
+          return <button key={step.id} type="button" onClick={() => setActive(step.id)} aria-current={active === step.id ? "step" : undefined} className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors ${active === step.id ? "border-primary bg-primary/5" : "bg-surface hover:border-border-strong"}`}>
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-background">{progress[step.id] ? <Check className="size-5 text-success" aria-hidden /> : <StepIcon className="size-5 text-primary" aria-hidden />}</span>
+            <span className="min-w-0"><span className="block text-xs text-muted-foreground">Step {index + 1} · {stepChecks.filter((check) => check.state === "ready").length}/{stepChecks.length} checks ready</span><span className="mt-1 block text-sm font-semibold">{step.title}</span><span className="mt-1 block text-xs text-muted-foreground">{progress[step.id] ? "Reviewed in this browser" : step.summary}</span></span>
           </button>;
         })}
       </nav>
@@ -100,7 +101,7 @@ function GettingStarted() {
         <div className="flex items-start gap-3"><span className="rounded-lg bg-primary/10 p-2"><Icon className="size-5 text-primary" aria-hidden /></span><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Step {gettingStartedSteps.indexOf(active) + 1} of 3</p><h2 id="step-heading" className="text-lg font-semibold">{selected.title}</h2><p className="mt-1 text-sm text-muted-foreground">{selected.summary}</p></div></div>
         <div className="mt-5 space-y-2" aria-label="Checks for this step">{visibleChecks.map((check) => <div key={check.key} className="rounded-lg border p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{check.label}</strong><span className={check.state === "ready" ? "text-success" : "text-muted-foreground"}>{check.state === "ready" ? "Ready in demo" : check.state === "not connected" ? "Not connected" : "Needs action"}</span></div><p className="mt-1 text-xs text-muted-foreground">{check.detail} Owner: {check.owner}.</p></div>)}</div>
         <ul className="mt-5 divide-y border-y">
-          {selected.tasks.map((task) => <li key={task.title} className="flex flex-wrap items-start justify-between gap-3 py-4"><div className="max-w-xl"><h3 className="text-sm font-medium">{task.title}</h3><p className="mt-1 text-xs text-muted-foreground">{task.detail}</p></div><a href={task.href} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">{task.action}<ArrowRight className="size-4" aria-hidden /></a></li>)}
+          {selected.tasks.map((task) => <li key={task.title} className="flex flex-wrap items-start justify-between gap-3 py-4"><div className="max-w-xl"><h3 className="text-sm font-medium">{task.title}</h3><p className="mt-1 text-xs text-muted-foreground">{task.detail}</p></div><Link to={task.href as never} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">{task.action}<ArrowRight className="size-4" aria-hidden /></Link></li>)}
         </ul>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
           <Button variant={progress[active] ? "outline" : "default"} onClick={() => setReviewed(active, !progress[active])} disabled={!loaded}>{progress[active] ? "Mark as not reviewed" : "Mark step reviewed"}</Button>

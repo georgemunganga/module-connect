@@ -28,7 +28,8 @@ const nowStr = () => new Date().toISOString().slice(0, 16).replace("T", " ");
 function EventDetail() {
   const { id } = Route.useParams();
   const { role, entityId } = useApp();
-  const e = useProcurement().sourcing.find((x) => x.id === id);
+  const procurement = useProcurement();
+  const e = procurement.sourcing.find((x) => x.id === id);
   const evaluation = useCommercial().evaluations.find((item) => item.eventId === id);
   const setE = (value: SourcingEvent) => saveProcurement((state) => ({ ...state, sourcing: state.sourcing.map((item) => item.id === id ? value : item) }));
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
@@ -50,6 +51,7 @@ function EventDetail() {
 
   return (
     <AppShell>
+      <Link to="/procurement/sourcing" className="mb-3 inline-block text-sm text-primary underline">← Back to quote requests</Link>
       <PageHeader eyebrow={`Quotes · ${e.method}`} title={e.title} description={`${e.id} · ${e.entity} · handled by ${e.buyer}`} primaryAction={primary} />
       <div className="mb-4 flex flex-wrap gap-3 text-sm">
         <StatusBadge status={e.state} />
@@ -73,8 +75,15 @@ function EventDetail() {
         {tab === "Overview" ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="Requirement">
+              {e.description ? <p className="mb-3 whitespace-pre-wrap text-muted-foreground">{e.description}</p> : null}
               <ul className="list-disc pl-5">{e.items.map((i) => <li key={i.description}>{i.qty} {i.unit} — {i.description}</li>)}</ul>
-              <p className="mt-2 text-xs text-muted-foreground">From: {e.sourceLines.join(", ")}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">From: {e.sourceLines.map((source) => {
+                const requestId = source.match(/^PR-\d{4}-\d+/)?.[0];
+                const request = procurement.requests.find((item) => item.id === requestId);
+                return request && sameEntity(procurement.metadata[request.id]?.entity, entityId)
+                  ? <Link key={source} to="/procurement/requests/$id" params={{ id: request.id }} className="text-primary underline">{source}</Link>
+                  : <span key={source}>{source}</span>;
+              })}</div>
             </Card>
             <Card title="Evaluation criteria (fixed once published)">
               {e.criteria.length ? <ul>{e.criteria.map((c) => <li key={c.name} className="flex justify-between"><span>{c.name}</span><span className="tabular-nums">{c.weight}%</span></li>)}</ul> : <p className="text-muted-foreground">Not set yet.</p>}
@@ -124,6 +133,7 @@ function EventDetail() {
           <div className="rounded-lg border bg-surface p-5 text-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">What invited suppliers receive</p>
             <h2 className="mt-1 text-lg font-semibold">{e.method}: {e.title}</h2>
+            {e.description ? <p className="mt-2 whitespace-pre-wrap">{e.description}</p> : null}
             <p className="mt-1">Issued by {e.entity}. Submit by <strong>{e.closesAt || "[deadline not set]"}</strong> ({e.timeZone}).</p>
             <h3 className="mt-4 font-medium">Items</h3><ul className="list-disc pl-5">{e.items.map((i) => <li key={i.description}>{i.qty} {i.unit} — {i.description}</li>)}</ul>
             <h3 className="mt-4 font-medium">How responses are evaluated</h3><ul className="list-disc pl-5">{e.criteria.map((c) => <li key={c.name}>{c.name} — {c.weight}%</li>)}</ul>

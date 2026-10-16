@@ -91,13 +91,25 @@ function Field({
   );
 }
 
+type InboxFile = { id: string; name: string; size: number; addedAt: string };
+
 export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payments" }) {
   const state = usePayables();
   const { entityId, role } = useApp();
   const navigate = useNavigate();
   const [intakeError, setIntakeError] = useState("");
+  const [inboxState, setInboxState] = useState<{ key: string; files: InboxFile[] }>({ key: "", files: [] });
+  const [dragging, setDragging] = useState(false);
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const inboxKey = `proc:bill-inbox:${entityId}`;
+  const inboxFiles = inboxState.key === inboxKey ? inboxState.files : [];
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(inboxKey) ?? "[]");
+      setInboxState({ key: inboxKey, files: Array.isArray(stored) ? stored.filter((entry): entry is InboxFile => Boolean(entry && typeof entry.id === "string" && typeof entry.name === "string" && typeof entry.size === "number" && typeof entry.addedAt === "string")) : [] });
+    } catch { setInboxState({ key: inboxKey, files: [] }); }
+  }, [inboxKey]);
   const statusInView = (status: Invoice["status"]) => view === "inbox" ? !["Posted", "Partially paid", "Paid", "Voided", "Cancelled"].includes(status) : view === "payments" ? ["Handed to AP", "AP rejected", "Posted", "Partially paid", "Paid"].includes(status) : true;
   const rows = state.invoices.filter(
     (i) =>
@@ -112,12 +124,25 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
     : view === "payments"
       ? [{ label: "Handed to AP", value: rows.filter((i) => i.status === "Handed to AP").length }, { label: "AP rejected", value: rows.filter((i) => i.status === "AP rejected").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }]
       : [{ label: "Bills", value: rows.length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }];
-  const startFromFile = (file?: File) => {
-    if (!file) return;
-    if (file.size > 5_000_000) return setIntakeError("Choose a file smaller than 5 MB.");
-    if (!/\.(pdf|png|jpe?g)$/i.test(file.name)) return setIntakeError("Choose a PDF, PNG or JPG bill.");
-    sessionStorage.setItem("proc:bill-intake-draft", JSON.stringify({ name: file.name, entityId }));
+  const addFiles = (files: FileList | File[]) => {
+    const chosen = Array.from(files);
+    if (!chosen.length) return;
+    if (chosen.length + inboxFiles.length > 20) return setIntakeError("Keep up to 20 bill filenames in this inbox. Remove reviewed entries before adding more.");
+    if (chosen.some((file) => file.size > 5_000_000)) return setIntakeError("Each file must be smaller than 5 MB.");
+    if (chosen.some((file) => !/\.(pdf|png|jpe?g|csv)$/i.test(file.name))) return setIntakeError("Choose PDF, PNG, JPG or CSV files.");
+    const entries = chosen.map((file) => ({ id: crypto.randomUUID(), name: file.name, size: file.size, addedAt: new Date().toISOString() }));
+    const next = [...entries, ...inboxFiles];
+    localStorage.setItem(inboxKey, JSON.stringify(next));
+    setInboxState({ key: inboxKey, files: next });
     setIntakeError("");
+  };
+  const removeFile = (id: string) => {
+    const next = inboxFiles.filter((file) => file.id !== id);
+    localStorage.setItem(inboxKey, JSON.stringify(next));
+    setInboxState({ key: inboxKey, files: next });
+  };
+  const createBillDraft = (file: InboxFile) => {
+    sessionStorage.setItem("proc:bill-intake-draft", JSON.stringify({ name: file.name, entityId }));
     void navigate({ to: "/procurement/invoices/new" });
   };
   return (
@@ -138,14 +163,24 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
           {summary.map((card) => <div key={card.label} className="rounded-lg border bg-surface p-4"><p className="text-xs text-muted-foreground">{card.label}</p><p className="text-2xl font-semibold">{card.value}</p></div>)}
         </div>
-        {view === "inbox" && role !== "auditor" ? <section
-          className="mb-4 rounded-xl border border-dashed bg-surface p-5"
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => { event.preventDefault(); startFromFile(event.dataTransfer.files[0]); }}
-        >
-          <div className="flex items-start gap-3"><FileUp className="size-6 text-primary" aria-hidden /><div><h2 className="font-medium">Start a bill from a file</h2><p className="text-sm text-muted-foreground">Drop one PDF or image here, or choose a file. Its name fills the draft reference; this demo does not upload or read the document.</p></div></div>
-          <Input aria-label="Choose bill file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" className="mt-3 max-w-sm" onChange={(event) => startFromFile(event.target.files?.[0])} />
-          {intakeError ? <p role="alert" className="mt-2 text-sm text-danger">{intakeError}</p> : null}
+        {view === "inbox" ? <section className="mb-5 space-y-3">
+          {role !== "auditor" ? <div
+            className={`rounded-xl border-2 border-dashed bg-surface p-6 text-center ${dragging ? "border-primary bg-primary-soft" : "border-border"}`}
+            onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(event.dataTransfer.files); }}
+          >
+            <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary-soft text-primary"><FileUp className="size-6" aria-hidden /></span>
+            <h2 className="mt-3 font-semibold">Add bills to the inbox</h2>
+            <p className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">Drop files here or choose them below. Review each filename before creating its bill draft. This demo stores names and sizes in this browser; it does not upload or read file contents.</p>
+            <Input aria-label="Choose bill files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.csv,application/pdf,image/png,image/jpeg,text/csv" className="mx-auto mt-4 max-w-sm" onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} />
+            <p className="mt-2 text-xs text-muted-foreground">Up to 20 entries, 5 MB each · PDF, image or CSV</p>
+            {intakeError ? <p role="alert" className="mt-2 text-sm text-danger">{intakeError}</p> : null}
+          </div> : null}
+          <div className="rounded-xl border bg-surface p-4">
+            <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Inbox files</h2><span className="text-xs text-muted-foreground">{inboxFiles.length} waiting</span></div>
+            {inboxFiles.length ? <ul className="mt-3 divide-y">{inboxFiles.map((file) => <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><p className="truncate font-medium">{file.name}</p><p className="text-xs text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB · Added {file.addedAt.slice(0, 10)} · Ready to review</p></div><div className="flex flex-wrap gap-2">{role !== "auditor" ? <><Button size="sm" onClick={() => createBillDraft(file)}>Create bill draft</Button><Button size="sm" variant="outline" onClick={() => removeFile(file.id)}>Remove</Button></> : null}</div></li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">Your inbox is clear. Added bill filenames will appear here for review.</p>}
+          </div>
         </section> : null}
         <div className="mb-4 flex flex-wrap gap-2">
           <Input
