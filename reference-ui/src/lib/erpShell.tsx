@@ -28,6 +28,7 @@ type ErpShellContext = {
   branches: Branch[];
   selection: ShellSelection;
   contextAvailable: boolean;
+  assignedRoles: string[];
   selectEntity: (id: string) => void;
   selectBranch: (id: string, entityId: string) => void;
 };
@@ -79,6 +80,18 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selection, setSelection] = useState<ShellSelection>(readSelection);
   const [contextAvailable, setContextAvailable] = useState(false);
+  const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/hrm/auth/me", { credentials: "include", cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((body: { authenticated?: boolean; user?: { roles?: unknown } }) => {
+        if (body.authenticated && Array.isArray(body.user?.roles)) setAssignedRoles(body.user.roles.filter((role): role is string => typeof role === "string"));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const sync = (event: StorageEvent) => {
@@ -150,10 +163,10 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     setSelection(next);
   };
   const value = useMemo<ErpShellContext>(() => ({
-    branding, entities, branches, selection, contextAvailable,
+    branding, entities, branches, selection, contextAvailable, assignedRoles,
     selectEntity: (id) => updateSelection({ ...selection, entityId: id, branch: "" }),
     selectBranch: (id, entityId) => updateSelection({ ...selection, entityId, branch: id }),
-  }), [branding, entities, branches, selection, contextAvailable]);
+  }), [branding, entities, branches, selection, contextAvailable, assignedRoles]);
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }
 

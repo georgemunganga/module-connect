@@ -46,7 +46,10 @@ const payables = [
 export function AppShell() {
   const location = useLocation();
   const { records, notify } = useApp();
-  const { branding, entities, branches, selection, contextAvailable, selectEntity, selectBranch } = useErpShell();
+  const { branding, entities, branches, selection, contextAvailable, assignedRoles, selectEntity, selectBranch } = useErpShell();
+  const roleSet = new Set(assignedRoles.map((role) => role.toLowerCase()));
+  const canOpenHrm = ["employee", "manager", "hr_ops", "payroll", "finance_approver", "hr_admin", "investigator", "timesheet_operator"].some((role) => roleSet.has(role));
+  const canOpenCore = roleSet.has("erp_admin") || roleSet.has("hr_admin");
   const [mobile, setMobile] = useState(false),
     [query, setQuery] = useState(""),
     [searchOpen, setSearchOpen] = useState(false),
@@ -104,23 +107,7 @@ export function AppShell() {
         >
           <Menu size={22} />
         </button>
-        <div className="relative flex shrink-0 items-center lg:w-[260px]">
-          <button
-            type="button"
-            aria-label="Open ERP modules"
-            aria-expanded={modulesOpen}
-            onClick={() => { setModulesOpen(!modulesOpen); setContextOpen(false); }}
-            className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1 hover:bg-primary-foreground/10"
-          >
-            <BrandMark onDark />
-            <ChevronDown size={14} className="shrink-0" />
-          </button>
-          {modulesOpen && <div className="absolute left-0 top-11 w-56 rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl">
-            <p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">Modules</p>
-            <a href="/hrm" className="block rounded px-2 py-2 text-sm hover:bg-secondary">Human Resources</a>
-            <Link to="/" onClick={() => setModulesOpen(false)} className="block rounded bg-primary-soft px-2 py-2 text-sm font-medium text-primary">Procurement</Link>
-          </div>}
-        </div>
+        <a href="/" className="flex shrink-0 items-center rounded-md px-2 py-1 hover:bg-primary-foreground/10 lg:w-[260px]"><BrandMark onDark /></a>
         <div className="relative hidden md:block">
           <button
             type="button"
@@ -191,6 +178,15 @@ export function AppShell() {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
+          <div className="relative">
+            <button type="button" aria-label="Switch ERP module" aria-expanded={modulesOpen} onClick={() => { setModulesOpen(!modulesOpen); setContextOpen(false); }} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold hover:bg-primary-foreground/10"><ShoppingBag size={16} /><span className="hidden sm:inline">Procurement</span><ChevronDown size={14} /></button>
+            {modulesOpen && <div className="absolute right-0 top-11 z-50 w-56 rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl">
+              <p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">My modules</p>
+              {canOpenHrm && <a href="/hrm" className="block rounded px-2 py-2 text-sm hover:bg-secondary">Human resources</a>}
+              <Link to="/" onClick={() => setModulesOpen(false)} className="block rounded bg-primary-soft px-2 py-2 text-sm font-medium text-primary">Procurement</Link>
+              {canOpenCore && <a href="/core" className="block rounded px-2 py-2 text-sm hover:bg-secondary">ERP Core</a>}
+            </div>}
+          </div>
           <span className="hidden rounded-full border border-warning/40 bg-warning-soft px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-foreground xl:block">
             Demo data
           </span>

@@ -112,7 +112,11 @@ const titleCase = (value: string) =>
 
 export function Settings() {
   const location = useLocation();
-  const { branding } = useErpShell();
+  const { branding, assignedRoles } = useErpShell();
+  const assigned = new Set(assignedRoles.map((role) => role.toLowerCase()));
+  const canOpenHrm = ["employee", "manager", "hr_ops", "payroll", "finance_approver", "hr_admin", "investigator", "timesheet_operator"].some((role) => assigned.has(role));
+  const canOpenCore = assigned.has("erp_admin") || assigned.has("hr_admin");
+  const [modulesOpen, setModulesOpen] = useState(false);
   const { notify } = useApp();
   const [preview, setPreview] = useStoredState<Record<string, string>>(
     "settings.preview.v1",
@@ -214,6 +218,10 @@ export function Settings() {
             className="pl-9"
           />
         </div>
+        <div className="relative">
+          <button type="button" aria-label="Switch ERP module" aria-expanded={modulesOpen} onClick={() => setModulesOpen(!modulesOpen)} className="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold hover:bg-secondary"><LayoutGrid size={15} /><span className="hidden sm:inline">Procurement</span><ChevronDown size={13} /></button>
+          {modulesOpen && <div className="absolute right-0 top-11 z-50 w-56 rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl"><p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">My modules</p>{canOpenHrm && <a href="/hrm" className="block rounded px-2 py-2 text-sm hover:bg-secondary">Human resources</a>}<a href="/procurement/workspace/" className="block rounded bg-primary-soft px-2 py-2 text-sm font-semibold text-primary">Procurement</a>{canOpenCore && <a href="/core" className="block rounded px-2 py-2 text-sm hover:bg-secondary">ERP Core</a>}</div>}
+        </div>
         <Link
           to="/"
           className="hidden shrink-0 items-center gap-1 rounded-full border border-border bg-surface px-3.5 py-2 text-[13px] font-medium text-foreground hover:bg-secondary sm:flex"
@@ -305,48 +313,16 @@ function SettingsSidebar({
             <X size={18} />
           </button>
         </div>
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">
-          Organization settings
-        </p>
+        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Shared settings</p>
+        <a href="/core" className="mb-4 flex items-center gap-2 rounded-md px-3 py-2 text-[13px] text-rail-muted hover:bg-rail-active hover:text-rail-foreground"><Building2 size={16} />ERP Core<ArrowRight size={13} className="ml-auto" /></a>
+        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Procurement settings</p>
         <SidebarGroup
-          title="Organization"
+          title="Supplier access & catalogs"
           path={path}
-          links={organizationLinks.slice(1)}
-          icon={groupIcons.Organization}
-        />
-        <SidebarGroup
-          title="Users & Roles"
-          path={path}
-          links={userLinks}
-          icon={groupIcons["Users & Roles"]}
-        />
-        <SidebarGroup
-          title="Taxes & Compliance"
-          path={path}
-          links={taxLinks}
-          icon={groupIcons["Taxes & Compliance"]}
-        />
-        <SidebarGroup
-          title="Setup & Configurations"
-          path={path}
-          links={setupLinks}
+          links={setupLinks.filter(([, href]) => href === "/settings/vendor-portal" || href === "/settings/punchout-catalogs")}
           icon={groupIcons["Setup & Configurations"]}
         />
-        <SidebarGroup
-          title="Customization"
-          path={path}
-          links={customizationLinks}
-          icon={groupIcons.Customization}
-        />
-        <SidebarGroup
-          title="Automation"
-          path={path}
-          links={automationLinks}
-          icon={groupIcons.Automation}
-        />
-        <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">
-          Module settings
-        </p>
+        <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Transaction settings</p>
         {moduleGroups.map((group) => (
           <ModuleSidebarGroup
             key={group.title}
@@ -472,67 +448,24 @@ function SidebarLink({
 function SettingsIndex({ search }: { search: string }) {
   const cards = [
     {
-      title: "Organization",
+      title: "Shared ERP settings",
       tone: "mint",
       icon: <Building2 size={17} />,
       links: [
-        ["Profile", "/settings/profile"],
-        ["Branding", "/settings/branding"],
-        ["Locations", "/settings/locations"],
-        ["General", "/settings/general"],
+        ["Organization & branches", "/core/organization"],
+        ["Branding", "/core/branding"],
+        ["Users", "/core/users"],
+        ["Roles", "/core/roles"],
+        ["All shared settings", "/core"],
       ],
     },
     {
-      title: "Users & Roles",
-      tone: "rose",
-      icon: <Users size={17} />,
-      links: [
-        ["Users", "/settings/users"],
-        ["Roles", "/settings/roles"],
-        ["Departments", "/settings/departments"],
-      ],
-    },
-    {
-      title: "Taxes & Compliance",
-      tone: "blue",
-      icon: <ShieldCheck size={17} />,
-      links: [
-        ["Taxes", "/settings/taxes"],
-        ["TDS", "/settings/tds"],
-        ["Reporting Tags", "/settings/reporting-tags"],
-      ],
-    },
-    {
-      title: "Setup & Configurations",
+      title: "Supplier access & catalogs",
       tone: "amber",
       icon: <Settings2 size={17} />,
       links: [
-        ["Currencies", "/settings/currencies"],
-        ["Payment Terms", "/settings/payment-terms"],
         ["Vendor Portal", "/settings/vendor-portal"],
         ["Punchout Catalogs", "/settings/punchout-catalogs"],
-      ],
-    },
-    {
-      title: "Customization",
-      tone: "violet",
-      icon: <Sparkles size={17} />,
-      links: [
-        ["Transaction Number Series", "/settings/transaction-number-series"],
-        ["PDF Templates", "/settings/customization/pdf-templates"],
-        ["Email Notifications", "/settings/customization/email-notifications"],
-        ["Web Tabs", "/settings/web-tabs"],
-      ],
-    },
-    {
-      title: "Automation",
-      tone: "rose",
-      icon: <Zap size={17} />,
-      links: [
-        ["Workflow Rules", "/settings/automation/workflow-rules"],
-        ["Workflow Actions", "/settings/automation/workflow-actions"],
-        ["Workflow Logs", "/settings/automation/workflow-logs"],
-        ["Schedules", "/settings/automation/schedules"],
       ],
     },
   ];
@@ -543,8 +476,8 @@ function SettingsIndex({ search }: { search: string }) {
   return (
     <div className="mx-auto max-w-[1240px]">
       <PageHeader
-        title="Organization Settings"
-        subtitle="Configure your procurement workspace without leaving this frontend demo."
+        title="Procurement settings"
+        subtitle="Buying rules stay here. Company-wide settings are managed once in ERP Core."
         actions={<Badge>Demo workspace</Badge>}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -563,14 +496,14 @@ function SettingsIndex({ search }: { search: string }) {
               {card.links
                 .filter(([label]) => matches(label))
                 .map(([label, href]) => (
-                  <Link
+                  <a
                     key={href}
-                    to={href}
+                    href={href}
                     className="flex items-center justify-between rounded-md px-1 py-2 text-[13px] text-muted-foreground hover:bg-surface-muted hover:text-primary"
                   >
                     {label}
                     <ArrowRight size={14} className="text-muted-foreground" />
-                  </Link>
+                  </a>
                 ))}
             </div>
           </section>
@@ -638,6 +571,26 @@ function SettingsRouteContent({
         </Link>
       </div>
     );
+  const sharedDestinations: Record<string, string> = {
+    "/settings/profile": "/core/organization",
+    "/settings/branding": "/core/branding",
+    "/settings/locations": "/core/organization#locations",
+    "/settings/users": "/core/users",
+    "/settings/roles": "/core/roles",
+    "/settings/departments": "/core/organization#departments",
+  };
+  if (sharedDestinations[path] || path === "/settings/general" || path.startsWith("/settings/automation/") || ["/settings/transaction-number-series", "/settings/customization/pdf-templates", "/settings/customization/email-notifications", "/settings/web-tabs"].includes(path)) {
+    const destination = sharedDestinations[path] || `/core/settings/${path.split("/").at(-1)}`;
+    return <div className="mx-auto max-w-2xl rounded-xl border border-border bg-surface p-7">
+      <Building2 size={28} className="text-primary" />
+      <h1 className="mt-4 text-xl font-semibold">This setting is managed in ERP Core</h1>
+      <p className="mt-2 text-sm text-muted-foreground">Company-wide settings are shared by all modules. Open the Core workspace to manage them once for the ERP.</p>
+      <a href={destination} className="mt-5 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Open in ERP Core <ArrowRight size={15} /></a>
+    </div>;
+  }
+  if (["/settings/currencies", "/settings/payment-terms", "/settings/taxes", "/settings/tds", "/settings/reporting-tags"].includes(path)) {
+    return <div className="mx-auto max-w-2xl rounded-xl border border-border bg-surface p-7"><Receipt size={28} className="text-primary" /><h1 className="mt-4 text-xl font-semibold">Finance owns this setting</h1><p className="mt-2 text-sm text-muted-foreground">Procurement uses this reference but does not maintain the financial master. The Finance workspace will provide its editor when enabled.</p><Link to="/settings" className="mt-5 inline-block text-sm font-semibold text-primary">Back to Procurement settings →</Link></div>;
+  }
   if (path.startsWith("/settings/modules/")) {
     const [, , , moduleSlug, tab = "preferences"] = path.split("/");
     return (
