@@ -13,6 +13,8 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { statusLabel } from "@/platform/components/StatusBadge";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
+import { ListPage } from "@/platform/components/ListPage";
+import { downloadCsv } from "@/platform/data-transfer";
 import {
   addComment,
   addCreditRef,
@@ -102,6 +104,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
   const [dragging, setDragging] = useState(false);
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [listStyle, setListStyle] = useState<"cards" | "table">("cards");
   const inboxKey = `proc:bill-inbox:${entityId}`;
   const inboxFiles = inboxState.key === inboxKey ? inboxState.files : [];
   useEffect(() => {
@@ -120,10 +123,10 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
   );
   const viewRows = state.invoices.filter((invoice) => invoice.entityId === entityId && statusInView(invoice.status));
   const summary = view === "inbox"
-    ? [{ label: "Awaiting review", value: rows.filter((i) => i.status === "Received").length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception" || i.status === "AP rejected").length }, { label: "Ready for AP", value: rows.filter((i) => i.status === "Validated").length }]
+    ? [{ label: "Awaiting review", value: viewRows.filter((i) => i.status === "Received").length }, { label: "Needs resolution", value: viewRows.filter((i) => i.status === "Exception" || i.status === "AP rejected").length }, { label: "Ready for AP", value: viewRows.filter((i) => i.status === "Validated").length }]
     : view === "payments"
-      ? [{ label: "Handed to AP", value: rows.filter((i) => i.status === "Handed to AP").length }, { label: "AP rejected", value: rows.filter((i) => i.status === "AP rejected").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }]
-      : [{ label: "Bills", value: rows.length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }];
+      ? [{ label: "Handed to AP", value: viewRows.filter((i) => i.status === "Handed to AP").length }, { label: "AP rejected", value: viewRows.filter((i) => i.status === "AP rejected").length }, { label: "Finance confirmed paid", value: viewRows.filter((i) => i.status === "Paid").length }]
+      : [{ label: "Bills", value: viewRows.length }, { label: "Needs resolution", value: viewRows.filter((i) => i.status === "Exception").length }, { label: "Finance confirmed paid", value: viewRows.filter((i) => i.status === "Paid").length }];
   const addFiles = (files: FileList | File[]) => {
     const chosen = Array.from(files);
     if (!chosen.length) return;
@@ -182,6 +185,33 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
             {inboxFiles.length ? <ul className="mt-3 divide-y">{inboxFiles.map((file) => <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><p className="truncate font-medium">{file.name}</p><p className="text-xs text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB · Added {file.addedAt.slice(0, 10)} · Ready to review</p></div><div className="flex flex-wrap gap-2">{role !== "auditor" ? <><Button size="sm" onClick={() => createBillDraft(file)}>Create bill draft</Button><Button size="sm" variant="outline" onClick={() => removeFile(file.id)}>Remove</Button></> : null}</div></li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">Your inbox is clear. Added bill filenames will appear here for review.</p>}
           </div>
         </section> : null}
+        <div className="mb-4 flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Showing bills for your company. Open one to see the matching and Finance history.</p><div role="group" aria-label="List display" className="inline-flex shrink-0 rounded-md border bg-surface p-1"><Button size="sm" variant={listStyle === "cards" ? "secondary" : "ghost"} aria-pressed={listStyle === "cards"} onClick={() => setListStyle("cards")}>Cards</Button><Button size="sm" variant={listStyle === "table" ? "secondary" : "ghost"} aria-pressed={listStyle === "table"} onClick={() => setListStyle("table")}>Table</Button></div></div>
+        {listStyle === "table" ? <ListPage<Invoice>
+          rows={viewRows}
+          searchPlaceholder="Search bill, vendor or purchase order"
+          searchFields={(invoice) => `${invoice.id} ${invoice.number} ${invoice.supplier} ${invoice.po}`}
+          filters={[
+            { id: "status", label: "Status", options: [...new Set(viewRows.map((invoice) => invoice.status))], match: (invoice, value) => invoice.status === value },
+            { id: "source", label: "Source", options: [...new Set(viewRows.map((invoice) => invoice.source))], match: (invoice, value) => invoice.source === value },
+          ]}
+          sortOptions={[
+            { id: "number", label: "Bill number", value: (invoice) => invoice.number },
+            { id: "supplier", label: "Vendor", value: (invoice) => invoice.supplier },
+            { id: "due", label: "Due date", value: (invoice) => invoice.due },
+          ]}
+          columns={[
+            { id: "number", header: "Bill", cell: (invoice) => <Link to="/procurement/invoices/$id" params={{ id: invoice.id }} className="font-medium text-primary hover:underline">{invoice.number}</Link> },
+            { id: "supplier", header: "Vendor", cell: (invoice) => invoice.supplier },
+            { id: "po", header: "Order", cell: (invoice) => invoice.po },
+            { id: "total", header: "Total", cell: (invoice) => money(invoiceTotal(invoice), invoice.currency) },
+            { id: "currency", header: "Currency", cell: (invoice) => invoice.currency },
+            { id: "status", header: "Status", cell: (invoice) => <StatusBadge status={invoice.status} /> },
+            { id: "due", header: "Due", cell: (invoice) => invoice.due },
+            { id: "owner", header: "Next owner", defaultVisible: false, cell: (invoice) => invoice.exception?.owner ?? invoice.owner },
+          ]}
+          onExport={["ap_processor", "proc_admin"].includes(role) ? (scope, exportRows, columns) => downloadCsv(`bills-${scope}.csv`, columns.map((column) => ({ key: column.id, label: column.header })), exportRows.map((invoice) => Object.fromEntries(columns.map((column) => [column.id, column.id === "number" ? invoice.number : column.id === "supplier" ? invoice.supplier : column.id === "po" ? invoice.po : column.id === "total" ? String(invoiceTotal(invoice)) : column.id === "currency" ? invoice.currency : column.id === "status" ? invoice.status : column.id === "due" ? invoice.due : invoice.exception?.owner ?? invoice.owner])))) : undefined}
+          emptyState={{ title: view === "payments" ? "No payment updates yet" : view === "inbox" ? "No bills to check" : "No bills yet", body: view === "payments" ? "Finance updates will appear after a bill is sent there." : "Add a vendor bill to compare it with the order and delivery.", icon: <Inbox className="size-10" aria-hidden />, action: view !== "payments" && role !== "auditor" ? <Button asChild><Link to="/procurement/invoices/new">Add bill</Link></Button> : undefined }}
+        /> : <>
         <div className="mb-4 flex flex-wrap gap-2">
           <Input
             aria-label="Search invoices"
@@ -251,6 +281,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
         ) : (
           <NoResultsState title="No matching invoices" body="Try a different search or status." action={<Button variant="outline" onClick={() => { setSearch(""); setFilter("All"); }}>Clear search and filter</Button>} />
         )}
+        </>}
         <p className="mt-5 text-xs text-muted-foreground">
           Payment and posting statuses appear only when confirmed by the Finance demo adapter.
           Procurement cannot execute payment.
