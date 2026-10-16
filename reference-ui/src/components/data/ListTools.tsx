@@ -1,0 +1,547 @@
+import { useState } from "react";
+import {
+  ChevronRight,
+  Columns3,
+  Download,
+  Filter,
+  MoreHorizontal,
+  RefreshCw,
+  RotateCcw,
+  Upload,
+} from "lucide-react";
+import { Button, Field, Input, Modal, Select } from "../ui";
+import {
+  ListImportWizard,
+  type DuplicateMode,
+  type ImportKind,
+  type ImportResult,
+} from "./ListImportWizard";
+
+export type ListColumn = { key: string; label: string; width?: number };
+export type ListFilterField = {
+  key: string;
+  label: string;
+  type?: "text" | "select";
+  options?: string[];
+};
+export type ListSortOption = { key: string; label: string };
+export type ExportScope = "all" | "view" | "selected";
+
+export function ListTools({
+  entity,
+  columns,
+  visibleColumns,
+  onVisibleColumnsChange,
+  columnWidths,
+  onColumnWidthsChange,
+  clipText,
+  onClipTextChange,
+  sortOptions,
+  onSort,
+  filterFields,
+  activeFilters,
+  onApplyFilters,
+  currentView,
+  viewOptions,
+  onViewChange,
+  showSavedView = true,
+  onExport,
+  onImport,
+  selectedCount = 0,
+  onPreferences,
+  onRefresh,
+  onResetWidths,
+  notify,
+}: {
+  entity: string;
+  columns: ListColumn[];
+  visibleColumns: string[];
+  onVisibleColumnsChange: (keys: string[]) => void;
+  columnWidths: Record<string, number>;
+  onColumnWidthsChange: (widths: Record<string, number>) => void;
+  clipText: boolean;
+  onClipTextChange: (value: boolean) => void;
+  sortOptions: ListSortOption[];
+  onSort: (key: string) => void;
+  filterFields: ListFilterField[];
+  activeFilters: Record<string, string>;
+  onApplyFilters: (filters: Record<string, string>) => void;
+  currentView?: string;
+  viewOptions?: string[];
+  onViewChange?: (view: string) => void;
+  showSavedView?: boolean;
+  onExport: (scope: ExportScope) => void;
+  onImport?: (
+    rows: Record<string, string>[],
+    kind: ImportKind,
+    duplicateMode: DuplicateMode,
+  ) => ImportResult;
+  selectedCount?: number;
+  onPreferences?: () => void;
+  onRefresh: () => void;
+  onResetWidths: () => void;
+  notify: (message: string) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [submenu, setSubmenu] = useState<"sort" | "import" | "export" | null>(
+    null,
+  );
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const closeMenu = () => {
+    setMenuOpen(false);
+    setSubmenu(null);
+  };
+  const exportAction = (scope: ExportScope) => {
+    onExport(scope);
+    closeMenu();
+  };
+  const label = entity.toLowerCase();
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          aria-label={`Advanced Search ${entity}`}
+          title="Advanced Search"
+          onClick={() => setFilterOpen(true)}
+          className="px-2.5"
+        >
+          <Filter size={15} /> <span className="hidden sm:inline">Filter</span>
+        </Button>
+        <div className="relative">
+          <Button
+            variant="secondary"
+            aria-label="Customize columns"
+            aria-expanded={columnsOpen}
+            onClick={() => setColumnsOpen(true)}
+            className="px-2.5"
+          >
+            <Columns3 size={15} />{" "}
+            <span className="hidden sm:inline">Columns</span>
+          </Button>
+        </div>
+        <div className="relative">
+          <Button
+            variant="secondary"
+            aria-label="More Actions"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => {
+              setMenuOpen((open) => !open);
+              setSubmenu(null);
+            }}
+            className="px-2.5"
+          >
+            <MoreHorizontal size={17} />
+            <span className="hidden sm:inline">More</span>
+          </Button>
+          {menuOpen && (
+            <div
+              role="menu"
+              aria-label={`${entity} list actions`}
+              className="absolute left-0 right-auto top-full z-40 mt-2 w-[min(16rem,calc(100vw-8rem))] rounded-md border border-slate-200 bg-white p-1.5 text-left text-sm shadow-xl sm:left-auto sm:right-0 sm:w-64"
+            >
+              <button
+                role="menuitem"
+                aria-expanded={submenu === "sort"}
+                className="flex w-full items-center justify-between rounded px-3 py-2 hover:bg-slate-50"
+                onClick={() => setSubmenu(submenu === "sort" ? null : "sort")}
+              >
+                <span>Sort by</span>
+                <ChevronRight size={14} />
+              </button>
+              {submenu === "sort" && (
+                <div className="ml-3 border-l border-slate-200 pl-2">
+                  {sortOptions.map((option) => (
+                    <button
+                      key={option.key}
+                      role="menuitem"
+                      className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                      onClick={() => {
+                        onSort(option.key);
+                        closeMenu();
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {onImport && (
+                <>
+                  <button
+                    role="menuitem"
+                    aria-expanded={submenu === "import"}
+                    className="flex w-full items-center justify-between rounded px-3 py-2 hover:bg-slate-50"
+                    onClick={() =>
+                      setSubmenu(submenu === "import" ? null : "import")
+                    }
+                  >
+                    <span className="flex items-center gap-2">
+                      <Upload size={14} />
+                      Import
+                    </span>
+                    <ChevronRight size={14} />
+                  </button>
+                  {submenu === "import" && (
+                    <div className="ml-3 border-l border-slate-200 pl-2">
+                      <button
+                        role="menuitem"
+                        className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
+                        onClick={() => {
+                          setImportOpen(true);
+                          closeMenu();
+                        }}
+                      >
+                        Import {entity}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+              <button
+                role="menuitem"
+                aria-expanded={submenu === "export"}
+                className="flex w-full items-center justify-between rounded px-3 py-2 hover:bg-slate-50"
+                onClick={() =>
+                  setSubmenu(submenu === "export" ? null : "export")
+                }
+              >
+                <span className="flex items-center gap-2">
+                  <Download size={14} />
+                  Export
+                </span>
+                <ChevronRight size={14} />
+              </button>
+              {submenu === "export" && (
+                <div className="ml-3 border-l border-slate-200 pl-2">
+                  <button
+                    role="menuitem"
+                    className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
+                    onClick={() => exportAction("all")}
+                  >
+                    Export {entity}
+                  </button>
+                  <button
+                    role="menuitem"
+                    className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
+                    onClick={() => exportAction("view")}
+                  >
+                    Export Current View
+                  </button>
+                  {selectedCount > 0 && (
+                    <button
+                      role="menuitem"
+                      className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
+                      onClick={() => exportAction("selected")}
+                    >
+                      Export Selected ({selectedCount})
+                    </button>
+                  )}
+                </div>
+              )}
+              {onPreferences && (
+                <button
+                  role="menuitem"
+                  className="w-full rounded px-3 py-2 text-left hover:bg-slate-50"
+                  onClick={() => {
+                    onPreferences();
+                    closeMenu();
+                  }}
+                >
+                  Preferences
+                </button>
+              )}
+              <button
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"
+                onClick={() => {
+                  onRefresh();
+                  closeMenu();
+                }}
+              >
+                <RefreshCw size={14} />
+                Refresh List
+              </button>
+              <button
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"
+                onClick={() => {
+                  onResetWidths();
+                  closeMenu();
+                }}
+              >
+                <RotateCcw size={14} />
+                Reset Column Width
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {columnsOpen && (
+        <ColumnSettings
+          entity={entity}
+          columns={columns}
+          selected={visibleColumns}
+          widths={columnWidths}
+          clipText={clipText}
+          onClose={() => setColumnsOpen(false)}
+          onSave={(next, clip, widths) => {
+            onVisibleColumnsChange(next);
+            onClipTextChange(clip);
+            onColumnWidthsChange(widths);
+            setColumnsOpen(false);
+          }}
+        />
+      )}
+      {filterOpen && (
+        <AdvancedSearch
+          entity={entity}
+          fields={filterFields}
+          active={activeFilters}
+          currentView={currentView}
+          viewOptions={viewOptions}
+          onViewChange={onViewChange}
+          showSavedView={showSavedView}
+          onClose={() => setFilterOpen(false)}
+          onApply={(next) => {
+            onApplyFilters(next);
+            setFilterOpen(false);
+          }}
+          onClear={() => {
+            onApplyFilters({});
+            setFilterOpen(false);
+          }}
+        />
+      )}
+      {importOpen && onImport && (
+        <ListImportWizard
+          entity={entity.toLowerCase().includes("item") ? "items" : "vendors"}
+          onClose={() => setImportOpen(false)}
+          onImport={onImport}
+          notify={notify}
+        />
+      )}
+      <span className="sr-only" aria-live="polite">
+        List tools for {label}
+      </span>
+    </>
+  );
+}
+
+function ColumnSettings({
+  entity,
+  columns,
+  selected,
+  widths,
+  clipText,
+  onClose,
+  onSave,
+}: {
+  entity: string;
+  columns: ListColumn[];
+  selected: string[];
+  widths: Record<string, number>;
+  clipText: boolean;
+  onClose: () => void;
+  onSave: (
+    keys: string[],
+    clip: boolean,
+    widths: Record<string, number>,
+  ) => void;
+}) {
+  const [draft, setDraft] = useState(selected);
+  const [draftWidths, setDraftWidths] = useState(widths);
+  const [clip, setClip] = useState(clipText);
+  return (
+    <Modal title={`Customize ${entity} columns`} onClose={onClose}>
+      <p className="mb-4 text-sm text-slate-500">
+        Choose which fields appear in this table. The change is local to this
+        browser preview.
+      </p>
+      <div className="grid gap-2">
+        {columns.map((column) => (
+          <div
+            key={column.key}
+            className="grid grid-cols-[1fr_130px] items-center gap-3 rounded border border-slate-100 px-3 py-2"
+          >
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.includes(column.key)}
+                onChange={(event) =>
+                  setDraft((previous) =>
+                    event.target.checked
+                      ? [...previous, column.key]
+                      : previous.filter((key) => key !== column.key),
+                  )
+                }
+              />
+              {column.label}
+            </label>
+            <Select
+              aria-label={`Width for ${column.label}`}
+              value={String(draftWidths[column.key] ?? 0)}
+              onChange={(event) =>
+                setDraftWidths((previous) => ({
+                  ...previous,
+                  [column.key]: Number(event.target.value),
+                }))
+              }
+            >
+              <option value="0">Auto width</option>
+              <option value="120">120 px</option>
+              <option value="160">160 px</option>
+              <option value="200">200 px</option>
+              <option value="260">260 px</option>
+              <option value="320">320 px</option>
+            </Select>
+          </div>
+        ))}
+      </div>
+      <label className="mt-4 flex cursor-pointer items-center gap-2 border-t border-slate-100 pt-4 text-sm">
+        <input
+          type="checkbox"
+          checked={clip}
+          onChange={(event) => setClip(event.target.checked)}
+        />
+        Clip long cell text
+      </label>
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          onClick={() =>
+            onSave(
+              draft.length ? draft : [columns[0]?.key].filter(Boolean),
+              clip,
+              Object.fromEntries(
+                Object.entries(draftWidths).filter(([, width]) => width > 0),
+              ),
+            )
+          }
+        >
+          Apply to Preview
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function AdvancedSearch({
+  entity,
+  fields,
+  active,
+  currentView,
+  viewOptions,
+  onViewChange,
+  showSavedView,
+  onClose,
+  onApply,
+  onClear,
+}: {
+  entity: string;
+  fields: ListFilterField[];
+  active: Record<string, string>;
+  currentView?: string;
+  viewOptions?: string[];
+  onViewChange?: (view: string) => void;
+  showSavedView: boolean;
+  onClose: () => void;
+  onApply: (filters: Record<string, string>) => void;
+  onClear: () => void;
+}) {
+  const [draft, setDraft] = useState(active);
+  const [filter, setFilter] = useState(currentView ?? `All ${entity}`);
+  const searchEntity =
+    entity === "Vendors" ? "Vendors" : entity === "Items" ? "Items" : entity;
+  const submit = () => {
+    onViewChange?.(filter);
+    onApply(draft);
+  };
+  return (
+    <Modal title={`Advanced Search · ${entity}`} onClose={onClose} wide>
+      <div
+        className={`mb-5 grid gap-4 ${showSavedView ? "sm:grid-cols-2" : "grid-cols-1"}`}
+      >
+        <Field label="Search">
+          <Select
+            aria-label="Search in list entity"
+            value={searchEntity}
+            disabled
+          >
+            <option>{searchEntity}</option>
+          </Select>
+        </Field>
+        {showSavedView && (
+          <Field label="Filter">
+            <Select
+              aria-label="Saved list filter"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+            >
+              {(viewOptions?.length ? viewOptions : [`All ${entity}`]).map(
+                (option) => (
+                  <option key={option}>{option}</option>
+                ),
+              )}
+            </Select>
+          </Field>
+        )}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {fields.map((field) => (
+          <Field key={field.key} label={field.label}>
+            {field.type === "select" ? (
+              <Select
+                aria-label={field.label}
+                value={draft[field.key] ?? ""}
+                onChange={(event) =>
+                  setDraft((previous) => ({
+                    ...previous,
+                    [field.key]: event.target.value,
+                  }))
+                }
+              >
+                <option value="">Any</option>
+                {(field.options ?? []).map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </Select>
+            ) : (
+              <Input
+                aria-label={field.label}
+                value={draft[field.key] ?? ""}
+                onChange={(event) =>
+                  setDraft((previous) => ({
+                    ...previous,
+                    [field.key]: event.target.value,
+                  }))
+                }
+                placeholder={`Search ${field.label.toLowerCase()}`}
+              />
+            )}
+          </Field>
+        ))}
+      </div>
+      <div className="mt-6 flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
+        <Button variant="ghost" onClick={onClear}>
+          Clear filters
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit}>
+            <Filter size={14} />
+            Search
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

@@ -1,0 +1,420 @@
+{
+  "routes": [
+    {
+      "path": "/",
+      "title": "Procurement dashboard"
+    },
+    {
+      "path": "/approvals",
+      "title": "Approvals"
+    },
+    {
+      "path": "/procurement-requests",
+      "title": "Procurement Purchase Requests"
+    },
+    {
+      "path": "/items",
+      "title": "Items"
+    },
+    {
+      "path": "/items/new",
+      "title": "New Item"
+    },
+    {
+      "path": "/items/:id",
+      "title": "Item detail"
+    },
+    {
+      "path": "/items/:id/edit",
+      "title": "Edit Item"
+    },
+    {
+      "path": "/vendors",
+      "title": "Vendors"
+    },
+    {
+      "path": "/vendors/new",
+      "title": "New Vendor"
+    },
+    {
+      "path": "/vendors/:id",
+      "title": "Vendor detail"
+    },
+    {
+      "path": "/vendors/:id/:tab",
+      "title": "Vendor detail section"
+    },
+    {
+      "path": "/vendors/:id/edit",
+      "title": "Edit Vendor"
+    },
+    {
+      "path": "/inbox",
+      "title": "Payables Inbox"
+    },
+    {
+      "path": "/batch-payments",
+      "title": "Batch Payments"
+    },
+    {
+      "path": "/batch-payments/:id",
+      "title": "Batch payment detail"
+    },
+    {
+      "path": "/batch-payments/:id/edit",
+      "title": "Edit prepared batch"
+    },
+    {
+      "path": "/budgets",
+      "title": "Budgets"
+    },
+    {
+      "path": "/analytics",
+      "title": "Analytics"
+    },
+    {
+      "path": "/requests",
+      "title": "My Requests"
+    },
+    {
+      "path": "/requests/new",
+      "title": "New Purchase Request"
+    },
+    {
+      "path": "/requests/:id",
+      "title": "Purchase Request detail"
+    },
+    {
+      "path": "/requests/:id/edit",
+      "title": "Edit Purchase Request"
+    },
+    {
+      "path": "/purchase-orders",
+      "title": "Purchase Orders"
+    },
+    {
+      "path": "/purchase-orders/new",
+      "title": "New Purchase Order"
+    },
+    {
+      "path": "/purchase-orders/:id",
+      "title": "Purchase Order detail"
+    },
+    {
+      "path": "/purchase-orders/:id/edit",
+      "title": "Edit Purchase Order"
+    },
+    {
+      "path": "/purchase-receives",
+      "title": "Purchase Receives"
+    },
+    {
+      "path": "/purchase-receives/new",
+      "title": "New Purchase Receive"
+    },
+    {
+      "path": "/purchase-receives/:id",
+      "title": "Purchase Receive detail"
+    },
+    {
+      "path": "/purchase-receives/:id/edit",
+      "title": "Edit Purchase Receive"
+    },
+    {
+      "path": "/bills",
+      "title": "Bills"
+    },
+    {
+      "path": "/bills/new",
+      "title": "New Bill"
+    },
+    {
+      "path": "/bills/:id",
+      "title": "Bill detail"
+    },
+    {
+      "path": "/bills/:id/edit",
+      "title": "Edit Bill"
+    },
+    {
+      "path": "/recurring-bills",
+      "title": "Recurring Bills"
+    },
+    {
+      "path": "/recurring-bills/new",
+      "title": "New Recurring Bill"
+    },
+    {
+      "path": "/recurring-bills/:id",
+      "title": "Recurring Bill detail"
+    },
+    {
+      "path": "/recurring-bills/:id/edit",
+      "title": "Edit Recurring Bill"
+    },
+    {
+      "path": "/payments",
+      "title": "Payments Made"
+    },
+    {
+      "path": "/payments/new",
+      "title": "New Payment"
+    },
+    {
+      "path": "/payments/:id",
+      "title": "Payment detail"
+    },
+    {
+      "path": "/payments/:id/edit",
+      "title": "Edit Payment"
+    },
+    {
+      "path": "/vendor-credits",
+      "title": "Vendor Credits"
+    },
+    {
+      "path": "/vendor-credits/new",
+      "title": "New Vendor Credit"
+    },
+    {
+      "path": "/vendor-credits/:id",
+      "title": "Vendor Credit detail"
+    },
+    {
+      "path": "/vendor-credits/:id/edit",
+      "title": "Edit Vendor Credit"
+    },
+    {
+      "path": "/rfqs",
+      "title": "Request for Quotes"
+    },
+    {
+      "path": "/rfqs/new",
+      "title": "New Request for Quote"
+    },
+    {
+      "path": "/rfqs/:id",
+      "title": "Request for Quote detail"
+    },
+    {
+      "path": "/rfqs/:id/edit",
+      "title": "Edit Request for Quote"
+    },
+    {
+      "path": "/settings",
+      "title": "All Settings"
+    },
+    {
+      "path": "/settings/general",
+      "title": "General"
+    },
+    {
+      "path": "/settings/profile",
+      "title": "Organization Profile"
+    },
+    {
+      "path": "/settings/branding",
+      "title": "Organization Branding"
+    },
+    {
+      "path": "/settings/locations",
+      "title": "Locations"
+    },
+    {
+      "path": "/settings/currencies",
+      "title": "Currencies"
+    },
+    {
+      "path": "/settings/payment-terms",
+      "title": "Payment Terms"
+    },
+    {
+      "path": "/settings/vendor-portal",
+      "title": "Vendor Portal"
+    },
+    {
+      "path": "/settings/punchout-catalogs",
+      "title": "Punchout Catalogs"
+    },
+    {
+      "path": "/settings/transaction-number-series",
+      "title": "Transaction Number Series"
+    },
+    {
+      "path": "/settings/users",
+      "title": "Users"
+    },
+    {
+      "path": "/settings/roles",
+      "title": "Roles"
+    },
+    {
+      "path": "/settings/departments",
+      "title": "Departments"
+    },
+    {
+      "path": "/settings/taxes",
+      "title": "Taxes"
+    },
+    {
+      "path": "/settings/tds",
+      "title": "TDS"
+    },
+    {
+      "path": "/settings/reporting-tags",
+      "title": "Reporting Tags"
+    },
+    {
+      "path": "/settings/web-tabs",
+      "title": "Web Tabs"
+    },
+    {
+      "path": "/settings/customization/pdf-templates",
+      "title": "PDF Templates"
+    },
+    {
+      "path": "/settings/customization/email-notifications",
+      "title": "Email Notifications"
+    },
+    {
+      "path": "/settings/automation/workflow-rules",
+      "title": "Workflow Rules"
+    },
+    {
+      "path": "/settings/automation/workflow-actions",
+      "title": "Workflow Actions"
+    },
+    {
+      "path": "/settings/automation/workflow-logs",
+      "title": "Workflow Logs"
+    },
+    {
+      "path": "/settings/automation/schedules",
+      "title": "Schedules"
+    },
+    {
+      "path": "/settings/modules/vendors/preferences",
+      "title": "Vendors — Preferences"
+    },
+    {
+      "path": "/settings/modules/vendors/approvals",
+      "title": "Vendors — Approvals"
+    },
+    {
+      "path": "/settings/modules/vendors/fields",
+      "title": "Vendors — Fields"
+    },
+    {
+      "path": "/settings/modules/vendors/buttons",
+      "title": "Vendors — Buttons"
+    },
+    {
+      "path": "/settings/modules/projects/preferences",
+      "title": "Projects — Preferences"
+    },
+    {
+      "path": "/settings/modules/items/preferences",
+      "title": "Items — Preferences"
+    },
+    {
+      "path": "/settings/modules/accounts/preferences",
+      "title": "Chart of Accounts — Preferences"
+    },
+    {
+      "path": "/settings/modules/customers/preferences",
+      "title": "Customers — Preferences"
+    },
+    {
+      "path": "/settings/modules/purchase-requests/preferences",
+      "title": "Purchase Requests — Preferences"
+    },
+    {
+      "path": "/settings/modules/purchase-requests/fields",
+      "title": "Purchase Requests — Fields"
+    },
+    {
+      "path": "/settings/modules/purchase-requests/approvals",
+      "title": "Purchase Requests — Approvals"
+    },
+    {
+      "path": "/settings/modules/purchase-requests/buttons",
+      "title": "Purchase Requests — Buttons"
+    },
+    {
+      "path": "/settings/modules/purchase-requests/page-layout",
+      "title": "Purchase Requests — Page Layout"
+    },
+    {
+      "path": "/settings/modules/purchase-requests/validation-rules",
+      "title": "Purchase Requests — Validation Rules"
+    },
+    {
+      "path": "/settings/modules/purchase-orders/preferences",
+      "title": "Purchase Orders — Preferences"
+    },
+    {
+      "path": "/settings/modules/purchase-orders/approvals",
+      "title": "Purchase Orders — Approvals"
+    },
+    {
+      "path": "/settings/modules/purchase-orders/fields",
+      "title": "Purchase Orders — Fields"
+    },
+    {
+      "path": "/settings/modules/purchase-orders/validation-rules",
+      "title": "Purchase Orders — Validation Rules"
+    },
+    {
+      "path": "/settings/modules/purchase-orders/buttons",
+      "title": "Purchase Orders — Buttons"
+    },
+    {
+      "path": "/settings/modules/purchase-orders/related-lists",
+      "title": "Purchase Orders — Related Lists"
+    },
+    {
+      "path": "/settings/modules/purchase-receives/preferences",
+      "title": "Purchase Receives — Preferences"
+    },
+    {
+      "path": "/settings/modules/bills/preferences",
+      "title": "Bills — Preferences"
+    },
+    {
+      "path": "/settings/modules/recurring-bills/buttons",
+      "title": "Recurring Bills — Buttons"
+    },
+    {
+      "path": "/settings/modules/payments-made/approvals",
+      "title": "Payments Made — Approvals"
+    },
+    {
+      "path": "/settings/builders/custom-field",
+      "title": "New Custom Field"
+    },
+    {
+      "path": "/settings/builders/validation-rule",
+      "title": "New Validation Rule"
+    },
+    {
+      "path": "/settings/builders/custom-button",
+      "title": "New Custom Button"
+    },
+    {
+      "path": "/settings/builders/related-list",
+      "title": "New Related List"
+    },
+    {
+      "path": "/settings/builders/workflow-rule",
+      "title": "New Workflow Rule"
+    },
+    {
+      "path": "/settings/builders/email-alert",
+      "title": "New Email Alert"
+    },
+    {
+      "path": "/settings/builders/schedule",
+      "title": "New Schedule"
+    }
+  ]
+}

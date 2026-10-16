@@ -1,0 +1,94 @@
+@import "tailwindcss";
+@theme {
+  --font-sans: "Inter", "Segoe UI", Arial, sans-serif;
+  --color-blue-500: oklch(0.46 0.093 205);
+  --color-blue-600: oklch(0.4 0.093 205);
+}
+:root {
+  font-family: var(--font-sans);
+  color: #253045;
+  background: #fff;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-size: 14px;
+}
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+select {
+  cursor: pointer;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid oklch(0.46 0.093 205);
+  outline-offset: 3px;
+}
+@layer components {
+  .control {
+    display: block;
+    width: 100%;
+    border: 1px solid #dce1e9;
+    border-radius: 5px;
+    padding: 9px 12px;
+    background: white;
+    color: #334155;
+    font-size: 13px;
+    line-height: 20px;
+    outline: none;
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+  .control:focus {
+    border-color: oklch(0.46 0.093 205);
+    box-shadow: 0 0 0 3px oklch(0.46 0.093 205 / 0.12);
+  }
+  .control:disabled {
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+  }
+  .control::placeholder {
+    color: #9ca7b7;
+  }
+}
+.table-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #778296;
+  background: #f8f9fc;
+}
+.table-cell {
+  padding: 17px 20px;
+  border-bottom: 1px solid #eff1f5;
+  white-space: nowrap;
+  font-size: 13px;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cfd5df;
+  border-radius: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

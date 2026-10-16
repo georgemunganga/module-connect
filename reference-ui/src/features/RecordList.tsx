@@ -1,0 +1,726 @@
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Plus,
+  Search,
+  ChevronDown,
+  MoreHorizontal,
+  ArrowRight,
+  FileText,
+  Eye,
+  Pencil,
+  Check,
+  X,
+} from "lucide-react";
+import { modules, type ModuleKey } from "../data/modules";
+import { useApp, useStoredState, money, type AppRecord } from "../lib/store";
+import { removeSelectedId, updateVisibleSelection } from "../lib/list-state";
+import {
+  filterEmployeeRequests,
+  requesterFor,
+  type RequestListTab,
+  type RequestOwnerScope,
+} from "../lib/request-views";
+import { Badge, Button, EmptyState, Modal, PageHeader } from "../components/ui";
+import { DeleteConfirm } from "../components/data/DetailPrimitives";
+import {
+  ListTools,
+  type ExportScope,
+  type ListColumn,
+  type ListFilterField,
+  type ListSortOption,
+} from "../components/data/ListTools";
+import { downloadCsv } from "../lib/csv";
+
+export function RecordList({
+  kind,
+  procurement = false,
+  approval = false,
+}: {
+  kind: ModuleKey;
+  procurement?: boolean;
+  approval?: boolean;
+}) {
+  const config = modules[kind];
+  const { records, updateRecord, deleteRecord, notify } = useApp();
+  const navigate = useNavigate();
+  const employeeRequests = kind === "requests" && !procurement && !approval;
+  const [requestTab, setRequestTab] = useStoredState<RequestListTab>(
+    "my-requests-tab",
+    "pending",
+  );
+  const [requestScope, setRequestScope] = useStoredState<RequestOwnerScope>(
+    "my-requests-scope",
+    "mine",
+  );
+  const [query, setQuery] = useState(""),
+    [status, setStatus] = useState("All"),
+    [sort, setSort] = useState("newest"),
+    [filters, setFilters] = useState<Record<string, string>>({}),
+    [visibleColumns, setVisibleColumns] = useState<string[]>([
+      "date",
+      "number",
+      "party",
+      "requester",
+      "status",
+      "amount",
+    ]),
+    [columnWidths, setColumnWidths] = useState<Record<string, number>>({}),
+    [clipText, setClipText] = useState(false),
+    [selected, setSelected] = useState<string[]>([]),
+    [detail, setDetail] = useState<AppRecord | null>(null),
+    [pendingDelete, setPendingDelete] = useState<AppRecord | null>(null);
+  const all = employeeRequests
+    ? filterEmployeeRequests(
+        records.filter((record) => record.kind === kind),
+        requestTab,
+        requestScope,
+      )
+    : records.filter(
+        (record) =>
+          record.kind === kind &&
+          (!approval || record.status === "Pending Approval"),
+      );
+  const filtered = all
+    .filter(
+      (record) =>
+        `${record.id} ${record.title} ${record.party} ${kind === "requests" ? requesterFor(record) : ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase()) &&
+        (status === "All" ||
+          (status === "Empty" && false) ||
+          record.status === status) &&
+        Object.entries(filters).every(([key, value]) => {
+          if (!value) return true;
+          const values: Record<string, string> = {
+            number: record.id,
+            title: record.title,
+            party: record.party,
+            requester: requesterFor(record),
+            date: record.date,
+            status: record.status,
+            amount: String(record.amount),
+          };
+          return (values[key] ?? "")
+            .toLowerCase()
+            .includes(value.toLowerCase());
+        }),
+    )
+    .sort((a, b) =>
+      sort === "amount"
+        ? b.amount - a.amount
+        : sort === "oldest"
+          ? a.date.localeCompare(b.date) || a.id.localeCompare(b.id)
+          : sort === "number"
+            ? a.id.localeCompare(b.id)
+            : sort === "party"
+              ? a.party.localeCompare(b.party)
+              : sort === "requester"
+                ? requesterFor(a).localeCompare(requesterFor(b))
+                : sort === "status"
+                  ? a.status.localeCompare(b.status)
+                  : b.date.localeCompare(a.date) || b.id.localeCompare(a.id),
+    );
+  const title = approval
+    ? "Approvals"
+    : procurement
+      ? "Purchase Requests"
+      : config.title;
+  const statuses = [...new Set(all.map((record) => record.status))];
+  const columns: ListColumn[] = [
+    { key: "date", label: "Date", width: 90 },
+    { key: "number", label: "Number / Description", width: 230 },
+    {
+      key: "party",
+      label: kind === "requests" ? "Department" : "Vendor / Team",
+      width: 180,
+    },
+    ...(kind === "requests"
+      ? [{ key: "requester", label: "Requested By", width: 150 }]
+      : []),
+    { key: "status", label: "Status", width: 130 },
+    { key: "amount", label: kind === "rfqs" ? "Type" : "Amount", width: 130 },
+  ];
+  const sortOptions: ListSortOption[] = [
+    { key: "newest", label: "Date · Newest first" },
+    { key: "oldest", label: "Date · Oldest first" },
+    { key: "number", label: "Number" },
+    {
+      key: "party",
+      label: kind === "requests" ? "Department" : "Vendor / Team",
+    },
+    ...(kind === "requests"
+      ? [{ key: "requester", label: "Requested by" }]
+      : []),
+    { key: "status", label: "Status" },
+    { key: "amount", label: "Amount · Highest first" },
+  ];
+  const filterFields: ListFilterField[] = [
+    { key: "number", label: "Number" },
+    { key: "title", label: "Description" },
+    {
+      key: "party",
+      label: kind === "requests" ? "Department" : "Vendor / Team",
+    },
+    ...(kind === "requests"
+      ? [{ key: "requester", label: "Requested by" }]
+      : []),
+    { key: "date", label: "Date" },
+    { key: "status", label: "Status", type: "select", options: statuses },
+    { key: "amount", label: "Amount" },
+  ];
+  const exportLocal = (scope: ExportScope) => {
+    const dataset =
+      scope === "all"
+        ? all
+        : scope === "selected"
+          ? all.filter((record) => selected.includes(record.id))
+          : filtered;
+    const exportColumns =
+      scope === "all"
+        ? columns
+        : columns.filter((column) => visibleColumns.includes(column.key));
+    const rows = [
+      exportColumns.map((column) => column.label),
+      ...dataset.map((record) =>
+        exportColumns.map((column) => {
+          if (column.key === "number") return `${record.id} · ${record.title}`;
+          if (column.key === "party") return record.party;
+          if (column.key === "requester") return requesterFor(record);
+          if (column.key === "date") return record.date;
+          if (column.key === "status") return record.status;
+          return kind === "rfqs" ? "Request for Quote" : String(record.amount);
+        }),
+      ),
+    ];
+    downloadCsv(
+      `${kind}-${scope === "all" ? "all" : scope === "view" ? "current-view" : "selected"}.csv`,
+      rows,
+    );
+    notify(
+      `Downloaded ${dataset.length} local demo ${config.title.toLowerCase()} record(s).`,
+    );
+  };
+  const returnContext = procurement
+    ? "?entry=procurement"
+    : approval
+      ? "?entry=approvals"
+      : "";
+  const changeApproval = (record: AppRecord, next: string) => {
+    updateRecord(record.id, { status: next });
+    setDetail(null);
+    notify(
+      `${record.id} ${next.toLowerCase()} in this demo only. No ERP record changed.`,
+    );
+  };
+  const removeRecord = () => {
+    if (!pendingDelete) return;
+    deleteRecord(pendingDelete.id);
+    setSelected((previous) => removeSelectedId(previous, pendingDelete.id));
+    notify(
+      `${pendingDelete.id} removed from local demo data. Linked records remain unchanged.`,
+    );
+    setPendingDelete(null);
+    setDetail(null);
+  };
+  const forward = (record: AppRecord) => {
+    const destination: Record<string, string> = {
+      requests: "/rfqs/new",
+      "purchase-orders": "/purchase-receives/new",
+      "purchase-receives": "/bills/new",
+      bills: "/payments/new",
+    };
+    const entry =
+      record.kind === "requests" && procurement
+        ? "&entry=procurement"
+        : record.kind === "requests" && approval
+          ? "&entry=approvals"
+          : "";
+    navigate(
+      `${destination[record.kind]}?source=${encodeURIComponent(record.id)}${entry}`,
+    );
+  };
+  return (
+    <div className="p-5 sm:p-8">
+      <PageHeader
+        title={title}
+        subtitle={
+          approval
+            ? "Review requests awaiting your approval."
+            : procurement
+              ? "The Procurement team view of the same purchase-request records."
+              : config.description
+        }
+        actions={
+          <>
+            <ListTools
+              entity={title}
+              columns={columns}
+              visibleColumns={visibleColumns}
+              onVisibleColumnsChange={setVisibleColumns}
+              columnWidths={columnWidths}
+              onColumnWidthsChange={setColumnWidths}
+              clipText={clipText}
+              onClipTextChange={setClipText}
+              sortOptions={sortOptions}
+              onSort={setSort}
+              filterFields={filterFields}
+              activeFilters={filters}
+              onApplyFilters={setFilters}
+              currentView={
+                employeeRequests
+                  ? undefined
+                  : status === "All"
+                    ? `All ${title}`
+                    : status
+              }
+              viewOptions={
+                employeeRequests ? undefined : [`All ${title}`, ...statuses]
+              }
+              onViewChange={
+                employeeRequests
+                  ? undefined
+                  : (view) => setStatus(view.startsWith("All") ? "All" : view)
+              }
+              onExport={exportLocal}
+              selectedCount={selected.length}
+              onRefresh={() =>
+                notify(`${title} list refreshed in this local preview.`)
+              }
+              onResetWidths={() => {
+                setColumnWidths({});
+                notify("Column widths restored to their default preview size.");
+              }}
+              notify={notify}
+              showSavedView={!employeeRequests}
+            />
+            {!approval && (
+              <Link
+                to={`/${kind}/new${procurement ? "?entry=procurement" : ""}`}
+              >
+                <Button>
+                  <Plus size={16} />
+                  New {config.singular}
+                </Button>
+              </Link>
+            )}
+          </>
+        }
+      />
+      {(procurement || approval) && (
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-md border border-blue-100 bg-blue-50/40 px-4 py-3 text-xs text-slate-500">
+          <span>
+            {approval
+              ? "Approval decisions are simulated locally."
+              : "Shared records · Role-specific workflow actions"}
+          </span>
+          <Link to="/requests" className="shrink-0 text-blue-500">
+            Employee view →
+          </Link>
+        </div>
+      )}
+      <div className="rounded-lg border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-3">
+            {employeeRequests ? (
+              <>
+                <div
+                  role="tablist"
+                  aria-label="Purchase request status views"
+                  className="flex items-center gap-1"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={requestTab === "pending"}
+                    onClick={() => setRequestTab("pending")}
+                    className={`border-b-2 px-3 py-3 text-sm font-medium ${requestTab === "pending" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                  >
+                    Pending Requests
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={requestTab === "all"}
+                    onClick={() => setRequestTab("all")}
+                    className={`border-b-2 px-3 py-3 text-sm font-medium ${requestTab === "all" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                  >
+                    All Requests
+                    <ChevronDown size={13} className="ml-1 inline-block" />
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                  <span className="sr-only">Request owner scope</span>
+                  <select
+                    aria-label="Request owner scope"
+                    value={requestScope}
+                    onChange={(event) =>
+                      setRequestScope(event.target.value as RequestOwnerScope)
+                    }
+                    className="max-w-[150px] rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none focus:border-blue-400"
+                  >
+                    <option value="mine">My Requests</option>
+                    <option value="all">All Requesters</option>
+                  </select>
+                </label>
+              </>
+            ) : (
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <select
+                  aria-label="Filter records by status"
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value)}
+                  className="bg-transparent pr-2 outline-none"
+                >
+                  <option value="All">
+                    All {approval ? "Pending Requests" : title}
+                  </option>
+                  {statuses.map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                  <option value="Empty">Empty state preview</option>
+                </select>
+                <ChevronDown size={14} className="text-slate-400" />
+              </label>
+            )}
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-400">
+              {filtered.length}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-3 top-2.5 text-slate-400"
+              />
+              <input
+                aria-label={`Search ${title}`}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search records"
+                className="w-36 rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-400 sm:w-52"
+              />
+            </div>
+            <select
+              aria-label="Sort records"
+              value={sort}
+              onChange={(event) => setSort(event.target.value)}
+              className="hidden bg-transparent text-xs text-slate-400 sm:block"
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="amount">Highest amount</option>
+            </select>
+          </div>
+        </div>
+        {selected.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 bg-blue-50 px-5 py-3 text-xs text-blue-700">
+            <span>{selected.length} selected</span>
+            <Button variant="secondary" onClick={() => exportLocal("selected")}>
+              Export selected
+            </Button>
+            <button className="ml-auto" onClick={() => setSelected([])}>
+              Clear selection
+            </button>
+          </div>
+        )}
+        {filtered.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] table-fixed text-left">
+              <thead className="table-head">
+                <tr>
+                  <th className="table-cell !py-3" style={{ width: 40 }}>
+                    <input
+                      aria-label="Select all visible records"
+                      type="checkbox"
+                      checked={
+                        filtered.length > 0 &&
+                        filtered.every((record) => selected.includes(record.id))
+                      }
+                      onChange={(event) =>
+                        setSelected((previous) =>
+                          updateVisibleSelection(
+                            previous,
+                            filtered.map((record) => record.id),
+                            event.target.checked,
+                          ),
+                        )
+                      }
+                    />
+                  </th>
+                  {columns
+                    .filter((column) => visibleColumns.includes(column.key))
+                    .map((column) => (
+                      <th
+                        key={column.key}
+                        style={{
+                          width: columnWidths[column.key] ?? column.width,
+                        }}
+                        className="table-cell !py-3"
+                      >
+                        <button
+                          className="font-medium hover:text-blue-600"
+                          onClick={() =>
+                            setSort(
+                              column.key === "date" ? "newest" : column.key,
+                            )
+                          }
+                        >
+                          {column.label}
+                        </button>
+                      </th>
+                    ))}
+                  <th
+                    className="table-cell sticky right-0 z-10 !py-3 bg-slate-50 shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
+                    style={{ width: 84 }}
+                  ></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((record) => (
+                  <tr key={record.id} className="hover:bg-[#fafbfe]">
+                    <td className="table-cell w-10" style={{ width: 40 }}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${record.id}`}
+                        checked={selected.includes(record.id)}
+                        onChange={(event) =>
+                          setSelected(
+                            event.target.checked
+                              ? [...selected, record.id]
+                              : selected.filter((id) => id !== record.id),
+                          )
+                        }
+                      />
+                    </td>
+                    {columns
+                      .filter((column) => visibleColumns.includes(column.key))
+                      .map((column) => (
+                        <td
+                          key={column.key}
+                          style={{
+                            width: columnWidths[column.key] ?? column.width,
+                          }}
+                          className={`table-cell ${clipText ? "max-w-[240px] truncate whitespace-nowrap" : "whitespace-normal"}`}
+                        >
+                          {column.key === "date" ? (
+                            <span className="text-slate-500">
+                              {record.date}
+                            </span>
+                          ) : column.key === "number" ? (
+                            <Link
+                              className="text-left"
+                              to={`/${kind}/${record.id}${returnContext}`}
+                            >
+                              <span className="font-medium text-blue-500">
+                                {record.id}
+                              </span>
+                              <span className="mt-1 block text-xs text-slate-400">
+                                {record.title}
+                              </span>
+                            </Link>
+                          ) : column.key === "party" ? (
+                            <span className="text-slate-600">
+                              {record.party}
+                            </span>
+                          ) : column.key === "requester" ? (
+                            <span className="text-slate-600">
+                              {requesterFor(record)}
+                            </span>
+                          ) : column.key === "status" ? (
+                            <Badge>{record.status}</Badge>
+                          ) : (
+                            <span className="font-medium text-slate-700">
+                              {kind === "rfqs"
+                                ? "Request for Quote"
+                                : money(record.amount)}
+                            </span>
+                          )}
+                        </td>
+                      ))}
+                    <td
+                      className="table-cell sticky right-0 z-10 bg-white shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
+                      style={{ width: 84 }}
+                    >
+                      <button
+                        onClick={() => setDetail(record)}
+                        aria-label={`Actions for ${record.id}`}
+                        className="rounded p-1 text-slate-400 hover:bg-slate-100"
+                      >
+                        <MoreHorizontal size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title={
+              status === "Empty"
+                ? `No ${title.toLowerCase()} to display`
+                : query
+                  ? "No matching records"
+                  : "Nothing to review yet"
+            }
+            description={
+              query
+                ? "Try another search term or clear your filters."
+                : approval
+                  ? "Approved and rejected requests no longer appear in this queue."
+                  : `Create your first ${config.singular.toLowerCase()} to start this workflow.`
+            }
+            action={
+              !approval && (
+                <Link to={`/${kind}/new${returnContext}`}>
+                  <Button>
+                    <Plus size={15} />
+                    New {config.singular}
+                  </Button>
+                </Link>
+              )
+            }
+          />
+        )}
+        <footer className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-xs text-slate-400">
+          <span>{filtered.length} records · Fictional data</span>
+          <span>25 per page</span>
+        </footer>
+      </div>
+      <p className="mt-4 flex items-center gap-1.5 text-[10px] text-slate-400">
+        <FileText size={12} />
+        Canonical screen:{" "}
+        {approval
+          ? "approval.inbox"
+          : procurement
+            ? "purchase-request.list.procurement"
+            : `${kind}.list`}{" "}
+        · Reference{" "}
+        {approval ? "03" : procurement ? "08" : config.reference.slice(0, 2)}
+      </p>
+      {detail && (
+        <Modal
+          title={`${detail.id} · ${config.singular}`}
+          onClose={() => setDetail(null)}
+          wide
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-medium">{detail.title}</h3>
+              <p className="mt-2 text-sm text-slate-500">{detail.party}</p>
+            </div>
+            <Badge>{detail.status}</Badge>
+          </div>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <Link to={`/${kind}/${detail.id}${returnContext}`}>
+              <Button variant="secondary">
+                <Eye size={14} /> View full details
+              </Button>
+            </Link>
+            <Button variant="danger" onClick={() => setPendingDelete(detail)}>
+              Delete locally
+            </Button>
+          </div>
+          <div className="my-6 grid grid-cols-2 gap-4 rounded-lg bg-slate-50 p-4">
+            <div>
+              <p className="text-xs text-slate-400">Date</p>
+              <p className="mt-1 text-sm">{detail.date}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Amount</p>
+              <p className="mt-1 font-semibold">{money(detail.amount)}</p>
+            </div>
+          </div>
+          {detail.lines?.length ? (
+            <div className="mb-6 overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="table-head">
+                  <tr>
+                    {["Item", "Quantity", "Rate", "Amount"].map((label) => (
+                      <th key={label} className="table-cell !py-2">
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.lines.map((line) => (
+                    <tr key={line.id}>
+                      <td className="table-cell">{line.name}</td>
+                      <td className="table-cell">
+                        {line.quantity} {line.unit}
+                      </td>
+                      <td className="table-cell">{money(line.rate)}</td>
+                      <td className="table-cell">
+                        {money(line.quantity * line.rate)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {detail.kind === "requests" &&
+            detail.status === "Pending Approval" &&
+            (approval || procurement) ? (
+              <>
+                <Button onClick={() => changeApproval(detail, "Approved")}>
+                  <Check size={15} />
+                  Approve (demo)
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => changeApproval(detail, "Rejected")}
+                >
+                  <X size={15} />
+                  Reject (demo)
+                </Button>
+              </>
+            ) : null}
+            <Link
+              to={`/${kind}/${detail.id}/edit${detail.kind === "requests" ? returnContext : ""}`}
+            >
+              <Button variant="secondary">
+                <Pencil size={14} />
+                Edit record
+              </Button>
+            </Link>
+            {((detail.kind === "requests" && detail.status === "Approved") ||
+              ["purchase-orders", "purchase-receives", "bills"].includes(
+                detail.kind,
+              )) && (
+              <Button onClick={() => forward(detail)}>
+                {detail.kind === "requests"
+                  ? "Create RFQ"
+                  : detail.kind === "purchase-orders"
+                    ? "Record receive"
+                    : detail.kind === "purchase-receives"
+                      ? "Create bill"
+                      : "Record payment"}
+                <ArrowRight size={14} />
+              </Button>
+            )}
+            {detail.kind === "requests" && detail.status === "Approved" && (
+              <Link to={`/purchase-orders/new?source=${detail.id}`}>
+                <Button variant="secondary">Create purchase order</Button>
+              </Link>
+            )}
+          </div>
+          <p className="mt-5 text-xs text-slate-400">
+            This preview and all workflow actions use local demo state. There is
+            no live approval, order, receipt, or payment.
+          </p>
+        </Modal>
+      )}
+      <DeleteConfirm
+        open={Boolean(pendingDelete)}
+        title="Delete record?"
+        description={`Delete ${pendingDelete?.id ?? "this record"} from local demo data? Linked records remain unchanged and nothing is deleted from ERP.`}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={removeRecord}
+      />
+    </div>
+  );
+}
