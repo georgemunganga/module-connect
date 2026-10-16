@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../shared/branding";
 
 type Branding = {
   displayName: string;
@@ -37,22 +38,6 @@ type ErpShellContext = {
 const SHELL_KEY = "erp.shell.state.v1";
 const SESSION_KEY = "erp.oidc.session";
 const ShellContext = createContext<ErpShellContext | null>(null);
-const colorTokens: Record<string, keyof Branding> = {
-  "--primary": "primaryColor",
-  "--primary-foreground": "primaryForegroundColor",
-  "--button-primary": "buttonColor",
-  "--button-primary-foreground": "buttonForegroundColor",
-  "--secondary": "secondaryColor",
-  "--secondary-foreground": "secondaryForegroundColor",
-  "--accent": "accentColor",
-  "--accent-foreground": "accentForegroundColor",
-  "--rail": "railColor",
-  "--rail-foreground": "railForegroundColor",
-  "--rail-muted": "railMutedColor",
-  "--rail-active": "railActiveColor",
-  "--ring": "primaryColor",
-};
-
 function readSelection(): ShellSelection {
   try {
     return JSON.parse(localStorage.getItem(SHELL_KEY) || "{}") as ShellSelection;
@@ -83,6 +68,22 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const [contextAvailable, setContextAvailable] = useState(false);
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
 
+  useLayoutEffect(() => {
+    const cached = readBrandingCache();
+    if (cached && typeof cached.displayName === "string") {
+      applyBranding(cached);
+      setBranding(cached as Branding);
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "erp.company-branding.v1") {
+        const next = readBrandingCache();
+        if (next && typeof next.displayName === "string") setBranding(next as Branding);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/hrm/auth/me", { credentials: "include", cache: "no-store", signal: controller.signal })
@@ -107,48 +108,35 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     let active = true;
     const startedAt = Date.now();
     const timeout = window.setTimeout(() => controller.abort(), 3000);
+    const overlay = document.getElementById("erp-global-preloader");
+    let revealTimer: number | undefined;
+    const reveal = () => {
+      if (!overlay || revealTimer !== undefined) return;
+      revealTimer = window.setTimeout(() => {
+        overlay.classList.add("is-leaving");
+        window.setTimeout(() => overlay.remove(), 280);
+      }, Math.max(0, 450 - (Date.now() - startedAt)));
+    };
+    if (readBrandingCache()) reveal();
     fetch("/api/hrm/branding", { cache: "no-store", signal: controller.signal })
       .then((response) => response.ok ? response.json() as Promise<Branding> : Promise.reject())
-      .then((value) => { if (active) setBranding(value); })
+      .then((value) => {
+        if (!active) return;
+        applyBranding(value);
+        saveBrandingCache(value);
+        setBranding(value);
+      })
       .catch(() => {})
       .finally(() => {
         window.clearTimeout(timeout);
-        if (!active) return;
-        const overlay = document.getElementById("erp-global-preloader");
-        if (!overlay) return;
-        window.setTimeout(() => {
-          overlay.classList.add("is-leaving");
-          window.setTimeout(() => overlay.remove(), 280);
-        }, Math.max(0, 450 - (Date.now() - startedAt)));
+        if (active) reveal();
       });
-    return () => { active = false; controller.abort(); window.clearTimeout(timeout); };
+    return () => { active = false; controller.abort(); window.clearTimeout(timeout); if (revealTimer !== undefined) window.clearTimeout(revealTimer); };
   }, []);
 
   useEffect(() => {
     if (!branding) return;
-    const root = document.documentElement;
-    for (const [token, field] of Object.entries(colorTokens)) {
-      const value = branding[field];
-      if (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty(token, value);
-    }
-    const fonts: Record<string, string> = {
-      Montserrat: '"Montserrat", ui-sans-serif, system-ui, sans-serif',
-      "Plus Jakarta Sans": '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif',
-      Inter: '"Inter", ui-sans-serif, system-ui, sans-serif',
-    };
-    root.style.setProperty("--erp-font-family", fonts[branding.fontFamily || "Montserrat"] ?? fonts.Montserrat);
-    if (branding.faviconDataUri?.startsWith("data:image/")) {
-      const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-      if (icon) icon.href = branding.faviconDataUri;
-    }
-    const logo = branding.logoDarkDataUri || branding.logoLightDataUri;
-    const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
-    const fallback = document.getElementById("erp-preloader-fallback");
-    if (logo?.startsWith("data:image/") && image && fallback) {
-      image.src = logo;
-      image.hidden = false;
-      fallback.hidden = true;
-    }
+    applyBranding(branding);
     document.title = `Procurement · ${branding.displayName}`;
   }, [branding]);
 

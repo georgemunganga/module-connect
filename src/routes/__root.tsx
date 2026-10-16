@@ -8,12 +8,13 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppProvider } from "../platform/app-context";
 import { ProcurementSessionProvider, useProcurementSession } from "../platform/procurement-session";
+import { applyBranding, readBrandingCache, saveBrandingCache, type ErpBranding } from "../../shared/branding";
 
 function PreloaderController({ brandingReady }: { brandingReady: boolean }) {
   const session = useProcurementSession();
@@ -114,7 +115,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
@@ -149,28 +150,32 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [brandingReady, setBrandingReady] = useState(false);
 
+  useLayoutEffect(() => {
+    const cached = readBrandingCache();
+    if (cached) {
+      applyBranding(cached);
+      setBrandingReady(true);
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "erp.company-branding.v1") {
+        const next = readBrandingCache();
+        if (next) applyBranding(next);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
     const timeout = window.setTimeout(() => controller.abort(), 3000);
-    const fonts: Record<string, string> = {
-      Montserrat: '"Montserrat", ui-sans-serif, system-ui, sans-serif',
-      "Plus Jakarta Sans": '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif',
-      Inter: '"Inter", ui-sans-serif, system-ui, sans-serif',
-    };
     fetch("/api/hrm/branding", { cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ fontFamily?: string; logoDarkDataUri?: string; logoLightDataUri?: string }> : Promise.reject())
+      .then((response) => response.ok ? response.json() as Promise<ErpBranding> : Promise.reject())
       .then((branding) => {
         if (!active) return;
-        document.documentElement.style.setProperty("--erp-font-family", fonts[branding.fontFamily || "Montserrat"] ?? fonts.Montserrat);
-        const logo = branding.logoDarkDataUri || branding.logoLightDataUri;
-        const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
-        const fallback = document.getElementById("erp-preloader-fallback");
-        if (logo?.startsWith("data:image/") && image && fallback) {
-          image.src = logo;
-          image.hidden = false;
-          fallback.hidden = true;
-        }
+        applyBranding(branding);
+        saveBrandingCache(branding);
       })
       .catch(() => {})
       .finally(() => { if (active) setBrandingReady(true); window.clearTimeout(timeout); });
