@@ -55,40 +55,9 @@ const NAV_BLUE = "text-primary";
 
 type SavePreview = (label: string) => void;
 
-const organizationLinks = [
-  ["Organization", "/settings/profile"],
-  ["Profile", "/settings/profile"],
-  ["Branding", "/settings/branding"],
-  ["Locations", "/settings/locations"],
-];
 const setupLinks = [
-  ["General", "/settings/general"],
-  ["Currencies", "/settings/currencies"],
-  ["Payment Terms", "/settings/payment-terms"],
   ["Vendor Portal", "/settings/vendor-portal"],
   ["Punchout Catalogs", "/settings/punchout-catalogs"],
-];
-const userLinks = [
-  ["Users", "/settings/users"],
-  ["Roles", "/settings/roles"],
-  ["Departments", "/settings/departments"],
-];
-const taxLinks = [
-  ["Taxes", "/settings/taxes"],
-  ["TDS", "/settings/tds"],
-  ["Reporting Tags", "/settings/reporting-tags"],
-];
-const customizationLinks = [
-  ["Transaction Number Series", "/settings/transaction-number-series"],
-  ["PDF Templates", "/settings/customization/pdf-templates"],
-  ["Email Notifications", "/settings/customization/email-notifications"],
-  ["Web Tabs", "/settings/web-tabs"],
-];
-const automationLinks = [
-  ["Workflow Rules", "/settings/automation/workflow-rules"],
-  ["Workflow Actions", "/settings/automation/workflow-actions"],
-  ["Workflow Logs", "/settings/automation/workflow-logs"],
-  ["Schedules", "/settings/automation/schedules"],
 ];
 
 const groupIcons: Record<string, ReactNode> = {
@@ -201,10 +170,10 @@ export function Settings() {
           <BrandMark showName={false} />
           <span className="hidden sm:block">
             <span className="block text-[15px] font-semibold text-foreground">
-              All Settings
+              Procurement Settings
             </span>
             <span className="block text-xs text-muted-foreground">
-              {branding?.displayName || "ERP workspace"} · frontend demo
+              {branding?.displayName || "ERP workspace"} · Procurement demo
             </span>
           </span>
         </Link>
@@ -313,13 +282,11 @@ function SettingsSidebar({
             <X size={18} />
           </button>
         </div>
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Shared settings</p>
-        <a href="/core" className="mb-4 flex items-center gap-2 rounded-md px-3 py-2 text-[13px] text-rail-muted hover:bg-rail-active hover:text-rail-foreground"><Building2 size={16} />ERP Core<ArrowRight size={13} className="ml-auto" /></a>
         <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Procurement settings</p>
         <SidebarGroup
           title="Supplier access & catalogs"
           path={path}
-          links={setupLinks.filter(([, href]) => href === "/settings/vendor-portal" || href === "/settings/punchout-catalogs")}
+          links={setupLinks}
           icon={groupIcons["Setup & Configurations"]}
         />
         <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Transaction settings</p>
@@ -448,18 +415,6 @@ function SidebarLink({
 function SettingsIndex({ search }: { search: string }) {
   const cards = [
     {
-      title: "Shared ERP settings",
-      tone: "mint",
-      icon: <Building2 size={17} />,
-      links: [
-        ["Organization & branches", "/core/organization"],
-        ["Branding", "/core/branding"],
-        ["Users", "/core/users"],
-        ["Roles", "/core/roles"],
-        ["All shared settings", "/core"],
-      ],
-    },
-    {
       title: "Supplier access & catalogs",
       tone: "amber",
       icon: <Settings2 size={17} />,
@@ -477,7 +432,7 @@ function SettingsIndex({ search }: { search: string }) {
     <div className="mx-auto max-w-[1240px]">
       <PageHeader
         title="Procurement settings"
-        subtitle="Buying rules stay here. Company-wide settings are managed once in ERP Core."
+        subtitle="Configure suppliers, catalogs, requests, orders, receiving, and invoice checks for Procurement."
         actions={<Badge>Demo workspace</Badge>}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -581,12 +536,7 @@ function SettingsRouteContent({
   };
   if (sharedDestinations[path] || path === "/settings/general" || path.startsWith("/settings/automation/") || ["/settings/transaction-number-series", "/settings/customization/pdf-templates", "/settings/customization/email-notifications", "/settings/web-tabs"].includes(path)) {
     const destination = sharedDestinations[path] || `/core/settings/${path.split("/").at(-1)}`;
-    return <div className="mx-auto max-w-2xl rounded-xl border border-border bg-surface p-7">
-      <Building2 size={28} className="text-primary" />
-      <h1 className="mt-4 text-xl font-semibold">This setting is managed in ERP Core</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Company-wide settings are shared by all modules. Open the Core workspace to manage them once for the ERP.</p>
-      <a href={destination} className="mt-5 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Open in ERP Core <ArrowRight size={15} /></a>
-    </div>;
+    return <SharedSettingsRedirect destination={destination} />;
   }
   if (["/settings/currencies", "/settings/payment-terms", "/settings/taxes", "/settings/tds", "/settings/reporting-tags"].includes(path)) {
     return <div className="mx-auto max-w-2xl rounded-xl border border-border bg-surface p-7"><Receipt size={28} className="text-primary" /><h1 className="mt-4 text-xl font-semibold">Finance owns this setting</h1><p className="mt-2 text-sm text-muted-foreground">Procurement uses this reference but does not maintain the financial master. The Finance workspace will provide its editor when enabled.</p><Link to="/settings" className="mt-5 inline-block text-sm font-semibold text-primary">Back to Procurement settings →</Link></div>;
@@ -621,6 +571,11 @@ function SettingsRouteContent({
     );
   const slug = path.replace("/settings/", "") || "general";
   return <ConfigurationPage slug={slug} onSavePreview={onSavePreview} />;
+}
+
+function SharedSettingsRedirect({ destination }: { destination: string }) {
+  useEffect(() => { window.location.replace(destination); }, [destination]);
+  return <div className="mx-auto max-w-2xl rounded-xl border border-border bg-surface p-7"><p className="text-sm text-muted-foreground">Opening this setting in ERP Core…</p><a href={destination} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">Continue to ERP Core <ArrowRight size={15} /></a></div>;
 }
 
 function ConfigurationPage({
