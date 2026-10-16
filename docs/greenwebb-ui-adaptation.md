@@ -17,7 +17,7 @@
 | PO, receive, bill, recurring bill, credit and batch editors | Commercial and payables areas | Commercial lists retain cards and add shared table controls; recurring purchases and vendor credit references have scoped views. Finance owns recurring payables, batch payments and payment execution. | List and reference views adapted; editors partial |
 | Inbox filename → bill draft | Payables inbox and invoice new | Queue up to 20 PDF/image/CSV filenames by company, remove or open each as a bill draft. No file content is uploaded, read or extracted. | Adapted for demo |
 | Vendor transaction linking | Vendor profile + orders/invoices | Use stable supplier IDs at API boundary; current demo names remain display only. | Partial |
-| Settings preferences/tabs/builders | Procurement Configuration and shared ERP settings | Purchase Order and Bill settings share accessible six-tab navigation and preview rules without changing published policy or executing automation. | PO and Bill previews adapted; other settings partial |
+| Settings preferences/tabs/builders | Procurement Configuration and shared ERP settings | Purchase Order and Bill settings plus Vendors, Items, Purchases, Purchase Requests, Quote Requests, Receives and Vendor Credits share six-tab navigation. The extra transaction pages explain fields, validation, actions, approval choices and related records without changing published policy. | Transaction guidance adapted; ERP-owned settings and executable builders remain pending |
 | Analytics/export | Procurement reports | Define metric and currency basis; authorize exports and keep Finance ledger separate. | Partial |
 
 ## Preservation checks
