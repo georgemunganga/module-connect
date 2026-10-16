@@ -8,12 +8,29 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppProvider } from "../platform/app-context";
-import { ProcurementSessionProvider } from "../platform/procurement-session";
+import { ProcurementSessionProvider, useProcurementSession } from "../platform/procurement-session";
+
+function PreloaderController({ brandingReady }: { brandingReady: boolean }) {
+  const session = useProcurementSession();
+  const startedAt = useRef(Date.now());
+  useEffect(() => {
+    if (!brandingReady || session.mode === "loading") return;
+    const overlay = document.getElementById("erp-global-preloader");
+    if (!overlay) return;
+    const delay = Math.max(0, 450 - (Date.now() - startedAt.current));
+    const timer = window.setTimeout(() => {
+      overlay.classList.add("is-leaving");
+      window.setTimeout(() => overlay.classList.add("is-gone"), 280);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [brandingReady, session.mode]);
+  return null;
+}
 
 function NotFoundComponent() {
   return (
@@ -115,6 +132,12 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <div id="erp-global-preloader" className="erp-global-preloader" role="status" aria-label="Loading ERP">
+          <div className="erp-preloader-orbit" aria-hidden="true">
+            <span id="erp-preloader-fallback" className="erp-preloader-fallback">ERP</span>
+            <img id="erp-preloader-logo" className="erp-preloader-logo" alt="" hidden />
+          </div>
+        </div>
         {children}
         <Scripts />
       </body>
@@ -124,25 +147,41 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const [brandingReady, setBrandingReady] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 3000);
     const fonts: Record<string, string> = {
       Montserrat: '"Montserrat", ui-sans-serif, system-ui, sans-serif',
       "Plus Jakarta Sans": '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif',
       Inter: '"Inter", ui-sans-serif, system-ui, sans-serif',
     };
     fetch("/api/hrm/branding", { cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ fontFamily?: string }> : Promise.reject())
-      .then((branding) => document.documentElement.style.setProperty("--erp-font-family", fonts[branding.fontFamily || "Montserrat"] ?? fonts.Montserrat))
-      .catch(() => {});
-    return () => controller.abort();
+      .then((response) => response.ok ? response.json() as Promise<{ fontFamily?: string; logoDarkDataUri?: string; logoLightDataUri?: string }> : Promise.reject())
+      .then((branding) => {
+        if (!active) return;
+        document.documentElement.style.setProperty("--erp-font-family", fonts[branding.fontFamily || "Montserrat"] ?? fonts.Montserrat);
+        const logo = branding.logoDarkDataUri || branding.logoLightDataUri;
+        const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
+        const fallback = document.getElementById("erp-preloader-fallback");
+        if (logo?.startsWith("data:image/") && image && fallback) {
+          image.src = logo;
+          image.hidden = false;
+          fallback.hidden = true;
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setBrandingReady(true); window.clearTimeout(timeout); });
+    return () => { active = false; controller.abort(); window.clearTimeout(timeout); };
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <AppProvider>
         <ProcurementSessionProvider>
+          <PreloaderController brandingReady={brandingReady} />
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />
         </ProcurementSessionProvider>

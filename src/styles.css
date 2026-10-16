@@ -5,6 +5,54 @@
 
 @custom-variant dark (&:is(.dark *));
 
+.erp-global-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  opacity: 1;
+  transition: opacity 260ms ease;
+}
+.erp-global-preloader.is-leaving { opacity: 0; pointer-events: none; }
+.erp-global-preloader.is-gone { display: none; }
+.erp-preloader-orbit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+}
+.erp-preloader-orbit::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  border: 3px solid #e8f0f5;
+  border-top-color: var(--primary, #012642);
+  border-radius: 50%;
+  animation: erp-preloader-turn 3s linear infinite;
+}
+.erp-preloader-fallback, .erp-preloader-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+.erp-preloader-fallback {
+  display: grid;
+  place-items: center;
+  background: var(--primary, #012642);
+  color: #fff;
+  font: 700 18px/1 Arial, sans-serif;
+  letter-spacing: .04em;
+}
+.erp-preloader-logo { padding: 7px; }
+.erp-preloader-logo[hidden], .erp-preloader-fallback[hidden] { display: none; }
+@keyframes erp-preloader-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .erp-preloader-orbit::before { animation: none; } }
+
 @layer base {
   * {
     border-color: var(--color-border);

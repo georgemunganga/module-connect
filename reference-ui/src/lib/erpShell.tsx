@@ -104,11 +104,24 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
+    const startedAt = Date.now();
+    const timeout = window.setTimeout(() => controller.abort(), 3000);
     fetch("/api/hrm/branding", { cache: "no-store", signal: controller.signal })
       .then((response) => response.ok ? response.json() as Promise<Branding> : Promise.reject())
-      .then(setBranding)
-      .catch(() => {});
-    return () => controller.abort();
+      .then((value) => { if (active) setBranding(value); })
+      .catch(() => {})
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (!active) return;
+        const overlay = document.getElementById("erp-global-preloader");
+        if (!overlay) return;
+        window.setTimeout(() => {
+          overlay.classList.add("is-leaving");
+          window.setTimeout(() => overlay.remove(), 280);
+        }, Math.max(0, 450 - (Date.now() - startedAt)));
+      });
+    return () => { active = false; controller.abort(); window.clearTimeout(timeout); };
   }, []);
 
   useEffect(() => {
@@ -127,6 +140,14 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     if (branding.faviconDataUri?.startsWith("data:image/")) {
       const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
       if (icon) icon.href = branding.faviconDataUri;
+    }
+    const logo = branding.logoDarkDataUri || branding.logoLightDataUri;
+    const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
+    const fallback = document.getElementById("erp-preloader-fallback");
+    if (logo?.startsWith("data:image/") && image && fallback) {
+      image.src = logo;
+      image.hidden = false;
+      fallback.hidden = true;
     }
     document.title = `Procurement · ${branding.displayName}`;
   }, [branding]);
