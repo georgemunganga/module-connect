@@ -97,7 +97,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
@@ -124,6 +124,20 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const fonts: Record<string, string> = {
+      Montserrat: '"Montserrat", ui-sans-serif, system-ui, sans-serif',
+      "Plus Jakarta Sans": '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif',
+      Inter: '"Inter", ui-sans-serif, system-ui, sans-serif',
+    };
+    fetch("/api/hrm/branding", { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<{ fontFamily?: string }> : Promise.reject())
+      .then((branding) => document.documentElement.style.setProperty("--erp-font-family", fonts[branding.fontFamily || "Montserrat"] ?? fonts.Montserrat))
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

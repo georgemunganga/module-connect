@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 type Branding = {
   displayName: string;
+  fontFamily?: string;
   primaryColor?: string;
   primaryForegroundColor?: string;
   buttonColor?: string;
@@ -117,6 +118,12 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
       const value = branding[field];
       if (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty(token, value);
     }
+    const fonts: Record<string, string> = {
+      Montserrat: '"Montserrat", ui-sans-serif, system-ui, sans-serif',
+      "Plus Jakarta Sans": '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif',
+      Inter: '"Inter", ui-sans-serif, system-ui, sans-serif',
+    };
+    root.style.setProperty("--erp-font-family", fonts[branding.fontFamily || "Montserrat"] ?? fonts.Montserrat);
     if (branding.faviconDataUri?.startsWith("data:image/")) {
       const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
       if (icon) icon.href = branding.faviconDataUri;

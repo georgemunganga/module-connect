@@ -7,7 +7,7 @@
   --color-blue-700: var(--primary);
 }
 :root {
-  font-family: var(--font-sans);
+  font-family: var(--erp-font-family, var(--font-sans));
   color: var(--foreground);
   background: var(--background);
   font-synthesis: none;
