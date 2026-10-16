@@ -10,7 +10,7 @@
 | Choose → Match → Review import; CSV/TSV, sample, skip invalid/duplicate rows | `src/platform/components/DataTransfer.tsx`, record import routes | Keep imported vendors Proposed and items Inactive. No unsupported file format claim. | Adapted for vendor and item imports |
 | Vendor Overview, Comments, Transactions, Mails, Statement | `src/routes/procurement.suppliers_.$id.tsx` | Keep diligence/Finance checks; notes and message drafts stay local, statement is a procurement-side preview limited by linked invoice entity. | Adapted; browser acceptance pending |
 | Vendor seven-tab create/edit | `src/routes/procurement.suppliers_.new.tsx` | Keep legal identity, contacts, sites, masked bank reference, custom fields, tags and remarks; edited profiles retain ID/history and return to review. | Create and guarded edit adapted |
-| Item list/detail/edit | Catalog routes and `CatalogItemEditor` | Preserve item type, entity eligibility and unpublished offers. Manage list uses shared list controls; item detail has overview, linked-request transactions and history tabs. | Adapted for demo; downstream order links need stable item IDs |
+| Item list/detail/edit | Catalog routes and `CatalogItemEditor` | Preserve item type, entity eligibility and unpublished offers. Item detail has overview, ID-linked requests, orders, deliveries, authorized bills and history tabs. New direct and single-line award orders carry the catalog item ID. | Adapted for demo; older orders without an item ID remain unlinked |
 | One resumable six-stage RFQ wizard, nested approved-item picker | Sourcing new/detail routes | Save draft, select partial approved quantities, name and describe the request, set a future deadline, preview supplier-facing information, return to source request, and recheck eligibility before submission. Team assignment still needs the shared identity directory. | Approved-item flow adapted; team picker pending |
 | Canonical list → detail → edit and return to origin | Procurement record routes | Carry source queue/tab and draft context; keep stable IDs. | Partial |
 | Purchase Request list controls | `src/routes/procurement.requests.tsx` | Sort and export the current or selected company-scoped view; keep existing saved views, filters and detail links. | Adapted |
@@ -31,7 +31,7 @@ The reference's generic `AppRecord`/string metadata, direct React Router tree an
 1. Apply the shared list controls to remaining transaction management lists while preserving each record's existing actions and state rules.
 2. Add a team selector to RFQ using the shared identity directory; keep the current approved-item picker and pre-submit validation.
 3. Carry queue/tab return context through all detail/edit/new routes, including supplier creation from a transaction.
-4. Extend stable IDs through orders and receipts before presenting them as item or vendor transactions.
+4. Extend stable supplier IDs and line-level item IDs through all multi-line orders before presenting every vendor or item transaction as linked.
 5. Connect approval, policy, documents, audit and Finance/AP status through the ERP APIs. The reference project has no backend to salvage for these flows.
 
 The source project's route count is not an ERP completion measure: many routes are settings previews or browser-only actions. This register marks adapted behavior explicitly and leaves incomplete behavior visible.

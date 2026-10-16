@@ -471,6 +471,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
           terms: event.terms,
           due: sourceRequest?.neededBy ?? event.closesAt.slice(0, 10),
           line: {
+            catalogItemId: sourceLines.length === 1 ? sourceLines[0].line.catalogItemId : undefined,
             description: event.items[0]?.description || event.title,
             qty,
             price: item.awardValue! / qty,

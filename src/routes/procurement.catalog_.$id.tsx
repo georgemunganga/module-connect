@@ -5,11 +5,13 @@ import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { useState } from "react";
 import { useApp } from "@/platform/app-context";
-import { internalRole, requesterRole, sameEntity } from "@/modules/procurement/access";
+import { internalRole, requesterRole, requestVisible, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import { isExpired, money, useCatalog } from "@/modules/procurement/catalog";
 import { CatalogItemEditor } from "@/modules/procurement/CatalogItemEditor";
 import { useProcurement } from "@/modules/procurement/store";
+import { useCommercial } from "@/modules/procurement/commercial/store";
+import { usePayables } from "@/modules/procurement/payables/store";
 
 export const Route = createFileRoute("/procurement/catalog_/$id")({
   head: () => ({ meta: [{ title: "Catalog item — Meridian ERP" }, { name: "description", content: "Procurement catalog item" }] }),
@@ -24,6 +26,8 @@ function ItemDetail() {
   const [tab, setTab] = useState<"Overview" | "Transactions" | "History">("Overview");
   const [requestStatus, setRequestStatus] = useState("All");
   const procurement = useProcurement();
+  const commercial = useCommercial();
+  const payables = usePayables();
   const suppliers = procurement.suppliers;
   const i = catalogItems.find((x) => x.id === id);
   if (!i || !internalRole(role) || !i.entities.some((entity) => sameEntity(entity, entityId))) return <AppShell><RestrictedState /></AppShell>;
@@ -31,9 +35,15 @@ function ItemDetail() {
   const canRequest = i.status === "Active" && !i.block && !!offer;
   const relatedRequests = procurement.requests.filter((request) =>
     procurement.metadata[request.id]?.lines.some((line) => line.catalogItemId === i.id) &&
-    sameEntity(procurement.metadata[request.id]?.entity, entityId),
+    requestVisible(role, entityId, procurement.metadata[request.id]?.entity, request.requester, request.department),
   );
   const visibleRequests = relatedRequests.filter((request) => requestStatus === "All" || request.status === requestStatus);
+  const relatedOrders = commercial.orders.filter((order) => sameEntity(order.entity, entityId) && order.line.catalogItemId === i.id && (!requesterRole(role) || relatedRequests.some((request) => order.originRequest?.startsWith(`${request.id} /`) || order.source.startsWith(`${request.id} /`))));
+  const relatedOrderIds = new Set(relatedOrders.map((order) => order.id));
+  const relatedReceipts = commercial.receipts.filter((receipt) => relatedOrderIds.has(receipt.poId));
+  const relatedBills = ["buyer", "proc_admin", "ap_processor", "auditor"].includes(role) ? payables.invoices.filter((invoice) => invoice.entityId === entityId && relatedOrderIds.has(invoice.po)) : [];
+  const canOpenOrders = ["manager", "buyer", "proc_admin", "auditor"].includes(role);
+  const canOpenReceipts = ["manager", "receiver", "buyer", "proc_admin", "auditor"].includes(role);
 
   return (
     <AppShell>
@@ -99,6 +109,9 @@ function ItemDetail() {
               </li>
             ))}</ul> : <p className="mt-3 text-sm text-muted-foreground">{relatedRequests.length ? "No requests have that status." : "No linked requests yet."}</p>}
           </section> : null}
+          {tab === "Transactions" && relatedOrders.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Purchase orders</h2><p className="mt-1 text-xs text-muted-foreground">Only orders linked by this item's ID appear here.</p><ul className="mt-3 divide-y text-sm">{relatedOrders.map((order) => <li key={order.id} className="flex flex-wrap items-center justify-between gap-2 py-2">{canOpenOrders ? <Link to="/procurement/orders/$id" params={{ id: order.id }} className="font-medium text-primary hover:underline">{order.id} · {order.supplier}</Link> : <span className="font-medium">{order.id} · {order.supplier}</span>}<span className="text-muted-foreground">{order.status} · {order.line.received} of {order.line.qty} received</span></li>)}</ul></section> : null}
+          {tab === "Transactions" && relatedReceipts.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Deliveries</h2><ul className="mt-3 divide-y text-sm">{relatedReceipts.map((receipt) => <li key={receipt.id} className="flex flex-wrap items-center justify-between gap-2 py-2">{canOpenReceipts ? <Link to="/procurement/receiving/$id" params={{ id: receipt.poId }} className="font-medium text-primary hover:underline">{receipt.id} · {receipt.poId}</Link> : <span className="font-medium">{receipt.id} · {receipt.poId}</span>}<span className="text-muted-foreground">{receipt.status} · {receipt.qty} accepted</span></li>)}</ul></section> : null}
+          {tab === "Transactions" && relatedBills.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Bills</h2><ul className="mt-3 divide-y text-sm">{relatedBills.map((invoice) => <li key={invoice.id} className="flex flex-wrap items-center justify-between gap-2 py-2"><Link to="/procurement/invoices/$id" params={{ id: invoice.id }} className="font-medium text-primary hover:underline">{invoice.number} · {invoice.supplier}</Link><span className="text-muted-foreground">{invoice.status}</span></li>)}</ul></section> : null}
         </div>
 
         {tab === "Overview" ? <aside className="h-fit rounded-lg border bg-surface p-4 text-sm">
