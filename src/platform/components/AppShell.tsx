@@ -1,4 +1,4 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   Building2,
@@ -60,8 +60,6 @@ const moduleRegistry: Record<ModuleId, { def: ModuleDefinition; home: string; av
   hrm: { def: hrmModule, home: "/", available: true },
   procurement: { def: procurementModule, home: "/procurement", available: true },
 };
-
-const comingSoon = ["Finance", "Inventory", "Accounting"];
 
 function useVisibleSections(mod: ModuleDefinition, role: Role) {
   return mod.sections
@@ -292,14 +290,13 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, setRole, entityId, setEntityId, approvalActor, branch, setBranch, theme, toggleTheme, moduleId, setModuleId } = useApp();
+  const { role, setRole, entityId, setEntityId, approvalActor, branch, setBranch, theme, toggleTheme, moduleId } = useApp();
   const session = useProcurementSession();
   const procurement = useProcurement();
   const payables = usePayables();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const procurementScreen = pathname.startsWith("/procurement");
   const demoScreen = !procurementScreen || session.mode === "demo";
-  const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -326,14 +323,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     });
   };
 
-  const switchModule = (id: ModuleId) => {
-    if (id === "hrm" && window.location.hostname === "erp.amizopower.co.zm") {
-      window.location.assign("/hrm");
-      return;
-    }
-    setModuleId(id);
-    navigate({ to: moduleRegistry[id].home });
-  };
+  const assignedRoles = session.mode === "live" ? new Set(session.user.roles.map((value) => value.toLowerCase())) : null;
+  const canOpenHrm = !assignedRoles || ["employee", "manager", "hr_ops", "payroll", "finance_approver", "hr_admin", "investigator", "timesheet_operator"].some((value) => assignedRoles.has(value));
+  const canOpenCore = !assignedRoles || assignedRoles.has("erp_admin") || assignedRoles.has("hr_admin");
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -371,39 +363,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet> : null}
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2 px-2">
-                <Grid2x2 className="size-4" aria-hidden />
-                <span className="hidden font-semibold sm:inline">Meridian ERP</span>
-                <ChevronDown className="size-3.5" aria-hidden />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>Modules</DropdownMenuLabel>
-              {(Object.keys(moduleRegistry) as ModuleId[]).map((id) => (
-                <DropdownMenuItem
-                  key={id}
-                  onSelect={() => switchModule(id)}
-                  aria-current={id === moduleId ? "true" : undefined}
-                >
-                  {moduleRegistry[id].def.name}
-                  {id === moduleId ? <span className="ml-auto text-xs text-muted-foreground">Current</span> : null}
-                </DropdownMenuItem>
-              ))}
-              {comingSoon.map((label) => (
-                <DropdownMenuItem key={label} disabled>
-                  {label}
-                  <span className="ml-auto text-xs text-muted-foreground">Not enabled</span>
-                </DropdownMenuItem>
-              ))}
-              {demoScreen ? <><DropdownMenuSeparator />
-                <DropdownMenuLabel>Demo workspace</DropdownMenuLabel>
-                <DropdownMenuRadioGroup value={role} onValueChange={(v) => setRole(v as Role)}>
-                  {workspaces.map((w) => <DropdownMenuRadioItem key={w.id} value={w.id}>{w.label}</DropdownMenuRadioItem>)}
-                </DropdownMenuRadioGroup></> : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <a href="/" className="rounded-md px-2 py-1 text-sm font-semibold hover:bg-secondary">Meridian ERP</a>
 
           <span role="status" className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning-soft px-2.5 py-1 text-xs font-medium text-foreground">
             <span className="size-1.5 rounded-full bg-warning" aria-hidden />
@@ -445,6 +405,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           </DropdownMenu> : session.mode === "live" ? <div className="hidden items-center gap-2 rounded-md border px-3 py-1.5 text-sm md:flex"><Building2 className="size-4" aria-hidden /><span className="max-w-48 truncate">{session.context.company.name}</span></div> : null}
 
           <div className="ml-auto flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5" aria-label="Switch ERP module"><Grid2x2 className="size-4" /><span className="hidden sm:inline">Procurement</span><ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>My modules</DropdownMenuLabel>
+                {canOpenHrm ? <DropdownMenuItem asChild><a href="/hrm">Human resources</a></DropdownMenuItem> : null}
+                <DropdownMenuItem asChild><a href="/procurement" aria-current="page" className="font-semibold">Procurement</a></DropdownMenuItem>
+                {canOpenCore ? <DropdownMenuItem asChild><a href="/core">ERP Core</a></DropdownMenuItem> : null}
+                {demoScreen ? <><DropdownMenuSeparator /><DropdownMenuLabel>Demo workspace</DropdownMenuLabel><DropdownMenuRadioGroup value={role} onValueChange={(value) => setRole(value as Role)}>{workspaces.map((workspace) => <DropdownMenuRadioItem key={workspace.id} value={workspace.id}>{workspace.label}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></> : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {demoScreen ? <>
             {quickActions.length ? <DropdownMenu>
               <DropdownMenuTrigger asChild><Button size="icon" aria-label="Quick create" title="Quick create"><Plus className="size-4" aria-hidden /></Button></DropdownMenuTrigger>

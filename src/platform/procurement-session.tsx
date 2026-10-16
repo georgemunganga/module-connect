@@ -16,7 +16,7 @@ export interface ProcurementContext {
 export type ProcurementSession =
   | { mode: "loading" }
   | { mode: "demo" }
-  | { mode: "live"; user: { displayName: string; email: string }; context: ProcurementContext }
+  | { mode: "live"; user: { displayName: string; email: string; roles: string[] }; context: ProcurementContext }
   | { mode: "unavailable"; reason: string };
 
 const Session = createContext<ProcurementSession>({ mode: "loading" });
@@ -97,7 +97,7 @@ async function detectSession(signal: AbortSignal): Promise<ProcurementSession> {
       return { mode: "unavailable", reason: "Procurement company access was invalid." };
     return {
       mode: "live",
-      user: { displayName: body.user.displayName, email: body.user.email },
+      user: { displayName: body.user.displayName, email: body.user.email, roles: Array.isArray(body.user.roles) ? body.user.roles.filter((role): role is string => typeof role === "string") : [] },
       context,
     };
   } catch {
