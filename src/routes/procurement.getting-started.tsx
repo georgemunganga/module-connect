@@ -6,8 +6,11 @@ import { useApp, useEntity } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { RestrictedState } from "@/platform/components/States";
-import { gettingStartedSteps, useGettingStarted } from "@/modules/procurement/getting-started";
+import { gettingStartedSteps, procurementReadiness, useGettingStarted } from "@/modules/procurement/getting-started";
 import type { GettingStartedStep } from "@/modules/procurement/getting-started";
+import { useCatalog } from "@/modules/procurement/catalog";
+import { useConfigStore } from "@/modules/procurement/payables/config-store";
+import { useProcurement } from "@/modules/procurement/store";
 
 export const Route = createFileRoute("/procurement/getting-started")({
   head: () => ({ meta: [
@@ -57,15 +60,27 @@ function GettingStarted() {
   const { role, entityId } = useApp();
   const entity = useEntity();
   const { progress, loaded, reviewedCount, setReviewed } = useGettingStarted(entityId);
+  const config = useConfigStore();
+  const procurement = useProcurement();
+  const items = useCatalog();
   const [active, setActive] = useState<GettingStartedStep>("controls");
   if (role !== "proc_admin") return <AppShell><RestrictedState title="Procurement setup is for administrators" body="Ask your Procurement administrator for the setup guide. Employees can start from the catalog or My requests." /></AppShell>;
 
   const selected = steps.find((step) => step.id === active)!;
   const Icon = selected.icon;
+  const checks = procurementReadiness(entityId, config, procurement, items);
+  const readyCount = checks.filter((check) => check.state === "ready").length;
+  const visibleChecks = checks.filter((check) => active === "controls" ? ["policy", "supplier", "item"].includes(check.key) : active === "first-purchase" ? check.key === "first-request" : check.key === "finance");
   return <AppShell>
-    <PageHeader eyebrow="First use · Procurement" title="Getting started" description={`Three steps to prepare ${entity.name} for purchasing. Work through them in any order; your review progress is saved in this browser.`} primaryAction={<Button asChild variant="outline"><Link to="/procurement">Go to home</Link></Button>} />
+    <PageHeader eyebrow="First use · Procurement" title="Getting started" description={`Three steps to prepare ${entity.name} for purchasing. Setup checks use this company's demo records; review progress is saved separately in this browser.`} primaryAction={<Button asChild variant="outline"><Link to="/procurement">Go to home</Link></Button>} />
 
-    <section className="mt-5 rounded-xl border bg-surface p-4" aria-label="Setup progress">
+    <section className="mt-5 rounded-xl border bg-surface p-4" aria-label="Setup readiness">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><h2 className="font-medium">Setup readiness</h2><p className="text-muted-foreground">{readyCount} of {checks.length} checks ready</p></div>
+      <p className="mt-2 text-xs text-muted-foreground">Based on current demo records for this company. A ready check does not confirm production approval or integration.</p>
+      <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">{checks.map((check) => <li key={check.key} className="rounded-lg border p-3 text-sm"><p className="font-medium">{check.label}</p><p className={check.state === "ready" ? "mt-1 text-success" : "mt-1 text-muted-foreground"}>{check.state === "ready" ? "Ready in demo" : check.state === "not connected" ? "Not connected" : "Needs action"}</p><p className="mt-1 text-xs text-muted-foreground">Owner: {check.owner}</p></li>)}</ul>
+    </section>
+
+    <section className="mt-5 rounded-xl border bg-surface p-4" aria-label="Review progress">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><p className="font-medium">{loaded ? `${reviewedCount} of 3 steps reviewed` : "Loading progress"}</p><p className="text-muted-foreground">{entity.name}</p></div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${reviewedCount / 3 * 100}%` }} /></div>
       <p className="mt-2 text-xs text-muted-foreground">Marking a step reviewed only tracks your progress. It does not turn on a rule or approve spending.</p>
@@ -83,6 +98,7 @@ function GettingStarted() {
       </nav>
       <section className="min-w-0 rounded-xl border bg-surface p-5" aria-labelledby="step-heading">
         <div className="flex items-start gap-3"><span className="rounded-lg bg-primary/10 p-2"><Icon className="size-5 text-primary" aria-hidden /></span><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Step {gettingStartedSteps.indexOf(active) + 1} of 3</p><h2 id="step-heading" className="text-lg font-semibold">{selected.title}</h2><p className="mt-1 text-sm text-muted-foreground">{selected.summary}</p></div></div>
+        <div className="mt-5 space-y-2" aria-label="Checks for this step">{visibleChecks.map((check) => <div key={check.key} className="rounded-lg border p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{check.label}</strong><span className={check.state === "ready" ? "text-success" : "text-muted-foreground"}>{check.state === "ready" ? "Ready in demo" : check.state === "not connected" ? "Not connected" : "Needs action"}</span></div><p className="mt-1 text-xs text-muted-foreground">{check.detail} Owner: {check.owner}.</p></div>)}</div>
         <ul className="mt-5 divide-y border-y">
           {selected.tasks.map((task) => <li key={task.title} className="flex flex-wrap items-start justify-between gap-3 py-4"><div className="max-w-xl"><h3 className="text-sm font-medium">{task.title}</h3><p className="mt-1 text-xs text-muted-foreground">{task.detail}</p></div><a href={task.href} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">{task.action}<ArrowRight className="size-4" aria-hidden /></a></li>)}
         </ul>

@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useProcurement, saveProcurement, routeLine, resubmitReturnedRequest, submitDraftRequest, withdrawRequest } from "@/modules/procurement/store";
+import { useProcurement, saveProcurement, routeLine, cancelApprovedLineRemainder, resubmitReturnedRequest, submitDraftRequest, withdrawRequest } from "@/modules/procurement/store";
 import { useCommercial } from "@/modules/procurement/commercial/store";
 import { requestVisible, isDemoRequester, sameEntity } from "@/modules/procurement/access";
-import { deriveProgress, remaining } from "@/modules/procurement/requisition";
+import { availableToAllocate, deriveProgress, remaining } from "@/modules/procurement/requisition";
 import type { LineRoute, ReqLine } from "@/modules/procurement/requisition";
 import { useApp } from "@/platform/app-context";
 import { AppShell } from "@/platform/components/AppShell";
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/procurement/requests_/$id")({
   component: RequestDetail,
 });
 
-const ROUTES: LineRoute[] = ["Direct PO", "RFQ / tender", "Contract / framework", "Deferred", "Cancelled"];
+const ROUTES: LineRoute[] = ["Direct PO", "RFQ / tender", "Contract / framework", "Deferred"];
 const routeLabel: Record<LineRoute, string> = { "Direct PO": "Order directly", "RFQ / tender": "Ask for quotes", "Contract / framework": "Use an existing contract", Deferred: "Buy later", Cancelled: "Do not buy" , Unassigned: "Choose how to buy" };
 const BUYERS = ["buyer", "proc_admin"];
 const APPROVERS = ["manager", "proc_admin"];
@@ -56,6 +56,8 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
   const status = r.status;
   const [notice, setNotice] = useState<string | null>(null);
   const [section, setSection] = useState<"Items" | "Details" | "History">("Items");
+  const [cancelLine, setCancelLine] = useState<{ id: string; available: number } | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
 
   const money = new Intl.NumberFormat("en", { style: "currency", currency: r.currency, maximumFractionDigits: 0 });
   const isBuyer = BUYERS.includes(role);
@@ -73,6 +75,15 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
       const ref = routeLine(r.id, line.id, line.route, qty);
       setNotice(`${ref} is ready as a draft. It has not been sent to the vendor or Finance.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not start buying this item."); }
+  };
+  const cancelRemainder = () => {
+    if (!cancelLine) return;
+    try {
+      const quantity = cancelApprovedLineRemainder(r.id, cancelLine.id, cancelLine.available, cancelReason, role, entityId);
+      setNotice(`${quantity} unallocated units cancelled. Existing quotes and orders were kept.`);
+      setCancelLine(null);
+      setCancelReason("");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not cancel the remaining quantity."); }
   };
 
   // Header actions with permitted-state checks
@@ -123,17 +134,24 @@ function Workspace({ r }: { r: import("@/modules/procurement/types").PurchaseReq
               <div><dt className="text-muted-foreground">Requested</dt><dd className="mt-1 text-lg font-semibold">{l.qty}</dd></div>
               <div><dt className="text-muted-foreground">Approved</dt><dd className="mt-1 text-lg font-semibold">{l.approvedQty}</dd></div>
               <div><dt className="text-muted-foreground">Ordered</dt><dd className="mt-1 text-lg font-semibold">{l.orderedQty}</dd></div>
-              <div><dt className="text-muted-foreground">Left to buy</dt><dd className="mt-1 text-lg font-semibold">{remaining(l)}</dd></div>
+              <div><dt className="text-muted-foreground">Not yet being bought</dt><dd className="mt-1 text-lg font-semibold">{availableToAllocate(l)}</dd></div>
             </dl>
             {isBuyer ? <div className="mt-4 flex flex-wrap items-end gap-3 border-t pt-4">
-              <div><Label htmlFor={`rt-${l.id}`}>How to buy</Label><select id={`rt-${l.id}`} className="mt-1 h-9 rounded-md border bg-background px-3 text-sm" value={l.route} disabled={status !== "Approved" || l.approval !== "Approved" || remaining(l) === 0} onChange={(e) => updateLine(l.id, { route: e.target.value as LineRoute }, `Line route selected: ${e.target.value}`)}><option value="Unassigned" disabled>{routeLabel.Unassigned}</option>{ROUTES.map((x) => <option key={x} value={x}>{routeLabel[x]}</option>)}</select></div>
+              <div><Label htmlFor={`rt-${l.id}`}>How to buy</Label><select id={`rt-${l.id}`} className="mt-1 h-9 rounded-md border bg-background px-3 text-sm" value={l.route} disabled={status !== "Approved" || l.approval !== "Approved" || availableToAllocate(l) === 0} onChange={(e) => updateLine(l.id, { route: e.target.value as LineRoute }, `Line route selected: ${e.target.value}`)}><option value="Unassigned" disabled>{routeLabel.Unassigned}</option>{l.route === "Cancelled" ? <option value="Cancelled" disabled>{routeLabel.Cancelled}</option> : null}{ROUTES.map((x) => <option key={x} value={x}>{routeLabel[x]}</option>)}</select></div>
               <div><Label htmlFor={`supplier-${l.id}`}>Preferred vendor</Label><select id={`supplier-${l.id}`} className="mt-1 h-9 max-w-52 rounded-md border bg-background px-3 text-sm" value={l.preferredSupplier ?? ""} disabled={status !== "Approved" || l.approval !== "Approved" || l.orderedQty > 0 || l.allocatedQty > 0} onChange={(event) => updateLine(l.id, { preferredSupplier: event.target.value || undefined }, `Supplier preference set for ${l.description}: ${event.target.value || "none"}`)}><option value="">Choose approved vendor</option>{suppliers.filter((supplier) => supplier.status === "Active" && sameEntity(supplier.country, entityId)).map((supplier) => <option key={supplier.id}>{supplier.name}</option>)}</select></div>
-              {l.route === "RFQ / tender" && status === "Approved" && l.approval === "Approved" && !l.lockedBy && remaining(l) > 0 ? <Button asChild><Link to="/procurement/sourcing/new" search={{ requestId: r.id, lineId: l.id }}>Ask for quotes</Link></Button> : ["Direct PO", "Contract / framework"].includes(l.route) && status === "Approved" && l.approval === "Approved" && !l.lockedBy && remaining(l) > 0 ? <Button onClick={() => convert(l, false)}>{l.route === "Contract / framework" ? "Order from contract" : "Start order"}</Button> : null}
+              {l.route === "RFQ / tender" && status === "Approved" && l.approval === "Approved" && !l.lockedBy && availableToAllocate(l) > 0 ? <Button asChild><Link to="/procurement/sourcing/new" search={{ requestId: r.id, lineId: l.id }}>Ask for quotes</Link></Button> : ["Direct PO", "Contract / framework"].includes(l.route) && status === "Approved" && l.approval === "Approved" && !l.lockedBy && availableToAllocate(l) > 0 ? <Button onClick={() => convert(l, false)}>{l.route === "Contract / framework" ? "Order from contract" : "Start order"}</Button> : null}
               {l.route !== "RFQ / tender" && ["Direct PO", "Contract / framework"].includes(l.route) && status === "Approved" && l.approval === "Approved" && !l.lockedBy && l.approvedQty - l.allocatedQty - l.orderedQty - l.cancelledQty >= 2 ? <Button variant="outline" onClick={() => convert(l, true)}>Buy part of this</Button> : null}
+              {status === "Approved" && l.approval === "Approved" && !l.lockedBy && availableToAllocate(l) > 0 ? <Button variant="outline" onClick={() => { setCancelLine({ id: l.id, available: availableToAllocate(l) }); setCancelReason(""); setNotice(null); }}>Cancel unallocated balance</Button> : null}
             </div> : <p className="mt-4 border-t pt-3 text-sm text-muted-foreground">Buying route: {routeLabel[l.route]}</p>}
+            {isBuyer && cancelLine?.id === l.id ? <div className="mt-3 rounded-md border border-warning/40 bg-warning-soft p-3 text-sm">
+              <p>Cancel {cancelLine.available} approved units that have not entered a quote or order. Existing allocations and orders stay in place.</p>
+              <Label htmlFor={`cancel-reason-${l.id}`} className="mt-3 block">Why are these units no longer needed?</Label>
+              <Textarea id={`cancel-reason-${l.id}`} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} className="mt-1" />
+              <div className="mt-3 flex gap-2"><Button onClick={cancelRemainder} disabled={!cancelReason.trim()}>Confirm cancellation</Button><Button variant="outline" onClick={() => { setCancelLine(null); setCancelReason(""); }}>Keep units</Button></div>
+            </div> : null}
             <details className="mt-4 rounded-md bg-surface-muted px-3 py-2 text-sm">
               <summary className="cursor-pointer font-medium">See delivery and linked records</summary>
-              <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><div><dt className="text-muted-foreground">Being bought</dt><dd>{l.allocatedQty}</dd></div><div><dt className="text-muted-foreground">Delivered</dt><dd>{l.receivedQty}</dd></div><div><dt className="text-muted-foreground">Cancelled</dt><dd>{l.cancelledQty}</dd></div><div><dt className="text-muted-foreground">Value left to buy</dt><dd>{money.format(remaining(l) * l.unitPrice)}</dd></div></dl>
+              <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><div><dt className="text-muted-foreground">Being bought</dt><dd>{l.allocatedQty}</dd></div><div><dt className="text-muted-foreground">Delivered</dt><dd>{l.receivedQty}</dd></div><div><dt className="text-muted-foreground">Cancelled</dt><dd>{l.cancelledQty}</dd></div><div><dt className="text-muted-foreground">Value not yet being bought</dt><dd>{money.format(availableToAllocate(l) * l.unitPrice)}</dd></div></dl>
               {l.splitNote ? <p className="mt-2">{l.splitNote}</p> : null}
               {l.lockedBy ? <p className="mt-2 text-warning">{l.lockedBy} is working on this item</p> : null}
               {l.related.length ? <div className="mt-3 flex flex-wrap gap-2">{l.related.map((x) => x.kind === "RFQ" ? <Link key={x.ref} to="/procurement/sourcing/$id" params={{ id: x.ref }} className="text-primary underline">Quote request {x.ref}</Link> : x.kind === "PO" && !x.ref.includes("DRAFT") ? <Link key={x.ref} to="/procurement/orders/$id" params={{ id: x.ref }} className="text-primary underline">Order {x.ref}</Link> : x.kind === "Receipt" && receipts.some((receipt) => receipt.id === x.ref) ? <Link key={x.ref} to="/procurement/receiving/$id" params={{ id: receipts.find((receipt) => receipt.id === x.ref)!.poId }} className="text-primary underline">Delivery {x.ref}</Link> : <span key={x.ref}>{x.kind} {x.ref} {x.ref.includes("DRAFT") ? "· draft" : ""}</span>)}</div> : <p className="mt-2 text-muted-foreground">No linked quotes, orders or deliveries yet.</p>}

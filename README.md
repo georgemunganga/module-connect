@@ -2,6 +2,11 @@
 
 ## Procurement live identity bridge
 
+The [Procurement UI and API contract register](docs/procurement-ui-contract-register.md)
+maps each screen to its current source and the backend contract still needed for live use.
+The [workflow gap register](docs/procurement-ui-workflow-gap-register.md) tracks unfinished
+demo interactions and acceptance paths.
+
 Procurement remains a demo unless the build sets `VITE_PROCUREMENT_LIVE_MODE=1`.
 With the flag off, screens use local sample records and show **Demo data**. With it on,
 the browser checks the same-origin ERP session at `/api/hrm/auth/me`, then checks

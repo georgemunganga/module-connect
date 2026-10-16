@@ -11,7 +11,7 @@ import type { SupplierRecord } from "./suppliers";
 import type { SourcingEvent } from "./sourcing";
 import type { Role } from "@/mock/types";
 import { getCommercial, updateCommercial } from "./commercial/store";
-import { demoApprovalActors, demoManagerForEntity } from "./access";
+import { demoApprovalActors, demoManagerForEntity, sameEntity } from "./access";
 
 export interface ProcurementState {
   requests: PurchaseRequest[];
@@ -247,4 +247,46 @@ export function routeLine(requestId: string, lineId: string, route: LineRoute, q
   });
   if (kind !== "RFQ" && supplier) updateCommercial((current) => ({ ...current, orders: [{ id: ref, supplier: supplier.name, entity: meta.entity, source: contract?.id ?? `${requestId} / ${lineId}`, originRequest: contract ? `${requestId} / ${lineId}` : undefined, sourceApprovedValue: qty * line.unitPrice, status: "Draft", version: 1, currency: request.currency, shipTo: meta.deliverTo || (meta.entity.includes("Kenya") ? "Nairobi Office" : meta.entity.includes("Germany") ? "Hamburg Works" : "Rotterdam HQ"), billTo: meta.entity, taxRef: "Confirm tax treatment", terms: contract ? `Contract ${contract.id} signed v${contract.signedVersion}` : "Net 30", due: request.neededBy, line: { description: line.description, qty, price: line.unitPrice, received: 0, invoiced: 0, unit: line.kind === "Service" ? "service" : line.kind === "Subscription" ? "year" : "each", type: line.kind === "Service" || line.kind === "Subscription" ? "Service" : "Goods" }, supplierActive: true, revisions: [], audit: [{ at: stamp(), actor: "Procurement buyer (demo)", action: "Created draft PO", detail: `${qty} units from ${requestId} / ${lineId}${contract ? ` against ${contract.id}` : ""}; no supplier commitment yet` }] }, ...current.orders] }));
   return ref;
+}
+
+/** Cancel only the approved quantity that has not been allocated or ordered. */
+export function cancelApprovedLineRemainder(
+  requestId: string,
+  lineId: string,
+  expectedAvailable: number,
+  reason: string,
+  role: Role,
+  entityId: string,
+) {
+  if (!reason.trim()) throw new Error("Give a reason for cancelling the remaining quantity.");
+  if (role !== "buyer" && role !== "proc_admin") throw new Error("Only a procurement buyer can cancel an approved balance.");
+  const state = getProcurement();
+  const request = state.requests.find((item) => item.id === requestId);
+  const meta = state.metadata[requestId];
+  const line = meta?.lines.find((item) => item.id === lineId);
+  if (!sameEntity(meta?.entity, entityId)) throw new Error("This request belongs to another company.");
+  if (!request || !meta || request.status !== "Approved" || !line || line.approval !== "Approved")
+    throw new Error("Only an approved request line can have its remaining quantity cancelled.");
+  if (line.lockedBy) throw new Error(`${line.lockedBy} is working on this item. Refresh before cancelling.`);
+  const available = line.approvedQty - line.allocatedQty - line.orderedQty - line.cancelledQty;
+  if (!Number.isFinite(available) || available <= 0 || available !== expectedAvailable)
+    throw new Error("The available quantity has changed. Refresh the request and try again.");
+  if (line.allocatedQty < 0 || line.orderedQty < 0 || line.cancelledQty < 0 ||
+      line.allocatedQty + line.orderedQty + line.cancelledQty + available !== line.approvedQty)
+    throw new Error("This line has inconsistent quantities. Refresh before making changes.");
+  const updated: ReqLine = {
+    ...line,
+    cancelledQty: line.cancelledQty + available,
+    route: line.allocatedQty === 0 && line.orderedQty === 0 ? "Cancelled" : line.route,
+  };
+  saveProcurement((current) => ({
+    ...current,
+    metadata: { ...current.metadata, [requestId]: { ...meta, lines: meta.lines.map((item) => item.id === lineId ? updated : item) } },
+    requests: current.requests.map((item) => item.id === requestId ? {
+      ...item,
+      nextAction: "Review remaining request lines",
+      timeline: [{ id: crypto.randomUUID(), at: stamp(), actor: "Procurement buyer (demo)", event: `Cancelled ${available} unallocated ${line.description}`, reason: reason.trim(), before: `${line.cancelledQty} cancelled`, after: `${updated.cancelledQty} cancelled` }, ...item.timeline],
+    } : item),
+  }));
+  return available;
 }
