@@ -125,11 +125,11 @@ export function CurrencySettings({
           </tbody>
         </table>
       </div>
-      <div className="border-t border-slate-100 px-5 py-4">
+      <div className="border-t border-border px-5 py-4">
         <Button onClick={() => onSavePreview("Currencies")}>
           Save preview snapshot
         </Button>
-        <p className="mt-3 text-xs text-slate-400">
+        <p className="mt-3 text-xs text-muted-foreground">
           Currency conversion and live organization configuration are not
           connected.
         </p>
@@ -270,11 +270,11 @@ export function TaxSettings({
           </tbody>
         </table>
       </div>
-      <div className="border-t border-slate-100 px-5 py-4">
+      <div className="border-t border-border px-5 py-4">
         <Button onClick={() => onSavePreview(title)}>
           Save preview snapshot
         </Button>
-        <p className="mt-3 text-xs text-slate-400">
+        <p className="mt-3 text-xs text-muted-foreground">
           Sample rates only. No tax engine or live configuration is connected.
         </p>
       </div>

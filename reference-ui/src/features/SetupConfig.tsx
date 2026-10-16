@@ -154,7 +154,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
         {slug === "branding" && (
           <>
             <div className="flex flex-wrap items-center gap-5">
-              <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-blue-50 text-blue-500">
+              <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-primary-soft text-primary">
                 <Image size={30} />
               </div>
               <Field
@@ -169,7 +169,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
                   }
                 />
                 {values.logo && (
-                  <span className="mt-2 block text-xs text-slate-400">
+                  <span className="mt-2 block text-xs text-muted-foreground">
                     {values.logo}
                   </span>
                 )}
@@ -182,14 +182,14 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
                 <Textarea defaultValue="Meridian Procurement Demo · Purchasing with clarity." />
               </Field>
             </div>
-            <div className="rounded-lg border border-slate-200 p-5">
+            <div className="rounded-lg border border-border p-5">
               <span
                 className="rounded px-4 py-2 text-sm text-white"
                 style={{ background: values.color }}
               >
                 {values.organization}
               </span>
-              <p className="mt-4 text-xs text-slate-400">
+              <p className="mt-4 text-xs text-muted-foreground">
                 Brand preview only. This does not replace live logos.
               </p>
             </div>
@@ -197,7 +197,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
         )}
         {slug === "vendor-portal" && (
           <>
-            <div className="rounded-lg bg-blue-50 p-4 text-sm text-slate-600">
+            <div className="rounded-lg bg-primary-soft p-4 text-sm text-muted-foreground">
               A workspace where vendors can view requests, documents, and
               account information.
             </div>
@@ -217,18 +217,18 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
                 <Textarea placeholder="Message displayed to your vendors." />
               </Field>
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input type="checkbox" />
               Allow vendors to update profile information (preview)
             </label>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               Enabling here is a visual selection only. No invitations are sent.
             </p>
           </>
         )}
         {slug === "punchout-catalogs" && (
           <>
-            <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
+            <div className="rounded-lg bg-surface-muted p-4 text-sm text-muted-foreground">
               Configure external supplier catalogs for employee purchasing.
               Credentials and live supplier connections are not part of this
               frontend.
@@ -239,7 +239,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
               {field("Supplier Identity", "identity")}
               {select("Default Currency", "currency", ["ZMW", "USD", "EUR"])}
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               No supplier connection will be established; do not enter real
               credentials.
             </p>
@@ -267,7 +267,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
                 Use this number series by default
               </label>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               Numbering previews do not change identifiers in the live
               organization.
             </p>
@@ -351,7 +351,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
               </table>
             </div>
             {!rows.length && (
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-muted-foreground">
                 No {title[slug]?.toLowerCase()} configured in this preview.
               </p>
             )}
@@ -380,7 +380,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
           </>
         )}
       </div>
-      <footer className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-5 py-4">
+      <footer className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-4">
         <Button onClick={() => onSavePreview(title[slug] || slug)}>
           Save preview snapshot
         </Button>
@@ -392,7 +392,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
         >
           Reset
         </Button>
-        <Link to="/settings" className="px-3 text-xs text-slate-400">
+        <Link to="/settings" className="px-3 text-xs text-muted-foreground">
           Cancel
         </Link>
       </footer>

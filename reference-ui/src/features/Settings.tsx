@@ -50,7 +50,7 @@ import {
 import { SetupConfig } from "./SetupConfig";
 import { CurrencySettings, TaxSettings } from "./SettingsLists";
 
-const NAV_BLUE = "text-[#2879dc]";
+const NAV_BLUE = "text-primary";
 
 type SavePreview = (label: string) => void;
 
@@ -178,10 +178,10 @@ export function Settings() {
   }, [preview.snapshot]);
 
   return (
-    <div className="min-h-screen bg-[#f8f9fc] text-slate-800">
-      <header className="sticky top-0 z-30 flex min-h-[74px] items-center gap-4 border-b border-slate-200 bg-white px-4 shadow-sm sm:px-7">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-30 flex min-h-[74px] items-center gap-4 border-b border-border bg-surface px-4 sm:px-7">
         <button
-          className="rounded-md border border-slate-200 p-2 text-slate-500 lg:hidden"
+          className="rounded-md border border-border p-2 text-muted-foreground lg:hidden"
           aria-label="Open settings navigation"
           onClick={() => setMobileNavOpen(true)}
         >
@@ -189,23 +189,23 @@ export function Settings() {
         </button>
         <Link
           to="/"
-          className="flex items-center gap-3 border-r border-slate-200 pr-5"
+          className="flex items-center gap-3 border-r border-border pr-5"
           aria-label="Close Settings and return home"
         >
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#eaf3ff] text-[#2879dc]">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary">
             <Settings2 size={19} />
           </span>
           <span className="hidden sm:block">
-            <span className="block text-[15px] font-semibold text-slate-900">
+            <span className="block text-[15px] font-semibold text-foreground">
               All Settings
             </span>
-            <span className="block text-xs text-slate-400">
+            <span className="block text-xs text-muted-foreground">
               Meridian · frontend demo
             </span>
           </span>
         </Link>
         <div className="relative mx-auto w-full max-w-[420px]">
-          <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+          <Search size={16} className="absolute left-3 top-3 text-muted-foreground" />
           <Input
             aria-label="Search settings"
             value={search}
@@ -216,9 +216,9 @@ export function Settings() {
         </div>
         <Link
           to="/"
-          className="hidden shrink-0 items-center gap-1 rounded-md bg-slate-50 px-3.5 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-100 sm:flex"
+          className="hidden shrink-0 items-center gap-1 rounded-full border border-border bg-surface px-3.5 py-2 text-[13px] font-medium text-foreground hover:bg-secondary sm:flex"
         >
-          Close Settings <X size={14} className="text-rose-500" />
+          Close Settings <X size={14} className="text-muted-foreground" />
         </Link>
       </header>
       <div className="flex min-h-[calc(100vh-74px)]">
@@ -231,16 +231,16 @@ export function Settings() {
           {content}
         </main>
       </div>
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-2.5 text-center text-[11px] text-slate-500 backdrop-blur sm:text-left sm:px-7">
-        <span className="font-semibold text-slate-700">Frontend demo</span> ·
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-surface/95 px-4 py-2.5 text-center text-[11px] text-muted-foreground backdrop-blur sm:text-left sm:px-7">
+        <span className="font-semibold text-foreground">Frontend demo</span> ·
         only saved preview snapshots stay in this browser. No live
         configuration, automation, or emails are applied.
         {preview.lastSaved && (
-          <span className="ml-2 hidden text-slate-400 sm:inline">
+          <span className="ml-2 hidden text-muted-foreground sm:inline">
             Last preview: {preview.lastSaved}
             <button
               onClick={() => setSnapshotOpen(true)}
-              className="ml-3 text-blue-500"
+              className="ml-3 text-primary"
             >
               View snapshot
             </button>
@@ -252,11 +252,11 @@ export function Settings() {
           title={`${preview.snapshotTitle || "Settings"} · Local preview snapshot`}
           onClose={() => setSnapshotOpen(false)}
         >
-          <p className="mb-4 text-sm text-slate-500">
+          <p className="mb-4 text-sm text-muted-foreground">
             The field snapshot below is stored in this browser only. It does not
             change permissions, run scripts, send mail, or apply settings.
           </p>
-          <pre className="max-h-96 overflow-auto rounded bg-slate-50 p-4 text-xs whitespace-pre-wrap">
+          <pre className="max-h-96 overflow-auto rounded bg-surface-muted p-4 text-xs whitespace-pre-wrap">
             {JSON.stringify(snapshotFields, null, 2)}
           </pre>
           <Button className="mt-4" onClick={() => setSnapshotOpen(false)}>
@@ -297,7 +297,7 @@ function SettingsSidebar({
         />
       )}
       <aside
-        className={`fixed bottom-0 left-0 top-[74px] z-40 w-[284px] overflow-y-auto border-r border-slate-200 bg-white px-3 py-5 transition-transform lg:sticky lg:top-[74px] lg:block lg:h-[calc(100vh-74px)] lg:w-[250px] lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed bottom-0 left-0 top-[74px] z-40 w-64 overflow-y-auto border-r border-rail-active bg-rail px-3 py-5 text-rail-foreground transition-transform lg:sticky lg:top-[74px] lg:block lg:h-[calc(100vh-74px)] lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="mb-3 flex items-center justify-between px-2 lg:hidden">
           <span className="font-semibold">Settings navigation</span>
@@ -305,7 +305,7 @@ function SettingsSidebar({
             <X size={18} />
           </button>
         </div>
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
+        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">
           Organization settings
         </p>
         <SidebarGroup
@@ -344,7 +344,7 @@ function SettingsSidebar({
           links={automationLinks}
           icon={groupIcons.Automation}
         />
-        <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
+        <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">
           Module settings
         </p>
         {moduleGroups.map((group) => (
@@ -382,17 +382,17 @@ function SidebarGroup({
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={expanded}
-        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium ${expanded ? "text-slate-900" : "text-slate-600"}`}
+        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium hover:bg-rail-active ${expanded ? "text-rail-foreground" : "text-rail-muted"}`}
       >
         {icon}
         <span>{title}</span>
         <ChevronRight
           size={14}
-          className={`ml-auto text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`}
+          className={`ml-auto text-rail-muted transition-transform ${expanded ? "rotate-90" : ""}`}
         />
       </button>
       {expanded && (
-        <div className="ml-3 border-l border-slate-200 pl-2">
+        <div className="ml-3 border-l border-rail-active pl-2">
           {links.map(([label, href]) => (
             <SidebarLink key={href} label={label} href={href} path={path} />
           ))}
@@ -424,17 +424,17 @@ function ModuleSidebarGroup({
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={expanded}
-        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium ${expanded ? "text-slate-900" : "text-slate-600"}`}
+        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium hover:bg-rail-active ${expanded ? "text-rail-foreground" : "text-rail-muted"}`}
       >
         {icon}
         <span>{title}</span>
         <ChevronRight
           size={14}
-          className={`ml-auto text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`}
+          className={`ml-auto text-rail-muted transition-transform ${expanded ? "rotate-90" : ""}`}
         />
       </button>
       {expanded && (
-        <div className="ml-3 border-l border-slate-200 pl-2">
+        <div className="ml-3 border-l border-rail-active pl-2">
           {items.map((item) => (
             <SidebarLink
               key={item.slug}
@@ -462,7 +462,7 @@ function SidebarLink({
   return (
     <Link
       to={href}
-      className={`mb-0.5 block rounded-md px-3 py-2 text-[12px] transition-colors ${active ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+      className={`mb-0.5 block rounded-md px-3 py-2 text-[12px] transition-colors ${active ? "bg-rail-active font-semibold text-rail-foreground" : "text-rail-muted hover:bg-rail-active hover:text-rail-foreground"}`}
     >
       {label}
     </Link>
@@ -551,10 +551,10 @@ function SettingsIndex({ search }: { search: string }) {
         {cards.map((card) => (
           <section
             key={card.title}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_4px_16px_rgba(30,45,70,.04)]"
+            className="rounded-xl border border-border bg-surface p-5 shadow-[0_4px_16px_rgba(30,45,70,.04)]"
           >
             <div
-              className={`mb-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${card.tone === "mint" ? "bg-emerald-50 text-emerald-700" : card.tone === "rose" ? "bg-rose-50 text-rose-700" : card.tone === "amber" ? "bg-amber-50 text-amber-700" : card.tone === "violet" ? "bg-violet-50 text-violet-700" : "bg-blue-50 text-blue-700"}`}
+              className={`mb-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${card.tone === "mint" ? "bg-emerald-50 text-emerald-700" : card.tone === "rose" ? "bg-rose-50 text-rose-700" : card.tone === "amber" ? "bg-amber-50 text-amber-700" : card.tone === "violet" ? "bg-violet-50 text-violet-700" : "bg-primary-soft text-primary"}`}
             >
               {card.icon}
               {card.title}
@@ -566,27 +566,27 @@ function SettingsIndex({ search }: { search: string }) {
                   <Link
                     key={href}
                     to={href}
-                    className="flex items-center justify-between rounded-md px-1 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-blue-700"
+                    className="flex items-center justify-between rounded-md px-1 py-2 text-[13px] text-muted-foreground hover:bg-surface-muted hover:text-primary"
                   >
                     {label}
-                    <ArrowRight size={14} className="text-slate-300" />
+                    <ArrowRight size={14} className="text-muted-foreground" />
                   </Link>
                 ))}
             </div>
           </section>
         ))}
       </div>
-      <section className="mt-8 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_4px_16px_rgba(30,45,70,.04)]">
-        <h2 className="mb-4 text-lg font-semibold text-slate-900">
+      <section className="mt-8 rounded-xl border border-border bg-surface p-5 shadow-[0_4px_16px_rgba(30,45,70,.04)]">
+        <h2 className="mb-4 text-lg font-semibold text-foreground">
           Module Settings
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {["General", "Purchases"].map((group) => (
             <div
               key={group}
-              className="rounded-lg border border-slate-100 bg-slate-50/60 p-4"
+              className="rounded-lg border border-border bg-surface-muted/60 p-4"
             >
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                 {group === "General" ? (
                   <LayoutGrid size={16} className={NAV_BLUE} />
                 ) : (
@@ -601,10 +601,10 @@ function SettingsIndex({ search }: { search: string }) {
                     <Link
                       key={module.slug}
                       to={`/settings/modules/${module.slug}/${module.tabs[0].slug}`}
-                      className="flex items-center justify-between rounded px-1 py-2 text-[13px] text-slate-600 hover:bg-white hover:text-blue-700"
+                      className="flex items-center justify-between rounded px-1 py-2 text-[13px] text-muted-foreground hover:bg-surface hover:text-primary"
                     >
                       {module.title}
-                      <ChevronRight size={14} className="text-slate-300" />
+                      <ChevronRight size={14} className="text-muted-foreground" />
                     </Link>
                   ))}
               </div>
@@ -625,14 +625,14 @@ function SettingsRouteContent({
 }) {
   if (!settingsRoutes.some((route) => route.path === path))
     return (
-      <div className="mx-auto max-w-xl rounded-lg border border-slate-200 bg-white p-8">
+      <div className="mx-auto max-w-xl rounded-lg border border-border bg-surface p-8">
         <h1 className="text-xl font-semibold">Settings page not found</h1>
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-2 text-sm text-muted-foreground">
           That route is not part of the captured Procurement settings flow.
         </p>
         <Link
           to="/settings"
-          className="mt-5 inline-block text-sm text-blue-600"
+          className="mt-5 inline-block text-sm text-primary"
         >
           Return to All Settings →
         </Link>
@@ -744,7 +744,7 @@ function ConfigurationPage({
         actions={
           <Link
             to="/settings"
-            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-blue-700"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
           >
             <ArrowLeft size={15} /> All settings
           </Link>
@@ -804,7 +804,7 @@ function ConfigurationPage({
               />
             </Field>
           </div>
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-4">
             <Button onClick={() => onSavePreview(title)}>Save preview</Button>
             <Button
               variant="secondary"
@@ -819,7 +819,7 @@ function ConfigurationPage({
             >
               Reset fields
             </Button>
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-muted-foreground">
               Preview only · not connected to a backend
             </span>
           </div>
@@ -904,10 +904,10 @@ function DirectoryConfig({
           <tbody>
             {rows.map((row) => (
               <tr key={row[0]}>
-                <td className="table-cell font-medium text-slate-800">
+                <td className="table-cell font-medium text-foreground">
                   {row[0]}
                 </td>
-                <td className="table-cell text-slate-500">{row[1]}</td>
+                <td className="table-cell text-muted-foreground">{row[1]}</td>
                 <td className="table-cell">
                   <Badge>{row[2]}</Badge>
                 </td>
@@ -924,7 +924,7 @@ function DirectoryConfig({
           </tbody>
         </table>
       </div>
-      <div className="border-t border-slate-100 px-5 py-4 text-xs text-slate-400">
+      <div className="border-t border-border px-5 py-4 text-xs text-muted-foreground">
         Fictional users and roles only. Save actions are local previews.
       </div>
     </Panel>
@@ -967,8 +967,8 @@ function LocationsConfig({ onSavePreview }: { onSavePreview: SavePreview }) {
             key={`${location.name}-${index}`}
           >
             <div>
-              <p className="font-medium text-slate-800">{location.name}</p>
-              <p className="mt-1 text-xs text-slate-400">{location.address}</p>
+              <p className="font-medium text-foreground">{location.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{location.address}</p>
             </div>
             <Input
               defaultValue={location.address}
@@ -1012,21 +1012,21 @@ function ModulePage({
         actions={
           <Link
             to="/settings"
-            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-blue-700"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
           >
             <ArrowLeft size={15} /> All settings
           </Link>
         }
       />
       <nav
-        className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-2 pt-2"
+        className="mb-5 flex gap-1 overflow-x-auto border-b border-border bg-surface px-2 pt-2"
         aria-label={`${module.title} setting tabs`}
       >
         {module.tabs.map((item) => (
           <Link
             key={item.slug}
             to={`/settings/modules/${module.slug}/${item.slug}`}
-            className={`shrink-0 border-b-2 px-3 py-3 text-[13px] ${item.slug === tab.slug ? "border-blue-500 font-semibold text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+            className={`shrink-0 border-b-2 px-3 py-3 text-[13px] ${item.slug === tab.slug ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             {item.title}
           </Link>
@@ -1145,7 +1145,7 @@ function PreferencesPanel({
     >
       <div className="space-y-1 p-5">
         {specific}
-        <div className="mt-5 border-t border-slate-100 pt-5">
+        <div className="mt-5 border-t border-border pt-5">
           <Field
             label={`When should ${module.title} be closed?`}
             hint="This selection is only reflected in this local demo preview."
@@ -1167,7 +1167,7 @@ function PreferencesPanel({
           />
         </Field>
       </div>
-      <div className="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-4">
+      <div className="flex flex-wrap gap-2 border-t border-border px-5 py-4">
         <Button onClick={() => onSavePreview(`${module.title} preferences`)}>
           <Check size={15} /> Save preview
         </Button>
@@ -1187,19 +1187,19 @@ function PreferencesPanel({
 function ToggleRow({ label, hint }: { label: string; hint?: string }) {
   const [checked, setChecked] = useState(false);
   return (
-    <label className="flex cursor-pointer items-start gap-3 border-b border-slate-100 py-4">
+    <label className="flex cursor-pointer items-start gap-3 border-b border-border py-4">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => setChecked(event.target.checked)}
-        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+        className="mt-0.5 h-4 w-4 rounded border-input text-primary"
       />
       <span>
-        <span className="block text-sm font-medium text-slate-700">
+        <span className="block text-sm font-medium text-foreground">
           {label}
         </span>
         {hint && (
-          <span className="mt-1 block text-xs text-slate-400">{hint}</span>
+          <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>
         )}
       </span>
     </label>
@@ -1227,7 +1227,7 @@ function ApprovalsPanel({
       }
     >
       <div className="space-y-3 p-5">
-        <div className="grid gap-4 rounded-lg border border-blue-100 bg-blue-50/50 p-4 md:grid-cols-[1fr_180px_160px_auto] md:items-end">
+        <div className="grid gap-4 rounded-lg border border-primary/20 bg-primary-soft/50 p-4 md:grid-cols-[1fr_180px_160px_auto] md:items-end">
           <Field label="Approval condition">
             <Select defaultValue="amount">
               <option>Document total is greater than</option>
@@ -1367,7 +1367,7 @@ function BuilderList({
           />
         )}
       </div>
-      <div className="border-t border-slate-100 px-5 py-4 text-xs text-slate-400">
+      <div className="border-t border-border px-5 py-4 text-xs text-muted-foreground">
         Builder changes are not published or persisted as live configuration.
       </div>
     </Panel>
@@ -1397,14 +1397,14 @@ function PageLayoutPanel({
       }
     >
       <div className="p-5">
-        <p className="mb-4 text-sm text-slate-500">
+        <p className="mb-4 text-sm text-muted-foreground">
           Arrange the visible columns and form sections for this module.
         </p>
         <div className="space-y-2">
           {columns.map((column, index) => (
             <div
               key={column}
-              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
+              className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3"
             >
               <span className="text-sm font-medium">
                 {index + 1}. {column}
@@ -1523,7 +1523,7 @@ function TemplatePage({
               <button
                 key={option}
                 onClick={() => selectTemplate(option)}
-                className={`flex w-full items-center justify-between px-5 py-3 text-left text-[13px] ${selected === option ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
+                className={`flex w-full items-center justify-between px-5 py-3 text-left text-[13px] ${selected === option ? "bg-primary-soft font-semibold text-primary" : "text-muted-foreground hover:bg-surface-muted"}`}
               >
                 {option}
                 <ChevronRight size={14} />
@@ -1562,7 +1562,7 @@ function TemplatePage({
               />
             </Field>
           </div>
-          <div className="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-4">
+          <div className="flex flex-wrap gap-2 border-t border-border px-5 py-4">
             <Button
               onClick={() =>
                 onSavePreview(
@@ -1792,7 +1792,7 @@ function BuilderPage({
             <option>Related list</option>
           </Select>
         </Field>
-        <div className="mt-5 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+        <div className="mt-5 rounded-lg bg-surface-muted p-3 text-xs text-muted-foreground">
           Preview link:{" "}
           <span className="font-mono">
             /demo/{moduleFromQuery}/actions/request-quote
@@ -1823,7 +1823,7 @@ function BuilderPage({
             }
           />
         </Field>
-        <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <Code2 size={15} /> Scripts are shown for editing only and never
           executed.
         </div>
@@ -1857,7 +1857,7 @@ function BuilderFrame({
         actions={
           <Link
             to="/settings"
-            className="inline-flex items-center gap-1 text-sm text-slate-500"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground"
           >
             <X size={15} /> Cancel
           </Link>
@@ -1865,14 +1865,14 @@ function BuilderFrame({
       />
       <Panel title="Builder preview" action={<Badge>Unsaved</Badge>}>
         <div className={wide ? "p-5" : "max-w-2xl p-5"}>{children}</div>
-        <div className="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-4">
+        <div className="flex flex-wrap gap-2 border-t border-border px-5 py-4">
           <Button onClick={onSave}>
             <Check size={15} /> Save preview
           </Button>
           <Link to="/settings">
             <Button variant="secondary">Cancel</Button>
           </Link>
-          <span className="self-center text-xs text-slate-400">
+          <span className="self-center text-xs text-muted-foreground">
             No live configuration is changed.
           </span>
         </div>
@@ -1885,13 +1885,13 @@ function RadioRow({ label, options }: { label: string; options: string[] }) {
   const [value, setValue] = useState(options[1]);
   return (
     <fieldset className="mt-5">
-      <legend className="mb-2 text-[13px] font-medium text-slate-700">
+      <legend className="mb-2 text-[13px] font-medium text-foreground">
         {label}
       </legend>
       <div className="flex gap-5">
         {options.map((option) => (
           <label
-            className="flex items-center gap-2 text-sm text-slate-600"
+            className="flex items-center gap-2 text-sm text-muted-foreground"
             key={option}
           >
             <input
@@ -1924,7 +1924,7 @@ function ValidationBuilder({
         title={`New Validation Rule · ${module}`}
         subtitle="Build a safe, local validation preview from meaningful selectors."
         actions={
-          <Link to="/settings" className="text-sm text-slate-500">
+          <Link to="/settings" className="text-sm text-muted-foreground">
             Cancel
           </Link>
         }
@@ -1934,18 +1934,18 @@ function ValidationBuilder({
           <Field label="Validation rule name">
             <Input defaultValue="Require a positive order total" />
           </Field>
-          <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-5">
+          <div className="mt-6 rounded-xl border border-dashed border-border bg-surface-muted/70 p-5">
             <div className="mb-4 flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-full bg-amber-400 text-sm font-semibold text-white">
                 WHEN
               </span>
-              <span className="text-sm font-semibold text-slate-700">
+              <span className="text-sm font-semibold text-foreground">
                 All of these conditions are true
               </span>
             </div>
             {rules.map((rule, index) => (
               <div
-                className="mb-3 grid gap-3 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-[1fr_1fr_1fr_auto]"
+                className="mb-3 grid gap-3 rounded-lg border border-border bg-surface p-3 md:grid-cols-[1fr_1fr_1fr_auto]"
                 key={index}
               >
                 <Select
@@ -2085,9 +2085,9 @@ function WorkflowBuilder({ onSavePreview }: { onSavePreview: SavePreview }) {
             </>
           ) : (
             <>
-              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-4 text-sm">
+              <div className="rounded-lg border border-primary/20 bg-primary-soft/40 p-4 text-sm">
                 <strong>Module:</strong> {module}
-                <span className="mx-2 text-slate-300">|</span>
+                <span className="mx-2 text-muted-foreground">|</span>
                 <strong>Condition:</strong> event based
               </div>
               <Field label="Workflow type">
@@ -2189,7 +2189,7 @@ function EmailAlertBuilder({ onSavePreview }: { onSavePreview: SavePreview }) {
             <Input placeholder="Optional recipients (demo only)" />
           </Field>
         </div>
-        <div className="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-4">
+        <div className="flex flex-wrap gap-2 border-t border-border px-5 py-4">
           <Button
             onClick={() => onSavePreview(`Email alert · ${name || module}`)}
           >
@@ -2198,7 +2198,7 @@ function EmailAlertBuilder({ onSavePreview }: { onSavePreview: SavePreview }) {
           <Link to="/settings/automation/workflow-actions">
             <Button variant="secondary">Cancel</Button>
           </Link>
-          <span className="self-center text-xs text-slate-400">
+          <span className="self-center text-xs text-muted-foreground">
             No message is sent.
           </span>
         </div>
@@ -2250,7 +2250,7 @@ function ScheduleBuilder({ onSavePreview }: { onSavePreview: SavePreview }) {
               <option>On a selected date</option>
             </Select>
           </Field>
-          <label className="flex items-center gap-2 text-sm text-slate-600 md:col-span-2">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground md:col-span-2">
             <input type="checkbox" className="h-4 w-4" /> Exclude weekends
           </label>
           <Field
@@ -2266,14 +2266,14 @@ function ScheduleBuilder({ onSavePreview }: { onSavePreview: SavePreview }) {
             />
           </Field>
         </div>
-        <div className="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-4">
+        <div className="flex flex-wrap gap-2 border-t border-border px-5 py-4">
           <Button onClick={() => onSavePreview(`Schedule · ${frequency}`)}>
             <Check size={15} /> Save preview
           </Button>
           <Link to="/settings/automation/schedules">
             <Button variant="secondary">Cancel</Button>
           </Link>
-          <span className="self-center text-xs text-slate-400">
+          <span className="self-center text-xs text-muted-foreground">
             <Code2 size={13} className="mr-1 inline" />
             Code remains unsaved
           </span>
