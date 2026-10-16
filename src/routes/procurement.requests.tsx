@@ -12,6 +12,7 @@ import { ListPage } from "@/platform/components/ListPage";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RestrictedState } from "@/platform/components/States";
+import { downloadCsv } from "@/platform/data-transfer";
 
 export const Route = createFileRoute("/procurement/requests")({
   head: () => ({
@@ -27,6 +28,23 @@ export const Route = createFileRoute("/procurement/requests")({
 
 const fmt = (r: PurchaseRequest) =>
   new Intl.NumberFormat("en", { style: "currency", currency: r.currency, maximumFractionDigits: 0 }).format(r.amount);
+
+function requestExportValue(r: PurchaseRequest, column: string, progress: string): string {
+  switch (column) {
+    case "ref": return r.id;
+    case "title": return r.title;
+    case "dept": return r.department;
+    case "amount": return `${r.amount} ${r.currency}`;
+    case "status": return r.status;
+    case "next": return `${r.nextAction} · due ${r.dueDate}`;
+    case "progress": return progress;
+    case "owner": return r.owner;
+    case "requester": return r.requester;
+    case "date": return r.submittedAt;
+    case "needed": return r.neededBy;
+    default: return "";
+  }
+}
 
 function RequestList() {
   const { role, entityId } = useApp();
@@ -55,6 +73,23 @@ function RequestList() {
             onViewChange={setView}
             searchPlaceholder="Search reference, title or requester"
             searchFields={(r) => `${r.id} ${r.title} ${r.requester} ${r.department}`}
+            sortOptions={[
+              { id: "reference", label: "Reference", value: (r) => r.id },
+              { id: "title", label: "Title", value: (r) => r.title },
+              { id: "amount", label: "Amount", value: (r) => r.amount },
+              { id: "submitted", label: "Submitted date", value: (r) => r.submittedAt },
+              { id: "needed", label: "Needed by", value: (r) => r.neededBy },
+            ]}
+            onExport={(scope, exportRows, visibleColumns) =>
+              downloadCsv(
+                `purchase-requests-${scope}.csv`,
+                visibleColumns.map((column) => ({ key: column.id, label: column.header })),
+                exportRows.map((r) => Object.fromEntries(visibleColumns.map((column) => [
+                  column.id,
+                  requestExportValue(r, column.id, deriveProgress(metadata[r.id]?.lines ?? [])),
+                ]))),
+              )
+            }
             filters={[
               { id: "dept", label: "Department", options: ["Engineering", "Operations", "Facilities", "Logistics", "People"], match: (r, v) => r.department === v },
               { id: "status", label: "Status", options: ["Draft", "Submitted", "In review", "Approved", "Returned"], match: (r, v) => r.status === v },

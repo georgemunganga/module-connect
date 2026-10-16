@@ -10,12 +10,13 @@
 | Vendor Overview, Comments, Transactions, Mails, Statement | `src/routes/procurement.suppliers_.$id.tsx` | Keep diligence/Finance checks; notes and message drafts stay local, statement is a procurement-side preview limited by linked invoice entity. | Adapted; browser acceptance pending |
 | Vendor seven-tab create/edit | `src/routes/procurement.suppliers_.new.tsx` | Keep legal identity, contacts, sites, masked bank reference, custom fields, tags and remarks. | Existing ERP behavior; compare each field |
 | Item list/detail/edit | Catalog routes and `CatalogItemEditor` | Preserve item type, entity eligibility and unpublished offers. Manage list uses shared list controls; new requests retain catalog item IDs and detail links related requests by ID. | Item list and linked requests adapted; wider transactions pending |
-| One resumable six-stage RFQ wizard, nested Add Item/User | Sourcing new/detail routes | Add step resume and nested dialogs without weakening sealed bids, competition or award controls. | Planned |
+| One resumable six-stage RFQ wizard, nested approved-item picker | Sourcing new/detail routes | Save draft, select partial approved quantities, set terms/documents, return to source request, and recheck eligibility before submission. Team assignment still needs the shared identity directory. | Approved-item flow adapted; team picker pending |
 | Canonical list → detail → edit and return to origin | Procurement record routes | Carry source queue/tab and draft context; keep stable IDs. | Partial |
+| Purchase Request list controls | `src/routes/procurement.requests.tsx` | Sort and export the current or selected company-scoped view; keep existing saved views, filters and detail links. | Adapted |
 | PO, receive, bill, recurring bill, credit and batch editors | Commercial and payables areas | Preserve distinct fields and calculations. Finance owns recurring payables, batch payments and payment execution; Procurement shows status/reference. | Partial; see workflow gap register |
-| Inbox filename → bill draft | Payables inbox and invoice new | Preserve draft prefill; file name alone never counts as uploaded or extracted evidence. | Partial |
+| Inbox filename → bill draft | Payables inbox and invoice new | Drop/select a PDF or image to prefill the local bill document name; no file content is uploaded, read or extracted. | Adapted for demo |
 | Vendor transaction linking | Vendor profile + orders/invoices | Use stable supplier IDs at API boundary; current demo names remain display only. | Partial |
-| Settings preferences/tabs/builders | Procurement Configuration and shared ERP settings | Preview-only builders cannot silently publish policy or execute automation. | Partial |
+| Settings preferences/tabs/builders | Procurement Configuration and shared ERP settings | Purchase Order settings now offer six tabs and approval-model comparison; previews cannot silently publish policy or execute automation. | Purchase Order preview adapted; other settings partial |
 | Analytics/export | Procurement reports | Define metric and currency basis; authorize exports and keep Finance ledger separate. | Partial |
 
 ## Preservation checks
@@ -27,7 +28,7 @@ The reference's generic `AppRecord`/string metadata, direct React Router tree an
 ## Next integration slices
 
 1. Apply the shared list controls to remaining transaction management lists while preserving each record's existing actions and state rules.
-2. Preserve RFQ draft state through nested item and team selectors, then validate the saved draft and approval hand-off.
+2. Add a team selector to RFQ using the shared identity directory; keep the current approved-item picker and pre-submit validation.
 3. Carry queue/tab return context through all detail/edit/new routes, including supplier creation from a transaction.
 4. Extend stable IDs through orders and receipts before presenting them as item or vendor transactions.
 5. Connect approval, policy, documents, audit and Finance/AP status through the ERP APIs. The reference project has no backend to salvage for these flows.

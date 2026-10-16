@@ -1,5 +1,5 @@
 export type SettingsOwner = "ERP Core" | "Procurement" | "Finance" | "Platform" | "Projects / Inventory";
-export type SettingsRoute = "/procurement/configuration/policy" | "/procurement/configuration/bills";
+export type SettingsRoute = "/procurement/configuration/policy" | "/procurement/configuration/bills" | "/procurement/configuration/orders";
 
 export interface SettingsItem {
   name: string;
@@ -80,7 +80,7 @@ export const settingsGroups: SettingsGroup[] = [
         { name: "Purchases", owner: "Procurement", detail: "Commercial purchasing preferences and exceptions." },
         { name: "Purchase Requests", owner: "Procurement", detail: "Required fields, budget gate and request approval route.", to: "/procurement/configuration/policy" },
         { name: "Request for Quotes", owner: "Procurement", detail: "Supplier invitation, deadline and evaluation rules.", to: "/procurement/configuration/policy" },
-        { name: "Purchase Orders", owner: "Procurement", detail: "Approval, issue, revision and supplier acknowledgment.", to: "/procurement/configuration/policy" },
+        { name: "Purchase Orders", owner: "Procurement", detail: "Approval, issue, revision and supplier acknowledgment.", to: "/procurement/configuration/orders" },
         { name: "Purchase Receives", owner: "Procurement", detail: "Inspection, acceptance and receipt tolerances.", to: "/procurement/configuration/policy" },
         { name: "Bills", owner: "Procurement", detail: "Invoice validation settings and approval design; Finance owns AP posting.", to: "/procurement/configuration/bills" },
         { name: "Vendor Credits", owner: "Procurement", detail: "Commercial credit reason and source link; Finance owns ledger application." },

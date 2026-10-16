@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Inbox } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileUp, Inbox } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,6 +94,8 @@ function Field({
 export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payments" }) {
   const state = usePayables();
   const { entityId, role } = useApp();
+  const navigate = useNavigate();
+  const [intakeError, setIntakeError] = useState("");
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
   const statusInView = (status: Invoice["status"]) => view === "inbox" ? !["Posted", "Partially paid", "Paid", "Voided", "Cancelled"].includes(status) : view === "payments" ? ["Handed to AP", "AP rejected", "Posted", "Partially paid", "Paid"].includes(status) : true;
@@ -110,6 +112,14 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
     : view === "payments"
       ? [{ label: "Handed to AP", value: rows.filter((i) => i.status === "Handed to AP").length }, { label: "AP rejected", value: rows.filter((i) => i.status === "AP rejected").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }]
       : [{ label: "Bills", value: rows.length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }];
+  const startFromFile = (file?: File) => {
+    if (!file) return;
+    if (file.size > 5_000_000) return setIntakeError("Choose a file smaller than 5 MB.");
+    if (!/\.(pdf|png|jpe?g)$/i.test(file.name)) return setIntakeError("Choose a PDF, PNG or JPG bill.");
+    sessionStorage.setItem("proc:bill-intake-draft", JSON.stringify({ name: file.name, entityId }));
+    setIntakeError("");
+    void navigate({ to: "/procurement/invoices/new" });
+  };
   return (
     <Gate allowed={invoiceRoles}>
       <AppShell>
@@ -128,6 +138,15 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
           {summary.map((card) => <div key={card.label} className="rounded-lg border bg-surface p-4"><p className="text-xs text-muted-foreground">{card.label}</p><p className="text-2xl font-semibold">{card.value}</p></div>)}
         </div>
+        {view === "inbox" && role !== "auditor" ? <section
+          className="mb-4 rounded-xl border border-dashed bg-surface p-5"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => { event.preventDefault(); startFromFile(event.dataTransfer.files[0]); }}
+        >
+          <div className="flex items-start gap-3"><FileUp className="size-6 text-primary" aria-hidden /><div><h2 className="font-medium">Start a bill from a file</h2><p className="text-sm text-muted-foreground">Drop one PDF or image here, or choose a file. Its name fills the draft reference; this demo does not upload or read the document.</p></div></div>
+          <Input aria-label="Choose bill file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" className="mt-3 max-w-sm" onChange={(event) => startFromFile(event.target.files?.[0])} />
+          {intakeError ? <p role="alert" className="mt-2 text-sm text-danger">{intakeError}</p> : null}
+        </section> : null}
         <div className="mb-4 flex flex-wrap gap-2">
           <Input
             aria-label="Search invoices"
@@ -219,6 +238,15 @@ export function InvoiceCreate() {
   const [attachment, setAttachment] = useState("");
   const [source, setSource] = useState<IntakeSource>("Manual");
   const [error, setError] = useState("");
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("proc:bill-intake-draft");
+      sessionStorage.removeItem("proc:bill-intake-draft");
+      if (!raw) return;
+      const draft: unknown = JSON.parse(raw);
+      if (draft && typeof draft === "object" && "entityId" in draft && draft.entityId === entityId && "name" in draft && typeof draft.name === "string") setAttachment(draft.name);
+    } catch { /* Ignore stale or malformed browser draft metadata. */ }
+  }, [entityId]);
   const order = commercial.orders.find((item) => item.id === po.trim());
   const acceptedQuantity = order ? commercial.receipts.filter((receipt) => receipt.poId === order.id && ["Accepted", "Partially accepted"].includes(receipt.status)).reduce((sum, receipt) => sum + receipt.qty, 0) : 0;
   const save = (e: React.FormEvent) => {
