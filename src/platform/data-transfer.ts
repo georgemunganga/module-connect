@@ -8,7 +8,7 @@ export interface TransferField {
 
 export type TransferRow = Record<string, string>;
 
-export function parseCsv(source: string): string[][] {
+export function parseDelimited(source: string, delimiter: "," | "\t"): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -21,7 +21,7 @@ export function parseCsv(source: string): string[][] {
       else if (quoted) quoted = false;
       else if (!cell) quoted = true;
       else throw new Error("A quote appears inside an unquoted field.");
-    } else if (char === "," && !quoted) {
+    } else if (char === delimiter && !quoted) {
       row.push(cell.trim()); cell = "";
     } else if ((char === "\n" || char === "\r") && !quoted) {
       if (char === "\r" && text[index + 1] === "\n") index++;
@@ -30,10 +30,14 @@ export function parseCsv(source: string): string[][] {
       row = []; cell = "";
     } else cell += char;
   }
-  if (quoted) throw new Error("The CSV has an unfinished quoted field.");
+  if (quoted) throw new Error("The file has an unfinished quoted field.");
   row.push(cell.trim());
   if (row.some(Boolean)) rows.push(row);
   return rows;
+}
+
+export function parseCsv(source: string): string[][] {
+  return parseDelimited(source, ",");
 }
 
 export function normalizeColumn(value: string): string {

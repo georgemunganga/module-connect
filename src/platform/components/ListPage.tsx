@@ -1,4 +1,4 @@
-import { Columns3, Filter, Search, X } from "lucide-react";
+import { ArrowDownAZ, Columns3, Download, Filter, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,18 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { EmptyState, NoResultsState } from "./States";
 
 export interface ColumnDef<T> {
@@ -19,7 +27,15 @@ export interface ColumnDef<T> {
   header: string;
   /** Columns beyond the first 7 are hidden by default and offered in the column picker. */
   defaultVisible?: boolean;
+  /** Optional initial minimum width in pixels. Users can change this in Columns. */
+  width?: number;
   cell: (row: T) => ReactNode;
+}
+
+export interface SortDef<T> {
+  id: string;
+  label: string;
+  value: (row: T) => string | number | Date | null | undefined;
 }
 
 export interface FilterDef<T> {
@@ -43,7 +59,9 @@ export function ListPage<T extends { id: string }>({
   onViewChange,
   searchPlaceholder = "Search",
   searchFields,
+  sortOptions = [],
   bulkActions = [],
+  onExport,
   rowHref,
   emptyBody = "No records match the current view.",
   emptyState,
@@ -56,7 +74,11 @@ export function ListPage<T extends { id: string }>({
   onViewChange?: (id: string) => void;
   searchPlaceholder?: string;
   searchFields: (row: T) => string;
+  /** Include Created/Modified choices only when those dates exist in the record model. */
+  sortOptions?: SortDef<T>[];
   bulkActions?: { label: string; onSelect: (ids: string[]) => void }[];
+  /** The owning page supplies authorized export values; rendered cells are never scraped. */
+  onExport?: (scope: "view" | "selected", rows: T[], columns: ColumnDef<T>[]) => void;
   rowHref?: (row: T) => ReactNode;
   emptyBody?: string;
   emptyState?: { title: string; body: string; icon?: ReactNode; action?: ReactNode };
@@ -64,6 +86,10 @@ export function ListPage<T extends { id: string }>({
   const [query, setQuery] = useState("");
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string[]>([]);
+  const [sortId, setSortId] = useState("");
+  const [sortDescending, setSortDescending] = useState(false);
+  const [clipText, setClipText] = useState(false);
+  const [widths, setWidths] = useState<Record<string, number>>({});
   const [visible, setVisible] = useState<string[]>(
     columns.filter((c, i) => c.defaultVisible !== false && i < 7).map((c) => c.id),
   );
@@ -78,8 +104,40 @@ export function ListPage<T extends { id: string }>({
     });
   }, [rows, query, filterValues, filters, searchFields]);
 
+  const sorted = useMemo(() => {
+    const sort = sortOptions.find((option) => option.id === sortId);
+    if (!sort) return filtered;
+    const compare = (a: T, b: T) => {
+      const left = sort.value(a);
+      const right = sort.value(b);
+      const normalize = (value: typeof left) => (value instanceof Date ? value.getTime() : value);
+      const l = normalize(left);
+      const r = normalize(right);
+      if (l == null) return r == null ? 0 : 1;
+      if (r == null) return -1;
+      const result =
+        typeof l === "number" && typeof r === "number"
+          ? l - r
+          : String(l).localeCompare(String(r), undefined, { numeric: true, sensitivity: "base" });
+      return sortDescending ? -result : result;
+    };
+    return [...filtered].sort(compare);
+  }, [filtered, sortId, sortDescending, sortOptions]);
+
   const shown = columns.filter((c) => visible.includes(c.id));
-  const allSelected = filtered.length > 0 && selected.length === filtered.length;
+  const currentIds = new Set(rows.map((row) => row.id));
+  const selectedIds = selected.filter((id) => currentIds.has(id));
+  const selectedSet = new Set(selectedIds);
+  const selectedRows = rows.filter((row) => selectedSet.has(row.id));
+  const allSelected = sorted.length > 0 && sorted.every((row) => selectedSet.has(row.id));
+  const someSelected = sorted.some((row) => selectedSet.has(row.id));
+  const toggleAllShown = (on: boolean) =>
+    setSelected((previous) => {
+      const current = previous.filter((id) => currentIds.has(id));
+      if (on) return [...new Set([...current, ...sorted.map((row) => row.id)])];
+      const shownIds = new Set(sorted.map((row) => row.id));
+      return current.filter((id) => !shownIds.has(id));
+    });
   const activeFilters = Object.entries(filterValues).filter(([, v]) => v && v !== "all");
 
   return (
@@ -106,7 +164,10 @@ export function ListPage<T extends { id: string }>({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" aria-hidden />
+          <Search
+            className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+            aria-hidden
+          />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -135,6 +196,33 @@ export function ListPage<T extends { id: string }>({
             </SelectContent>
           </Select>
         ))}
+        {sortOptions.length ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <ArrowDownAZ className="size-4" aria-hidden />
+                Sort: {sortOptions.find((option) => option.id === sortId)?.label ?? "Default"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Sort records</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setSortId("")}>Default order</DropdownMenuItem>
+              {sortOptions.map((option) => (
+                <DropdownMenuItem key={option.id} onSelect={() => setSortId(option.id)}>
+                  {option.label}
+                  {sortId === option.id ? " ✓" : ""}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={sortDescending}
+                onCheckedChange={(on) => setSortDescending(Boolean(on))}
+              >
+                Descending
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
@@ -149,14 +237,63 @@ export function ListPage<T extends { id: string }>({
                 key={c.id}
                 checked={visible.includes(c.id)}
                 onCheckedChange={(on) =>
-                  setVisible((s) => (on ? [...s, c.id] : s.filter((x) => x !== c.id)))
+                  setVisible((s) =>
+                    on
+                      ? [...new Set([...s, c.id])]
+                      : s.length > 1
+                        ? s.filter((x) => x !== c.id)
+                        : s,
+                  )
                 }
               >
                 {c.header}
               </DropdownMenuCheckboxItem>
             ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={clipText}
+              onCheckedChange={(on) => setClipText(Boolean(on))}
+            >
+              Clip long text
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuLabel>Minimum column width</DropdownMenuLabel>
+            {[140, 200, 280].map((width) => (
+              <DropdownMenuItem
+                key={width}
+                onSelect={() =>
+                  setWidths(Object.fromEntries(shown.map((column) => [column.id, width])))
+                }
+              >
+                {width === 140 ? "Compact" : width === 200 ? "Comfortable" : "Wide"}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuItem onSelect={() => setWidths({})}>Use column defaults</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {onExport ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Download className="size-4" aria-hidden />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                disabled={sorted.length === 0}
+                onSelect={() => onExport("view", sorted, shown)}
+              >
+                Export current view
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={selectedRows.length === 0}
+                onSelect={() => onExport("selected", selectedRows, shown)}
+              >
+                Export selected ({selectedRows.length})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
 
       {activeFilters.length ? (
@@ -179,11 +316,16 @@ export function ListPage<T extends { id: string }>({
         {filtered.length} of {rows.length} records
       </p>
 
-      {selected.length > 0 && bulkActions.length ? (
+      {selectedRows.length > 0 && bulkActions.length ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary-soft p-2">
-          <span className="text-sm font-medium text-primary">{selected.length} selected</span>
+          <span className="text-sm font-medium text-primary">{selectedRows.length} selected</span>
           {bulkActions.map((a) => (
-            <Button key={a.label} size="sm" variant="outline" onClick={() => a.onSelect(selected)}>
+            <Button
+              key={a.label}
+              size="sm"
+              variant="outline"
+              onClick={() => a.onSelect(selectedIds)}
+            >
               {a.label}
             </Button>
           ))}
@@ -194,9 +336,28 @@ export function ListPage<T extends { id: string }>({
       ) : null}
 
       {rows.length === 0 ? (
-        <EmptyState title={emptyState?.title ?? "No records yet"} body={emptyState?.body ?? emptyBody} icon={emptyState?.icon} action={emptyState?.action} />
+        <EmptyState
+          title={emptyState?.title ?? "No records yet"}
+          body={emptyState?.body ?? emptyBody}
+          icon={emptyState?.icon}
+          action={emptyState?.action}
+        />
       ) : filtered.length === 0 ? (
-        <NoResultsState title="No matching records" body="Try a different search or clear the filters to see the available records." action={<Button variant="outline" onClick={() => { setQuery(""); setFilterValues({}); }}>Clear search and filters</Button>} />
+        <NoResultsState
+          title="No matching records"
+          body="Try a different search or clear the filters to see the available records."
+          action={
+            <Button
+              variant="outline"
+              onClick={() => {
+                setQuery("");
+                setFilterValues({});
+              }}
+            >
+              Clear search and filters
+            </Button>
+          }
+        />
       ) : (
         <div className="overflow-x-auto rounded-lg border bg-surface" style={{ contain: "paint" }}>
           <table className="w-full min-w-[42rem] text-left text-sm">
@@ -205,12 +366,17 @@ export function ListPage<T extends { id: string }>({
                 <th scope="col" className="w-10 px-3 py-2">
                   <Checkbox
                     aria-label="Select all rows"
-                    checked={allSelected}
-                    onCheckedChange={(on) => setSelected(on ? filtered.map((r) => r.id) : [])}
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={(on) => toggleAllShown(on === true)}
                   />
                 </th>
                 {shown.map((c) => (
-                  <th key={c.id} scope="col" className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <th
+                    key={c.id}
+                    scope="col"
+                    style={{ minWidth: widths[c.id] ?? c.width }}
+                    className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
                     {c.header}
                   </th>
                 ))}
@@ -218,22 +384,36 @@ export function ListPage<T extends { id: string }>({
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filtered.map((r) => (
+              {sorted.map((r) => (
                 <tr key={r.id} className="hover:bg-surface-muted">
                   <td className="px-3 py-2">
                     <Checkbox
                       aria-label={`Select ${r.id}`}
-                      checked={selected.includes(r.id)}
+                      checked={selectedSet.has(r.id)}
                       onCheckedChange={(on) =>
-                        setSelected((s) => (on ? [...s, r.id] : s.filter((x) => x !== r.id)))
+                        setSelected((s) =>
+                          on ? [...new Set([...s, r.id])] : s.filter((x) => x !== r.id),
+                        )
                       }
                     />
                   </td>
-                  {shown.map((c) => (
-                    <td key={c.id} className="px-3 py-2 align-top">
-                      {c.cell(r)}
-                    </td>
-                  ))}
+                  {shown.map((c) => {
+                    const content = c.cell(r);
+                    return (
+                      <td
+                        key={c.id}
+                        style={{ minWidth: widths[c.id] ?? c.width }}
+                        className="px-3 py-2 align-top"
+                      >
+                        <div
+                          className={clipText ? "max-w-[280px] truncate" : undefined}
+                          title={clipText && typeof content === "string" ? content : undefined}
+                        >
+                          {content}
+                        </div>
+                      </td>
+                    );
+                  })}
                   {rowHref ? <td className="px-3 py-2 text-right">{rowHref(r)}</td> : null}
                 </tr>
               ))}

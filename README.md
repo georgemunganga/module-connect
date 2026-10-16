@@ -6,6 +6,8 @@ The [Procurement UI and API contract register](docs/procurement-ui-contract-regi
 maps each screen to its current source and the backend contract still needed for live use.
 The [workflow gap register](docs/procurement-ui-workflow-gap-register.md) tracks unfinished
 demo interactions and acceptance paths.
+The [Greenwebb UI adaptation register](docs/greenwebb-ui-adaptation.md) tracks how the
+user's reference prototype is brought into the ERP shell without losing its interactions.
 
 Procurement remains a demo unless the build sets `VITE_PROCUREMENT_LIVE_MODE=1`.
 With the flag off, screens use local sample records and show **Demo data**. With it on,

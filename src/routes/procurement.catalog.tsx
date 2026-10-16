@@ -10,11 +10,13 @@ import { RestrictedState } from "@/platform/components/States";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { DataExportButton } from "@/platform/components/DataTransfer";
+import { ListPage } from "@/platform/components/ListPage";
+import { downloadCsv } from "@/platform/data-transfer";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
 import { bestOffer, catalogEntities, isExpired, money, useCatalog } from "@/modules/procurement/catalog";
 import { CatalogItemEditor } from "@/modules/procurement/CatalogItemEditor";
 import { itemExportRows, itemFields } from "@/modules/procurement/data-transfer";
-import type { ItemKind } from "@/modules/procurement/catalog";
+import type { CatalogItem, ItemKind } from "@/modules/procurement/catalog";
 
 type Search = { q?: string; kind?: string; entity?: string };
 
@@ -56,9 +58,11 @@ function CatalogPage() {
         (i) =>
           (view === "manage" || i.status === "Active") &&
           i.entities.some((entity) => sameEntity(entity, entityId)) &&
-          (!search.kind || i.kind === search.kind) &&
-          (!search.entity || i.entities.includes(search.entity)) &&
-          (i.name + i.category + i.spec).toLowerCase().includes((search.q ?? "").toLowerCase()),
+          (view === "manage" || (
+            (!search.kind || i.kind === search.kind) &&
+            (!search.entity || i.entities.includes(search.entity)) &&
+            (i.name + i.category + i.spec).toLowerCase().includes((search.q ?? "").toLowerCase())
+          )),
       ),
     [search, view, entityId, catalogItems],
   );
@@ -86,7 +90,7 @@ function CatalogPage() {
       {maintainer && view === "manage" ? <div className="mb-4 flex flex-wrap gap-2"><Button onClick={() => setAdding(true)}>Add item</Button><Button variant="outline" asChild><Link to="/procurement/catalog/import"><Upload className="size-4" aria-hidden />Import items</Link></Button><DataExportButton fileName="items.csv" fields={itemFields} rows={itemExportRows(procurementEntityName(entityId))} label="Export items CSV" /></div> : null}
       {adding ? <div className="mb-5"><CatalogItemEditor onSaved={(id) => navigate({ to: "/procurement/catalog/$id", params: { id } })} onCancel={() => setAdding(false)} /></div> : null}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      {view === "browse" ? <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <div><Label htmlFor="q">Search</Label><Input id="q" className="mt-1" value={search.q ?? ""} placeholder="Item name, type or details" onChange={(e) => setS({ q: e.target.value || undefined })} /></div>
         <div>
           <Label htmlFor="k">Type</Label>
@@ -100,32 +104,49 @@ function CatalogPage() {
             <option value="">All entities</option>{catalogEntities.map((k) => <option key={k}>{k}</option>)}
           </select>
         </div>
-      </div>
+      </div> : null}
 
       {!rows.length && !search.q && !search.kind && !search.entity ? (
         <EmptyState title="No items yet" body="Add goods or services so employees can find and request them here." icon={<Package className="size-10" aria-hidden />} action={maintainer ? <Button onClick={() => { setView("manage"); setAdding(true); }}>Add item</Button> : requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request something else</Link></Button> : undefined} />
       ) : !rows.length ? (
         <NoResultsState title="No matching items" body="Try a different search or request an item that is not listed." action={requesterRole(role) ? <Button variant="outline" asChild><Link to="/procurement/requests/new" search={{ item: undefined }}>Request something else</Link></Button> : undefined} />
       ) : view === "manage" ? (
-        <div className="overflow-x-auto rounded-lg border bg-surface">
-          <table className="w-full text-sm">
-            <thead className="border-b text-left text-xs text-muted-foreground">
-              <tr><th className="p-3">Item</th><th className="p-3">Category / unit</th><th className="p-3">Tax code</th><th className="p-3">Prices</th><th className="p-3">Available from</th><th className="p-3">Managed by</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.map((i) => (
-                <tr key={i.id}>
-                  <td className="p-3"><Link to="/procurement/catalog/$id" params={{ id: i.id }} className="font-medium text-primary underline-offset-2 hover:underline">{i.name}</Link><span className="block text-xs text-muted-foreground">v{i.versions[0].version} · {i.status}</span></td>
-                  <td className="p-3">{i.category} · {i.unit}</td>
-                  <td className="p-3">{i.taxRef}</td>
-                  <td className="p-3">{i.offers.length}</td>
-                  <td className="p-3">{i.activeFrom}{i.activeTo ? ` → ${i.activeTo}` : " → open"}</td>
-                  <td className="p-3 text-xs">{i.authoritativeOwner ?? "Procurement"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ListPage<CatalogItem>
+          rows={rows}
+          searchPlaceholder="Search item name, type or details"
+          searchFields={(item) => `${item.name} ${item.kind} ${item.category} ${item.spec} ${item.taxRef} ${item.status}`}
+          filters={[
+            { id: "kind", label: "Type", options: kinds, match: (item, value) => item.kind === value },
+            { id: "status", label: "Status", options: ["Active", "Inactive"], match: (item, value) => item.status === value },
+          ]}
+          sortOptions={[
+            { id: "name", label: "Item name", value: (item) => item.name },
+            { id: "category", label: "Category", value: (item) => item.category },
+            { id: "status", label: "Status", value: (item) => item.status },
+            { id: "from", label: "Available from", value: (item) => item.activeFrom },
+          ]}
+          columns={[
+            { id: "name", header: "Item", cell: (item) => <Link to="/procurement/catalog/$id" params={{ id: item.id }} className="font-medium text-primary hover:underline">{item.name}</Link> },
+            { id: "kind", header: "Type", cell: (item) => item.kind },
+            { id: "category", header: "Category", cell: (item) => item.category },
+            { id: "unit", header: "Unit", cell: (item) => item.unit },
+            { id: "status", header: "Status", cell: (item) => item.status },
+            { id: "tax", header: "Tax code", cell: (item) => item.taxRef },
+            { id: "prices", header: "Prices", cell: (item) => String(item.offers.length) },
+            { id: "from", header: "Available from", defaultVisible: false, cell: (item) => item.activeFrom },
+            { id: "owner", header: "Managed by", defaultVisible: false, cell: (item) => item.authoritativeOwner ?? "Procurement" },
+          ]}
+          onExport={(scope, selectedRows, visibleColumns) => downloadCsv(
+            `items-${scope}.csv`,
+            visibleColumns.map((column) => ({ key: column.id, label: column.header })),
+            selectedRows.map((item) => ({
+              name: item.name, kind: item.kind, category: item.category, unit: item.unit,
+              status: item.status, tax: item.taxRef, prices: String(item.offers.length),
+              from: item.activeFrom, owner: item.authoritativeOwner ?? "Procurement",
+            })),
+          )}
+          rowHref={(item) => <Link to="/procurement/catalog/$id" params={{ id: item.id }} className="text-primary hover:underline">Open<span className="sr-only"> {item.name}</span></Link>}
+        />
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((i) => {

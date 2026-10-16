@@ -21,11 +21,16 @@ function ItemDetail() {
   const { role, entityId } = useApp();
   const catalogItems = useCatalog();
   const [editing, setEditing] = useState(false);
-  const suppliers = useProcurement().suppliers;
+  const procurement = useProcurement();
+  const suppliers = procurement.suppliers;
   const i = catalogItems.find((x) => x.id === id);
   if (!i || !internalRole(role) || !i.entities.some((entity) => sameEntity(entity, entityId))) return <AppShell><RestrictedState /></AppShell>;
   const offer = i.offers.find((candidate) => !isExpired(candidate) && suppliers.some((supplier) => supplier.name === candidate.supplier && supplier.status === "Active"));
   const canRequest = i.status === "Active" && !i.block && !!offer;
+  const relatedRequests = procurement.requests.filter((request) =>
+    procurement.metadata[request.id]?.lines.some((line) => line.catalogItemId === i.id) &&
+    sameEntity(procurement.metadata[request.id]?.entity, entityId),
+  );
 
   return (
     <AppShell>
@@ -71,6 +76,17 @@ function ItemDetail() {
             <ul className="mt-3 space-y-2 text-sm">
               {i.versions.map((v) => <li key={v.version}><span className="font-medium">v{v.version}</span> · {v.change}<span className="block text-xs text-muted-foreground">{v.by} · {v.date}</span></li>)}
             </ul>
+          </section>
+
+          <section className="rounded-lg border bg-surface p-4">
+            <h2 className="text-sm font-semibold">Purchase requests for this item</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Only requests linked by item ID appear here. Older requests without that link remain on the requests page.</p>
+            {relatedRequests.length ? <ul className="mt-3 divide-y text-sm">{relatedRequests.map((request) => (
+              <li key={request.id} className="flex flex-wrap justify-between gap-2 py-2">
+                <Link className="font-medium text-primary underline-offset-2 hover:underline" to="/procurement/requests/$id" params={{ id: request.id }}>{request.id} · {request.title}</Link>
+                <span className="text-muted-foreground">{request.status}</span>
+              </li>
+            ))}</ul> : <p className="mt-3 text-sm text-muted-foreground">No linked requests yet.</p>}
           </section>
         </div>
 

@@ -13,7 +13,8 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { StatusTimeline } from "@/platform/components/StatusTimeline";
 import { useProcurement, saveProcurement } from "@/modules/procurement/store";
 import { useCommercial } from "@/modules/procurement/commercial/store";
-import { usePayables } from "@/modules/procurement/payables/store";
+import { invoiceTotal, usePayables } from "@/modules/procurement/payables/store";
+import type { Invoice, CreditRef } from "@/modules/procurement/payables/store";
 import { supplierRole, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import type { Decision, SupplierRecord } from "@/modules/procurement/suppliers";
@@ -23,14 +24,17 @@ export const Route = createFileRoute("/procurement/suppliers_/$id")({
   component: SupplierProfile,
 });
 
-const tabs = ["Overview", "Contacts", "Checks & documents", "Performance", "Orders & bills", "Activity"] as const;
+const tabs = ["Overview", "Contacts", "Checks & documents", "Performance", "Orders & bills", "Notes", "Messages", "Statement", "Activity"] as const;
 
 function SupplierProfile() {
   const { id } = Route.useParams();
   const { role, entityId } = useApp();
   const s = useProcurement().suppliers.find((x) => x.id === id);
   const orders = useCommercial().orders.filter((order) => order.supplier === s?.name && sameEntity(order.entity, entityId));
-  const invoices = usePayables().invoices.filter((invoice) => invoice.supplier === s?.name && invoice.entityId === entityId);
+  const payables = usePayables();
+  const invoices = payables.invoices.filter((invoice) => invoice.supplierId === s?.id && invoice.entityId === entityId);
+  const visibleInvoiceIds = new Set(invoices.map((invoice) => invoice.id));
+  const credits = (payables.credits ?? []).filter((credit) => credit.supplierId === s?.id && visibleInvoiceIds.has(credit.invoiceId));
   const openOrders = orders.filter((order) => !["Closed", "Cancelled"].includes(order.status));
   const openInvoices = invoices.filter((invoice) => !["Paid", "Voided", "Cancelled"].includes(invoice.status));
   const setS = (value: SupplierRecord) => saveProcurement((state) => ({ ...state, suppliers: state.suppliers.map((item) => item.id === id ? value : item) }));
@@ -134,6 +138,12 @@ function SupplierProfile() {
           ) : <EmptyState title="Not enough data yet" body="Scores appear after at least 5 receipts or invoices in the period." />
         ) : tab === "Orders & bills" ? (
           <div className="space-y-3 text-sm"><p>{openOrders.length} open purchase order(s) · {openInvoices.length} open invoice(s).</p>{orders.map((order) => <p key={order.id}><Link className="text-primary underline" to="/procurement/orders/$id" params={{ id: order.id }}>{order.id}</Link> · {order.status} · {order.line.description}</p>)}{invoices.map((invoice) => <p key={invoice.id}><Link className="text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.id}</Link> · {invoice.status} · {invoice.number}</p>)}</div>
+        ) : tab === "Notes" ? (
+          <SupplierNotes supplier={s} onChange={setS} role={role} readOnly={readOnly} />
+        ) : tab === "Messages" ? (
+          <SupplierMessages supplier={s} onChange={setS} role={role} readOnly={readOnly} />
+        ) : tab === "Statement" ? (
+          <SupplierStatement invoices={invoices} credits={credits} currency={s.onboarding?.currency} />
         ) : (
           <StatusTimeline events={s.timeline} />
         )}
@@ -154,6 +164,61 @@ function DecisionCard({ title, d }: { title: string; d: Decision }) {
 
 function List({ items, empty }: { items: string[]; empty: string }) {
   return items.length ? <ul className="space-y-2">{items.map((i) => <li key={i} className="rounded-lg border bg-surface p-3 text-sm">{i}</li>)}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>;
+}
+
+function SupplierNotes({ supplier, onChange, role, readOnly }: { supplier: SupplierRecord; onChange: (value: SupplierRecord) => void; role: string; readOnly: boolean }) {
+  const [text, setText] = useState("");
+  const [audience, setAudience] = useState<"Internal" | "Supplier">("Internal");
+  const add = () => {
+    if (!text.trim()) return;
+    const at = new Date().toISOString();
+    onChange({ ...supplier,
+      comments: [{ id: crypto.randomUUID(), at, actor: `${role} (demo)`, text: text.trim(), audience }, ...(supplier.comments ?? [])],
+      timeline: [{ id: crypto.randomUUID(), at, actor: `${role} (demo)`, event: `${audience} vendor note recorded` }, ...supplier.timeline],
+    });
+    setText("");
+  };
+  return <section className="rounded-lg border bg-surface p-5 text-sm">
+    <h2 className="font-semibold">Notes about this vendor</h2>
+    <p className="mt-1 text-muted-foreground">Notes stay in this browser demo. A supplier-visible label does not send a message or grant portal access.</p>
+    {!readOnly ? <div className="mt-4 space-y-3"><div><Label htmlFor="vendor-note">Note</Label><Textarea id="vendor-note" className="mt-1" value={text} onChange={(event) => setText(event.target.value)} /></div><div><Label htmlFor="vendor-note-audience">Who could see this after approval?</Label><select id="vendor-note-audience" className="mt-1 h-10 rounded-md border bg-background px-3" value={audience} onChange={(event) => setAudience(event.target.value as "Internal" | "Supplier")}><option>Internal</option><option>Supplier</option></select></div><Button onClick={add} disabled={!text.trim()}>Save note</Button></div> : null}
+    {(supplier.comments ?? []).length ? <ol className="mt-5 space-y-3 border-t pt-4">{supplier.comments?.map((comment) => <li key={comment.id} className="rounded-md bg-surface-muted p-3"><p>{comment.text}</p><p className="mt-2 text-xs text-muted-foreground">{comment.actor} · {comment.at} · {comment.audience}</p></li>)}</ol> : <p className="mt-4 text-muted-foreground">No notes yet.</p>}
+  </section>;
+}
+
+function SupplierMessages({ supplier, onChange, role, readOnly }: { supplier: SupplierRecord; onChange: (value: SupplierRecord) => void; role: string; readOnly: boolean }) {
+  const [to, setTo] = useState(supplier.contacts[0]?.email ?? "");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [error, setError] = useState("");
+  const save = () => {
+    if (!supplier.contacts.some((contact) => contact.email === to) || !subject.trim() || !body.trim()) return setError("Choose a vendor contact and enter a subject and message.");
+    const at = new Date().toISOString();
+    onChange({ ...supplier,
+      mailDrafts: [{ id: crypto.randomUUID(), at, actor: `${role} (demo)`, to, subject: subject.trim(), body: body.trim() }, ...(supplier.mailDrafts ?? [])],
+      timeline: [{ id: crypto.randomUUID(), at, actor: `${role} (demo)`, event: "Vendor message draft saved", reason: subject.trim() }, ...supplier.timeline],
+    });
+    setSubject(""); setBody(""); setError("");
+  };
+  return <section className="rounded-lg border bg-surface p-5 text-sm">
+    <h2 className="font-semibold">Vendor messages</h2><p className="mt-1 text-muted-foreground">Prepare a draft here. This demo never sends email or a portal message.</p>
+    {!readOnly ? <div className="mt-4 grid gap-3"><div><Label htmlFor="vendor-message-to">Vendor contact</Label><select id="vendor-message-to" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={to} onChange={(event) => setTo(event.target.value)}><option value="">Choose contact</option>{supplier.contacts.map((contact) => <option key={contact.email} value={contact.email}>{contact.name} · {contact.email}</option>)}</select></div><div><Label htmlFor="vendor-message-subject">Subject</Label><Input id="vendor-message-subject" value={subject} onChange={(event) => setSubject(event.target.value)} /></div><div><Label htmlFor="vendor-message-body">Message</Label><Textarea id="vendor-message-body" value={body} onChange={(event) => setBody(event.target.value)} /></div>{error ? <p role="alert" className="text-danger">{error}</p> : null}<Button className="w-fit" onClick={save}>Save draft</Button></div> : null}
+    {(supplier.mailDrafts ?? []).length ? <ol className="mt-5 space-y-3 border-t pt-4">{supplier.mailDrafts?.map((draft) => <li key={draft.id} className="rounded-md bg-surface-muted p-3"><p className="font-medium">Draft · {draft.subject}</p><p className="mt-1 whitespace-pre-wrap">{draft.body}</p><p className="mt-2 text-xs text-muted-foreground">To {draft.to} · {draft.actor} · {draft.at}</p></li>)}</ol> : <p className="mt-4 text-muted-foreground">No message drafts yet.</p>}
+  </section>;
+}
+
+function SupplierStatement({ invoices, credits, currency }: { invoices: Invoice[]; credits: CreditRef[]; currency?: string }) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const visibleInvoices = invoices.filter((invoice) => (!from || invoice.date >= from) && (!to || invoice.date <= to));
+  const visibleCredits = credits.filter((credit) => (!from || credit.created.slice(0, 10) >= from) && (!to || credit.created.slice(0, 10) <= to));
+  const format = (value: number, code: string) => new Intl.NumberFormat("en", { style: "currency", currency: code }).format(value);
+  return <section className="rounded-lg border bg-surface p-5 text-sm">
+    <h2 className="font-semibold">Statement preview</h2><p className="mt-1 text-muted-foreground">Purchase-side bills and credit references only. Finance owns the supplier ledger, payments and official statement.</p>
+    <div className="mt-4 flex flex-wrap gap-3"><div><Label htmlFor="statement-from">From</Label><Input id="statement-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></div><div><Label htmlFor="statement-to">To</Label><Input id="statement-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></div></div>
+    <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[35rem] text-left"><thead className="border-b bg-surface-muted"><tr><th className="p-2">Date</th><th className="p-2">Record</th><th className="p-2">Status</th><th className="p-2 text-right">Amount</th></tr></thead><tbody>{visibleInvoices.map((invoice) => <tr key={invoice.id} className="border-b"><td className="p-2">{invoice.date}</td><td className="p-2"><Link className="text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.number}</Link></td><td className="p-2">{invoice.status}</td><td className="p-2 text-right">{format(invoiceTotal(invoice), invoice.currency)}</td></tr>)}{visibleCredits.map((credit) => <tr key={credit.id} className="border-b"><td className="p-2">{credit.created.slice(0, 10)}</td><td className="p-2">Credit {credit.id}</td><td className="p-2">{credit.status}</td><td className="p-2 text-right">{format(credit.amount, credit.currency || currency || "EUR")}</td></tr>)}</tbody></table></div>
+    {!visibleInvoices.length && !visibleCredits.length ? <p className="mt-4 text-muted-foreground">No bills or credit references in this period.</p> : null}
+  </section>;
 }
 
 function ContactManager({ s, canEdit, role, onChange }: { s: SupplierRecord; canEdit: boolean; role: string; onChange: (value: SupplierRecord) => void }) {

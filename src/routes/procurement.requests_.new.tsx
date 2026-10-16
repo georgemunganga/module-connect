@@ -266,7 +266,7 @@ function NewRequest() {
           onSubmit={async () => {
             if (missing.length) return;
             await new Promise((r) => setTimeout(r, 600));
-            setRef(submitRequest({ title: d.purpose.trim(), requester: demoRequester(role, entity.id), department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: procurementEntityName(entity.id), currency: CCY, neededBy: d.neededBy, deliverTo: d.deliverTo, costCentre: d.costCentre, project: d.project, evidence: d.evidence, lines: d.lines.map(({ description, qty, unitPrice, supplier, kind }) => ({ description, qty, unitPrice, supplier, kind })) }));
+            setRef(submitRequest({ title: d.purpose.trim(), requester: demoRequester(role, entity.id), department: d.costCentre.split(" ").slice(1).join(" ") || "Operations", entity: procurementEntityName(entity.id), currency: CCY, neededBy: d.neededBy, deliverTo: d.deliverTo, costCentre: d.costCentre, project: d.project, evidence: d.evidence, lines: d.lines.map(({ catalogItemId, description, qty, unitPrice, supplier, kind }) => ({ catalogItemId, description, qty, unitPrice, supplier, kind })) }));
             sessionStorage.removeItem(draftKey);
             sessionStorage.removeItem(`flow:proc-request-new:${entity.id}`);
           }}

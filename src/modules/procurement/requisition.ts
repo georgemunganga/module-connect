@@ -7,6 +7,8 @@ export type LineApproval = "Pending" | "Approved" | "Returned" | "Rejected";
 
 export interface ReqLine {
   id: string;
+  /** Stable reference for a catalog line; display text may change independently. */
+  catalogItemId?: string;
   description: string;
   category: string;
   qty: number;
@@ -49,7 +51,7 @@ export const reqMeta: Record<string, ReqMeta> = {
     budgetBalance: { available: 60000, note: "CAPEX-ENG-27 indicative balance (Finance not confirmed)" },
     versions: [{ version: 1, date: "2026-10-01", by: "Sanne de Vries", note: "Submitted" }],
     lines: [
-      { id: "1042-1", description: "Laptop 14\" standard build", category: "IT hardware", qty: 12, unitPrice: 1230, approval: "Approved", approvedQty: 12, allocatedQty: 0, orderedQty: 12, receivedQty: 8, cancelledQty: 0, route: "Contract / framework", related: [{ kind: "Contract", ref: "CT-2025-014" }, { kind: "PO", ref: "PO-2026-1042" }, { kind: "Receipt", ref: "GRN-2026-1042" }] },
+      { id: "1042-1", catalogItemId: "itm-laptop-14", description: "Laptop 14\" standard build", category: "IT hardware", qty: 12, unitPrice: 1230, approval: "Approved", approvedQty: 12, allocatedQty: 0, orderedQty: 12, receivedQty: 8, cancelledQty: 0, route: "Contract / framework", related: [{ kind: "Contract", ref: "CT-2025-014" }, { kind: "PO", ref: "PO-2026-1042" }, { kind: "Receipt", ref: "GRN-2026-1042" }] },
       { id: "1042-2", description: "Docking station", category: "IT hardware", qty: 12, unitPrice: 307.5, approval: "Approved", approvedQty: 12, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] },
     ],
   },
@@ -57,7 +59,7 @@ export const reqMeta: Record<string, ReqMeta> = {
     entity: "Meridian Kenya Ltd", category: "Safety equipment", exceptions: [],
     versions: [{ version: 1, date: "2026-10-02", by: "Daniel Otieno", note: "Submitted" }],
     lines: [
-      { id: "1043-1", description: "Safety boots, size range", category: "Safety equipment", qty: 50, unitPrice: 7720, approval: "Approved", approvedQty: 50, allocatedQty: 50, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Direct PO", related: [{ kind: "PO", ref: "PO-2026-0044" }] },
+      { id: "1043-1", catalogItemId: "itm-boots", description: "Safety boots, size range", category: "Safety equipment", qty: 50, unitPrice: 7720, approval: "Approved", approvedQty: 50, allocatedQty: 50, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Direct PO", related: [{ kind: "PO", ref: "PO-2026-0044" }] },
     ],
   },
   "PR-2026-1038": {
@@ -69,14 +71,14 @@ export const reqMeta: Record<string, ReqMeta> = {
       { version: 1, date: "2026-09-20", by: "Lukas Brandt", note: "Submitted" },
     ],
     lines: [
-      { id: "1038-1", description: "Ergonomic office chair", category: "Furniture", qty: 20, unitPrice: 360, approval: "Approved", approvedQty: 20, allocatedQty: 4, orderedQty: 12, receivedQty: 8, cancelledQty: 4, route: "Direct PO", splitNote: "12 ordered on PO-2026-0311; 4 cancelled (supplier suspended); 4 moved to RFQ", related: [{ kind: "PO", ref: "PO-2026-0311" }, { kind: "Receipt", ref: "GR-2026-0144" }, { kind: "RFQ", ref: "RFQ-2026-0052" }] },
+      { id: "1038-1", catalogItemId: "itm-chair-ergo", description: "Ergonomic office chair", category: "Furniture", qty: 20, unitPrice: 360, approval: "Approved", approvedQty: 20, allocatedQty: 4, orderedQty: 12, receivedQty: 8, cancelledQty: 4, route: "Direct PO", splitNote: "12 ordered on PO-2026-0311; 4 cancelled (supplier suspended); 4 moved to RFQ", related: [{ kind: "PO", ref: "PO-2026-0311" }, { kind: "Receipt", ref: "GR-2026-0144" }, { kind: "RFQ", ref: "RFQ-2026-0052" }] },
     ],
   },
   "PR-2026-1035": {
     entity: "Meridian Kenya Ltd", category: "Logistics", exceptions: ["Supplier not onboarded"],
     versions: [{ version: 1, date: "2026-09-29", by: "Daniel Otieno", note: "Submitted" }],
     lines: [
-      { id: "1035-1", description: "Freight, Nairobi → Mombasa", category: "Logistics", qty: 5, unitPrice: 188000, approval: "Returned", approvedQty: 0, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] },
+      { id: "1035-1", catalogItemId: "itm-freight-nbo-mba", description: "Freight, Nairobi → Mombasa", category: "Logistics", qty: 5, unitPrice: 188000, approval: "Returned", approvedQty: 0, allocatedQty: 0, orderedQty: 0, receivedQty: 0, cancelledQty: 0, route: "Unassigned", related: [] },
     ],
   },
   "PR-2026-1044": {

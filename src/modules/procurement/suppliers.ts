@@ -51,6 +51,8 @@ export interface SupplierRecord {
   duplicateReview?: { state: "Cleared" | "Confirmed"; reason: string; by: string; at: string };
   portalUpdates?: { id: string; kind: "Contact email" | "Qualification evidence"; value: string; qualification?: string; validTo?: string; status: "Pending" | "Accepted" | "Returned"; at: string; decisionReason?: string }[];
   performance?: { period: string; source: string; delivery: number; quality: number; responsiveness: number; disputes: number };
+  comments?: { id: string; at: string; actor: string; text: string; audience: "Internal" | "Supplier" }[];
+  mailDrafts?: { id: string; at: string; actor: string; to: string; subject: string; body: string }[];
   openPOs: number;
   openInvoices: number;
   reviewVersion: number;

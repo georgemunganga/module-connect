@@ -7,6 +7,7 @@ import { ListPage } from "@/platform/components/ListPage";
 import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { DataExportButton } from "@/platform/components/DataTransfer";
+import { downloadCsv } from "@/platform/data-transfer";
 import { lifecycleFilters } from "@/modules/procurement/suppliers";
 import { vendorExportRows, vendorFields } from "@/modules/procurement/data-transfer";
 import { useProcurement } from "@/modules/procurement/store";
@@ -46,7 +47,26 @@ function SupplierList() {
         rows={rows}
         emptyState={{ title: "Every purchase starts with a vendor", body: "Create and manage your vendors and their contact persons, all in one place.", icon: <Building2 className="size-10" aria-hidden />, action: actions }}
         searchPlaceholder="Search vendor name, company ID or category"
-        searchFields={(s) => `${s.name} ${s.legalName} ${s.registration} ${s.categories.join(" ")}`}
+        searchFields={(s) => `${s.name} ${s.legalName} ${s.registration} ${s.status} ${s.categories.join(" ")} ${s.contacts.map((contact) => `${contact.name} ${contact.email}`).join(" ")} ${s.sites.map((site) => site.address).join(" ")} ${s.onboarding?.remarks ?? ""}`}
+        sortOptions={[
+          { id: "name", label: "Display name", value: (s) => s.name },
+          { id: "company", label: "Company name", value: (s) => s.legalName },
+          { id: "status", label: "Status", value: (s) => s.status },
+          { id: "owner", label: "Owner", value: (s) => s.owner },
+        ]}
+        onExport={canPropose ? (scope, selectedRows, visibleColumns) => downloadCsv(
+          `vendors-${scope}.csv`,
+          visibleColumns.map((column) => ({ key: column.id, label: column.header })),
+          selectedRows.map((supplier) => ({
+            name: supplier.name,
+            status: supplier.status,
+            owner: supplier.owner,
+            next: supplier.nextAction,
+            due: supplier.dueDate,
+            country: supplier.country,
+            cat: supplier.categories.join(", "),
+          })),
+        ) : undefined}
         filters={[
           { id: "status", label: "Status", options: lifecycleFilters, match: (s, v) => s.status === v },
           { id: "country", label: "Country", options: ["Netherlands", "Kenya", "Germany"], match: (s, v) => s.country === v },
