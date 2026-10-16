@@ -37,6 +37,8 @@ export const procurementModule: ModuleDefinition = {
     { id: "payables", label: "Payables", icon: Receipt, roles: PAYABLES, items: [
       { label: "Inbox", to: "/procurement/payables/inbox" },
       { label: "Bills", to: "/procurement/invoices" },
+      { label: "Recurring purchases", to: "/procurement/payables/recurring" },
+      { label: "Vendor credits", to: "/procurement/payables/credits" },
       { label: "Payment Status", to: "/procurement/payables/payment-status" },
     ] },
     { id: "budgets", label: "Budgets", icon: Wallet, to: "/procurement/budgets", roles: ["manager", "buyer", "proc_admin", "auditor"] },

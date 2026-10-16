@@ -6,6 +6,8 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { RestrictedState } from "@/platform/components/States";
 import { useApp, useEntity } from "@/platform/app-context";
 import { useConfigStore } from "@/modules/procurement/payables/config-store";
+import { SettingsTabs } from "@/modules/procurement/SettingsTabs";
+import { settingsPanelProps } from "@/modules/procurement/settings-tab-utils";
 
 export const Route = createFileRoute("/procurement/configuration_/orders")({ component: OrderSettings });
 
@@ -35,10 +37,8 @@ function OrderSettings() {
       <p className="mt-1 text-muted-foreground">{policy ? `Published v${policy.version}, effective ${policy.effective}. ${policy.approvalStrategy} approval model; competitive sourcing from ${policy.currency} ${policy.threshold.toLocaleString()}.` : "No published demo policy covers this company. The examples below are guidance only."}</p>
       <Button asChild variant="outline" size="sm" className="mt-3"><Link to="/procurement/configuration/policy">Open versioned buying rules</Link></Button>
     </div>
-    <div role="tablist" aria-label="Purchase order settings" className="mt-5 flex gap-1 overflow-x-auto border-b">
-      {tabs.map((name) => <button key={name} type="button" role="tab" aria-selected={tab === name} onClick={() => setTab(name)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === name ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{name}</button>)}
-    </div>
-    <section role="tabpanel" aria-label={tab} className="mt-5 max-w-5xl rounded-xl border bg-surface p-5">
+    <SettingsTabs id="order-settings" label="Purchase order settings" tabs={tabs} value={tab} onChange={setTab} />
+    <section {...settingsPanelProps("order-settings", tabs, tab)} className="mt-5 max-w-5xl rounded-xl border bg-surface p-5">
       <h2 className="text-lg font-semibold">{tab}</h2>
       {tab === "Approvals" ? <>
         <p className="mt-1 text-sm text-muted-foreground">Compare approval paths before the business sets authority limits. The published policy above is the current demo rule; the selection below is only a preview.</p>

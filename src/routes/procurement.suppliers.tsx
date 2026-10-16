@@ -33,7 +33,7 @@ function SupplierList() {
   const { role, entityId } = useApp();
   const canPropose = ["buyer", "supplier_steward", "proc_admin"].includes(role);
   const rows = useProcurement().suppliers.filter((supplier) => sameEntity(supplier.country, entityId));
-  const actions = canPropose ? <div className="flex flex-wrap gap-2"><Button asChild><Link to="/procurement/suppliers/new">Add vendor</Link></Button><Button variant="outline" asChild><Link to="/procurement/suppliers/import"><Upload className="mr-2 size-4" aria-hidden />Import vendors</Link></Button><DataExportButton fileName="vendors.csv" fields={vendorFields} rows={vendorExportRows(procurementEntity(entityId))} label="Export vendors CSV" /></div> : undefined;
+  const actions = canPropose ? <div className="flex flex-wrap gap-2"><Button asChild><Link to="/procurement/suppliers/new" search={{ edit: undefined }}>Add vendor</Link></Button><Button variant="outline" asChild><Link to="/procurement/suppliers/import"><Upload className="mr-2 size-4" aria-hidden />Import vendors</Link></Button><DataExportButton fileName="vendors.csv" fields={vendorFields} rows={vendorExportRows(procurementEntity(entityId))} label="Export vendors CSV" /></div> : undefined;
   if (!supplierRole(role)) return <AppShell><RestrictedState /></AppShell>;
   return (
     <AppShell>
@@ -80,7 +80,7 @@ function SupplierList() {
           { id: "country", header: "Country", cell: (s) => s.country },
           { id: "cat", header: "Categories", defaultVisible: false, cell: (s) => s.categories.join(", ") },
         ]}
-        rowHref={(s) => <Link to="/procurement/suppliers/$id" params={{ id: s.id }} className="text-sm font-medium text-primary hover:underline">Open<span className="sr-only"> {s.name}</span></Link>}
+        rowHref={(s) => <div className="flex flex-wrap gap-3"><Link to="/procurement/suppliers/$id" params={{ id: s.id }} className="text-sm font-medium text-primary hover:underline">Open<span className="sr-only"> {s.name}</span></Link>{["supplier_steward", "proc_admin"].includes(role) && !["Rejected", "Suspended", "Inactive", "Expired"].includes(s.status) ? <Link to="/procurement/suppliers/new" search={{ edit: s.id }} className="text-sm font-medium text-primary hover:underline">Edit<span className="sr-only"> {s.name}</span></Link> : null}</div>}
       />
     </AppShell>
   );

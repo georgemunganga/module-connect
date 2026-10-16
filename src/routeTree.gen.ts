@@ -55,8 +55,10 @@ import { Route as ProcurementEvaluationsIdRouteImport } from './routes/procureme
 import { Route as ProcurementInvoicesIdRouteImport } from './routes/procurement.invoices_.$id'
 import { Route as ProcurementInvoicesNewRouteImport } from './routes/procurement.invoices_.new'
 import { Route as ProcurementOrdersIdRouteImport } from './routes/procurement.orders_.$id'
+import { Route as ProcurementPayablesCreditsRouteImport } from './routes/procurement.payables.credits'
 import { Route as ProcurementPayablesInboxRouteImport } from './routes/procurement.payables.inbox'
 import { Route as ProcurementPayablesPaymentStatusRouteImport } from './routes/procurement.payables.payment-status'
+import { Route as ProcurementPayablesRecurringRouteImport } from './routes/procurement.payables.recurring'
 import { Route as ProcurementReceivingIdRouteImport } from './routes/procurement.receiving_.$id'
 import { Route as ProcurementRequestsIdRouteImport } from './routes/procurement.requests_.$id'
 import { Route as ProcurementRequestsNewRouteImport } from './routes/procurement.requests_.new'
@@ -303,6 +305,12 @@ const ProcurementOrdersIdRoute = ProcurementOrdersIdRouteImport.update({
   path: '/procurement/orders/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementPayablesCreditsRoute =
+  ProcurementPayablesCreditsRouteImport.update({
+    id: '/procurement/payables/credits',
+    path: '/procurement/payables/credits',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProcurementPayablesInboxRoute =
   ProcurementPayablesInboxRouteImport.update({
     id: '/procurement/payables/inbox',
@@ -313,6 +321,12 @@ const ProcurementPayablesPaymentStatusRoute =
   ProcurementPayablesPaymentStatusRouteImport.update({
     id: '/procurement/payables/payment-status',
     path: '/procurement/payables/payment-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ProcurementPayablesRecurringRoute =
+  ProcurementPayablesRecurringRouteImport.update({
+    id: '/procurement/payables/recurring',
+    path: '/procurement/payables/recurring',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ProcurementReceivingIdRoute = ProcurementReceivingIdRouteImport.update({
@@ -404,8 +418,10 @@ export interface FileRoutesByFullPath {
   '/procurement/invoices/$id': typeof ProcurementInvoicesIdRoute
   '/procurement/invoices/new': typeof ProcurementInvoicesNewRoute
   '/procurement/orders/$id': typeof ProcurementOrdersIdRoute
+  '/procurement/payables/credits': typeof ProcurementPayablesCreditsRoute
   '/procurement/payables/inbox': typeof ProcurementPayablesInboxRoute
   '/procurement/payables/payment-status': typeof ProcurementPayablesPaymentStatusRoute
+  '/procurement/payables/recurring': typeof ProcurementPayablesRecurringRoute
   '/procurement/receiving/$id': typeof ProcurementReceivingIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests/new': typeof ProcurementRequestsNewRoute
@@ -462,8 +478,10 @@ export interface FileRoutesByTo {
   '/procurement/invoices/$id': typeof ProcurementInvoicesIdRoute
   '/procurement/invoices/new': typeof ProcurementInvoicesNewRoute
   '/procurement/orders/$id': typeof ProcurementOrdersIdRoute
+  '/procurement/payables/credits': typeof ProcurementPayablesCreditsRoute
   '/procurement/payables/inbox': typeof ProcurementPayablesInboxRoute
   '/procurement/payables/payment-status': typeof ProcurementPayablesPaymentStatusRoute
+  '/procurement/payables/recurring': typeof ProcurementPayablesRecurringRoute
   '/procurement/receiving/$id': typeof ProcurementReceivingIdRoute
   '/procurement/requests/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests/new': typeof ProcurementRequestsNewRoute
@@ -521,8 +539,10 @@ export interface FileRoutesById {
   '/procurement/invoices_/$id': typeof ProcurementInvoicesIdRoute
   '/procurement/invoices_/new': typeof ProcurementInvoicesNewRoute
   '/procurement/orders_/$id': typeof ProcurementOrdersIdRoute
+  '/procurement/payables/credits': typeof ProcurementPayablesCreditsRoute
   '/procurement/payables/inbox': typeof ProcurementPayablesInboxRoute
   '/procurement/payables/payment-status': typeof ProcurementPayablesPaymentStatusRoute
+  '/procurement/payables/recurring': typeof ProcurementPayablesRecurringRoute
   '/procurement/receiving_/$id': typeof ProcurementReceivingIdRoute
   '/procurement/requests_/$id': typeof ProcurementRequestsIdRoute
   '/procurement/requests_/new': typeof ProcurementRequestsNewRoute
@@ -581,8 +601,10 @@ export interface FileRouteTypes {
     | '/procurement/invoices/$id'
     | '/procurement/invoices/new'
     | '/procurement/orders/$id'
+    | '/procurement/payables/credits'
     | '/procurement/payables/inbox'
     | '/procurement/payables/payment-status'
+    | '/procurement/payables/recurring'
     | '/procurement/receiving/$id'
     | '/procurement/requests/$id'
     | '/procurement/requests/new'
@@ -639,8 +661,10 @@ export interface FileRouteTypes {
     | '/procurement/invoices/$id'
     | '/procurement/invoices/new'
     | '/procurement/orders/$id'
+    | '/procurement/payables/credits'
     | '/procurement/payables/inbox'
     | '/procurement/payables/payment-status'
+    | '/procurement/payables/recurring'
     | '/procurement/receiving/$id'
     | '/procurement/requests/$id'
     | '/procurement/requests/new'
@@ -697,8 +721,10 @@ export interface FileRouteTypes {
     | '/procurement/invoices_/$id'
     | '/procurement/invoices_/new'
     | '/procurement/orders_/$id'
+    | '/procurement/payables/credits'
     | '/procurement/payables/inbox'
     | '/procurement/payables/payment-status'
+    | '/procurement/payables/recurring'
     | '/procurement/receiving_/$id'
     | '/procurement/requests_/$id'
     | '/procurement/requests_/new'
@@ -756,8 +782,10 @@ export interface RootRouteChildren {
   ProcurementInvoicesIdRoute: typeof ProcurementInvoicesIdRoute
   ProcurementInvoicesNewRoute: typeof ProcurementInvoicesNewRoute
   ProcurementOrdersIdRoute: typeof ProcurementOrdersIdRoute
+  ProcurementPayablesCreditsRoute: typeof ProcurementPayablesCreditsRoute
   ProcurementPayablesInboxRoute: typeof ProcurementPayablesInboxRoute
   ProcurementPayablesPaymentStatusRoute: typeof ProcurementPayablesPaymentStatusRoute
+  ProcurementPayablesRecurringRoute: typeof ProcurementPayablesRecurringRoute
   ProcurementReceivingIdRoute: typeof ProcurementReceivingIdRoute
   ProcurementRequestsIdRoute: typeof ProcurementRequestsIdRoute
   ProcurementRequestsNewRoute: typeof ProcurementRequestsNewRoute
@@ -1092,6 +1120,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProcurementOrdersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/payables/credits': {
+      id: '/procurement/payables/credits'
+      path: '/procurement/payables/credits'
+      fullPath: '/procurement/payables/credits'
+      preLoaderRoute: typeof ProcurementPayablesCreditsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/procurement/payables/inbox': {
       id: '/procurement/payables/inbox'
       path: '/procurement/payables/inbox'
@@ -1104,6 +1139,13 @@ declare module '@tanstack/react-router' {
       path: '/procurement/payables/payment-status'
       fullPath: '/procurement/payables/payment-status'
       preLoaderRoute: typeof ProcurementPayablesPaymentStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement/payables/recurring': {
+      id: '/procurement/payables/recurring'
+      path: '/procurement/payables/recurring'
+      fullPath: '/procurement/payables/recurring'
+      preLoaderRoute: typeof ProcurementPayablesRecurringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/procurement/receiving_/$id': {
@@ -1212,8 +1254,10 @@ const rootRouteChildren: RootRouteChildren = {
   ProcurementInvoicesIdRoute: ProcurementInvoicesIdRoute,
   ProcurementInvoicesNewRoute: ProcurementInvoicesNewRoute,
   ProcurementOrdersIdRoute: ProcurementOrdersIdRoute,
+  ProcurementPayablesCreditsRoute: ProcurementPayablesCreditsRoute,
   ProcurementPayablesInboxRoute: ProcurementPayablesInboxRoute,
   ProcurementPayablesPaymentStatusRoute: ProcurementPayablesPaymentStatusRoute,
+  ProcurementPayablesRecurringRoute: ProcurementPayablesRecurringRoute,
   ProcurementReceivingIdRoute: ProcurementReceivingIdRoute,
   ProcurementRequestsIdRoute: ProcurementRequestsIdRoute,
   ProcurementRequestsNewRoute: ProcurementRequestsNewRoute,

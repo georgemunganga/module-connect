@@ -67,6 +67,7 @@ function SupplierProfile() {
         <span>Owner <strong>{s.owner}</strong></span>
         <span>Next: <strong>{s.nextAction}</strong></span>
         <span>Due <strong>{s.dueDate}</strong></span>
+        {canDecide && !["Rejected", "Suspended", "Inactive", "Expired"].includes(s.status) ? <Button variant="outline" size="sm" asChild><Link to="/procurement/suppliers/new" search={{ edit: s.id }}>Edit vendor details</Link></Button> : null}
         {readOnly ? <span className="flex items-center gap-1 text-muted-foreground"><Lock className="size-3.5" aria-hidden />You can view but cannot change this vendor</span> : null}
       </div>
 

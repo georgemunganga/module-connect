@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { ListPage } from "@/platform/components/ListPage";
 import { statusLabel } from "@/platform/components/StatusBadge";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
+import { downloadCsv } from "@/platform/data-transfer";
 import { useApp } from "@/platform/app-context";
 import { procurementEntityName, sameEntity } from "@/modules/procurement/access";
 import { getProcurement, saveProcurement, useProcurement } from "@/modules/procurement/store";
@@ -18,6 +20,7 @@ import { audit, updateCommercial, useCommercial, getCommercial, nextId } from ".
 import type { Evaluation, Contract, Order, Receipt } from "./store";
 
 type Area = "evaluations" | "contracts" | "orders" | "receiving";
+type CommercialRow = { id: string; name: string; detail: string; status: string; entity: string };
 const titles: Record<Area, string> = {
   evaluations: "Compare quotes & choose a vendor",
   contracts: "Contracts",
@@ -142,7 +145,8 @@ export function CommercialList({ area }: { area: Area }) {
   const sourcingEvents = useProcurement().sourcing;
   const { role, entityId } = useApp();
   const [q, setQ] = useState("");
-  const records =
+  const [listStyle, setListStyle] = useState<"cards" | "table">("cards");
+  const records: CommercialRow[] =
     area === "evaluations"
       ? data.evaluations.map((x) => ({
           id: x.id,
@@ -193,18 +197,42 @@ export function CommercialList({ area }: { area: Area }) {
       <AppShell>
         <Header area={area} />
         {area === "contracts" && canEdit(area, role) && <div className="mb-4"><Button asChild><Link to="/procurement/contracts/new">Add contract</Link></Button></div>}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">Showing records for your company. Open one to see details or take action.</p>
+          <div className="inline-flex rounded-md border bg-surface p-1" role="group" aria-label="List display">
+            <Button size="sm" variant={listStyle === "cards" ? "secondary" : "ghost"} aria-pressed={listStyle === "cards"} onClick={() => setListStyle("cards")}>Cards</Button>
+            <Button size="sm" variant={listStyle === "table" ? "secondary" : "ghost"} aria-pressed={listStyle === "table"} onClick={() => setListStyle("table")}>Table</Button>
+          </div>
+        </div>
+        {listStyle === "table" ? (
+          <ListPage<CommercialRow>
+            rows={entityRecords}
+            searchPlaceholder="Search number, vendor or item"
+            searchFields={(row) => `${row.id} ${row.name} ${row.detail}`}
+            filters={[{ id: "status", label: "Status", options: [...new Set(entityRecords.map((row) => row.status))], match: (row, value) => row.status === value }]}
+            sortOptions={[
+              { id: "reference", label: "Reference", value: (row) => row.id },
+              { id: "name", label: "Vendor or item", value: (row) => row.name },
+              { id: "status", label: "Status", value: (row) => row.status },
+            ]}
+            columns={[
+              { id: "reference", header: "Reference", cell: (row) => <Link className="font-mono text-primary underline" to={detailPaths[area]} params={{ id: row.id }}>{row.id}</Link> },
+              { id: "name", header: area === "receiving" ? "Item or service" : "Vendor or event", cell: (row) => row.name },
+              { id: "detail", header: "Details", cell: (row) => row.detail },
+              { id: "status", header: "Status", cell: (row) => <Tag>{statusLabel(row.status)}</Tag> },
+              { id: "entity", header: "Company", defaultVisible: false, cell: (row) => row.entity },
+            ]}
+            onExport={(scope, exportRows, shown) => downloadCsv(
+              `${area}-${scope}.csv`,
+              shown.map((column) => ({ key: column.id, label: column.header })),
+              exportRows.map((row) => Object.fromEntries(shown.map((column) => [column.id, column.id === "reference" ? row.id : column.id === "name" ? row.name : column.id === "detail" ? row.detail : column.id === "status" ? row.status : row.entity]))),
+            )}
+            emptyState={{ title: empty.title, body: empty.body, icon: empty.icon, action: <Button variant="outline" asChild><Link to={empty.to}>{empty.action}</Link></Button> }}
+          />
+        ) : <>
         <div className={section}>
           <Label htmlFor="find-commercial">Search</Label>
-          <Input
-            id="find-commercial"
-            className="mt-2 max-w-md"
-            placeholder="Number, vendor or item"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <p className="mt-2 text-xs text-muted-foreground">
-            Showing records for your company. Open one to see details or take action.
-          </p>
+          <Input id="find-commercial" className="mt-2 max-w-md" placeholder="Number, vendor or item" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <div className="grid gap-3">
           {visible.map((x) => (
@@ -229,6 +257,7 @@ export function CommercialList({ area }: { area: Area }) {
           {!visible.length && !entityRecords.length ? <EmptyState title={empty.title} body={empty.body} icon={empty.icon} action={<Button variant="outline" asChild><Link to={empty.to}>{empty.action}</Link></Button>} /> : null}
           {!visible.length && entityRecords.length ? <NoResultsState title="No matches" body="Try a different number or vendor name." action={<Button variant="outline" onClick={() => setQ("")}>Clear search</Button>} /> : null}
         </div>
+        </>}
       </AppShell>
     </Guard>
   );
