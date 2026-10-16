@@ -40,6 +40,7 @@ import {
   Textarea,
 } from "../components/ui";
 import { useApp, useStoredState } from "../lib/store";
+import { BrandMark, useErpShell } from "../lib/erpShell";
 import {
   findModule,
   moduleSettings,
@@ -111,6 +112,7 @@ const titleCase = (value: string) =>
 
 export function Settings() {
   const location = useLocation();
+  const { branding } = useErpShell();
   const { notify } = useApp();
   const [preview, setPreview] = useStoredState<Record<string, string>>(
     "settings.preview.v1",
@@ -192,15 +194,13 @@ export function Settings() {
           className="flex items-center gap-3 border-r border-border pr-5"
           aria-label="Close Settings and return home"
         >
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary">
-            <Settings2 size={19} />
-          </span>
+          <BrandMark showName={false} />
           <span className="hidden sm:block">
             <span className="block text-[15px] font-semibold text-foreground">
               All Settings
             </span>
             <span className="block text-xs text-muted-foreground">
-              Meridian · frontend demo
+              {branding?.displayName || "ERP workspace"} · frontend demo
             </span>
           </span>
         </Link>

@@ -6,6 +6,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { AppProvider } from "../lib/store";
+import { ErpShellProvider } from "../lib/erpShell";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -47,6 +48,7 @@ export function App() {
   return (
     <BrowserRouter basename="/procurement/workspace">
       <AppProvider>
+        <ErpShellProvider>
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
@@ -209,6 +211,7 @@ export function App() {
           </Route>
           <Route path="/settings/*" element={<Settings />} />
         </Routes>
+        </ErpShellProvider>
       </AppProvider>
     </BrowserRouter>
   );

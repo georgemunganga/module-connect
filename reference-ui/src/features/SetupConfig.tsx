@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Image, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import { BrandMark, useErpShell } from "../lib/erpShell";
 import {
   Badge,
   Button,
@@ -13,13 +14,13 @@ import {
 
 type Props = { slug: string; onSavePreview: (label: string) => void };
 export function SetupConfig({ slug, onSavePreview }: Props) {
+  const { branding } = useErpShell();
   const [values, setValues] = useState<Record<string, string>>({
     organization: "Meridian Procurement Demo",
     industry: "Professional Services",
     currency: "ZMW",
     timezone: "Africa/Lusaka",
     year: "January",
-    color: "#3987f6",
     country: "Zambia",
     dateFormat: "dd MMM yyyy",
     notification: "Enabled",
@@ -79,6 +80,22 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
     "reporting-tags": "Reporting Tags",
     "web-tabs": "Web Tabs",
   };
+  if (slug === "branding") {
+    return <Panel title="Company branding">
+      <div className="space-y-5 p-5">
+        <p className="text-sm text-muted-foreground">The logo, company name and colors below come from the ERP company branding settings. Changes there apply across the ERP.</p>
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-muted p-4">
+          <BrandMark />
+        </div>
+        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+          <span>Primary: {branding?.primaryColor || "ERP default"}</span>
+          <span>Accent: {branding?.accentColor || "ERP default"}</span>
+        </div>
+        <a href="/hrm/configuration/branding" className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">Open company branding settings</a>
+        <p className="text-xs text-muted-foreground">Company branding is managed in one place in the current ERP configuration.</p>
+      </div>
+    </Panel>;
+  }
   return (
     <Panel
       title={title[slug] || "Configuration"}
@@ -150,50 +167,6 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
               <Textarea placeholder="Shown on new document drafts." />
             </Field>
           </div>
-        )}
-        {slug === "branding" && (
-          <>
-            <div className="flex flex-wrap items-center gap-5">
-              <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-primary-soft text-primary">
-                <Image size={30} />
-              </div>
-              <Field
-                label="Organization Logo"
-                hint="Only the filename is retained in this preview."
-              >
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) =>
-                    set("logo", event.target.files?.[0]?.name || "")
-                  }
-                />
-                {values.logo && (
-                  <span className="mt-2 block text-xs text-muted-foreground">
-                    {values.logo}
-                  </span>
-                )}
-              </Field>
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              {field("Brand Accent Color", "color", "color")}
-              {field("Display Name", "organization")}
-              <Field label="Email Footer" className="sm:col-span-2">
-                <Textarea defaultValue="Meridian Procurement Demo · Purchasing with clarity." />
-              </Field>
-            </div>
-            <div className="rounded-lg border border-border p-5">
-              <span
-                className="rounded px-4 py-2 text-sm text-white"
-                style={{ background: values.color }}
-              >
-                {values.organization}
-              </span>
-              <p className="mt-4 text-xs text-muted-foreground">
-                Brand preview only. This does not replace live logos.
-              </p>
-            </div>
-          </>
         )}
         {slug === "vendor-portal" && (
           <>
