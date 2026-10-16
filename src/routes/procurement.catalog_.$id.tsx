@@ -3,6 +3,7 @@ import { AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { RecordTabs, RecordTabPanel } from "@/platform/components/RecordTabs";
 import { useState } from "react";
 import { useApp } from "@/platform/app-context";
 import { internalRole, requesterRole, requestVisible, sameEntity } from "@/modules/procurement/access";
@@ -57,10 +58,8 @@ function ItemDetail() {
       />
       {(["buyer", "proc_admin"].includes(role)) ? <div className="mb-4 flex gap-2"><Button variant="outline" onClick={() => setEditing((value) => !value)}>{editing ? "Close form" : "Edit item"}</Button><Button variant="ghost" asChild><Link to="/procurement/catalog">Back to catalog</Link></Button></div> : null}
       {editing ? <div className="mb-5"><CatalogItemEditor key={`${i.id}-${i.versions[0]?.version}`} item={i} onSaved={() => setEditing(false)} onCancel={() => setEditing(false)} /></div> : null}
-      <div role="tablist" aria-label="Item sections" className="mb-4 flex gap-1 overflow-x-auto border-b">
-        {(["Overview", "Transactions", "History"] as const).map((section) => <button key={section} type="button" role="tab" aria-selected={tab === section} onClick={() => setTab(section)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === section ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground"}`}>{section}</button>)}
-      </div>
-      <div role="tabpanel" aria-label={tab}>
+      <RecordTabs label="Item sections" idPrefix="item-detail" tabs={["Overview", "Transactions", "History"] as const} value={tab} onChange={setTab} />
+      <RecordTabPanel idPrefix="item-detail" tab={tab}>
       <div className={`grid gap-6 ${tab === "Overview" ? "lg:grid-cols-[minmax(0,1fr)_20rem]" : ""}`}>
         <div className="space-y-6">
           {tab === "Overview" ? <>
@@ -127,7 +126,7 @@ function ItemDetail() {
           ) : null}
         </aside> : null}
       </div>
-      </div>
+      </RecordTabPanel>
     </AppShell>
   );
 }

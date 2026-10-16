@@ -11,6 +11,7 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { StatusTimeline } from "@/platform/components/StatusTimeline";
+import { RecordTabs, RecordTabPanel } from "@/platform/components/RecordTabs";
 import { useProcurement, saveProcurement } from "@/modules/procurement/store";
 import { useCommercial } from "@/modules/procurement/commercial/store";
 import { invoiceTotal, usePayables } from "@/modules/procurement/payables/store";
@@ -74,14 +75,9 @@ function SupplierProfile() {
       {suspending ? <SuspendForm s={s} openOrders={openOrders.length} openInvoices={openInvoices.length} onCancel={() => setSuspending(false)} onDone={(reason, date) => { setSuspending(false); setS({ ...s, status: "Suspended", nextAction: `Review ${openOrders.length} open PO(s) and ${openInvoices.length} invoice(s)`, timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString().slice(0, 16).replace("T", " "), actor: "You (demo)", event: "Suspended", reason, before: "Active", after: `Suspended (effective ${date})` }, ...s.timeline] }); }} /> : null}
       {deactivating ? <DeactivateForm openOrders={openOrders.length} openInvoices={openInvoices.length} onCancel={() => setDeactivating(false)} onDone={(reason) => { setDeactivating(false); setS({ ...s, status: "Inactive", nextAction: "No new purchase orders", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString(), actor: `${role} (demo)`, event: "Deactivated", reason, before: s.status, after: "Inactive" }, ...s.timeline] }); }} /> : null}
 
-      <div role="tablist" aria-label="Supplier sections" className="mb-4 flex gap-1 overflow-x-auto border-b">
-        {tabs.map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === t ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground"}`}>{t}</button>
-        ))}
-      </div>
+      <RecordTabs label="Supplier sections" idPrefix="supplier-detail" tabs={tabs} value={tab} onChange={setTab} />
 
-      <div role="tabpanel" aria-label={tab}>
+      <RecordTabPanel idPrefix="supplier-detail" tab={tab}>
         {tab === "Overview" ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="rounded-lg border border-primary/30 bg-primary-soft p-5 text-sm lg:col-span-2">
@@ -158,7 +154,7 @@ function SupplierProfile() {
         ) : (
           <StatusTimeline events={s.timeline} />
         )}
-      </div>
+      </RecordTabPanel>
     </AppShell>
   );
 }

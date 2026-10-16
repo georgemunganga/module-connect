@@ -17,6 +17,7 @@
 | PO, receive, bill, recurring bill, credit and batch editors | Commercial and payables areas | Commercial and bill lists retain cards and add shared table controls; bill CSV export is scoped to AP and Procurement administrators. Vendor credits can be added against bills by AP/Procurement administrators with duplicate and amount checks, then searched, filtered and exported in scope. Finance owns recurring payables, batch payments and payment execution. | List and credit reference views adapted; editors partial |
 | Inbox filename → bill draft | Payables inbox and invoice new | Queue up to 20 PDF/image/CSV filenames by company, remove or open each as a bill draft. No file content is uploaded, read or extracted. | Adapted for demo |
 | Vendor transaction linking | Vendor profile + orders/invoices | Supplier profile uses stable supplier IDs for linked orders and bills. Seed orders and new award/contract-release orders carry the ID where the supplier is resolved in entity scope; unmatched older orders remain unlinked. | Adapted for linked demo records; live API contract pending |
+| Record detail tabs | `src/platform/components/RecordTabs.tsx` | Reuse the reference's tab layout in vendor and item detail with ERP colors, shared semantics, and keyboard arrow/Home/End navigation. | Shared component adapted |
 | Settings preferences/tabs/builders | Procurement Configuration and shared ERP settings | Purchase Order and Bill settings plus Vendors, Items, Purchases, Purchase Requests, Quote Requests, Receives and Vendor Credits share six-tab navigation. The extra transaction pages explain fields, validation, actions, approval choices and related records without changing published policy. | Transaction guidance adapted; ERP-owned settings and executable builders remain pending |
 | Analytics/export | Procurement reports | Define metric and currency basis; authorize exports and keep Finance ledger separate. | Partial |
 
@@ -25,6 +26,10 @@
 For each adapted area, verify: the reference action still has a reachable equivalent; create/view/edit paths keep one canonical record; search, filters, selection and return context survive navigation; edits persist in demo mode; invalid and duplicate inputs explain recovery; restricted roles and another company cannot access the record; the live-mode gate never displays local demo transactions as real records; keyboard and mobile use remain possible.
 
 The reference's generic `AppRecord`/string metadata, direct React Router tree and local approval/payment actions are not API contracts. The ERP [UI/API contract register](procurement-ui-contract-register.md) and [workflow gap register](procurement-ui-workflow-gap-register.md) remain the source for live integration and unresolved workflows. No reference screenshots will be copied into `public/` or product screens.
+
+## Source component mapping
+
+The separate UI is the baseline for Procurement screen structure and interactions. Its `AppShell`, buttons, inputs and modal map to the ERP shell and existing design system; `ListTools` maps to the shared ERP `ListPage`; `DetailPrimitives` maps to `RecordTabs`, `PageHeader`, `StatusTimeline` and record sections; `ListImportWizard` maps to the shared transfer component. Transaction editors map onto the ERP's typed request, order, receipt, bill and credit records so linked records keep their IDs and scope. Settings screens map to Procurement configuration and shared platform settings. This mapping preserves the reference workflow while avoiding a second browser-local record store inside the ERP.
 
 ## Next integration slices
 
