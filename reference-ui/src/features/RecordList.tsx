@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { modules, type ModuleKey } from "../data/modules";
 import { useApp, useStoredState, money, type AppRecord } from "../lib/store";
-import { removeSelectedId, updateVisibleSelection } from "../lib/list-state";
+import { removeSelectedId } from "../lib/list-state";
 import {
   filterEmployeeRequests,
   requesterFor,
@@ -23,6 +23,7 @@ import {
 } from "../lib/request-views";
 import { Badge, Button, EmptyState, Modal, PageHeader } from "../components/ui";
 import { DeleteConfirm } from "../components/data/DetailPrimitives";
+import { StandardDataTable } from "../components/data/StandardDataTable";
 import {
   ListTools,
   type ExportScope,
@@ -67,6 +68,7 @@ export function RecordList({
     ]),
     [columnWidths, setColumnWidths] = useState<Record<string, number>>({}),
     [clipText, setClipText] = useState(false),
+    [page, setPage] = useState(1),
     [selected, setSelected] = useState<string[]>([]),
     [detail, setDetail] = useState<AppRecord | null>(null),
     [pendingDelete, setPendingDelete] = useState<AppRecord | null>(null);
@@ -121,6 +123,9 @@ export function RecordList({
                   ? a.status.localeCompare(b.status)
                   : b.date.localeCompare(a.date) || b.id.localeCompare(a.id),
     );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 25));
+  const currentPage = Math.min(page, pageCount);
+  const visibleRecords = filtered.slice((currentPage - 1) * 25, currentPage * 25);
   const title = approval
     ? "Approvals"
     : procurement
@@ -128,7 +133,7 @@ export function RecordList({
       : config.title;
   const statuses = [...new Set(all.map((record) => record.status))];
   const columns: ListColumn[] = [
-    { key: "date", label: "Date", width: 90 },
+    { key: "date", label: "Date", width: 112 },
     { key: "number", label: "Number / Description", width: 230 },
     {
       key: "party",
@@ -240,6 +245,17 @@ export function RecordList({
       `${destination[record.kind]}?source=${encodeURIComponent(record.id)}${entry}`,
     );
   };
+  const renderCell = (record: AppRecord, column: ListColumn) => {
+    if (column.key === "date") return <span className="text-[var(--muted-foreground)]">{record.date}</span>;
+    if (column.key === "number") return <Link className="block text-left" to={`/${kind}/${record.id}${returnContext}`}>
+      <span className="font-semibold text-[var(--primary)]">{record.id}</span>
+      <span className="mt-1 block text-xs text-[var(--muted-foreground)]">{record.title}</span>
+    </Link>;
+    if (column.key === "party") return record.party;
+    if (column.key === "requester") return requesterFor(record);
+    if (column.key === "status") return <Badge>{record.status}</Badge>;
+    return <span className="font-medium">{kind === "rfqs" ? "Request for Quote" : money(record.amount)}</span>;
+  };
   return (
     <div className="p-5 sm:p-8">
       <PageHeader
@@ -266,7 +282,7 @@ export function RecordList({
               onSort={setSort}
               filterFields={filterFields}
               activeFilters={filters}
-              onApplyFilters={setFilters}
+              onApplyFilters={(next) => { setFilters(next); setPage(1); }}
               currentView={
                 employeeRequests
                   ? undefined
@@ -333,7 +349,7 @@ export function RecordList({
                     type="button"
                     role="tab"
                     aria-selected={requestTab === "pending"}
-                    onClick={() => setRequestTab("pending")}
+                    onClick={() => { setRequestTab("pending"); setPage(1); }}
                     className={`border-b-2 px-3 py-3 text-sm font-medium ${requestTab === "pending" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
                   >
                     Pending Requests
@@ -342,7 +358,7 @@ export function RecordList({
                     type="button"
                     role="tab"
                     aria-selected={requestTab === "all"}
-                    onClick={() => setRequestTab("all")}
+                    onClick={() => { setRequestTab("all"); setPage(1); }}
                     className={`border-b-2 px-3 py-3 text-sm font-medium ${requestTab === "all" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
                   >
                     All Requests
@@ -354,9 +370,10 @@ export function RecordList({
                   <select
                     aria-label="Request owner scope"
                     value={requestScope}
-                    onChange={(event) =>
-                      setRequestScope(event.target.value as RequestOwnerScope)
-                    }
+                    onChange={(event) => {
+                      setRequestScope(event.target.value as RequestOwnerScope);
+                      setPage(1);
+                    }}
                     className="max-w-[150px] rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none focus:border-blue-400"
                   >
                     <option value="mine">My Requests</option>
@@ -369,7 +386,7 @@ export function RecordList({
                 <select
                   aria-label="Filter records by status"
                   value={status}
-                  onChange={(event) => setStatus(event.target.value)}
+                  onChange={(event) => { setStatus(event.target.value); setPage(1); }}
                   className="bg-transparent pr-2 outline-none"
                 >
                   <option value="All">
@@ -396,7 +413,7 @@ export function RecordList({
               <input
                 aria-label={`Search ${title}`}
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => { setQuery(event.target.value); setPage(1); }}
                 placeholder="Search records"
                 className="w-36 rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-400 sm:w-52"
               />
@@ -425,136 +442,29 @@ export function RecordList({
           </div>
         )}
         {filtered.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] table-fixed text-left">
-              <thead className="table-head">
-                <tr>
-                  <th className="table-cell !py-3" style={{ width: 40 }}>
-                    <input
-                      aria-label="Select all visible records"
-                      type="checkbox"
-                      checked={
-                        filtered.length > 0 &&
-                        filtered.every((record) => selected.includes(record.id))
-                      }
-                      onChange={(event) =>
-                        setSelected((previous) =>
-                          updateVisibleSelection(
-                            previous,
-                            filtered.map((record) => record.id),
-                            event.target.checked,
-                          ),
-                        )
-                      }
-                    />
-                  </th>
-                  {columns
-                    .filter((column) => visibleColumns.includes(column.key))
-                    .map((column) => (
-                      <th
-                        key={column.key}
-                        style={{
-                          width: columnWidths[column.key] ?? column.width,
-                        }}
-                        className="table-cell !py-3"
-                      >
-                        <button
-                          className="font-medium hover:text-blue-600"
-                          onClick={() =>
-                            setSort(
-                              column.key === "date" ? "newest" : column.key,
-                            )
-                          }
-                        >
-                          {column.label}
-                        </button>
-                      </th>
-                    ))}
-                  <th
-                    className="table-cell sticky right-0 z-10 !py-3 bg-slate-50 shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
-                    style={{ width: 84 }}
-                  ></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((record) => (
-                  <tr key={record.id} className="hover:bg-[#fafbfe]">
-                    <td className="table-cell w-10" style={{ width: 40 }}>
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${record.id}`}
-                        checked={selected.includes(record.id)}
-                        onChange={(event) =>
-                          setSelected(
-                            event.target.checked
-                              ? [...selected, record.id]
-                              : selected.filter((id) => id !== record.id),
-                          )
-                        }
-                      />
-                    </td>
-                    {columns
-                      .filter((column) => visibleColumns.includes(column.key))
-                      .map((column) => (
-                        <td
-                          key={column.key}
-                          style={{
-                            width: columnWidths[column.key] ?? column.width,
-                          }}
-                          className={`table-cell ${clipText ? "max-w-[240px] truncate whitespace-nowrap" : "whitespace-normal"}`}
-                        >
-                          {column.key === "date" ? (
-                            <span className="text-slate-500">
-                              {record.date}
-                            </span>
-                          ) : column.key === "number" ? (
-                            <Link
-                              className="text-left"
-                              to={`/${kind}/${record.id}${returnContext}`}
-                            >
-                              <span className="font-medium text-blue-500">
-                                {record.id}
-                              </span>
-                              <span className="mt-1 block text-xs text-slate-400">
-                                {record.title}
-                              </span>
-                            </Link>
-                          ) : column.key === "party" ? (
-                            <span className="text-slate-600">
-                              {record.party}
-                            </span>
-                          ) : column.key === "requester" ? (
-                            <span className="text-slate-600">
-                              {requesterFor(record)}
-                            </span>
-                          ) : column.key === "status" ? (
-                            <Badge>{record.status}</Badge>
-                          ) : (
-                            <span className="font-medium text-slate-700">
-                              {kind === "rfqs"
-                                ? "Request for Quote"
-                                : money(record.amount)}
-                            </span>
-                          )}
-                        </td>
-                      ))}
-                    <td
-                      className="table-cell sticky right-0 z-10 bg-white shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
-                      style={{ width: 84 }}
-                    >
-                      <button
-                        onClick={() => setDetail(record)}
-                        aria-label={`Actions for ${record.id}`}
-                        className="rounded p-1 text-slate-400 hover:bg-slate-100"
-                      >
-                        <MoreHorizontal size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <StandardDataTable
+            rows={visibleRecords}
+            columns={columns}
+            visibleColumns={visibleColumns}
+            columnWidths={columnWidths}
+            clipText={clipText}
+            selected={selected}
+            onSelectedChange={setSelected}
+            onSort={setSort}
+            onOpen={setDetail}
+            rowLabel={(record) => `Open ${record.id}: ${record.title}`}
+            renderCell={renderCell}
+            renderActions={(record) => (
+              <button
+                type="button"
+                onClick={() => setDetail(record)}
+                aria-label={`Actions for ${record.id}`}
+                className="rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--primary-soft)] hover:text-[var(--primary)]"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+            )}
+          />
         ) : (
           <EmptyState
             title={
@@ -583,9 +493,13 @@ export function RecordList({
             }
           />
         )}
-        <footer className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-xs text-slate-400">
-          <span>{filtered.length} records · Fictional data</span>
-          <span>25 per page</span>
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-3 text-xs text-[var(--muted-foreground)]">
+          <span>{filtered.length ? `${(currentPage - 1) * 25 + 1}–${Math.min(currentPage * 25, filtered.length)} of ${filtered.length}` : "0 records"} · Fictional data</span>
+          <div className="flex items-center gap-2">
+            <button type="button" className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-40" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
+            <span className="min-w-16 text-center">Page {currentPage} of {pageCount}</span>
+            <button type="button" className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-40" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}>Next</button>
+          </div>
         </footer>
       </div>
       <p className="mt-4 flex items-center gap-1.5 text-[10px] text-slate-400">
