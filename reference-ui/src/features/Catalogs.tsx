@@ -667,7 +667,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
       return (
         <>
           <Link
-            className="font-medium text-blue-600 hover:text-blue-700"
+            className="block max-w-full break-words font-medium text-blue-600 hover:text-blue-700"
             to={`/${kind}/${record.id}`}
           >
             {record.title}
@@ -786,7 +786,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="region" aria-label={`${label} table`} tabIndex={0}>
             <table className="w-full min-w-[980px] table-fixed border-collapse">
               <thead>
                 <tr className="table-head">
@@ -831,7 +831,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
                       </th>
                     ))}
                   <th
-                    className="table-cell sticky right-0 z-10 bg-slate-50 text-right shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
+                    className="table-cell bg-slate-50 text-right md:sticky md:right-0 md:z-10 md:shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
                     style={{ width: 90 }}
                   >
                     Actions
@@ -864,13 +864,13 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
                           style={{
                             width: `${columnWidths[column.key] ?? column.width}px`,
                           }}
-                          className={`table-cell text-slate-600 ${["rate", "payables", "unusedCredits"].includes(column.key) ? "text-right" : ""} ${clipText ? "max-w-[240px] truncate whitespace-nowrap" : "whitespace-normal"}`}
+                          className={`table-cell overflow-hidden [overflow-wrap:anywhere] text-slate-600 ${["rate", "payables", "unusedCredits"].includes(column.key) ? "text-right" : ""} ${clipText ? "max-w-[240px] truncate whitespace-nowrap" : "whitespace-normal"}`}
                         >
                           {renderCell(record, column.key)}
                         </td>
                       ))}
                     <td
-                      className="table-cell sticky right-0 z-10 bg-white shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
+                      className="table-cell bg-white md:sticky md:right-0 md:z-10 md:shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
                       style={{ width: 90 }}
                     >
                       <div className="flex justify-end gap-1">

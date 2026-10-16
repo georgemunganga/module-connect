@@ -97,8 +97,7 @@ export function AppShell() {
         </button>
         <Link to="/" className="flex items-center gap-2.5 lg:w-[205px]">
           <Hexagon size={27} strokeWidth={1.5} />
-          <span className="text-lg font-medium tracking-tight">Meridian ERP</span>
-          <span className="hidden text-xs text-slate-300 sm:inline">Procurement</span>
+          <span className="whitespace-nowrap text-lg font-medium tracking-tight">Meridian ERP</span>
         </Link>
         <div className="relative ml-auto hidden w-[min(28vw,360px)] md:block lg:ml-5">
           <Search
@@ -215,6 +214,7 @@ export function AppShell() {
                 >
                   Organization profile
                 </Link>
+                <a href="/" className="mt-3 block text-sm text-blue-500">Back to ERP</a>
               </div>
             )}
           </div>
@@ -288,7 +288,6 @@ export function AppShell() {
           {nav("/analytics", "Analytics", <BarChart3 size={17} />)}
         </nav>
         <div className="border-t border-slate-200 p-3">
-          <a href="/" className="flex items-center gap-3 px-3 py-2 text-xs text-slate-500 hover:text-blue-500"><Home size={16} />Back to ERP</a>
           <Link
             to="/settings"
             className="flex items-center gap-3 px-3 py-2 text-xs text-slate-500"
