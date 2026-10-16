@@ -10,7 +10,7 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { statusLabel } from "@/platform/components/StatusBadge";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
 import { useApp } from "@/platform/app-context";
-import { sameEntity } from "@/modules/procurement/access";
+import { procurementEntityName, sameEntity } from "@/modules/procurement/access";
 import { getProcurement, saveProcurement, useProcurement } from "@/modules/procurement/store";
 import type { SourcingEvent } from "@/modules/procurement/sourcing";
 import { usePayables } from "@/modules/procurement/payables/store";
@@ -184,7 +184,7 @@ export function CommercialList({ area }: { area: Area }) {
   const entityRecords = records.filter((x) => entityAllowed(x.entity, entityId, role));
   const empty = {
     evaluations: { title: "No quotes to compare yet", body: "Close a quote request and open the vendor replies to begin comparing them.", to: "/procurement/sourcing" as const, action: "Open quote requests", icon: <Trophy className="size-10" aria-hidden /> },
-    contracts: { title: "No contracts yet", body: "Approved supplier agreements will appear here.", to: "/procurement/sourcing" as const, action: "Open quote requests", icon: <ScrollText className="size-10" aria-hidden /> },
+    contracts: { title: "No contracts yet", body: "Add a standalone agreement or start one from an approved award.", to: "/procurement/contracts/new" as const, action: "Add contract", icon: <ScrollText className="size-10" aria-hidden /> },
     orders: { title: "No purchase orders yet", body: "Start with an approved request or a chosen vendor.", to: "/procurement/requests" as const, action: "Open requests", icon: <FileText className="size-10" aria-hidden /> },
     receiving: { title: "No deliveries yet", body: "Send a purchase order before recording what arrived or which services were completed.", to: "/procurement/orders" as const, action: "Open orders", icon: <PackageCheck className="size-10" aria-hidden /> },
   }[area];
@@ -192,6 +192,7 @@ export function CommercialList({ area }: { area: Area }) {
     <Guard area={area}>
       <AppShell>
         <Header area={area} />
+        {area === "contracts" && canEdit(area, role) && <div className="mb-4"><Button asChild><Link to="/procurement/contracts/new">Add contract</Link></Button></div>}
         <div className={section}>
           <Label htmlFor="find-commercial">Search</Label>
           <Input
@@ -273,6 +274,53 @@ export function CommercialDetail({ area, id }: { area: Area; id: string }) {
       </AppShell>
     </Guard>
   );
+}
+
+export function ContractNew() {
+  const { role, entityId } = useApp();
+  const suppliers = useProcurement().suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && supplier.status === "Active");
+  const [supplier, setSupplier] = useState("");
+  const [kind, setKind] = useState<Contract["kind"]>("Standard");
+  const [category, setCategory] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [notice, setNotice] = useState("");
+  const [ceiling, setCeiling] = useState("");
+  const [currency, setCurrency] = useState("EUR");
+  const [rate, setRate] = useState("");
+  const [obligations, setObligations] = useState("");
+  const [reason, setReason] = useState("");
+  const [created, setCreated] = useState("");
+  const [error, setError] = useState("");
+  if (!canEdit("contracts", role)) return <Guard area="contracts"><AppShell><p>Only a buyer or Procurement administrator can add a contract.</p></AppShell></Guard>;
+  const create = () => {
+    if (!suppliers.some((item) => item.name === supplier) || !category.trim() || !start || !end || end < start || !notice || notice > end || !Number.isFinite(Number(ceiling)) || Number(ceiling) <= 0 || !rate.trim() || !obligations.trim() || !reason.trim()) {
+      setError("Choose an active vendor and complete the category, dates, limit, rates, obligations and reason. The notice date must be on or before the end date.");
+      return;
+    }
+    const id = nextId("CON", Math.max(2000, ...getCommercial().contracts.map((contract) => Number(contract.id.match(/(\d+)$/)?.[1] || 0))) + 1);
+    const contract: Contract = { id, supplier, entity: procurementEntityName(entityId), owner: actor(role), category: category.trim(), kind, state: "Draft", version: 1, start, end, notice, ceiling: Number(ceiling), committed: 0, currency, rate: rate.trim(), obligations: obligations.trim(), source: "Standalone", audit: [audit(actor(role), "Created standalone draft", reason.trim())] };
+    updateCommercial((state) => ({ ...state, contracts: [contract, ...state.contracts] }));
+    setCreated(id);
+    setError("");
+  };
+  return <AppShell><PageHeader eyebrow="Contracts" title="Add contract" description="Record proposed terms for review. Nothing is active or available for ordering until signed." />
+    {created ? <div className={section}><h2 className="font-semibold">Draft saved</h2><p className="mt-1 text-sm">{created} is ready for review.</p><Button className="mt-3" asChild><Link to="/procurement/contracts/$id" params={{ id: created }}>Open contract</Link></Button></div> : <div className={section}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div><Label htmlFor="contract-supplier">Vendor</Label><select id="contract-supplier" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={supplier} onChange={(event) => setSupplier(event.target.value)}><option value="">Choose an active vendor</option>{suppliers.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></div>
+        <div><Label htmlFor="contract-kind">Contract type</Label><select id="contract-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={kind} onChange={(event) => setKind(event.target.value as Contract["kind"])}><option>Standard</option><option>Framework</option><option>Recurring</option></select></div>
+        <div><Label htmlFor="contract-category">Category</Label><Input id="contract-category" value={category} onChange={(event) => setCategory(event.target.value)} /></div>
+        <div><Label htmlFor="contract-currency">Currency</Label><select id="contract-currency" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={currency} onChange={(event) => setCurrency(event.target.value)}>{["EUR", "KES", "USD", "ZMW", "GBP"].map((value) => <option key={value}>{value}</option>)}</select></div>
+        <div><Label htmlFor="contract-start">Starts</Label><Input id="contract-start" type="date" value={start} onChange={(event) => setStart(event.target.value)} /></div>
+        <div><Label htmlFor="contract-end">Ends</Label><Input id="contract-end" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></div>
+        <div><Label htmlFor="contract-notice">Renewal decision by</Label><Input id="contract-notice" type="date" value={notice} onChange={(event) => setNotice(event.target.value)} /></div>
+        <div><Label htmlFor="contract-ceiling">Spending limit</Label><Input id="contract-ceiling" type="number" min="0.01" step="0.01" value={ceiling} onChange={(event) => setCeiling(event.target.value)} /></div>
+        <div className="sm:col-span-2"><Label htmlFor="contract-rate">Rates or price schedule</Label><Input id="contract-rate" value={rate} onChange={(event) => setRate(event.target.value)} /></div>
+        <div className="sm:col-span-2"><Label htmlFor="contract-obligations">Supplier obligations</Label><Textarea id="contract-obligations" value={obligations} onChange={(event) => setObligations(event.target.value)} /></div>
+        <div className="sm:col-span-2"><Label htmlFor="contract-reason">Why this contract is needed</Label><Textarea id="contract-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
+      </div>{error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}<div className="mt-4 flex gap-2"><Button onClick={create}>Save draft</Button><Button variant="outline" asChild><Link to="/procurement/contracts">Cancel</Link></Button></div>
+    </div>}
+  </AppShell>;
 }
 
 function EvaluationView({ item, role, event }: { item: Evaluation; role: string; event: SourcingEvent }) {
@@ -755,7 +803,11 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
     .filter((o) => ["Draft", "Pending approval", "Approved"].includes(o.status))
     .reduce((sum, o) => sum + o.line.qty * o.line.price, 0);
   const [reason, setReason] = useState("");
+  const [signedRef, setSignedRef] = useState("");
   const [ceiling, setCeiling] = useState(item.ceiling);
+  const [renewEnd, setRenewEnd] = useState("");
+  const [renewNotice, setRenewNotice] = useState("");
+  const [renewCeiling, setRenewCeiling] = useState(String(item.ceiling));
   const [release, setRelease] = useState(0);
   const [error, setError] = useState("");
   const edit = canEdit("contracts", role);
@@ -776,17 +828,27 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
       Approved: "Awaiting signature",
       "Awaiting signature": "Active",
       Active: "Expiring",
-      Expiring: "Renewed",
+      Renewed: "Expiring",
     };
     const state = next[item.state];
     if (!state) return;
-    if (state === "Active" && !reason.trim())
+    if (state === "Approved" && role !== "proc_admin") return setError("A Procurement administrator must approve terms in this demo.");
+    if (state === "Active" && !signedRef.trim())
       return setError("Enter the signed document reference before activation.");
+    const signed = state === "Active";
+    const renewal = signed && item.renewal?.status === "Awaiting signature" ? item.renewal : undefined;
+    const newCeiling = renewal?.proposedCeiling ?? (signed && item.amendment?.approved ? item.amendment.proposedCeiling : item.ceiling);
+    const newEnd = renewal?.proposedEnd ?? item.end;
+    const newNotice = renewal?.proposedNotice ?? item.notice;
     patch(
-      { state, signedVersion: state === "Active" ? item.version : item.signedVersion },
-      `Moved to ${state}`,
-      state === "Active" ? `Signed version ${item.version}: ${reason}` : "Review decision recorded",
+      { state: renewal ? "Renewed" : state, signedVersion: signed ? item.version : item.signedVersion,
+        ...(signed ? { ceiling: newCeiling, end: newEnd, notice: newNotice, signedTerms: { start: item.start, end: newEnd, notice: newNotice, ceiling: newCeiling },
+          signedHistory: item.signedVersion ? [...(item.signedHistory ?? []), { version: item.signedVersion, ...(item.signedTerms ?? { start: item.start, end: item.end, notice: item.notice, ceiling: item.ceiling }) }] : item.signedHistory,
+          amendment: undefined, renewal: undefined } : {}) },
+      `Moved to ${renewal ? "Renewed" : state}`,
+      signed ? `Signed version ${item.version}: ${signedRef.trim()}; previous signed version retained in history` : "Review decision recorded",
     );
+    if (signed) setSignedRef("");
     setError("");
   };
   const addRelease = () => {
@@ -866,8 +928,9 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
     setError("");
   };
   const propose = () => {
-    if (!reason.trim() || ceiling <= 0)
-      return setError("Give a reason and valid proposed ceiling.");
+    if (item.state === "Awaiting signature" || item.renewal?.status === "Pending decision") return setError("Finish the pending signature or renewal decision before another change.");
+    if (!reason.trim() || ceiling < item.committed + pendingValue)
+      return setError("Give a reason and a limit that covers committed spending and draft orders.");
     patch(
       { amendment: { reason, proposedCeiling: ceiling } },
       "Proposed amendment",
@@ -879,14 +942,31 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
     if (!item.amendment) return;
     patch(
       {
-        ceiling: item.amendment.proposedCeiling,
         version: item.version + 1,
         state: "Awaiting signature",
-        amendment: undefined,
+        amendment: { ...item.amendment, approved: true },
       },
       "Approved amendment",
       `New v${item.version + 1} pending signature; old signed v${item.signedVersion || "none"} stays effective until signed.`,
     );
+  };
+  const proposeRenewal = () => {
+    const nextCeiling = Number(renewCeiling);
+    if (!reason.trim() || !renewEnd || renewEnd <= item.end || !renewNotice || renewNotice > renewEnd || !Number.isFinite(nextCeiling) || nextCeiling < item.committed)
+      return setError("Enter a reason, later end date, notice date before the new end, and a limit no lower than committed spending.");
+    patch({ renewal: { proposedEnd: renewEnd, proposedNotice: renewNotice, proposedCeiling: nextCeiling, reason: reason.trim(), status: "Pending decision" } }, "Proposed renewal", `End ${item.end} → ${renewEnd}; limit ${money(item.ceiling, item.currency)} → ${money(nextCeiling, item.currency)}; ${reason}`);
+    setReason("");
+    setError("");
+  };
+  const decideRenewal = (approve: boolean) => {
+    if (!item.renewal || item.renewal.status !== "Pending decision" || role !== "proc_admin") return;
+    if (!approve && !reason.trim()) return setError("Give a reason for declining renewal.");
+    patch({ state: approve ? "Awaiting signature" : "Expiring", version: approve ? item.version + 1 : item.version,
+      renewal: { ...item.renewal, status: approve ? "Awaiting signature" : "Declined", decidedBy: actor(role) },
+      signedTerms: item.signedTerms ?? (item.signedVersion ? { start: item.start, end: item.end, notice: item.notice, ceiling: item.ceiling } : undefined) },
+    approve ? "Renewal approved pending signature" : "Renewal declined", approve ? `Proposed v${item.version + 1}; old signed v${item.signedVersion ?? "none"} remains recorded` : reason.trim());
+    setReason("");
+    setError("");
   };
   return (
     <>
@@ -939,12 +1019,13 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
             payment.
           </p>
         )}
+        {item.signedHistory?.length ? <div className="mt-3 text-xs text-muted-foreground"><strong>Earlier signed terms:</strong> {item.signedHistory.map((version) => `v${version.version}: ends ${version.end}, limit ${money(version.ceiling, item.currency)}`).join(" · ")}</div> : null}
       </section>
       <section className={section}>
         <h2 className="font-semibold">Contract dates and renewal</h2>
         {item.state === "Awaiting signature" && (
           <p className="mt-2 text-sm text-amber-700">
-            Approved terms are not yet an executed agreement. No release is allowed.
+            Proposed v{item.version} needs a signed document. {item.signedVersion ? `Signed v${item.signedVersion} remains recorded; new releases are paused until signature.` : "No release is allowed."}
           </p>
         )}
         {item.state === "Expiring" && (
@@ -960,9 +1041,9 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
         )}
         {edit && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {["Draft", "Review", "Approved", "Awaiting signature", "Active", "Expiring"].includes(
+            {["Draft", "Review", "Approved", "Awaiting signature", "Active", "Renewed"].includes(
               item.state,
-            ) && (
+            ) && (item.state !== "Review" || role === "proc_admin") && (
               <Button onClick={transition}>
                 {
                   (
@@ -972,7 +1053,7 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
                       Approved: "Request signature",
                       "Awaiting signature": "Record signature",
                       Active: "Mark expiring",
-                      Expiring: "Record renewal",
+                      Renewed: "Mark expiring",
                     } as Record<string, string>
                   )[item.state]
                 }
@@ -999,13 +1080,16 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
             )}
           </div>
         )}
+        {item.state === "Expiring" && edit && <div className="mt-4 rounded-lg border p-4"><h3 className="font-medium">Renewal decision</h3><p className="mt-1 text-xs text-muted-foreground">A proposal and approval do not extend the signed end date. The new terms take effect after signature.</p>
+          {item.renewal?.status === "Pending decision" ? <div className="mt-3 text-sm"><p>Proposed end {item.renewal.proposedEnd} · decision by {item.renewal.proposedNotice} · limit {money(item.renewal.proposedCeiling, item.currency)}.</p><p className="mt-1">Reason: {item.renewal.reason}</p>{role === "proc_admin" && <div className="mt-3 flex gap-2"><Button onClick={() => decideRenewal(true)}>Approve for signature</Button><Button variant="outline" onClick={() => decideRenewal(false)}>Decline with reason</Button></div>}</div> : <div className="mt-3 grid gap-3 sm:grid-cols-3"><div><Label htmlFor="renew-end">New end date</Label><Input id="renew-end" type="date" value={renewEnd} onChange={(e) => setRenewEnd(e.target.value)} /></div><div><Label htmlFor="renew-notice">New decision date</Label><Input id="renew-notice" type="date" value={renewNotice} onChange={(e) => setRenewNotice(e.target.value)} /></div><div><Label htmlFor="renew-limit">New spending limit</Label><Input id="renew-limit" type="number" min="0" value={renewCeiling} onChange={(e) => setRenewCeiling(e.target.value)} /></div><div className="sm:col-span-3"><Label htmlFor="renew-reason">Renewal reason</Label><Textarea id="renew-reason" value={reason} onChange={(e) => setReason(e.target.value)} /></div><div><Button onClick={proposeRenewal}>Propose renewal</Button></div></div>}
+        </div>}
         {item.state === "Awaiting signature" && edit && (
           <div className="mt-3">
             <Label htmlFor="signed-ref">Signed document reference</Label>
             <Input
               id="signed-ref"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              value={signedRef}
+              onChange={(e) => setSignedRef(e.target.value)}
               placeholder="Signed document ID or secure attachment reference"
             />
           </div>
@@ -1068,10 +1152,10 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
           {item.amendment ? (
             <div className="mt-3 text-sm">
               <p>
-                Pending: {money(item.ceiling, item.currency)} →{" "}
+                {item.amendment.approved ? "Approved, awaiting signature" : "Pending"}: {money(item.ceiling, item.currency)} →{" "}
                 {money(item.amendment.proposedCeiling, item.currency)}. {item.amendment.reason}
               </p>
-              {role === "proc_admin" && (
+              {role === "proc_admin" && !item.amendment.approved && (
                 <Button className="mt-2" onClick={approveAmend}>
                   Approve amendment; request new signature
                 </Button>
