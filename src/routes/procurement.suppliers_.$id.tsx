@@ -30,7 +30,7 @@ function SupplierProfile() {
   const { id } = Route.useParams();
   const { role, entityId } = useApp();
   const s = useProcurement().suppliers.find((x) => x.id === id);
-  const orders = useCommercial().orders.filter((order) => order.supplier === s?.name && sameEntity(order.entity, entityId));
+  const orders = useCommercial().orders.filter((order) => order.supplierId === s?.id && sameEntity(order.entity, entityId));
   const payables = usePayables();
   const invoices = payables.invoices.filter((invoice) => invoice.supplierId === s?.id && invoice.entityId === entityId);
   const visibleInvoiceIds = new Set(invoices.map((invoice) => invoice.id));
@@ -138,7 +138,17 @@ function SupplierProfile() {
             </div>
           ) : <EmptyState title="Not enough data yet" body="Scores appear after at least 5 receipts or invoices in the period." />
         ) : tab === "Orders & bills" ? (
-          <div className="space-y-3 text-sm"><p>{openOrders.length} open purchase order(s) · {openInvoices.length} open invoice(s).</p>{orders.map((order) => <p key={order.id}><Link className="text-primary underline" to="/procurement/orders/$id" params={{ id: order.id }}>{order.id}</Link> · {order.status} · {order.line.description}</p>)}{invoices.map((invoice) => <p key={invoice.id}><Link className="text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.id}</Link> · {invoice.status} · {invoice.number}</p>)}</div>
+          <div className="space-y-6 text-sm">
+            <p className="text-muted-foreground">{openOrders.length} open purchase order(s) · {openInvoices.length} open bill(s). Records appear here when linked to this vendor ID.</p>
+            <section aria-labelledby="vendor-orders-title">
+              <h2 id="vendor-orders-title" className="mb-3 font-semibold">Purchase orders</h2>
+              {orders.length ? <div className="space-y-2">{orders.map((order) => <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-surface p-4"><div><Link className="font-medium text-primary underline" to="/procurement/orders/$id" params={{ id: order.id }}>{order.id}</Link><p className="mt-1 text-muted-foreground">{order.line.description} · due {order.due}</p></div><div className="flex items-center gap-4"><span>{new Intl.NumberFormat("en", { style: "currency", currency: order.currency }).format(order.line.qty * order.line.price)}</span><StatusBadge status={order.status} /></div></div>)}</div> : <EmptyState title="No linked purchase orders" body="Purchase orders linked to this vendor will appear here." />}
+            </section>
+            <section aria-labelledby="vendor-bills-title">
+              <h2 id="vendor-bills-title" className="mb-3 font-semibold">Bills</h2>
+              {invoices.length ? <div className="space-y-2">{invoices.map((invoice) => <div key={invoice.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-surface p-4"><div><Link className="font-medium text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.number}</Link><p className="mt-1 text-muted-foreground">{invoice.date} · {invoice.po}</p></div><div className="flex items-center gap-4"><span>{new Intl.NumberFormat("en", { style: "currency", currency: invoice.currency }).format(invoiceTotal(invoice))}</span><StatusBadge status={invoice.status} /></div></div>)}</div> : <EmptyState title="No linked bills" body="Bills linked to this vendor will appear here." />}
+            </section>
+          </div>
         ) : tab === "Notes" ? (
           <SupplierNotes supplier={s} onChange={setS} role={role} readOnly={readOnly} />
         ) : tab === "Messages" ? (
