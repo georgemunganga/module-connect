@@ -832,7 +832,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
                     ))}
                   <th
                     className="table-cell bg-slate-50 text-right md:sticky md:right-0 md:z-10 md:shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
-                    style={{ width: 90 }}
+                    style={{ width: 140, minWidth: 140 }}
                   >
                     Actions
                   </th>
@@ -871,7 +871,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
                       ))}
                     <td
                       className="table-cell bg-white md:sticky md:right-0 md:z-10 md:shadow-[-8px_0_10px_-10px_rgba(15,23,42,0.4)]"
-                      style={{ width: 90 }}
+                      style={{ width: 140, minWidth: 140 }}
                     >
                       <div className="flex justify-end gap-1">
                         <Link

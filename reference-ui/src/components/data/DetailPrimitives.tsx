@@ -16,7 +16,7 @@ export function DetailTabs({
   return (
     <nav
       aria-label="Record detail sections"
-      className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-2"
+      className="flex gap-1 overflow-x-auto border-b border-border bg-surface px-2"
     >
       {tabs.map((tab) => (
         <button
@@ -25,7 +25,7 @@ export function DetailTabs({
           role="tab"
           aria-selected={active === tab.key}
           onClick={() => onChange(tab.key)}
-          className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm transition-colors ${active === tab.key ? "border-blue-500 font-semibold text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm transition-colors ${active === tab.key ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
           {tab.label}
         </button>
@@ -47,10 +47,10 @@ export function DetailSection({
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-lg border border-slate-200 bg-white ${className}`}
+      className={`overflow-hidden rounded-xl border border-border bg-surface ${className}`}
     >
-      <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5">
-        <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {action}
       </header>
       <div className="p-4 sm:p-5">{children}</div>
@@ -67,8 +67,8 @@ export function DetailValue({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs text-slate-400">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-medium text-slate-700">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-medium text-foreground">
         {value ?? "—"}
       </dd>
     </div>

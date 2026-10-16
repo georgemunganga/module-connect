@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  Hexagon,
+  Grid2x2,
   Home,
   ShoppingBag,
   CheckCircle2,
@@ -22,6 +22,7 @@ import {
   CircleHelp,
   PanelLeftClose,
   Sparkles,
+  UserRound,
 } from "lucide-react";
 import { useApp, money } from "../../lib/store";
 import { modules } from "../../data/modules";
@@ -78,7 +79,7 @@ export function AppShell() {
       to={to}
       end={to === "/"}
       className={({ isActive }) =>
-        `group flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors ${child ? "pl-10" : ""} ${isActive ? "bg-blue-500 font-medium text-white shadow-sm" : "text-slate-600 hover:bg-slate-200/60"}`
+        `group flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors ${child ? "pl-10" : ""} ${isActive ? "bg-rail-active font-medium text-rail-foreground" : "text-rail-muted hover:bg-rail-active hover:text-rail-foreground"}`
       }
     >
       {icon}
@@ -86,8 +87,8 @@ export function AppShell() {
     </NavLink>
   );
   return (
-    <div className="min-h-dvh bg-white">
-      <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center bg-[#20263e] px-3 text-slate-100 sm:px-5">
+    <div className="min-h-dvh bg-background text-foreground">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center border-b border-border bg-surface px-3 text-foreground sm:px-5">
         <button
           className="mr-3 p-1 lg:hidden"
           aria-label="Open navigation"
@@ -95,13 +96,13 @@ export function AppShell() {
         >
           <Menu size={22} />
         </button>
-        <Link to="/" className="flex items-center gap-2.5 lg:w-[205px]">
-          <Hexagon size={27} strokeWidth={1.5} />
-          <span className="whitespace-nowrap text-lg font-medium tracking-tight">Meridian ERP</span>
+        <Link to="/" className="flex items-center gap-2.5 lg:w-[237px]">
+          <Grid2x2 size={20} strokeWidth={1.7} />
+          <span className="whitespace-nowrap text-sm font-semibold tracking-tight">Meridian ERP</span>
         </Link>
         <div className="relative ml-auto hidden w-[min(28vw,360px)] md:block lg:ml-5">
           <Search
-            className="absolute left-3 top-2.5 text-slate-400"
+            className="absolute left-3 top-2.5 text-muted-foreground"
             size={17}
           />
           <input
@@ -112,7 +113,7 @@ export function AppShell() {
               setQuery(event.target.value);
               setSearchOpen(true);
             }}
-            className="w-full rounded-md border border-white/15 bg-white/5 py-2 pl-10 pr-3 text-xs outline-none focus:border-blue-400"
+            className="w-full rounded-full border border-input bg-background py-2 pl-10 pr-3 text-xs text-foreground outline-none focus:border-primary"
             placeholder="Search in Procurement ( / )"
           />
           {searchOpen && (
@@ -148,14 +149,14 @@ export function AppShell() {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
-          <span className="hidden rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-wider text-slate-300 xl:block">
-            Frontend demo
+          <span className="hidden rounded-full border border-warning/40 bg-warning-soft px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-foreground xl:block">
+            Demo data
           </span>
           <div className="relative">
             <button
               onClick={() => setQuick(!quick)}
               aria-label="Quick create"
-              className="rounded bg-blue-500 p-1.5"
+              className="rounded-full bg-primary p-1.5 text-primary-foreground"
             >
               <Plus size={21} />
             </button>
@@ -188,7 +189,7 @@ export function AppShell() {
             className="relative p-1"
           >
             <Bell size={19} />
-            <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-[#20263e] bg-red-400" />
+            <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-surface bg-danger" />
           </button>
           <Link to="/settings" aria-label="Open settings" className="p-1">
             <Settings size={19} />
@@ -197,9 +198,9 @@ export function AppShell() {
             <button
               aria-label="Open demo account"
               onClick={() => setAccount(!account)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-500/60 text-xs font-medium"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
             >
-              AC
+              <UserRound size={17} aria-hidden />
             </button>
             {account && (
               <div className="absolute right-0 top-11 w-60 rounded-lg bg-white p-4 text-slate-700 shadow-xl">
@@ -228,7 +229,7 @@ export function AppShell() {
       )}
       <aside
         aria-label="Main navigation"
-        className={`fixed bottom-0 top-0 z-40 flex w-[224px] flex-col border-r border-slate-200 bg-[#f7f8fd] pt-4 transition-transform lg:top-14 lg:z-20 lg:pt-0 ${mobile ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} ${compact ? "lg:hidden" : ""}`}
+        className={`fixed bottom-0 top-0 z-40 flex w-64 flex-col border-r border-rail-active bg-rail pt-4 text-rail-foreground transition-transform lg:top-14 lg:z-20 lg:pt-0 ${mobile ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} ${compact ? "lg:hidden" : ""}`}
       >
         <div className="flex items-center justify-between px-4 pb-4 lg:hidden">
           <span className="font-semibold">Procurement</span>
@@ -242,9 +243,9 @@ export function AppShell() {
         <div className="px-3 py-4">
           <button
             onClick={() => setHelp(true)}
-            className="flex w-full items-center gap-2 rounded-md border border-[#e0e2f0] bg-[#ecebf9] px-3 py-3 text-xs"
+          className="flex w-full items-center gap-2 rounded-lg border border-rail-active bg-rail-active/40 px-3 py-3 text-xs text-rail-foreground"
           >
-            <Sparkles size={16} className="text-amber-400" />
+            <Sparkles size={16} className="text-primary" />
             <span>Workflow guide</span>
             <ChevronRight size={14} className="ml-auto" />
           </button>
@@ -258,7 +259,7 @@ export function AppShell() {
           {nav("/vendors", "Vendors", <Store size={17} />)}
           <button
             onClick={() => setProcOpen(!procOpen)}
-            className="mt-3 flex w-full items-center gap-3 px-3 py-2.5 text-[13px] text-slate-600"
+            className="mt-3 flex w-full items-center gap-3 px-3 py-2.5 text-[13px] text-rail-muted hover:text-rail-foreground"
           >
             <ShoppingBag size={17} />
             <span>Procurement</span>
@@ -272,7 +273,7 @@ export function AppShell() {
             procurement.map(([to, label]) => nav(to, label, null, true))}
           <button
             onClick={() => setPayOpen(!payOpen)}
-            className="flex w-full items-center gap-3 px-3 py-2.5 text-[13px] text-slate-600"
+            className="flex w-full items-center gap-3 px-3 py-2.5 text-[13px] text-rail-muted hover:text-rail-foreground"
           >
             <Wallet size={17} />
             <span>Payables</span>
@@ -287,17 +288,17 @@ export function AppShell() {
           {nav("/budgets", "Budgets", <PieChart size={17} />)}
           {nav("/analytics", "Analytics", <BarChart3 size={17} />)}
         </nav>
-        <div className="border-t border-slate-200 p-3">
+        <div className="border-t border-rail-active p-3">
           <Link
             to="/settings"
-            className="flex items-center gap-3 px-3 py-2 text-xs text-slate-500"
+            className="flex items-center gap-3 px-3 py-2 text-xs text-rail-muted hover:text-rail-foreground"
           >
             <Settings size={16} />
             Settings
           </Link>
           <button
             onClick={() => setCompact(true)}
-            className="hidden items-center gap-3 px-3 py-2 text-xs text-slate-400 lg:flex"
+            className="hidden items-center gap-3 px-3 py-2 text-xs text-rail-muted hover:text-rail-foreground lg:flex"
           >
             <PanelLeftClose size={16} />
             Collapse navigation
@@ -305,7 +306,7 @@ export function AppShell() {
         </div>
       </aside>
       <main
-        className={`min-w-0 pb-16 pt-14 transition-all ${compact ? "" : "lg:pl-[224px]"}`}
+        className={`min-w-0 pb-16 pt-14 transition-all ${compact ? "" : "lg:pl-64"}`}
       >
         {compact && (
           <button
@@ -316,13 +317,13 @@ export function AppShell() {
             <Menu size={18} />
           </button>
         )}
-        <div className="border-b border-slate-100 bg-[#fbfcfe] px-4 py-2 text-[11px] text-slate-400 sm:px-7">
+        <div className="border-b border-border bg-surface-muted px-4 py-2 text-[11px] text-muted-foreground sm:px-7">
           Fictional demo data <span className="mx-2 text-slate-200">|</span>{" "}
           Changes stay in this browser. ERP records are not connected yet.
         </div>
         <Outlet />
       </main>
-      <footer className="fixed inset-x-0 bottom-0 z-20 flex h-8 items-center justify-between border-t border-slate-200 bg-white px-4 text-[10px] text-slate-400">
+      <footer className="fixed inset-x-0 bottom-0 z-20 flex h-8 items-center justify-between border-t border-border bg-surface px-4 text-[10px] text-muted-foreground">
         <span>
           Procurement workspace{" "}
           <span className="ml-3 hidden sm:inline">

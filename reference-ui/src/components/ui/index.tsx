@@ -17,16 +17,16 @@ export function Button({
   variant?: "primary" | "secondary" | "ghost" | "danger";
 }) {
   const colors = {
-    primary: "bg-blue-500 text-white hover:bg-blue-600 border-blue-500",
-    secondary: "bg-white text-slate-700 hover:bg-slate-50 border-slate-200",
+    primary: "bg-primary text-primary-foreground hover:bg-primary/90 border-primary shadow-sm",
+    secondary: "bg-surface text-foreground hover:bg-secondary border-input",
     ghost:
-      "bg-transparent text-slate-500 hover:bg-slate-100 border-transparent",
-    danger: "bg-red-50 text-red-600 border-red-100 hover:bg-red-100",
+      "bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground border-transparent",
+    danger: "bg-danger-soft text-danger border-danger/20 hover:bg-danger/15",
   };
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center gap-2 rounded-md border px-3.5 py-2 text-[13px] font-medium transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${colors[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${colors[variant]} ${className}`}
       {...props}
     />
   );
@@ -129,11 +129,11 @@ export function Panel({
 }) {
   return (
     <section
-      className={`rounded-lg border border-slate-200 bg-white ${className}`}
+      className={`rounded-xl border border-border bg-surface ${className}`}
     >
       {title && (
-        <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-          <h2 className="font-semibold text-slate-800">{title}</h2>
+        <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <h2 className="font-semibold text-foreground">{title}</h2>
           {action}
         </header>
       )}
@@ -153,11 +153,11 @@ export function PageHeader({
   return (
     <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-1.5 text-sm text-slate-500">{subtitle}</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">{actions}</div>
