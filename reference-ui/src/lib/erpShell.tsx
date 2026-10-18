@@ -112,10 +112,12 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     let revealTimer: number | undefined;
     const reveal = () => {
       if (!overlay || revealTimer !== undefined) return;
+      const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
+      const visibleAt = Number(image?.dataset.readyAt) || startedAt;
       revealTimer = window.setTimeout(() => {
         overlay.classList.add("is-leaving");
         window.setTimeout(() => overlay.remove(), 280);
-      }, Math.max(0, 450 - (Date.now() - startedAt)));
+      }, Math.max(0, 550 - (Date.now() - visibleAt)));
     };
     if (readBrandingCache()) reveal();
     fetch("/api/hrm/branding", { cache: "no-store", signal: controller.signal })

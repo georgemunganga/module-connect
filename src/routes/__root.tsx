@@ -24,7 +24,9 @@ function PreloaderController({ brandingReady }: { brandingReady: boolean }) {
     if (!brandingReady || session.mode === "loading") return;
     const overlay = document.getElementById("erp-global-preloader");
     if (!overlay) return;
-    const delay = Math.max(0, 450 - (Date.now() - startedAt.current));
+    const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
+    const visibleAt = Number(image?.dataset.readyAt) || startedAt.current;
+    const delay = Math.max(0, 550 - (Date.now() - visibleAt));
     const timer = window.setTimeout(() => {
       overlay.classList.add("is-leaving");
       window.setTimeout(() => overlay.classList.add("is-gone"), 280);
@@ -136,7 +138,6 @@ function RootShell({ children }: { children: ReactNode }) {
       <body>
         <div id="erp-global-preloader" className="erp-global-preloader" role="status" aria-label="Loading ERP">
           <div className="erp-preloader-orbit" aria-hidden="true">
-            <span id="erp-preloader-fallback" className="erp-preloader-fallback">ERP</span>
             <img id="erp-preloader-logo" className="erp-preloader-logo" alt="" hidden />
           </div>
         </div>

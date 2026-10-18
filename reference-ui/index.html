@@ -13,20 +13,16 @@
     <style>
       .erp-global-preloader{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#fff;opacity:1;transition:opacity 260ms ease}
       .erp-global-preloader.is-leaving{opacity:0;pointer-events:none}
-      .erp-preloader-orbit{position:relative;display:grid;place-items:center;width:104px;height:104px;border-radius:50%}
-      .erp-preloader-orbit::before{position:absolute;inset:0;content:"";border:3px solid #e8f0f5;border-top-color:var(--primary,#012642);border-radius:50%;animation:erp-preloader-turn 3s linear infinite}
-      .erp-preloader-fallback,.erp-preloader-logo{width:72px;height:72px;border-radius:50%;object-fit:contain}
-      .erp-preloader-fallback{display:grid;place-items:center;background:var(--primary,#012642);color:#fff;font:700 18px/1 Arial,sans-serif;letter-spacing:.04em}
-      .erp-preloader-logo{padding:7px}
-      .erp-preloader-logo[hidden],.erp-preloader-fallback[hidden]{display:none}
-      @keyframes erp-preloader-turn{to{transform:rotate(360deg)}}
-      @media (prefers-reduced-motion:reduce){.erp-preloader-orbit::before{animation:none}}
+      .erp-preloader-orbit{display:grid;place-items:center}
+      .erp-preloader-logo{display:block;width:min(240px,65vw);height:auto;max-height:120px;object-fit:contain;animation:erp-preloader-breathe 2.4s ease-in-out infinite}
+      .erp-preloader-logo[hidden]{display:none}
+      @keyframes erp-preloader-breathe{50%{opacity:.65;transform:scale(.97)}}
+      @media (prefers-reduced-motion:reduce){.erp-preloader-logo{animation:none}}
     </style>
   </head>
   <body>
     <div id="erp-global-preloader" class="erp-global-preloader" role="status" aria-label="Loading ERP">
       <div class="erp-preloader-orbit" aria-hidden="true">
-        <span id="erp-preloader-fallback" class="erp-preloader-fallback">ERP</span>
         <img id="erp-preloader-logo" class="erp-preloader-logo" alt="" hidden />
       </div>
     </div>

@@ -67,10 +67,11 @@ export function applyBranding(value: ErpBranding): void {
   }
   const logo = value.logoDarkDataUri || value.logoLightDataUri;
   const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
-  const fallback = document.getElementById("erp-preloader-fallback");
-  if (image && fallback) {
+  if (image) {
     image.hidden = !logo?.startsWith("data:image/");
-    fallback.hidden = !image.hidden;
-    if (!image.hidden && logo) image.src = logo;
+    if (!image.hidden && logo && image.getAttribute("src") !== logo) {
+      image.src = logo;
+      image.dataset.readyAt = String(Date.now());
+    }
   }
 }
