@@ -363,13 +363,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet> : null}
 
-          <a href="/" className="rounded-md px-2 py-1 text-sm font-semibold hover:bg-secondary">Meridian ERP</a>
-
-          <span role="status" className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning-soft px-2.5 py-1 text-xs font-medium text-foreground">
-            <span className="size-1.5 rounded-full bg-warning" aria-hidden />
-            {procurementScreen ? session.mode === "live" ? "Live account · screens pending" : session.mode === "unavailable" ? "Procurement unavailable" : session.mode === "loading" ? "Checking access" : "Demo data" : "Demo data"}
-          </span>
-
+          <a href="/" aria-label="ERP home" className="rounded-md px-2 py-1 text-sm font-semibold hover:bg-secondary">ERP workspace</a>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="h-9 gap-1.5 rounded-md px-2" aria-label="Switch ERP module"><Grid2x2 className="size-4" /><span className="hidden sm:inline">Procurement</span><ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>My modules</DropdownMenuLabel>
+              {canOpenHrm ? <DropdownMenuItem asChild><a href="/hrm">Human resources</a></DropdownMenuItem> : null}
+              <DropdownMenuItem asChild><a href="/procurement" aria-current="page" className="font-semibold">Procurement</a></DropdownMenuItem>
+              {canOpenCore ? <DropdownMenuItem asChild><a href="/core">ERP Core</a></DropdownMenuItem> : null}
+              {demoScreen ? <><DropdownMenuSeparator /><DropdownMenuLabel>Preview role</DropdownMenuLabel><DropdownMenuRadioGroup value={role} onValueChange={(value) => setRole(value as Role)}>{workspaces.map((workspace) => <DropdownMenuRadioItem key={workspace.id} value={workspace.id}>{workspace.label}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></> : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {demoScreen ? <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -405,16 +409,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           </DropdownMenu> : session.mode === "live" ? <div className="hidden items-center gap-2 rounded-md border px-3 py-1.5 text-sm md:flex"><Building2 className="size-4" aria-hidden /><span className="max-w-48 truncate">{session.context.company.name}</span></div> : null}
 
           <div className="ml-auto flex items-center gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5" aria-label="Switch ERP module"><Grid2x2 className="size-4" /><span className="hidden sm:inline">Procurement</span><ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>My modules</DropdownMenuLabel>
-                {canOpenHrm ? <DropdownMenuItem asChild><a href="/hrm">Human resources</a></DropdownMenuItem> : null}
-                <DropdownMenuItem asChild><a href="/procurement" aria-current="page" className="font-semibold">Procurement</a></DropdownMenuItem>
-                {canOpenCore ? <DropdownMenuItem asChild><a href="/core">ERP Core</a></DropdownMenuItem> : null}
-                {demoScreen ? <><DropdownMenuSeparator /><DropdownMenuLabel>Demo workspace</DropdownMenuLabel><DropdownMenuRadioGroup value={role} onValueChange={(value) => setRole(value as Role)}>{workspaces.map((workspace) => <DropdownMenuRadioItem key={workspace.id} value={workspace.id}>{workspace.label}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></> : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
             {demoScreen ? <>
             {quickActions.length ? <DropdownMenu>
               <DropdownMenuTrigger asChild><Button size="icon" aria-label="Quick create" title="Quick create"><Plus className="size-4" aria-hidden /></Button></DropdownMenuTrigger>
@@ -452,7 +446,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                 {moduleId === "procurement" ? <>
                   {procAlerts.map((task) => <DropdownMenuItem key={task.id} asChild><Link to="/procurement/approvals/$id" params={{ id: task.id }} className="flex flex-col items-start"><span className="text-sm font-medium">Approval · {task.subject}</span><span className="text-xs text-muted-foreground">{task.id} · {task.state}</span></Link></DropdownMenuItem>)}
-                  {billAlerts.map((invoice) => <DropdownMenuItem key={invoice.id} asChild><Link to="/procurement/invoices/$id" params={{ id: invoice.id }} className="flex flex-col items-start"><span className="text-sm font-medium">Bill needs review · {invoice.supplier}</span><span className="text-xs text-muted-foreground">{invoice.id} · {invoice.status}</span></Link></DropdownMenuItem>)}
                   {!unread ? <p className="px-2 py-3 text-sm text-muted-foreground">No procurement alerts for this company.</p> : null}
                 </> : notifications.map((n) => (
                   <DropdownMenuItem key={n.id} className="flex-col items-start gap-0.5">

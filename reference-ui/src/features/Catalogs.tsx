@@ -699,7 +699,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
     <div>
       <PageHeader
         title={label}
-        subtitle={`${catalog.length} ${label.toLowerCase()} in your local catalog`}
+        subtitle={`${catalog.length} ${label.toLowerCase()}`}
         actions={
           <>
             <ListTools
@@ -910,8 +910,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
           </div>
         )}
         <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400">
-          {filtered.length} records · Fictional data · View, Edit, Delete affect
-          only this browser
+          {filtered.length} records
         </div>
       </Panel>
       <DeleteConfirm

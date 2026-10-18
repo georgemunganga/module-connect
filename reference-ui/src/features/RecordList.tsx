@@ -497,7 +497,7 @@ export function RecordList({
           />
         )}
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-3 text-xs text-[var(--muted-foreground)]">
-          <span>{filtered.length ? `${(currentPage - 1) * 25 + 1}–${Math.min(currentPage * 25, filtered.length)} of ${filtered.length}` : "0 records"} · Fictional data</span>
+          <span>{filtered.length ? `${(currentPage - 1) * 25 + 1}–${Math.min(currentPage * 25, filtered.length)} of ${filtered.length}` : "0 records"}</span>
           <div className="flex items-center gap-2">
             <button type="button" className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-40" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
             <span className="min-w-16 text-center">Page {currentPage} of {pageCount}</span>

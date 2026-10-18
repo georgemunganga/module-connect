@@ -4,6 +4,7 @@ import {
   Building2,
   Home,
   ShoppingBag,
+  LayoutGrid,
   CheckCircle2,
   Package,
   Store,
@@ -26,7 +27,7 @@ import {
 } from "lucide-react";
 import { useApp, money } from "../../lib/store";
 import { modules } from "../../data/modules";
-import { Modal, Button, Badge } from "../ui";
+import { Modal, Button } from "../ui";
 import { BrandMark, useErpShell } from "../../lib/erpShell";
 
 const procurement = [
@@ -99,7 +100,7 @@ export function AppShell() {
   );
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center border-b border-primary/40 bg-primary px-3 text-primary-foreground shadow-sm sm:px-5">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-14 min-w-0 items-center gap-1 border-b border-primary/40 bg-primary px-2 text-primary-foreground shadow-sm sm:gap-2 sm:px-3">
         <button
           className="mr-3 p-1 lg:hidden"
           aria-label="Open navigation"
@@ -107,35 +108,44 @@ export function AppShell() {
         >
           <Menu size={22} />
         </button>
-        <a href="/" className="flex shrink-0 items-center rounded-md px-2 py-1 hover:bg-primary-foreground/10 lg:w-[260px]"><BrandMark onDark /></a>
-        <div className="relative hidden md:block">
+        <a href="/" aria-label="ERP home" className="flex shrink-0 items-center rounded-md px-1.5 py-1 hover:bg-primary-foreground/10 sm:px-2"><BrandMark onDark showName={false} /></a>
+        <div className="relative shrink-0">
+          <button type="button" aria-label="Switch ERP module" aria-expanded={modulesOpen} onClick={() => { setModulesOpen(!modulesOpen); setContextOpen(false); }} className="flex h-9 items-center gap-1 rounded-md px-2 text-xs font-semibold hover:bg-primary-foreground/10 sm:gap-1.5 sm:px-3"><LayoutGrid size={16} /><span className="hidden sm:inline">Procurement</span><ChevronDown size={14} /></button>
+          {modulesOpen && <div className="absolute left-0 top-11 z-50 w-56 rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl">
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">My modules</p>
+            {canOpenHrm && <a href="/hrm" className="block rounded px-2 py-2 text-sm hover:bg-secondary">Human resources</a>}
+            <Link to="/" onClick={() => setModulesOpen(false)} aria-current="page" className="block rounded bg-primary-soft px-2 py-2 text-sm font-medium text-primary">Procurement</Link>
+            {canOpenCore && <a href="/core" className="block rounded px-2 py-2 text-sm hover:bg-secondary">ERP Core</a>}
+          </div>}
+        </div>
+        <div className="relative shrink-0">
           <button
             type="button"
             aria-label="Organisation context"
             aria-expanded={contextOpen}
             onClick={() => { setContextOpen(!contextOpen); setModulesOpen(false); }}
-            className="flex max-w-64 items-center gap-2 rounded-full border border-primary-foreground/40 bg-surface px-3 py-1.5 text-xs text-foreground"
+            className="flex max-w-64 items-center gap-2 rounded-full border border-primary-foreground/40 bg-surface px-2 py-1.5 text-xs text-foreground md:px-3"
           >
             <Building2 size={15} className="shrink-0" />
-            <span className="truncate">{activeEntity?.name || branding?.displayName || "Organisation"}{activeBranch ? ` · ${activeBranch.name}` : ""}</span>
-            <ChevronDown size={14} className="shrink-0" />
+            <span className="hidden truncate md:inline">{activeEntity?.name || branding?.displayName || "Organisation"}{activeBranch ? ` · ${activeBranch.name}` : ""}</span>
+            <ChevronDown size={14} className="hidden shrink-0 md:block" />
           </button>
-          {contextOpen && <div className="absolute left-0 top-11 max-h-[60vh] w-80 overflow-y-auto rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl">
+          {contextOpen && <div className="fixed inset-x-3 top-14 z-50 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl md:absolute md:inset-x-auto md:left-0 md:top-11 md:w-80">
             <p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">Organisation context</p>
             {contextAvailable ? entities.map((entity) => <div key={entity.id}>
               <button type="button" onClick={() => selectEntity(entity.id)} className={`w-full rounded px-2 py-2 text-left text-sm hover:bg-secondary ${selection.entityId === entity.id && !selection.branch ? "bg-primary-soft font-semibold text-primary" : ""}`}>{entity.name}</button>
               {branches.filter((branch) => branch.legalEntityId === entity.id).map((branch) => <button key={branch.id} type="button" onClick={() => selectBranch(branch.id, entity.id)} className={`block w-full rounded px-6 py-1.5 text-left text-xs hover:bg-secondary ${selection.branch === branch.id ? "bg-primary-soft font-semibold text-primary" : "text-muted-foreground"}`}>{branch.name}</button>)}
             </div>) : <p className="px-2 py-2 text-xs text-muted-foreground">Sign in to the ERP to see your permitted entities and branches.</p>}
-            <p className="mt-2 border-t border-border px-2 pt-2 text-[11px] text-muted-foreground">Procurement demo records are not filtered by this selection.</p>
           </div>}
         </div>
-        <div className="relative ml-auto hidden w-[min(25vw,320px)] md:block lg:ml-5">
+        <div className={`${searchOpen ? "fixed inset-x-3 top-16 z-50 block" : "hidden"} lg:relative lg:inset-auto lg:top-auto lg:z-auto lg:ml-auto lg:block lg:w-[min(25vw,320px)]`}>
           <Search
             className="absolute left-3 top-2.5 text-muted-foreground"
             size={17}
           />
           <input
-            aria-label="Search demo records"
+            aria-label="Search procurement"
+            autoFocus={searchOpen}
             value={query}
             onFocus={() => setSearchOpen(true)}
             onChange={(event) => {
@@ -143,7 +153,7 @@ export function AppShell() {
               setSearchOpen(true);
             }}
             className="w-full rounded-full border border-primary-foreground/40 bg-surface py-2 pl-10 pr-3 text-xs text-foreground outline-none focus:border-ring"
-            placeholder="Search in Procurement ( / )"
+            placeholder="Search procurement"
           />
           {searchOpen && (
             <div className="absolute left-0 top-11 w-full rounded-md border border-slate-200 bg-white py-2 text-slate-800 shadow-xl">
@@ -177,19 +187,8 @@ export function AppShell() {
             </div>
           )}
         </div>
-        <div className="ml-auto flex items-center gap-2 sm:gap-4">
-          <div className="relative">
-            <button type="button" aria-label="Switch ERP module" aria-expanded={modulesOpen} onClick={() => { setModulesOpen(!modulesOpen); setContextOpen(false); }} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold hover:bg-primary-foreground/10"><ShoppingBag size={16} /><span className="hidden sm:inline">Procurement</span><ChevronDown size={14} /></button>
-            {modulesOpen && <div className="absolute right-0 top-11 z-50 w-56 rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl">
-              <p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">My modules</p>
-              {canOpenHrm && <a href="/hrm" className="block rounded px-2 py-2 text-sm hover:bg-secondary">Human resources</a>}
-              <Link to="/" onClick={() => setModulesOpen(false)} className="block rounded bg-primary-soft px-2 py-2 text-sm font-medium text-primary">Procurement</Link>
-              {canOpenCore && <a href="/core" className="block rounded px-2 py-2 text-sm hover:bg-secondary">ERP Core</a>}
-            </div>}
-          </div>
-          <span className="hidden rounded-full border border-warning/40 bg-warning-soft px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-foreground xl:block">
-            Demo data
-          </span>
+        <div className="ml-auto flex items-center gap-2 sm:gap-3 md:ml-2">
+          <button type="button" aria-label="Search procurement" className="rounded-md p-1 lg:hidden" onClick={() => setSearchOpen(true)}><Search size={19} /></button>
           <div className="relative">
             <button
               onClick={() => setQuick(!quick)}
@@ -229,12 +228,9 @@ export function AppShell() {
             <Bell size={19} />
             <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-primary bg-danger" />
           </button>
-          <Link to="/settings" aria-label="Open settings" className="p-1">
-            <Settings size={19} />
-          </Link>
           <div className="relative">
             <button
-              aria-label="Open demo account"
+              aria-label="User menu"
               onClick={() => setAccount(!account)}
               className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-foreground/15 text-primary-foreground"
             >
@@ -242,15 +238,11 @@ export function AppShell() {
             </button>
             {account && (
               <div className="absolute right-0 top-11 w-60 rounded-lg bg-white p-4 text-slate-700 shadow-xl">
-                <p className="font-semibold">{branding?.displayName || "ERP workspace"}</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Fictional demo organization
-                </p>
-                <Badge>Procurement admin</Badge>
+                <p className="font-semibold">ERP account</p>
                 <a href="/core/workspace/settings/organization" className="mt-3 block text-sm text-blue-500">
                   Organization profile
                 </a>
-                <a href="/" className="mt-3 block text-sm text-blue-500">Back to ERP</a>
+                <Link to="/settings" className="mt-3 block text-sm text-blue-500">Procurement settings</Link>
               </div>
             )}
           </div>
@@ -274,10 +266,6 @@ export function AppShell() {
           >
             <X size={20} />
           </button>
-        </div>
-        <div className="px-4 pb-2 text-xs text-rail-muted md:hidden">
-          <span className="block truncate">{activeEntity?.name || branding?.displayName || "Organisation"}{activeBranch ? ` · ${activeBranch.name}` : ""}</span>
-          <a href="/hrm" className="mt-1 inline-block text-rail-foreground underline underline-offset-2">Change branch in ERP</a>
         </div>
         <div className="px-3 py-4">
           <button
@@ -356,19 +344,11 @@ export function AppShell() {
             <Menu size={18} />
           </button>
         )}
-        <div className="border-b border-border bg-surface-muted px-4 py-2 text-[11px] text-muted-foreground sm:px-7">
-          Fictional demo data <span className="mx-2 text-slate-200">|</span>{" "}
-          Changes stay in this browser. ERP records are not connected yet.
-        </div>
+        <div className="border-b border-border bg-surface-muted px-4 py-2 text-[11px] text-muted-foreground sm:px-7">Preview workspace · Changes stay in this browser.</div>
         <Outlet />
       </main>
       <footer className="fixed inset-x-0 bottom-0 z-20 flex h-8 items-center justify-between border-t border-border bg-surface px-4 text-[10px] text-muted-foreground">
-        <span>
-          Procurement workspace{" "}
-          <span className="ml-3 hidden sm:inline">
-            React · TypeScript · Tailwind
-          </span>
-        </span>
+        <span>Procurement workspace</span>
         <button
           onClick={() => setHelp(true)}
           className="flex items-center gap-1.5 text-blue-500"
