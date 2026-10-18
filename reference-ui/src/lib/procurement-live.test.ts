@@ -7,7 +7,7 @@ const worker = "00000000-0000-0000-0000-000000000003";
 const capabilities = {
   vendorDraft: true, itemDraft: true, requestDraft: true, approvals: false,
   sourcing: false, contracts: false, orders: false, receiving: false,
-  invoiceValidation: false, financeHandoff: false, supplierPortal: false,
+  invoiceValidation: false, financeHandoff: false, supplierPortal: false, planningDraft: true, configurationDraft: true,
 };
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 
