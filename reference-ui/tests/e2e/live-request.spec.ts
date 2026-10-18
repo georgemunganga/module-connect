@@ -1,0 +1,100 @@
+import { expect, test, type Page } from "@playwright/test";
+
+const companyId = "11111111-1111-4111-8111-111111111111";
+const workerId = "22222222-2222-4222-8222-222222222222";
+const requestId = "77777777-7777-4777-8777-777777777777";
+const lineId = "88888888-8888-4888-8888-888888888888";
+const capabilities = Object.fromEntries([
+  "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
+  "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "configurationDraft", "contractDraft", "sourcingDraft",
+].map((key) => [key, key === "requestDraft"]));
+type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
+
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean } = {}) {
+  let record: RecordValue | null = null;
+  await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Requester", email: "requester@example.test", roles: ["employee"] } });
+    if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
+    if (path === "/api/hrm/admin/locations") return json({ items: [] });
+    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
+    if (path === "/api/procurement/v1/requests") {
+      if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403) : json({ records: record ? [{ ...record, lineCount: record.lines.length }] : [], count: record ? 1 : 0, limit: 50, offset: 0 });
+      if (request.method() === "POST") {
+        const input = request.postDataJSON();
+        record = { ...input, id: requestId, number: "PR-001", status: "Draft", version: 1, currencyCode: input.currencyCode || "ZMW", createdAt: "2026-10-18T00:00:00Z",
+          lines: input.lines.map((line: Record<string, unknown>, index: number) => ({ ...line, id: index ? "99999999-9999-4999-8999-999999999999" : lineId, lineNumber: index + 1, approvalStatus: "Pending" })) };
+        return json(record, 201);
+      }
+    }
+    if (path === `/api/procurement/v1/requests/${requestId}` && record) {
+      if (request.method() === "GET") return json(record);
+      if (request.method() === "PUT") {
+        if (options.staleUpdate) return json({ message: "Refresh this request before saving changes." }, 409);
+        const input = request.postDataJSON();
+        if (input.version !== record.version) return json({ message: "Stale version" }, 409);
+        record = { ...record, ...input, version: input.version + 1,
+          lines: input.lines.map((line: Record<string, unknown>, index: number) => ({ ...line, id: line.id || (index ? "99999999-9999-4999-8999-999999999999" : lineId), lineNumber: index + 1, approvalStatus: "Pending" })) };
+        return json(record);
+      }
+    }
+    if (path === `/api/procurement/v1/requests/${requestId}/withdraw` && record) {
+      record = { ...record, status: "Withdrawn", version: record.version + 1 };
+      return json(record);
+    }
+    return json({ message: `Unexpected route: ${path}` }, 404);
+  });
+}
+
+test("request draft lines persist, edit and withdraw without submission", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/requests");
+  await expect(page.getByText("What do you need to buy?")).toBeVisible();
+  await expect(page.getByText("Office equipment for new team")).toHaveCount(0);
+  await page.getByRole("link", { name: "New request" }).first().click();
+  await page.getByLabel("What do you need?").fill("Office chairs for Lusaka");
+  await page.getByLabel("Item or service 1").fill("Office chair");
+  await page.getByLabel("Quantity").fill("3");
+  await page.getByLabel("Estimated unit price").fill("1200");
+  await expect(page.getByText("Estimated total: ZMW 3,600")).toBeVisible();
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Office chairs for Lusaka" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Office chair" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("cell", { name: "Office chair" })).toBeVisible();
+  await page.getByRole("link", { name: "Edit request" }).click();
+  await page.getByLabel("Quantity").fill("4");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("4", { exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Withdraw draft" }).click();
+  await expect(page.getByRole("heading", { name: "My Requests" })).toBeVisible();
+  await expect(page.getByText("Withdrawn")).toBeVisible();
+});
+
+test("request list denial shows no local demo records", async ({ page }) => {
+  await mockErp(page, { denyList: true });
+  await page.goto("/procurement/workspace/requests");
+  await expect(page.getByRole("alert")).toContainText("do not have access");
+  await expect(page.getByText("Office equipment for new team")).toHaveCount(0);
+});
+
+test("stale request edit keeps entered lines", async ({ page }) => {
+  await mockErp(page, { staleUpdate: true });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Office chairs for Lusaka");
+  await page.getByLabel("Item or service 1").fill("Office chair");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("link", { name: "Edit request" }).click();
+  await page.getByLabel("Item or service 1").fill("Unsaved chair change");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("alert")).toContainText("Refresh");
+  await expect(page.getByLabel("Item or service 1")).toHaveValue("Unsaved chair change");
+});

@@ -10,6 +10,7 @@ import { ErpShellProvider } from "../lib/erpShell";
 import { ProcurementLiveGate, isProcurementLiveMode } from "../lib/ProcurementLiveGate";
 import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/LiveVendors";
 import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
+import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../features/LiveRequests";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -62,13 +63,13 @@ export function App() {
             />
             <Route
               path="/procurement-requests"
-              element={<RecordList kind="requests" procurement />}
+              element={isProcurementLiveMode ? <LiveRequestList /> : <RecordList kind="requests" procurement />}
             />
             {Object.values(modules).map((module) => (
               <Route
                 key={module.key}
                 path={`/${module.key}`}
-                element={<RecordList key={module.key} kind={module.key} />}
+                element={isProcurementLiveMode && module.key === "requests" ? <LiveRequestList /> : <RecordList key={module.key} kind={module.key} />}
               />
             ))}
             {Object.values(modules).map((module) => (
@@ -77,7 +78,7 @@ export function App() {
                 path={`/${module.key}/:id`}
                 element={
                   <div className="p-5 sm:p-8">
-                    <RecordRoute kind={module.key} />
+                    {isProcurementLiveMode && module.key === "requests" ? <LiveRequestDetail /> : <RecordRoute kind={module.key} />}
                   </div>
                 }
               />
@@ -89,7 +90,7 @@ export function App() {
                   key={`${module.key}-new`}
                   path={`/${module.key}/new`}
                   element={
-                    <EditorRoute
+                    isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />
                   }
@@ -98,7 +99,7 @@ export function App() {
                   key={`${module.key}-edit`}
                   path={`/${module.key}/:id/edit`}
                   element={
-                    <EditorRoute
+                    isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />
                   }
