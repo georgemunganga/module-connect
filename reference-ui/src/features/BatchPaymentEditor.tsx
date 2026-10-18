@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save } from "lucide-react";
@@ -150,7 +151,7 @@ export function BatchPaymentEditor() {
         >
           {candidates.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[680px] text-left text-sm">
+              <RecordTable variant="compact" className="w-full min-w-[680px] text-left text-sm">
                 <thead className="table-head">
                   <tr>
                     {[
@@ -195,7 +196,7 @@ export function BatchPaymentEditor() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </RecordTable>
             </div>
           ) : (
             <EmptyState

@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -123,7 +124,7 @@ export function BatchPayments() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse">
+            <RecordTable className="w-full min-w-[720px] border-collapse">
               <thead>
                 <tr className="table-head">
                   <th className="table-cell w-12 text-left">
@@ -178,7 +179,7 @@ export function BatchPayments() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </RecordTable>
           </div>
         )}
       </Panel>

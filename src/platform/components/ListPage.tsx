@@ -1,3 +1,4 @@
+import { RecordTable } from "./RecordTable";
 import { ArrowDownAZ, Columns3, Download, Filter, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -360,7 +361,7 @@ export function ListPage<T extends { id: string }>({
         </div>
       ) : (
         <div className="overflow-x-auto" style={{ contain: "paint" }}>
-          <table className="w-full min-w-[42rem] border-collapse text-left text-sm">
+          <RecordTable className="w-full min-w-[42rem] border-collapse text-left text-sm">
             <thead className="border-b border-border bg-surface-muted/60">
               <tr>
                 <th scope="col" className="w-11 px-4 py-3">
@@ -418,7 +419,7 @@ export function ListPage<T extends { id: string }>({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </RecordTable>
         </div>
       )}
       <footer className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">

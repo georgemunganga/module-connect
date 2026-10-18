@@ -1,3 +1,4 @@
+import { RecordTable } from "./RecordTable";
 import type { ReactNode } from "react";
 import type { ListColumn } from "./ListTools";
 import { updateVisibleSelection } from "../../lib/list-state";
@@ -37,7 +38,7 @@ export function StandardDataTable<T extends { id: string }>({
 
   return (
     <div className="overflow-x-auto" data-testid="erp-record-table">
-      <table className="w-full min-w-[940px] table-fixed border-collapse text-left text-sm">
+      <RecordTable className="w-full min-w-[940px] table-fixed border-collapse text-left text-sm">
         <thead className="table-head border-b border-[var(--border)] bg-[var(--surface-muted)]">
           <tr>
             <th scope="col" className="w-11 px-4 py-3">
@@ -91,7 +92,7 @@ export function StandardDataTable<T extends { id: string }>({
             </tr>
           ))}
         </tbody>
-      </table>
+      </RecordTable>
     </div>
   );
 }

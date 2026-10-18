@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useState, type FormEvent } from "react";
 import {
   Link,
@@ -482,7 +483,7 @@ export function RecordDetail({ kind }: { kind: string }) {
         {active === "items" && (
           <DetailSection title="Items / Line Details">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px] text-left text-sm">
+              <RecordTable variant="compact" className="w-full min-w-[700px] text-left text-sm">
                 <thead className="table-head">
                   <tr>
                     {[
@@ -515,7 +516,7 @@ export function RecordDetail({ kind }: { kind: string }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </RecordTable>
             </div>
             <div className="ml-auto mt-4 max-w-xs space-y-2 text-sm">
               <div className="flex justify-between">
@@ -540,7 +541,7 @@ export function RecordDetail({ kind }: { kind: string }) {
           <DetailSection title="Related Records">
             {related.length ? (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-left text-sm">
+                <RecordTable variant="compact" className="w-full min-w-[620px] text-left text-sm">
                   <thead className="table-head">
                     <tr>
                       {[
@@ -578,7 +579,7 @@ export function RecordDetail({ kind }: { kind: string }) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </RecordTable>
               </div>
             ) : (
               <EmptyState

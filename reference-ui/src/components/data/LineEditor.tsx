@@ -1,3 +1,4 @@
+import { RecordTable } from "./RecordTable";
 import { Link } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import { Button, Input, Select } from "../ui";
@@ -59,7 +60,7 @@ export function LineEditor({
         </Link>
       </header>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left">
+        <RecordTable variant="compact" className="w-full min-w-[720px] text-left">
           <thead className="table-head">
             <tr>
               {[
@@ -168,7 +169,7 @@ export function LineEditor({
               </tr>
             ))}
           </tbody>
-        </table>
+        </RecordTable>
       </div>
       <div className="p-3">
         <Button

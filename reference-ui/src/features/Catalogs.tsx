@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Link,
@@ -787,7 +788,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
           />
         ) : (
           <div className="overflow-x-auto" role="region" aria-label={`${label} table`} tabIndex={0}>
-            <table className="w-full min-w-[980px] table-fixed border-collapse">
+            <RecordTable className="w-full min-w-[980px] table-fixed border-collapse">
               <thead>
                 <tr className="table-head">
                   <th
@@ -903,7 +904,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </RecordTable>
           </div>
         )}
         <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400">
@@ -1681,7 +1682,7 @@ export function CatalogEditor({ kind }: { kind: CatalogKind }) {
                   </div>
                   {vendor.contacts.length ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[1120px] text-left text-xs">
+                      <RecordTable className="w-full min-w-[1120px] text-left text-xs">
                         <thead className="table-head">
                           <tr>
                             {[
@@ -1766,7 +1767,7 @@ export function CatalogEditor({ kind }: { kind: CatalogKind }) {
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </RecordTable>
                     </div>
                   ) : (
                     <p className="py-8 text-center text-sm text-slate-400">

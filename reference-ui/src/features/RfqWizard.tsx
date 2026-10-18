@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -603,7 +604,7 @@ export function RfqWizard() {
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[650px] border-collapse text-left text-sm">
+                      <RecordTable variant="compact" className="w-full min-w-[650px] border-collapse text-left text-sm">
                         <thead>
                           <tr className="table-head">
                             <th className="px-5 py-3">Item</th>
@@ -648,7 +649,7 @@ export function RfqWizard() {
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </RecordTable>
                     </div>
                   )}
                   {errors.lines && (
@@ -922,7 +923,7 @@ export function RfqWizard() {
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                      <RecordTable variant="compact" className="w-full min-w-[760px] border-collapse text-left text-sm">
                         <thead>
                           <tr className="table-head">
                             <th className="px-5 py-3">Name</th>
@@ -985,7 +986,7 @@ export function RfqWizard() {
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </RecordTable>
                     </div>
                   )}
                 </Panel>

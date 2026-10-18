@@ -1,3 +1,4 @@
+import { RecordTable } from "./RecordTable";
 import { useMemo, useState } from "react";
 import { Download, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -89,7 +90,7 @@ export function DataImportPanel({ recordName, fields, validate, apply, onDone, m
     </> : null}
     {stage === "preview" ? <>
       <section className="rounded-lg border bg-surface p-5"><h2 className="font-semibold">3. Review before saving</h2><p className="mt-1 text-sm text-muted-foreground">{ready} ready · {rows.length - ready} need attention. Rows with errors or duplicate names/IDs are skipped; only ready rows will be added.</p>
-        <div className="mt-4 max-h-[28rem] overflow-auto"><table className="w-full min-w-[42rem] text-left text-sm"><thead><tr className="border-b"><th className="p-2">Row</th>{fields.filter((field) => field.required).map((field) => <th className="p-2" key={field.key}>{field.label}</th>)}<th className="p-2">Result</th></tr></thead><tbody>{rows.map((row, index) => <tr className="border-b" key={index}><td className="p-2">{index + 2}</td>{fields.filter((field) => field.required).map((field) => <td className="max-w-48 truncate p-2" title={row[field.key]} key={field.key}>{row[field.key] || "—"}</td>)}<td className={`p-2 ${problems[index]?.length ? "text-danger" : "text-success"}`}>{problems[index]?.length ? problems[index].join("; ") : "Ready"}</td></tr>)}</tbody></table></div>
+        <div className="mt-4 max-h-[28rem] overflow-auto"><RecordTable variant="compact" className="w-full min-w-[42rem] text-left text-sm"><thead><tr className="border-b"><th className="p-2">Row</th>{fields.filter((field) => field.required).map((field) => <th className="p-2" key={field.key}>{field.label}</th>)}<th className="p-2">Result</th></tr></thead><tbody>{rows.map((row, index) => <tr className="border-b" key={index}><td className="p-2">{index + 2}</td>{fields.filter((field) => field.required).map((field) => <td className="max-w-48 truncate p-2" title={row[field.key]} key={field.key}>{row[field.key] || "—"}</td>)}<td className={`p-2 ${problems[index]?.length ? "text-danger" : "text-success"}`}>{problems[index]?.length ? problems[index].join("; ") : "Ready"}</td></tr>)}</tbody></RecordTable></div>
         <div className="mt-4 flex flex-wrap gap-2"><Button variant="outline" onClick={() => setStage("map")}>Back to columns</Button><Button disabled={!ready} onClick={confirm}>Add {ready} {ready === 1 ? oneName : recordName}</Button><Button variant="outline" onClick={clearFile}>Clear file</Button></div>
       </section>
     </> : null}

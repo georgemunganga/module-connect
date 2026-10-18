@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
@@ -249,7 +250,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
         {["payment-terms", "reporting-tags", "web-tabs"].includes(slug) && (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[500px] text-left">
+              <RecordTable className="w-full min-w-[500px] text-left">
                 <thead className="table-head">
                   <tr>
                     <th className="table-cell">Name</th>
@@ -321,7 +322,7 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </RecordTable>
             </div>
             {!rows.length && (
               <p className="text-sm text-muted-foreground">

@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -702,7 +703,7 @@ function DirectoryConfig({
       }
     >
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[600px] text-left">
+        <RecordTable className="w-full min-w-[600px] text-left">
           <thead className="table-head">
             <tr>
               <th className="table-cell">Name</th>
@@ -732,7 +733,7 @@ function DirectoryConfig({
               </tr>
             ))}
           </tbody>
-        </table>
+        </RecordTable>
       </div>
       <div className="border-t border-border px-5 py-4 text-xs text-muted-foreground">
         Fictional users and roles only. Save actions are local previews.
@@ -1070,7 +1071,7 @@ function ApprovalsPanel({
           </Button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left">
+          <RecordTable className="w-full min-w-[620px] text-left">
             <thead className="table-head">
               <tr>
                 <th className="table-cell">Level</th>
@@ -1097,7 +1098,7 @@ function ApprovalsPanel({
                 </td>
               </tr>
             </tbody>
-          </table>
+          </RecordTable>
         </div>
       </div>
     </Panel>
@@ -1139,7 +1140,7 @@ function BuilderList({
     >
       <div className="overflow-x-auto">
         {entries.length ? (
-          <table className="w-full min-w-[620px] text-left">
+          <RecordTable className="w-full min-w-[620px] text-left">
             <thead className="table-head">
               <tr>
                 <th className="table-cell">Name</th>
@@ -1169,7 +1170,7 @@ function BuilderList({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </RecordTable>
         ) : (
           <EmptyState
             title={`No ${kind} configured`}
@@ -1481,7 +1482,7 @@ function AutomationPage({
       {config.rows.length ? (
         <Panel title="Configured previews">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[650px] text-left">
+            <RecordTable className="w-full min-w-[650px] text-left">
               <thead className="table-head">
                 <tr>
                   <th className="table-cell">Name</th>
@@ -1517,7 +1518,7 @@ function AutomationPage({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </RecordTable>
           </div>
         </Panel>
       ) : (

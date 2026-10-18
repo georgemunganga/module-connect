@@ -94,3 +94,28 @@ a:focus-visible {
     transition: none !important;
   }
 }
+
+/* Shared record-table surface, including denser editor and preview variants. */
+.erp-record-table { color: var(--foreground); }
+.erp-record-table thead { background: var(--surface-muted); }
+.erp-record-table thead tr { border-bottom: 1px solid var(--border); }
+.erp-record-table thead th {
+  padding: 12px 16px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: normal;
+  line-height: 20px;
+  text-transform: none;
+  white-space: nowrap;
+}
+.erp-record-table tbody tr { border-bottom: 1px solid var(--border); transition: background-color 150ms ease; }
+.erp-record-table tbody tr:last-child { border-bottom: 0; }
+.erp-record-table tbody tr:hover { background: var(--primary-soft); }
+.erp-record-table tbody :is(td, th) { padding: 12px 16px; vertical-align: middle; }
+.erp-record-table tbody th { text-align: left; }
+.erp-record-table caption:not(.sr-only) { padding: 12px 16px; text-align: left; color: var(--muted-foreground); }
+.erp-record-table--compact thead th,
+.erp-record-table--compact tbody :is(td, th) { padding: 8px 12px; }
+.erp-record-table--matrix thead th,
+.erp-record-table--matrix tbody :is(td, th) { padding: revert-layer; }

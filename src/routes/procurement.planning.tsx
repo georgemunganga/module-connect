@@ -1,3 +1,4 @@
+import { RecordTable } from "@/platform/components/RecordTable";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, Info, Lock } from "lucide-react";
 import { useState } from "react";
@@ -155,7 +156,7 @@ function PlanningPage() {
             </div>
           </div>
           <div className="overflow-x-auto rounded-lg border bg-surface" style={{ contain: "paint" }}>
-            <table className="w-full text-sm">
+            <RecordTable className="min-w-[840px] text-sm">
               <thead className="border-b text-left text-xs text-muted-foreground">
                 <tr><th className="p-3">What is needed</th><th className="p-3">Estimated cost</th><th className="p-3">Needed by</th><th className="p-3">How to buy</th><th className="p-3">Funding</th><th className="p-3">{view === "procurement" ? "Difference / request" : "Owner"}</th><th className="p-3">Status / action</th></tr>
               </thead>
@@ -179,7 +180,7 @@ function PlanningPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </RecordTable>
             {!lines.length ? <p className="p-4 text-sm text-muted-foreground">No items match these filters.</p> : null}
           </div>
           {editing && editable ? <LineEditor line={editing} setLine={setEditing} onCancel={() => setEditing(null)} onSave={() => { try { updatePlanLine(plan.id, editing.id, editing, role); setEditing(null); setNotice("Item saved in the current plan."); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save item."); } }} /> : null}

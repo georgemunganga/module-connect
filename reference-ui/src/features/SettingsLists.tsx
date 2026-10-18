@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge, Button, Field, Input, Panel, Select } from "../components/ui";
@@ -50,7 +51,7 @@ export function CurrencySettings({
       }
     >
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left">
+        <RecordTable className="w-full min-w-[720px] text-left">
           <thead className="table-head">
             <tr>
               <th className="table-cell">Currency</th>
@@ -123,7 +124,7 @@ export function CurrencySettings({
               </tr>
             ))}
           </tbody>
-        </table>
+        </RecordTable>
       </div>
       <div className="border-t border-border px-5 py-4">
         <Button onClick={() => onSavePreview("Currencies")}>
@@ -184,7 +185,7 @@ export function TaxSettings({
       }
     >
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left">
+        <RecordTable className="w-full min-w-[720px] text-left">
           <thead className="table-head">
             <tr>
               <th className="table-cell">Name</th>
@@ -268,7 +269,7 @@ export function TaxSettings({
               </tr>
             ))}
           </tbody>
-        </table>
+        </RecordTable>
       </div>
       <div className="border-t border-border px-5 py-4">
         <Button onClick={() => onSavePreview(title)}>

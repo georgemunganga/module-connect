@@ -1,3 +1,4 @@
+import { RecordTable } from "./RecordTable";
 import { useMemo, useState, type ChangeEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, FileUp } from "lucide-react";
 import { Button, Field, Input, Modal, Select } from "../ui";
@@ -499,7 +500,7 @@ export function ListImportWizard({
                 </span>
               </div>
               <div className="overflow-x-auto rounded-md border border-slate-200">
-                <table className="w-full text-left text-sm">
+                <RecordTable variant="compact" className="w-full text-left text-sm">
                   <thead className="table-head">
                     <tr>
                       <th className="table-cell">File column</th>
@@ -549,7 +550,7 @@ export function ListImportWizard({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </RecordTable>
               </div>
               <p className="text-xs text-slate-500">
                 Required fields:{" "}
@@ -579,7 +580,7 @@ export function ListImportWizard({
                 </p>
               ) : (
                 <div className="max-h-72 overflow-auto rounded-md border border-slate-200">
-                  <table className="w-full min-w-[560px] text-left text-xs">
+                  <RecordTable variant="compact" className="w-full min-w-[560px] text-left text-xs">
                     <thead className="table-head">
                       <tr>
                         {fields
@@ -608,7 +609,7 @@ export function ListImportWizard({
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </RecordTable>
                 </div>
               )}
               <p className="text-xs text-slate-500">

@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -180,7 +181,7 @@ export function Budgets() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse">
+            <RecordTable className="w-full min-w-[720px] border-collapse">
               <thead>
                 <tr className="table-head">
                   <th className="table-cell text-left">Budget</th>
@@ -244,7 +245,7 @@ export function Budgets() {
                   );
                 })}
               </tbody>
-            </table>
+            </RecordTable>
           </div>
         )}
       </Panel>
@@ -477,7 +478,7 @@ export function Analytics() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse">
+            <RecordTable className="w-full min-w-[760px] border-collapse">
               <thead>
                 <tr className="table-head">
                   <th className="table-cell text-left">Report name</th>
@@ -513,7 +514,7 @@ export function Analytics() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </RecordTable>
           </div>
         )}
       </Panel>

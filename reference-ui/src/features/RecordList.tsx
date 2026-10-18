@@ -1,3 +1,4 @@
+import { RecordTable } from "../components/data/RecordTable";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -548,7 +549,7 @@ export function RecordList({
           </div>
           {detail.lines?.length ? (
             <div className="mb-6 overflow-x-auto">
-              <table className="w-full text-left">
+              <RecordTable variant="compact" className="w-full text-left">
                 <thead className="table-head">
                   <tr>
                     {["Item", "Quantity", "Rate", "Amount"].map((label) => (
@@ -572,7 +573,7 @@ export function RecordList({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </RecordTable>
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">

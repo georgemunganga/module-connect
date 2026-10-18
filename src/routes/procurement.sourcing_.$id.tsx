@@ -1,3 +1,4 @@
+import { RecordTable } from "@/platform/components/RecordTable";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, Lock } from "lucide-react";
 import { useState } from "react";
@@ -113,7 +114,7 @@ function EventDetail() {
             {surrogate ? <SurrogateForm e={e} onCancel={() => setSurrogate(false)} onDone={(b) => { setSurrogate(false); setE({ ...e, bids: [...e.bids, b] }); ensureEvaluation(e.id); updateCommercial((state) => ({ ...state, evaluations: state.evaluations.map((evaluation) => evaluation.eventId === e.id ? { ...evaluation, bids: [...evaluation.bids, { id: b.id, supplier: b.supplier, compliant: null, reason: "", score: null, conflict: false, deliveryCost: 0, tax: 0 }] } : evaluation) })); }} /> : null}
             {e.bids.length ? (
               <div className="overflow-x-auto rounded-lg border bg-surface">
-                <table className="w-full text-sm">
+                <RecordTable variant="compact" className="min-w-[640px] text-sm">
                   <thead className="border-b text-left text-xs text-muted-foreground"><tr><th className="p-3">Supplier</th><th className="p-3">Received</th><th className="p-3">Channel</th><th className="p-3">Version</th><th className="p-3">Content</th></tr></thead>
                   <tbody className="divide-y">
                     {e.bids.map((b) => (
@@ -126,7 +127,7 @@ function EventDetail() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </RecordTable>
               </div>
             ) : <EmptyState title={e.state === "Closed" ? "No responses received" : "No responses yet"} body={e.state === "Closed" ? "Re-invite suppliers with a new event, or use a direct purchase with a recorded reason." : "Responses appear here as they arrive, sealed until opening."} />}
             <p className="text-xs text-muted-foreground">Submitted responses are locked. A supplier can submit a new version before closing; earlier versions are kept.</p>
