@@ -65,6 +65,8 @@ export function LiveContractEditor() {
   const { legalEntityId, defaultCurrencyCode } = useCompany();
   const [draft, setDraft] = useState<ContractDraft>(() => emptyDraft(defaultCurrencyCode));
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [supplierLoading, setSupplierLoading] = useState(false);
   const [version, setVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,11 +74,8 @@ export function LiveContractEditor() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError("");
-    Promise.all([
-      listVendorDrafts(legalEntityId, { pageSize: 100, signal: controller.signal }),
-      id ? getOwnContractDraft(legalEntityId, id, controller.signal) : Promise.resolve(null),
-    ]).then(([supplierPage, record]) => {
-      setVendors(supplierPage.items.filter((vendor) => vendor.status === "Draft" || ((vendor.status === "Active" || vendor.status === "Approved") && vendor.isOrderable)));
+    (id ? getOwnContractDraft(legalEntityId, id, controller.signal) : Promise.resolve(null))
+      .then((record) => {
       if (record) {
         setVersion(record.version);
         setDraft({ supplierId: record.supplierId, title: record.title, contractType: record.contractType,
@@ -88,6 +87,18 @@ export function LiveContractEditor() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, defaultCurrencyCode]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setSupplierLoading(true);
+      listVendorDrafts(legalEntityId, { search: supplierSearch.trim() || undefined, pageSize: 100, signal: controller.signal })
+        .then((page) => setVendors(page.items.filter((vendor) => vendor.status === "Draft"
+          || ((vendor.status === "Active" || vendor.status === "Approved") && vendor.isOrderable))))
+        .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
+        .finally(() => { if (!controller.signal.aborted) setSupplierLoading(false); });
+    }, supplierSearch ? 250 : 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [legalEntityId, supplierSearch]);
   const field = <K extends keyof ContractDraft>(key: K, value: ContractDraft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
   async function save(event: FormEvent) {
@@ -109,8 +120,9 @@ export function LiveContractEditor() {
     {loading ? <p role="status">Loading contract…</p> : <form onSubmit={save} className="max-w-5xl space-y-5">
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current draft before retrying.</span>}</p>}
       <Panel title="Agreement details"><div className="grid gap-4 p-5 sm:grid-cols-2">
-        <Field label="Supplier" className="sm:col-span-2"><Select required value={draft.supplierId} onChange={(event) => field("supplierId", event.target.value)}><option value="">Choose a supplier</option>{vendors.map((vendor) => <option value={vendor.id} key={vendor.id}>{vendor.displayName} ({vendor.status})</option>)}</Select></Field>
-        {!vendors.length && <p className="sm:col-span-2 text-sm text-muted-foreground">Add an eligible supplier before creating a contract.</p>}
+        <Field label="Search suppliers" className="sm:col-span-2"><Input value={supplierSearch} onChange={(event) => setSupplierSearch(event.target.value)} placeholder="Search by name or supplier number" /></Field>
+        <Field label="Supplier" className="sm:col-span-2"><Select required value={draft.supplierId} onChange={(event) => field("supplierId", event.target.value)}><option value="">Choose a supplier</option>{draft.supplierId && !vendors.some((vendor) => vendor.id === draft.supplierId) && <option value={draft.supplierId}>Selected supplier</option>}{vendors.map((vendor) => <option value={vendor.id} key={vendor.id}>{vendor.displayName} ({vendor.status})</option>)}</Select></Field>
+        {!supplierLoading && !vendors.length && <p className="sm:col-span-2 text-sm text-muted-foreground">{supplierSearch ? "No eligible suppliers match that search." : "Add an eligible supplier before creating a contract."}</p>}
         <Field label="Contract title" className="sm:col-span-2"><Input required maxLength={300} value={draft.title} onChange={(event) => field("title", event.target.value)} /></Field>
         <Field label="Contract type"><Select value={draft.contractType} onChange={(event) => field("contractType", event.target.value)}><option value="Supply">Goods supply</option><option value="Service">Services</option><option value="Framework">Framework agreement</option><option value="Subscription">Subscription</option><option value="Other">Other</option></Select></Field>
         <Field label="Spending limit"><Input required type="number" min="0" max="99999999999999" step="0.0001" value={draft.ceilingAmount} onChange={(event) => field("ceilingAmount", Number(event.target.value))} /></Field>
@@ -119,7 +131,7 @@ export function LiveContractEditor() {
         <Field label="Expires on"><Input type="date" value={draft.expiresOn || ""} onChange={(event) => field("expiresOn", event.target.value || null)} /></Field>
         <Field label="Renewal reminder"><Input type="date" value={draft.renewalNoticeOn || ""} onChange={(event) => field("renewalNoticeOn", event.target.value || null)} /></Field>
       </div></Panel>
-      <div className="flex gap-3"><Button type="submit" disabled={saving || !vendors.length}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/contracts/${id}` : "/contracts"}><Button variant="secondary">Cancel</Button></Link></div>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || (!draft.supplierId && !vendors.length)}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/contracts/${id}` : "/contracts"}><Button variant="secondary">Cancel</Button></Link></div>
     </form>}
   </div>;
 }

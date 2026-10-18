@@ -11,7 +11,7 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "contractDraft"]));
 type ContractRecord = Record<string, unknown> & { id: string; version: number; title: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; noSupplier?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; noSupplier?: boolean; searchOnly?: boolean } = {}) {
   let record: ContractRecord | null = null;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
@@ -25,7 +25,10 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
-    if (path === "/api/procurement/v1/vendors") return json({ items: options.noSupplier ? [] : [{ id: vendorId, number: "VEN-001", displayName: "Copper Supplies", legalName: "Copper Supplies", countryCode: "ZM", status: "Active", isOrderable: true, version: 1, createdAt: "2026-10-18T00:00:00Z" }], total: options.noSupplier ? 0 : 1, page: 1, pageSize: 100 });
+    if (path === "/api/procurement/v1/vendors") {
+      const found = !options.noSupplier && (!options.searchOnly || new URL(request.url()).searchParams.get("search")?.toLowerCase().includes("copper"));
+      return json({ items: found ? [{ id: vendorId, number: "VEN-001", displayName: "Copper Supplies", legalName: "Copper Supplies", countryCode: "ZM", status: "Active", isOrderable: true, version: 1, createdAt: "2026-10-18T00:00:00Z" }] : [], total: found ? 1 : 0, page: 1, pageSize: 100 });
+    }
     if (path === "/api/procurement/v1/contracts") {
       if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403)
         : json({ items: record ? [record] : [], total: record ? 1 : 0, page: 1, pageSize: 25 });
@@ -59,7 +62,7 @@ test("contract draft is saved, revised and cancelled", async ({ page }) => {
   await page.goto("/procurement/workspace/contracts");
   await expect(page.getByText("No contracts yet")).toBeVisible();
   await page.getByRole("link", { name: "New contract" }).first().click();
-  await page.getByLabel("Supplier").click();
+  await page.getByRole("combobox", { name: "Supplier" }).click();
   await page.getByRole("option", { name: /Copper Supplies/ }).click();
   await page.getByLabel("Contract title").fill("Office supplies agreement");
   await page.getByLabel("Spending limit").fill("50000");
@@ -88,7 +91,7 @@ test("contract list denial does not show local records", async ({ page }) => {
 test("stale contract save keeps entered values", async ({ page }) => {
   await mockErp(page, { staleUpdate: true });
   await page.goto("/procurement/workspace/contracts/new");
-  await page.getByLabel("Supplier").click();
+  await page.getByRole("combobox", { name: "Supplier" }).click();
   await page.getByRole("option", { name: /Copper Supplies/ }).click();
   await page.getByLabel("Contract title").fill("Office supplies agreement");
   await page.getByRole("button", { name: "Save draft" }).click();
@@ -104,4 +107,16 @@ test("cannot save a contract without an eligible supplier", async ({ page }) => 
   await page.goto("/procurement/workspace/contracts/new");
   await expect(page.getByText("Add an eligible supplier before creating a contract.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save draft" })).toBeDisabled();
+});
+
+test("supplier picker searches beyond the initial supplier page", async ({ page }) => {
+  await mockErp(page, { searchOnly: true });
+  await page.goto("/procurement/workspace/contracts/new");
+  await expect(page.getByText("Add an eligible supplier before creating a contract.")).toBeVisible();
+  await page.getByLabel("Search suppliers").fill("Copper");
+  await page.getByRole("combobox", { name: "Supplier" }).click();
+  await page.getByRole("option", { name: /Copper Supplies/ }).click();
+  await page.getByLabel("Contract title").fill("Copper supply agreement");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Copper supply agreement" })).toBeVisible();
 });
