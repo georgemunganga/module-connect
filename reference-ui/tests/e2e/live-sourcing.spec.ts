@@ -1,0 +1,101 @@
+import { expect, test, type Page } from "@playwright/test";
+
+const companyId = "11111111-1111-4111-8111-111111111111";
+const workerId = "22222222-2222-4222-8222-222222222222";
+const eventId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const lineId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const capabilities = Object.fromEntries([
+  "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
+  "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "configurationDraft", "contractDraft", "sourcingDraft",
+].map((key) => [key, key === "sourcingDraft"]));
+type EventRecord = Record<string, unknown> & {
+  id: string; version: number; title: string; status: string; lines: Record<string, unknown>[];
+};
+
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean } = {}) {
+  let record: EventRecord | null = null;
+  await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
+    if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
+    if (path === "/api/hrm/admin/locations") return json({ items: [] });
+    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
+    if (path === "/api/procurement/v1/sourcing") {
+      if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403)
+        : json({ items: record ? [{ ...record, lineCount: record.lines.filter((line) => line.status === "Active").length }] : [], total: record ? 1 : 0, page: 1, pageSize: 25 });
+      if (request.method() === "POST") {
+        const input = request.postDataJSON();
+        record = { ...input, id: eventId, number: "RF-001", status: "Draft", version: 1,
+          currencyCode: input.currencyCode || "ZMW", lines: input.lines.map((line: Record<string, unknown>) => ({ ...line, id: lineId, lineNumber: 1, status: "Active", version: 1 })) };
+        return json(record, 201);
+      }
+    }
+    if (path === `/api/procurement/v1/sourcing/${eventId}` && record) {
+      if (request.method() === "GET") return json(record);
+      if (request.method() === "PUT") {
+        if (options.staleUpdate) return json({ message: "Refresh this event before saving." }, 409);
+        const input = request.postDataJSON();
+        record = { ...record, ...input.draft, version: record.version + 1,
+          lines: input.draft.lines.map((line: Record<string, unknown>) => ({ ...line, id: lineId, lineNumber: 1, status: "Active", version: 2 })) };
+        return json(record);
+      }
+    }
+    if (path === `/api/procurement/v1/sourcing/${eventId}/cancel` && record) {
+      const input = request.postDataJSON();
+      record = { ...record, status: "Cancelled", cancellationReason: input.reason, version: record.version + 1,
+        lines: record.lines.map((line) => ({ ...line, status: "Cancelled" })) };
+      return json(record);
+    }
+    return json({ message: `Unexpected route: ${path}` }, 404);
+  });
+}
+
+test("quote request draft persists, can be revised and cancelled", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/rfqs");
+  await expect(page.getByText("No quote requests yet")).toBeVisible();
+  await page.getByRole("link", { name: "New quote request" }).first().click();
+  await page.getByLabel("What are you buying?").fill("Office chairs for Lusaka");
+  await page.getByLabel("Item or service 1").fill("Office chair");
+  await page.getByLabel("Quantity").fill("10");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Office chairs for Lusaka" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Office chair" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("cell", { name: "Office chair" })).toBeVisible();
+  await page.getByRole("link", { name: "Edit draft" }).click();
+  await page.getByLabel("Quantity").fill("12");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("cell", { name: "12" })).toBeVisible();
+  await page.getByLabel("Reason").fill("Specifications changed");
+  await page.getByRole("button", { name: "Cancel draft" }).click();
+  await expect(page.getByRole("heading", { name: "Request for Quotes" })).toBeVisible();
+  await expect(page.getByText("Cancelled")).toBeVisible();
+});
+
+test("quote request list denial does not show demo records", async ({ page }) => {
+  await mockErp(page, { denyList: true });
+  await page.goto("/procurement/workspace/rfqs");
+  await expect(page.getByRole("alert")).toContainText("do not have access");
+  await expect(page.getByText("No quote requests yet")).toBeVisible();
+});
+
+test("stale quote edit preserves entered values", async ({ page }) => {
+  await mockErp(page, { staleUpdate: true });
+  await page.goto("/procurement/workspace/rfqs/new");
+  await page.getByLabel("What are you buying?").fill("Office chairs");
+  await page.getByLabel("Item or service 1").fill("Chair");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("link", { name: "Edit draft" }).click();
+  await page.getByLabel("Item or service 1").fill("Updated chair");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("alert")).toContainText("Refresh");
+  await expect(page.getByLabel("Item or service 1")).toHaveValue("Updated chair");
+});

@@ -11,6 +11,7 @@ import { ProcurementLiveGate, isProcurementLiveMode } from "../lib/ProcurementLi
 import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/LiveVendors";
 import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
 import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../features/LiveRequests";
+import { LiveSourcingList, LiveSourcingEditor, LiveSourcingDetail } from "../features/LiveSourcing";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -69,7 +70,9 @@ export function App() {
               <Route
                 key={module.key}
                 path={`/${module.key}`}
-                element={isProcurementLiveMode && module.key === "requests" ? <LiveRequestList /> : <RecordList key={module.key} kind={module.key} />}
+                element={isProcurementLiveMode && module.key === "requests" ? <LiveRequestList />
+                  : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingList />
+                    : <RecordList key={module.key} kind={module.key} />}
               />
             ))}
             {Object.values(modules).map((module) => (
@@ -78,7 +81,9 @@ export function App() {
                 path={`/${module.key}/:id`}
                 element={
                   <div className="p-5 sm:p-8">
-                    {isProcurementLiveMode && module.key === "requests" ? <LiveRequestDetail /> : <RecordRoute kind={module.key} />}
+                    {isProcurementLiveMode && module.key === "requests" ? <LiveRequestDetail />
+                      : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingDetail />
+                        : <RecordRoute kind={module.key} />}
                   </div>
                 }
               />
@@ -105,8 +110,8 @@ export function App() {
                   }
                 />,
               ])}
-            <Route path="/rfqs/new" element={<WizardRoute />} />
-            <Route path="/rfqs/:id/edit" element={<WizardRoute />} />
+            <Route path="/rfqs/new" element={isProcurementLiveMode ? <LiveSourcingEditor /> : <WizardRoute />} />
+            <Route path="/rfqs/:id/edit" element={isProcurementLiveMode ? <LiveSourcingEditor /> : <WizardRoute />} />
             {(["items", "vendors"] as const).flatMap((kind) => [
               <Route
                 key={kind}
