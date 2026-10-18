@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { useEffect, useState } from "react";
 import { FileUp, Inbox } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -220,7 +221,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select
+          <FormSelect
             aria-label="Filter by invoice status"
             className="rounded-md border bg-surface px-3 text-sm"
             value={filter}
@@ -240,7 +241,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
             ].filter((status) => status === "All" || statusInView(status as Invoice["status"])).map((s) => (
               <option key={s}>{s}</option>
             ))}
-          </select>
+          </FormSelect>
         </div>
         {rows.length ? (
           <div className="grid gap-3">
@@ -379,7 +380,7 @@ export function InvoiceCreate() {
           <div className="grid gap-4 rounded-xl border bg-surface p-5 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="source">How did the bill arrive?</Label>
-              <select
+              <FormSelect
                 id="source"
                 className="h-10 w-full rounded-md border bg-background px-3"
                 value={source}
@@ -388,11 +389,11 @@ export function InvoiceCreate() {
                 {["Manual", "Supplier portal", "Email placeholder", "API placeholder"].map((s) => (
                   <option key={s}>{s}</option>
                 ))}
-              </select>
+              </FormSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="supplier">Vendor</Label>
-              <select
+              <FormSelect
                 id="supplier"
                 className="h-10 w-full rounded-md border bg-background px-3"
                 value={supplierId}
@@ -402,7 +403,7 @@ export function InvoiceCreate() {
                 <option value="sup-003" disabled>
                   Studio Zit · Suspended
                 </option>
-              </select>
+              </FormSelect>
             </div>
             <Field label="Invoice number" value={number} onChange={setNumber} required />
             <Field label="Purchase order number" value={po} onChange={setPo} required />
@@ -835,7 +836,7 @@ export function InvoiceDetail({ id }: { id: string }) {
                   onChange={(e) => setComment(e.target.value)}
                 />
                 <Label htmlFor="audience">Audience</Label>
-                <select
+                <FormSelect
                   id="audience"
                   className="block rounded-md border p-2"
                   value={audience}
@@ -843,7 +844,7 @@ export function InvoiceDetail({ id }: { id: string }) {
                 >
                   <option>Internal</option>
                   <option>Supplier</option>
-                </select>
+                </FormSelect>
                 <Button type="submit">Add demo message</Button>
               </form>
             )}

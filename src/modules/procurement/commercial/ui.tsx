@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { RecordTable } from "@/platform/components/RecordTable";
 import { Link } from "@tanstack/react-router";
 import { FileText, PackageCheck, ScrollText, Trophy } from "lucide-react";
@@ -236,9 +237,9 @@ export function CommercialList({ area, search, setSearch }: { area: Area; search
         </div>
         <div className={`${section} mb-4 flex flex-wrap items-end gap-3`}>
           <div className="min-w-52 flex-1"><Label htmlFor="find-commercial">Search</Label><Input id="find-commercial" className="mt-1" placeholder="Number, vendor or item" value={search.q ?? ""} onChange={(event) => setSearch({ q: event.target.value || undefined })} /></div>
-          <div><Label htmlFor="commercial-status">Status</Label><select id="commercial-status" className="mt-1 h-9 min-w-36 rounded-md border bg-background px-3 text-sm" value={search.status ?? ""} onChange={(event) => setSearch({ status: event.target.value || undefined })}><option value="">All statuses</option>{[...new Set(entityRecords.map((row) => row.status))].map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></div>
+          <div><Label htmlFor="commercial-status">Status</Label><FormSelect id="commercial-status" className="mt-1 h-9 min-w-36 rounded-md border bg-background px-3 text-sm" value={search.status ?? ""} onChange={(event) => setSearch({ status: event.target.value || undefined })}><option value="">All statuses</option>{[...new Set(entityRecords.map((row) => row.status))].map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</FormSelect></div>
           {listStyle === "table" ? <>
-            <div><Label htmlFor="commercial-sort">Sort by</Label><select id="commercial-sort" className="mt-1 h-9 min-w-36 rounded-md border bg-background px-3 text-sm" value={search.sort ?? "reference"} onChange={(event) => setSearch({ sort: event.target.value as CommercialSearch["sort"] })}><option value="reference">Reference</option><option value="name">Vendor or item</option><option value="status">Status</option></select></div>
+            <div><Label htmlFor="commercial-sort">Sort by</Label><FormSelect id="commercial-sort" className="mt-1 h-9 min-w-36 rounded-md border bg-background px-3 text-sm" value={search.sort ?? "reference"} onChange={(event) => setSearch({ sort: event.target.value as CommercialSearch["sort"] })}><option value="reference">Reference</option><option value="name">Vendor or item</option><option value="status">Status</option></FormSelect></div>
             <Button variant="outline" size="sm" onClick={() => setSearch({ descending: search.descending ? undefined : true })} aria-pressed={!!search.descending}>Descending</Button>
             <details className="relative"><summary className="cursor-pointer rounded-md border px-3 py-2 text-sm">Columns</summary><div className="absolute right-0 z-10 mt-1 min-w-36 space-y-2 rounded-md border bg-surface p-3 shadow-lg">{allowedColumns.map((column) => <label key={column} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={columns.includes(column)} disabled={column === "reference"} onChange={() => toggleColumn(column)} />{column === "reference" ? "Reference" : column[0].toUpperCase() + column.slice(1)}</label>)}</div></details>
             <Button variant="outline" size="sm" onClick={exportRows} disabled={!sorted.length}>Export view</Button>
@@ -350,10 +351,10 @@ export function ContractNew() {
   return <AppShell><PageHeader eyebrow="Contracts" title="Add contract" description="Record proposed terms for review. Nothing is active or available for ordering until signed." />
     {created ? <div className={section}><h2 className="font-semibold">Draft saved</h2><p className="mt-1 text-sm">{created} is ready for review.</p><Button className="mt-3" asChild><Link to="/procurement/contracts/$id" params={{ id: created }}>Open contract</Link></Button></div> : <div className={section}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div><Label htmlFor="contract-supplier">Vendor</Label><select id="contract-supplier" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={supplier} onChange={(event) => setSupplier(event.target.value)}><option value="">Choose an active vendor</option>{suppliers.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></div>
-        <div><Label htmlFor="contract-kind">Contract type</Label><select id="contract-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={kind} onChange={(event) => setKind(event.target.value as Contract["kind"])}><option>Standard</option><option>Framework</option><option>Recurring</option></select></div>
+        <div><Label htmlFor="contract-supplier">Vendor</Label><FormSelect id="contract-supplier" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={supplier} onChange={(event) => setSupplier(event.target.value)}><option value="">Choose an active vendor</option>{suppliers.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</FormSelect></div>
+        <div><Label htmlFor="contract-kind">Contract type</Label><FormSelect id="contract-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={kind} onChange={(event) => setKind(event.target.value as Contract["kind"])}><option>Standard</option><option>Framework</option><option>Recurring</option></FormSelect></div>
         <div><Label htmlFor="contract-category">Category</Label><Input id="contract-category" value={category} onChange={(event) => setCategory(event.target.value)} /></div>
-        <div><Label htmlFor="contract-currency">Currency</Label><select id="contract-currency" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={currency} onChange={(event) => setCurrency(event.target.value)}>{["EUR", "KES", "USD", "ZMW", "GBP"].map((value) => <option key={value}>{value}</option>)}</select></div>
+        <div><Label htmlFor="contract-currency">Currency</Label><FormSelect id="contract-currency" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={currency} onChange={(event) => setCurrency(event.target.value)}>{["EUR", "KES", "USD", "ZMW", "GBP"].map((value) => <option key={value}>{value}</option>)}</FormSelect></div>
         <div><Label htmlFor="contract-start">Starts</Label><Input id="contract-start" type="date" value={start} onChange={(event) => setStart(event.target.value)} /></div>
         <div><Label htmlFor="contract-end">Ends</Label><Input id="contract-end" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></div>
         <div><Label htmlFor="contract-notice">Renewal decision by</Label><Input id="contract-notice" type="date" value={notice} onChange={(event) => setNotice(event.target.value)} /></div>
@@ -606,7 +607,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div>
                     <Label>Required checks</Label>
-                    <select
+                    <FormSelect
                       aria-label={`${b.supplier} compliance`}
                       disabled={!editable || item.state !== "In evaluation" || offer.late}
                       value={b.compliant === null ? "" : String(b.compliant)}
@@ -616,7 +617,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
                       <option value="">Not checked</option>
                       <option value="true">Pass</option>
                       <option value="false">Fail</option>
-                    </select>
+                    </FormSelect>
                   </div>
                   <div>
                     <Label htmlFor={`score-${b.id}`}>Score out of 100</Label>
@@ -713,7 +714,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
           <Label htmlFor="winner" className="mt-3 block">
             Recommended supplier
           </Label>
-          <select
+          <FormSelect
             id="winner"
             className="mt-1 h-9 w-full rounded-md border bg-background px-3"
             value={selected}
@@ -727,7 +728,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
                   {x.supplier}
                 </option>
               ))}
-          </select>
+          </FormSelect>
           <Label htmlFor="rationale" className="mt-3 block">
             Rationale and risks
           </Label>

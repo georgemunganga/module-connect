@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { RecordTable } from "./RecordTable";
 import { useMemo, useState } from "react";
 import { Download, FileUp } from "lucide-react";
@@ -82,7 +83,7 @@ export function DataImportPanel({ recordName, fields, validate, apply, onDone, m
     </> : null}
     {stage === "map" ? <>
       <section className="rounded-lg border bg-surface p-5"><h2 className="font-semibold">2. Match your columns</h2><p className="mt-1 text-sm text-muted-foreground">Choose which column fills each field in {fileName}. Unused columns are ignored.</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">{fields.map((field) => <div key={field.key}><Label htmlFor={`map-${field.key}`}>{field.label}{field.required ? " *" : ""}</Label><select id={`map-${field.key}`} className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={mapping[field.key] ?? -1} onChange={(event) => setMapping((current) => ({ ...current, [field.key]: Number(event.target.value) }))}><option value={-1}>Leave blank</option>{headers.map((heading, index) => <option value={index} key={`${heading}-${index}`}>{heading}</option>)}</select></div>)}</div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">{fields.map((field) => <div key={field.key}><Label htmlFor={`map-${field.key}`}>{field.label}{field.required ? " *" : ""}</Label><FormSelect id={`map-${field.key}`} className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={mapping[field.key] ?? -1} onChange={(event) => setMapping((current) => ({ ...current, [field.key]: Number(event.target.value) }))}><option value={-1}>Leave blank</option>{headers.map((heading, index) => <option value={index} key={`${heading}-${index}`}>{heading}</option>)}</FormSelect></div>)}</div>
         {mappingIssue ? <p role="alert" className="mt-3 text-sm text-danger">Each file column can fill only one field. Check the matches above.</p> : null}
         {requiredMissing.length ? <p role="alert" className="mt-3 text-sm text-danger">Match the required fields: {requiredMissing.map((field) => field.label).join(", ")}.</p> : null}
         <div className="mt-4 flex gap-2"><Button variant="outline" onClick={() => setStage("configure")}>Back</Button><Button disabled={mappingIssue || requiredMissing.length > 0} onClick={() => setStage("preview")}>Review rows</Button></div>

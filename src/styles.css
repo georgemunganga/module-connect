@@ -55,6 +55,15 @@
     outline-offset: 2px;
   }
 
+  input[type="checkbox"]:not([role="switch"]),
+  input[type="radio"] {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex: none;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+  }
+
   .tabular {
     font-variant-numeric: tabular-nums;
   }

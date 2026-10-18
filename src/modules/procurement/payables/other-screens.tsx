@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -112,9 +113,9 @@ function SupplierInvoiceSubmission({ orders, invoices }: { orders: Order[]; invo
         </div>
         <div>
           <Label htmlFor="portal-po">PO reference</Label>
-          <select id="portal-po" className="h-10 w-full rounded-md border bg-background px-3" value={po} onChange={(e) => setPo(e.target.value)}>{orders.filter((order) => ["Issued", "Acknowledged"].includes(order.status)).map((order) => <option key={order.id} value={order.id}>{order.id} · {order.line.description}</option>)}</select>
+          <FormSelect id="portal-po" className="h-10 w-full rounded-md border bg-background px-3" value={po} onChange={(e) => setPo(e.target.value)}>{orders.filter((order) => ["Issued", "Acknowledged"].includes(order.status)).map((order) => <option key={order.id} value={order.id}>{order.id} · {order.line.description}</option>)}</FormSelect>
         </div>
-        <div><Label htmlFor="portal-correction">Corrects earlier invoice (optional)</Label><select id="portal-correction" className="h-10 w-full rounded-md border bg-background px-3" value={correctionOf} onChange={(event) => { setCorrectionOf(event.target.value); const original = invoices.find((invoice) => invoice.id === event.target.value); if (original) setPo(original.po); }}><option value="">New invoice</option>{invoices.filter((invoice) => invoice.status === "Exception").map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.number} · {invoice.id}</option>)}</select></div>
+        <div><Label htmlFor="portal-correction">Corrects earlier invoice (optional)</Label><FormSelect id="portal-correction" className="h-10 w-full rounded-md border bg-background px-3" value={correctionOf} onChange={(event) => { setCorrectionOf(event.target.value); const original = invoices.find((invoice) => invoice.id === event.target.value); if (original) setPo(original.po); }}><option value="">New invoice</option>{invoices.filter((invoice) => invoice.status === "Exception").map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.number} · {invoice.id}</option>)}</FormSelect></div>
         <div><Label htmlFor="portal-quantity">Invoiced quantity</Label><Input id="portal-quantity" type="number" min="0.01" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></div>
         <div>
           <Label htmlFor="portal-amount">Amount, EUR (illustrative)</Label>
@@ -358,7 +359,7 @@ export function SupplierPortal() {
             <SupplierInvoiceSubmission orders={orders} invoices={invoices} />
             <Box title="Submit a commercial credit reference">
               <p className="text-xs text-muted-foreground">Procurement reviews the commercial reason. Finance owns any accounting credit or refund.</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2"><div><Label htmlFor="credit-invoice">Original invoice</Label><select id="credit-invoice" className="h-10 w-full rounded-md border bg-background px-3" value={creditInvoice} onChange={(event) => setCreditInvoice(event.target.value)}>{invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.number} · {invoice.id}</option>)}</select></div><div><Label htmlFor="credit-amount">Credit amount</Label><Input id="credit-amount" type="number" min="0.01" step="0.01" value={creditAmount} onChange={(event) => setCreditAmount(event.target.value)} /></div><div><Label htmlFor="credit-reason">Commercial reason</Label><Input id="credit-reason" value={creditReason} onChange={(event) => setCreditReason(event.target.value)} /></div><div><Label htmlFor="credit-document">Credit note document reference</Label><Input id="credit-document" value={creditDocument} onChange={(event) => setCreditDocument(event.target.value)} /></div></div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2"><div><Label htmlFor="credit-invoice">Original invoice</Label><FormSelect id="credit-invoice" className="h-10 w-full rounded-md border bg-background px-3" value={creditInvoice} onChange={(event) => setCreditInvoice(event.target.value)}>{invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.number} · {invoice.id}</option>)}</FormSelect></div><div><Label htmlFor="credit-amount">Credit amount</Label><Input id="credit-amount" type="number" min="0.01" step="0.01" value={creditAmount} onChange={(event) => setCreditAmount(event.target.value)} /></div><div><Label htmlFor="credit-reason">Commercial reason</Label><Input id="credit-reason" value={creditReason} onChange={(event) => setCreditReason(event.target.value)} /></div><div><Label htmlFor="credit-document">Credit note document reference</Label><Input id="credit-document" value={creditDocument} onChange={(event) => setCreditDocument(event.target.value)} /></div></div>
               <Button className="mt-3" onClick={() => { const original = invoices.find((invoice) => invoice.id === creditInvoice); const amount = Number(creditAmount); if (!original || amount <= 0 || amount > invoiceTotal(original) || !creditReason.trim() || !creditDocument.trim()) return setMessage("Select your invoice, enter a positive credit no greater than its total, and provide a reason and document reference."); if ((state.credits ?? []).some((credit) => credit.invoiceId === original.id && credit.documentRef === creditDocument.trim())) return setMessage("This credit document reference is already recorded for the invoice."); const credit = addCreditRef(original, amount, creditReason.trim(), supplierName, creditDocument.trim()); setMessage(`${credit.id} submitted for commercial review. No Finance credit was posted.`); setCreditAmount(""); setCreditReason(""); setCreditDocument(""); }}>Submit credit reference</Button>
             </Box>
             {invoices.map((i) => (
@@ -399,7 +400,7 @@ export function SupplierPortal() {
           <div className="space-y-3">
             <Box title="Qualifications and expiry">
               {supplierRecord?.qualifications.map((qualification) => <p key={qualification.name} className="text-sm">{qualification.name} · {qualification.status} · valid to {qualification.validTo ?? "not recorded"}</p>)}
-              <div className="mt-3 grid gap-3 sm:grid-cols-3"><div><Label htmlFor="portal-qualification">Qualification</Label><select id="portal-qualification" className="h-10 w-full rounded-md border bg-background px-3" value={qualificationName} onChange={(event) => setQualificationName(event.target.value)}>{supplierRecord?.qualifications.map((qualification) => <option key={qualification.name}>{qualification.name}</option>)}</select></div><div><Label htmlFor="portal-document-ref">Replacement document reference</Label><Input id="portal-document-ref" value={qualificationRef} onChange={(event) => setQualificationRef(event.target.value)} /></div><div><Label htmlFor="portal-document-valid">Valid until</Label><Input id="portal-document-valid" type="date" value={qualificationValidTo} onChange={(event) => setQualificationValidTo(event.target.value)} /></div></div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3"><div><Label htmlFor="portal-qualification">Qualification</Label><FormSelect id="portal-qualification" className="h-10 w-full rounded-md border bg-background px-3" value={qualificationName} onChange={(event) => setQualificationName(event.target.value)}>{supplierRecord?.qualifications.map((qualification) => <option key={qualification.name}>{qualification.name}</option>)}</FormSelect></div><div><Label htmlFor="portal-document-ref">Replacement document reference</Label><Input id="portal-document-ref" value={qualificationRef} onChange={(event) => setQualificationRef(event.target.value)} /></div><div><Label htmlFor="portal-document-valid">Valid until</Label><Input id="portal-document-valid" type="date" value={qualificationValidTo} onChange={(event) => setQualificationValidTo(event.target.value)} /></div></div>
               <Button className="mt-3" onClick={() => submitPortalUpdate("Qualification evidence", qualificationRef, qualificationValidTo)}>Submit evidence reference</Button>
               <p className="mt-2 text-xs text-muted-foreground">The reference enters a Procurement review queue. This demo does not upload a file.</p>
             </Box>
@@ -436,7 +437,7 @@ export function SupplierPortal() {
               className="mt-4 space-y-2"
             >
               <Label htmlFor="supplier-message-record">Transaction</Label>
-              <select id="supplier-message-record" className="h-10 w-full rounded-md border bg-background px-3" value={messageRecord} onChange={(event) => setMessageRecord(event.target.value)}>{orders.map((order) => <option key={order.id} value={order.id}>{order.id}</option>)}</select>
+              <FormSelect id="supplier-message-record" className="h-10 w-full rounded-md border bg-background px-3" value={messageRecord} onChange={(event) => setMessageRecord(event.target.value)}>{orders.map((order) => <option key={order.id} value={order.id}>{order.id}</option>)}</FormSelect>
               <Label htmlFor="supplier-message">Message to Procurement</Label>
               <Textarea
                 id="supplier-message"
@@ -582,7 +583,7 @@ export function ProcurementReports() {
         <div className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div><p className="text-sm text-muted-foreground">Showing results for</p><h2 className="text-xl font-semibold">{reportLabels[metric]}</h2></div>
-            <div className="flex flex-wrap gap-2"><select aria-label="Reporting period" className="rounded-md border bg-surface p-2 text-sm" value={period} onChange={(e) => setPeriod(e.target.value)}><option value="2026-10">October 2026</option><option value="2026-09">September 2026</option></select><Button variant="outline" onClick={exportReport}>Export CSV</Button></div>
+            <div className="flex flex-wrap gap-2"><FormSelect aria-label="Reporting period" className="rounded-md border bg-surface p-2 text-sm" value={period} onChange={(e) => setPeriod(e.target.value)}><option value="2026-10">October 2026</option><option value="2026-09">September 2026</option></FormSelect><Button variant="outline" onClick={exportReport}>Export CSV</Button></div>
           </div>
           <div className="rounded-lg border bg-surface p-6">
             <p className="text-3xl font-semibold">{value}</p>
@@ -807,7 +808,7 @@ export function ProcurementPolicy() {
               </div>
               <div>
                 <Label htmlFor="sim-risk">Supplier risk</Label>
-                <select
+                <FormSelect
                   id="sim-risk"
                   className="block w-full rounded-md border bg-surface p-2"
                   value={supplierRisk}
@@ -816,11 +817,11 @@ export function ProcurementPolicy() {
                   <option>Standard</option>
                   <option>High</option>
                   <option>Suspended</option>
-                </select>
+                </FormSelect>
               </div>
               <div>
                 <Label htmlFor="sim-route">Requested route</Label>
-                <select
+                <FormSelect
                   id="sim-route"
                   className="block w-full rounded-md border bg-surface p-2"
                   value={route}
@@ -830,7 +831,7 @@ export function ProcurementPolicy() {
                   <option>RFQ</option>
                   <option>Contract</option>
                   <option>Emergency</option>
-                </select>
+                </FormSelect>
               </div>
             </div>
             <div role="status" className="mt-4 rounded-lg border bg-muted p-3 text-sm">

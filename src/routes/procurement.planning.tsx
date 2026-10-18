@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { RecordTable } from "@/platform/components/RecordTable";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, Info, Lock } from "lucide-react";
@@ -106,9 +107,9 @@ function PlanningPage() {
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
           <Label htmlFor="plan">Plan</Label>
-          <select id="plan" className="mt-1 h-9 rounded-md border bg-background px-3 text-sm" value={plan.id} onChange={(e) => { setVersionShown(null); setS({ plan: e.target.value }); }}>
+          <FormSelect id="plan" className="mt-1 h-9 rounded-md border bg-background px-3 text-sm" value={plan.id} onChange={(e) => { setVersionShown(null); setS({ plan: e.target.value }); }}>
             {visiblePlans.map((p) => <option key={p.id} value={p.id}>{p.department} · {p.period}</option>)}
-          </select>
+          </FormSelect>
         </div>
         <div role="tablist" aria-label="Review view" className="inline-flex rounded-md border p-1">
           {(["department", "procurement"] as const).map((v) => (
@@ -146,13 +147,13 @@ function PlanningPage() {
             {editable ? <Button size="sm" variant="outline" onClick={() => { try { const id = addPlanLine(plan.id, role); setEditing({ id, requirement: "", category: "", estimate: 0, currency: ccy, expected: "", funding: "", method: "Catalog", owner: plan.owner, status: "Planned" }); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not add a line."); } }}>Add requirement</Button> : null}
             <div className="flex gap-2">
               <label className="sr-only" htmlFor="fs">Status</label>
-              <select id="fs" className="h-9 rounded-md border bg-background px-2 text-sm" value={search.status ?? ""} onChange={(e) => setS({ status: e.target.value || undefined })}>
+              <FormSelect id="fs" className="h-9 rounded-md border bg-background px-2 text-sm" value={search.status ?? ""} onChange={(e) => setS({ status: e.target.value || undefined })}>
                 <option value="">All statuses</option>{["Planned", "Changed", "Requested", "Cancelled"].map((s) => <option key={s}>{s}</option>)}
-              </select>
+              </FormSelect>
               <label className="sr-only" htmlFor="fc">Category</label>
-              <select id="fc" className="h-9 rounded-md border bg-background px-2 text-sm" value={search.category ?? ""} onChange={(e) => setS({ category: e.target.value || undefined })}>
+              <FormSelect id="fc" className="h-9 rounded-md border bg-background px-2 text-sm" value={search.category ?? ""} onChange={(e) => setS({ category: e.target.value || undefined })}>
                 <option value="">All categories</option>{categories.map((c) => <option key={c}>{c}</option>)}
-              </select>
+              </FormSelect>
             </div>
           </div>
           <div className="overflow-x-auto rounded-lg border bg-surface" style={{ contain: "paint" }}>
@@ -222,9 +223,9 @@ function LineEditor({ line, setLine, onCancel, onSave }: { line: PlanLine; setLi
         <div><Label htmlFor="pl-estimate">Estimated value ({line.currency})</Label><Input id="pl-estimate" className="mt-1" type="number" min="0.01" step="0.01" value={line.estimate} onChange={(event) => set({ estimate: Number(event.target.value) })} /></div>
         <div><Label htmlFor="pl-expected">Expected date</Label><Input id="pl-expected" className="mt-1" type="date" value={line.expected} onChange={(event) => set({ expected: event.target.value })} /></div>
         <div><Label htmlFor="pl-funding">Funding source</Label><Input id="pl-funding" className="mt-1" value={line.funding ?? ""} onChange={(event) => set({ funding: event.target.value })} placeholder="Leave blank if not linked yet" /></div>
-        <div><Label htmlFor="pl-method">Proposed method</Label><select id="pl-method" className="mt-1 h-9 w-full rounded-md border bg-background px-3" value={line.method} onChange={(event) => set({ method: event.target.value as PlanLine["method"] })}>{["Catalog", "Direct PO", "RFQ", "Tender", "Framework call-off"].map((method) => <option key={method}>{method}</option>)}</select></div>
+        <div><Label htmlFor="pl-method">Proposed method</Label><FormSelect id="pl-method" className="mt-1 h-9 w-full rounded-md border bg-background px-3" value={line.method} onChange={(event) => set({ method: event.target.value as PlanLine["method"] })}>{["Catalog", "Direct PO", "RFQ", "Tender", "Framework call-off"].map((method) => <option key={method}>{method}</option>)}</FormSelect></div>
         <div><Label htmlFor="pl-owner">Owner</Label><Input id="pl-owner" className="mt-1" value={line.owner} onChange={(event) => set({ owner: event.target.value })} /></div>
-        <div><Label htmlFor="pl-status">Requirement state</Label><select id="pl-status" className="mt-1 h-9 w-full rounded-md border bg-background px-3" value={line.status === "Cancelled" ? "Cancelled" : "Planned"} onChange={(event) => set({ status: event.target.value as "Planned" | "Cancelled" })}><option>Planned</option><option>Cancelled</option></select></div>
+        <div><Label htmlFor="pl-status">Requirement state</Label><FormSelect id="pl-status" className="mt-1 h-9 w-full rounded-md border bg-background px-3" value={line.status === "Cancelled" ? "Cancelled" : "Planned"} onChange={(event) => set({ status: event.target.value as "Planned" | "Cancelled" })}><option>Planned</option><option>Cancelled</option></FormSelect></div>
         <div className="sm:col-span-2"><Label htmlFor="pl-notes">Notes</Label><Textarea id="pl-notes" className="mt-1" value={line.notes ?? ""} onChange={(event) => set({ notes: event.target.value })} /></div>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">A missing funding source remains visible for review. It does not reserve budget.</p>

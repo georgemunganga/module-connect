@@ -66,6 +66,14 @@ a:focus-visible {
     color: var(--muted-foreground);
   }
 }
+input[type="checkbox"]:not([role="switch"]),
+input[type="radio"] {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
 .table-head {
   font-size: .75rem;
   font-weight: 600;

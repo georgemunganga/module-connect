@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { RecordTable } from "@/platform/components/RecordTable";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, Lock } from "lucide-react";
@@ -182,7 +183,7 @@ function SurrogateForm({ e, onCancel, onDone }: { e: SourcingEvent; onCancel: ()
       <p className="mt-1 text-muted-foreground">For responses received outside the portal. Your name and the entry time are recorded; the response is locked once saved.</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div><Label htmlFor="sg-s">Supplier</Label><Input id="sg-s" className="mt-1" value={f.supplier} onChange={(x) => setF({ ...f, supplier: x.target.value })} /></div>
-        <div><Label htmlFor="sg-c">Received via</Label><select id="sg-c" className="mt-1 h-9 w-full rounded-md border bg-background px-3" value={f.channel} onChange={(x) => setF({ ...f, channel: x.target.value as BidReceipt["channel"] })}><option>Email (surrogate)</option><option>Post (surrogate)</option><option>Hand delivery (surrogate)</option></select></div>
+        <div><Label htmlFor="sg-c">Received via</Label><FormSelect id="sg-c" className="mt-1 h-9 w-full rounded-md border bg-background px-3" value={f.channel} onChange={(x) => setF({ ...f, channel: x.target.value as BidReceipt["channel"] })}><option>Email (surrogate)</option><option>Post (surrogate)</option><option>Hand delivery (surrogate)</option></FormSelect></div>
         <div><Label htmlFor="sg-r">Received at ({e.timeZone})</Label><Input id="sg-r" type="datetime-local" className="mt-1" value={f.receivedAt} onChange={(x) => setF({ ...f, receivedAt: x.target.value })} /></div>
         <div><Label htmlFor="sg-e">Where is the original reply?</Label><Input id="sg-e" className="mt-1" placeholder="e.g. original email or scanned letter" value={f.evidence} onChange={(x) => setF({ ...f, evidence: x.target.value })} /></div>
         <div><Label htmlFor="sg-t">Total offered (sealed)</Label><Input id="sg-t" type="number" className="mt-1" value={f.total} onChange={(x) => setF({ ...f, total: x.target.value })} /></div>

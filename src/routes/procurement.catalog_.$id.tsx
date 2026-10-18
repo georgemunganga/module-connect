@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -100,7 +101,7 @@ function ItemDetail() {
           {tab === "Transactions" ? <section className="rounded-lg border bg-surface p-4">
             <h2 className="text-sm font-semibold">Purchase requests for this item</h2>
             <p className="mt-1 text-xs text-muted-foreground">Only requests linked by item ID appear here. Older requests without that link remain on the requests page.</p>
-            <div className="mt-3 max-w-xs"><label htmlFor="item-request-status" className="text-xs font-medium">Status</label><select id="item-request-status" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={requestStatus} onChange={(event) => setRequestStatus(event.target.value)}><option>All</option>{[...new Set(relatedRequests.map((request) => request.status))].map((status) => <option key={status}>{status}</option>)}</select></div>
+            <div className="mt-3 max-w-xs"><label htmlFor="item-request-status" className="text-xs font-medium">Status</label><FormSelect id="item-request-status" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={requestStatus} onChange={(event) => setRequestStatus(event.target.value)}><option>All</option>{[...new Set(relatedRequests.map((request) => request.status))].map((status) => <option key={status}>{status}</option>)}</FormSelect></div>
             {visibleRequests.length ? <ul className="mt-3 divide-y text-sm">{visibleRequests.map((request) => (
               <li key={request.id} className="flex flex-wrap justify-between gap-2 py-2">
                 <Link className="font-medium text-primary underline-offset-2 hover:underline" to="/procurement/requests/$id" params={{ id: request.id }}>{request.id} · {request.title}</Link>

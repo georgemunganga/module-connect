@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, ChevronRight, Package, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -94,15 +95,15 @@ function CatalogPage() {
         <div><Label htmlFor="q">Search</Label><Input id="q" className="mt-1" value={search.q ?? ""} placeholder="Item name, type or details" onChange={(e) => setS({ q: e.target.value || undefined })} /></div>
         <div>
           <Label htmlFor="k">Type</Label>
-          <select id="k" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={search.kind ?? ""} onChange={(e) => setS({ kind: e.target.value || undefined })}>
+          <FormSelect id="k" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={search.kind ?? ""} onChange={(e) => setS({ kind: e.target.value || undefined })}>
             <option value="">All types</option>{kinds.map((k) => <option key={k}>{k}</option>)}
-          </select>
+          </FormSelect>
         </div>
         <div>
           <Label htmlFor="e">Company</Label>
-          <select id="e" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={search.entity ?? ""} onChange={(e) => setS({ entity: e.target.value || undefined })}>
+          <FormSelect id="e" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={search.entity ?? ""} onChange={(e) => setS({ entity: e.target.value || undefined })}>
             <option value="">All entities</option>{catalogEntities.map((k) => <option key={k}>{k}</option>)}
-          </select>
+          </FormSelect>
         </div>
       </div> : null}
 
