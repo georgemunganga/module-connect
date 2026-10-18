@@ -32,6 +32,7 @@ import {
   Field,
   Input,
   Select,
+  Switch,
   Textarea,
   Modal,
 } from "../components/ui";
@@ -735,12 +736,12 @@ export function TransactionEditor({
             {!isRequest && !isReceive && (
               <div className="flex flex-wrap items-center gap-4 border-t border-slate-100 pt-5">
                 <label className="flex items-center gap-2 text-xs text-slate-500">
-                  <input
-                    type="checkbox"
+                  <Switch
                     checked={draft.inclusive}
                     onChange={(event) =>
                       patch({ inclusive: event.target.checked })
                     }
+                    aria-label="Prices include tax"
                   />
                   Tax inclusive
                 </label>

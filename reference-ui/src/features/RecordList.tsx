@@ -23,7 +23,7 @@ import {
   type RequestListTab,
   type RequestOwnerScope,
 } from "../lib/request-views";
-import { Badge, Button, EmptyState, Modal, PageHeader } from "../components/ui";
+import { Badge, Button, EmptyState, Modal, PageHeader, Select } from "../components/ui";
 import { DeleteConfirm } from "../components/data/DetailPrimitives";
 import { StandardDataTable } from "../components/data/StandardDataTable";
 import {
@@ -369,7 +369,7 @@ export function RecordList({
                 </div>
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
                   <span className="sr-only">Request owner scope</span>
-                  <select
+                  <Select
                     aria-label="Request owner scope"
                     value={requestScope}
                     onChange={(event) => {
@@ -380,12 +380,12 @@ export function RecordList({
                   >
                     <option value="mine">My Requests</option>
                     <option value="all">All Requesters</option>
-                  </select>
+                  </Select>
                 </label>
               </>
             ) : (
               <label className="flex items-center gap-2 text-sm font-medium">
-                <select
+                <Select
                   aria-label="Filter records by status"
                   value={status}
                   onChange={(event) => { setStatus(event.target.value); setPage(1); }}
@@ -398,8 +398,7 @@ export function RecordList({
                     <option key={value}>{value}</option>
                   ))}
                   <option value="Empty">Empty state preview</option>
-                </select>
-                <ChevronDown size={14} className="text-slate-400" />
+                </Select>
               </label>
             )}
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-400">
@@ -420,16 +419,18 @@ export function RecordList({
                 className="w-36 rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-400 sm:w-52"
               />
             </div>
-            <select
+            <div className="hidden sm:block">
+            <Select
               aria-label="Sort records"
               value={sort}
               onChange={(event) => setSort(event.target.value)}
-              className="hidden bg-transparent text-xs text-slate-400 sm:block"
+              className="bg-transparent text-xs text-slate-400"
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
               <option value="amount">Highest amount</option>
-            </select>
+            </Select>
+            </div>
           </div>
         </div>
         <ActiveFilterChips fields={filterFields} filters={filters} onChange={(next) => { setFilters(next); setPage(1); }} />

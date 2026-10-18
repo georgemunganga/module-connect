@@ -10,6 +10,7 @@ import {
   Input,
   Panel,
   Select,
+  Switch,
   Textarea,
 } from "../components/ui";
 
@@ -160,9 +161,8 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
                 <option>Net 30</option>
               </Select>
             </Field>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" defaultChecked />
-              Show item descriptions on purchasing documents
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>Show item descriptions on purchasing documents</span><Switch defaultChecked aria-label="Show item descriptions on purchasing documents" />
             </label>
             <Field label="Default Customer Notes" className="sm:col-span-2">
               <Textarea placeholder="Shown on new document drafts." />
@@ -191,9 +191,8 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
                 <Textarea placeholder="Message displayed to your vendors." />
               </Field>
             </div>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input type="checkbox" />
-              Allow vendors to update profile information (preview)
+            <label className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+              <span>Allow vendors to update profile information</span><Switch aria-label="Allow vendors to update profile information" />
             </label>
             <p className="text-xs text-muted-foreground">
               Enabling here is a visual selection only. No invitations are sent.
@@ -236,9 +235,8 @@ export function SetupConfig({ slug, onSavePreview }: Props) {
               <Field label="Preview">
                 <Input value={`${values.prefix}${values.start}`} readOnly />
               </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" />
-                Use this number series by default
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Use this number series by default</span><Switch aria-label="Use this number series by default" />
               </label>
             </div>
             <p className="text-xs text-muted-foreground">

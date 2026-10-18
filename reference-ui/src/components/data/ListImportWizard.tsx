@@ -1,7 +1,7 @@
 import { RecordTable } from "./RecordTable";
 import { useMemo, useState, type ChangeEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, FileUp } from "lucide-react";
-import { Button, Field, Input, Modal, Select } from "../ui";
+import { Button, Field, Input, Modal, Select, Switch } from "../ui";
 import {
   downloadCsv,
   downloadSpreadsheetXml,
@@ -446,10 +446,10 @@ export function ListImportWizard({
                 </Select>
               </Field>
               <label className="flex items-center gap-2 text-xs text-slate-600">
-                <input
-                  type="checkbox"
+                <Switch
                   checked={saveSettings}
                   onChange={(event) => setSaveSettings(event.target.checked)}
+                  aria-label="Save import settings"
                 />
                 Save these import settings in this browser for future demo
                 imports

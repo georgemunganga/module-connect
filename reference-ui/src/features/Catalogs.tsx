@@ -1628,24 +1628,10 @@ export function CatalogEditor({ kind }: { kind: CatalogKind }) {
                             vendorField("shipping", JSON.stringify(value))
                           }
                         />
-                        <label className="flex items-center gap-2 px-5 pb-4 text-xs text-slate-500">
-                          <input
-                            type="checkbox"
-                            onChange={(event) =>
-                              event.target.checked &&
-                              vendor.billing &&
-                              vendorField(
-                                "shipping",
-                                JSON.stringify({
-                                  ...vendor.billing,
-                                  id:
-                                    vendor.shipping?.id ?? crypto.randomUUID(),
-                                }),
-                              )
-                            }
-                          />{" "}
-                          Copy billing address
-                        </label>
+                        <button type="button" className="px-5 pb-4 text-xs font-medium text-primary hover:underline" onClick={() => vendor.billing && vendorField(
+                          "shipping",
+                          JSON.stringify({ ...vendor.billing, id: vendor.shipping?.id ?? crypto.randomUUID() }),
+                        )}>Use billing address</button>
                       </>
                     ) : (
                       <div className="p-5 text-sm text-slate-400">

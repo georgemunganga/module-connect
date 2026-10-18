@@ -19,6 +19,7 @@ import {
   Modal,
   Panel,
   Select,
+  Switch,
   Textarea,
 } from "../components/ui";
 import {
@@ -1085,10 +1086,10 @@ export function RfqWizard() {
               </Select>
             </Field>
             <label className="flex items-center gap-2 text-sm text-slate-600">
-              <input
-                type="checkbox"
+              <Switch
                 checked={pointOfContact}
                 onChange={(event) => setPointOfContact(event.target.checked)}
+                aria-label="Mark user as point of contact"
               />{" "}
               Mark user as point of contact
             </label>

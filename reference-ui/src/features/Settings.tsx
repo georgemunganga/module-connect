@@ -38,6 +38,7 @@ import {
   PageHeader,
   Panel,
   Select,
+  Switch,
   Textarea,
 } from "../components/ui";
 import { useApp, useStoredState } from "../lib/store";
@@ -170,7 +171,7 @@ export function Settings() {
               Procurement Settings
             </span>
             <span className="block text-xs text-muted-foreground">
-              {branding?.displayName || "ERP workspace"} · Procurement demo
+              {branding?.displayName || "ERP workspace"}
             </span>
           </span>
         </Link>
@@ -201,26 +202,14 @@ export function Settings() {
           path={currentPath}
           onClose={() => setMobileNavOpen(false)}
         />
-        <main className="min-w-0 flex-1 px-4 py-6 pb-20 sm:px-7 lg:px-10">
+        <main className="min-w-0 flex-1 px-4 py-6 pb-10 sm:px-7 lg:px-10">
           {content}
         </main>
       </div>
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-surface/95 px-4 py-2.5 text-center text-[11px] text-muted-foreground backdrop-blur sm:text-left sm:px-7 lg:left-64">
-        <span className="font-semibold text-foreground">Frontend demo</span> ·
-        only saved preview snapshots stay in this browser. No live
-        configuration, automation, or emails are applied.
-        {preview.lastSaved && (
-          <span className="ml-2 hidden text-muted-foreground sm:inline">
-            Last preview: {preview.lastSaved}
-            <button
-              onClick={() => setSnapshotOpen(true)}
-              className="ml-3 text-primary"
-            >
-              View snapshot
-            </button>
-          </span>
-        )}
-      </div>
+      {preview.lastSaved && <div className="fixed bottom-0 left-0 right-0 z-20 flex items-center justify-between border-t border-border bg-surface/95 px-4 py-2.5 text-[11px] text-muted-foreground backdrop-blur sm:px-7 lg:left-64">
+        <span>Saved preview · {preview.lastSaved}</span>
+        <button onClick={() => setSnapshotOpen(true)} className="font-medium text-primary">View snapshot</button>
+      </div>}
       {snapshotOpen && (
         <Modal
           title={`${preview.snapshotTitle || "Settings"} · Local preview snapshot`}
@@ -966,7 +955,7 @@ function PreferencesPanel({
         {module.slug === "purchase-orders" && <div className="mt-5 border-t border-border pt-5">
           <Field
             label="When should a purchase order close?"
-            hint="This selection is only reflected in this local demo preview."
+            hint="Choose when an order becomes ready to close."
           >
             <Select
               value={closeRule}
@@ -981,7 +970,7 @@ function PreferencesPanel({
         </div>}
         {["purchase-orders", "request-for-quotes", "contracts"].includes(module.slug) && <Field label="Terms & conditions" className="mt-5">
           <Textarea
-            defaultValue={`Standard ${module.title.toLowerCase()} terms for Meridian Procurement Demo.\nDelivery and approval requirements apply.`}
+            defaultValue={`Standard ${module.title.toLowerCase()} terms.\nDelivery and approval requirements apply.`}
           />
         </Field>}
       </div>
@@ -1005,21 +994,16 @@ function PreferencesPanel({
 function ToggleRow({ label, hint }: { label: string; hint?: string }) {
   const [checked, setChecked] = useState(false);
   return (
-    <label className="flex cursor-pointer items-start gap-3 border-b border-border py-4">
-      <input
-        type="checkbox"
+    <label className="flex cursor-pointer items-center justify-between gap-4 border-b border-border py-4">
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-foreground">{label}</span>
+        {hint && <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>}
+      </span>
+      <Switch
         checked={checked}
         onChange={(event) => setChecked(event.target.checked)}
-        className="mt-0.5 h-4 w-4 rounded border-input text-primary"
+        aria-label={label}
       />
-      <span>
-        <span className="block text-sm font-medium text-foreground">
-          {label}
-        </span>
-        {hint && (
-          <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>
-        )}
-      </span>
     </label>
   );
 }
@@ -1309,14 +1293,14 @@ function TemplatePage({
   const [body, setBody] = useState(
     type === "pdf"
       ? `{{organization_name}}\n\n${selected}\n\nVendor: {{vendor_name}}\nReference: {{document_number}}\nTotal: {{total}}`
-      : `Hello {{recipient_name}},\n\nThis is a preview of the ${selected} email.\n\n{{document_link}}\n\nMeridian Procurement Demo`,
+      : `Hello {{recipient_name}},\n\nThis is a preview of the ${selected} email.\n\n{{document_link}}\n\n{{organization_name}}`,
   );
   const selectTemplate = (value: string) => {
     setSelected(value);
     setBody(
       type === "pdf"
         ? `{{organization_name}}\n\n${value}\n\nVendor: {{vendor_name}}\nReference: {{document_number}}\nTotal: {{total}}`
-        : `Hello {{recipient_name}},\n\nThis is a preview of the ${value} email.\n\n{{document_link}}\n\nMeridian Procurement Demo`,
+        : `Hello {{recipient_name}},\n\nThis is a preview of the ${value} email.\n\n{{document_link}}\n\n{{organization_name}}`,
     );
   };
   return (
@@ -2069,7 +2053,7 @@ function ScheduleBuilder({ onSavePreview }: { onSavePreview: SavePreview }) {
             </Select>
           </Field>
           <label className="flex items-center gap-2 text-sm text-muted-foreground md:col-span-2">
-            <input type="checkbox" className="h-4 w-4" /> Exclude weekends
+            <span>Exclude weekends</span><Switch aria-label="Exclude weekends" />
           </label>
           <Field
             label="Script preview"

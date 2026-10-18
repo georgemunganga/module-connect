@@ -9,7 +9,7 @@ import {
   RotateCcw,
   Upload,
 } from "lucide-react";
-import { Button, Field, Input, Modal, Select } from "../ui";
+import { Button, Field, Input, Modal, Select, Switch } from "../ui";
 import {
   ListImportWizard,
   type DuplicateMode,
@@ -404,10 +404,10 @@ function ColumnSettings({
         ))}
       </div>
       <label className="mt-4 flex cursor-pointer items-center gap-2 border-t border-slate-100 pt-4 text-sm">
-        <input
-          type="checkbox"
+        <Switch
           checked={clip}
           onChange={(event) => setClip(event.target.checked)}
+          aria-label="Clip long cell text"
         />
         Clip long cell text
       </label>

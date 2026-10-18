@@ -344,7 +344,6 @@ export function AppShell() {
             <Menu size={18} />
           </button>
         )}
-        <div className="border-b border-border bg-surface-muted px-4 py-2 text-[11px] text-muted-foreground sm:px-7">Preview workspace · Changes stay in this browser.</div>
         <Outlet />
       </main>
       <footer className="fixed inset-x-0 bottom-0 z-20 flex h-8 items-center justify-between border-t border-border bg-surface px-4 text-[10px] text-muted-foreground">
