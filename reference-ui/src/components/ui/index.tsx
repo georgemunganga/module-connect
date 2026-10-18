@@ -17,7 +17,7 @@ export function Button({
   variant?: "primary" | "secondary" | "ghost" | "danger";
 }) {
   const colors = {
-    primary: "bg-primary text-primary-foreground hover:bg-primary/90 border-primary shadow-sm",
+    primary: "bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 border-button-primary shadow-sm",
     secondary: "bg-surface text-foreground hover:bg-secondary border-input",
     ghost:
       "bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground border-transparent",

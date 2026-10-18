@@ -60,7 +60,11 @@ export function applyBranding(value: ErpBranding): void {
   };
   root.style.setProperty("--erp-font-family", fonts[value.fontFamily || "Montserrat"] ?? fonts.Montserrat);
   const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (icon && value.faviconDataUri?.startsWith("data:image/")) icon.href = value.faviconDataUri;
+  if (icon) {
+    icon.dataset.erpDefaultHref ||= icon.getAttribute("href") || "/favicon.ico";
+    icon.href = value.faviconDataUri?.startsWith("data:image/")
+      ? value.faviconDataUri : icon.dataset.erpDefaultHref;
+  }
   const logo = value.logoDarkDataUri || value.logoLightDataUri;
   const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
   const fallback = document.getElementById("erp-preloader-fallback");

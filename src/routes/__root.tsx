@@ -6,6 +6,7 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useRouterState,
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -98,10 +99,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Meridian ERP — HRM workspace" },
+      { title: "ERP workspace" },
       { name: "description", content: "HR operations workspace for leave, attendance, requests and pay." },
-      { name: "author", content: "Meridian ERP" },
-      { property: "og:title", content: "Meridian ERP — HRM workspace" },
+      { name: "author", content: "ERP" },
+      { property: "og:title", content: "ERP workspace" },
       { property: "og:description", content: "HR operations workspace for leave, attendance, requests and pay." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -148,18 +149,21 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [brandingReady, setBrandingReady] = useState(false);
+  const [branding, setBranding] = useState<ErpBranding | null>(null);
 
   useLayoutEffect(() => {
     const cached = readBrandingCache();
     if (cached) {
       applyBranding(cached);
+      setBranding(cached);
       setBrandingReady(true);
     }
     const onStorage = (event: StorageEvent) => {
       if (event.key === "erp.company-branding.v1") {
         const next = readBrandingCache();
-        if (next) applyBranding(next);
+        if (next) { applyBranding(next); setBranding(next); }
       }
     };
     window.addEventListener("storage", onStorage);
@@ -176,11 +180,19 @@ function RootComponent() {
         if (!active) return;
         applyBranding(branding);
         saveBrandingCache(branding);
+        setBranding(branding);
       })
       .catch(() => {})
       .finally(() => { if (active) setBrandingReady(true); window.clearTimeout(timeout); });
     return () => { active = false; controller.abort(); window.clearTimeout(timeout); };
   }, []);
+
+  useEffect(() => {
+    if (!branding?.displayName) return;
+    const area = pathname.startsWith("/supplier") ? "Supplier portal"
+      : pathname.startsWith("/procurement") ? "Procurement" : "ERP workspace";
+    document.title = `${area} · ${branding.displayName}`;
+  }, [branding, pathname]);
 
   return (
     <QueryClientProvider client={queryClient}>

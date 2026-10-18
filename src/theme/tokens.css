@@ -27,6 +27,8 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-button-primary: var(--button-primary);
+  --color-button-primary-foreground: var(--button-primary-foreground);
   --color-primary-soft: var(--primary-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -77,6 +79,8 @@
   /* brand */
   --primary: oklch(0.46 0.093 205);
   --primary-foreground: oklch(0.99 0.005 200);
+  --button-primary: var(--primary);
+  --button-primary-foreground: var(--primary-foreground);
   --primary-soft: oklch(0.95 0.028 200);
   --secondary: oklch(0.955 0.008 240);
   --secondary-foreground: oklch(0.28 0.03 245);
