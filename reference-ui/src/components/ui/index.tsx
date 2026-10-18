@@ -33,7 +33,7 @@ export function Button({
   return (
     <button
       type="button"
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${colors[variant]} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 py-2 text-base font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${colors[variant]} ${className}`}
       {...props}
     />
   );
@@ -53,7 +53,7 @@ export function Field({
 }) {
   return (
     <label className={`block ${className}`}>
-      <span className="mb-1.5 block text-[13px] font-medium text-slate-700">
+      <span className="mb-1.5 block text-sm font-medium text-foreground">
         {label}
       </span>
       {children}

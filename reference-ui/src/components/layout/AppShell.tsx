@@ -95,7 +95,7 @@ export function AppShell() {
       to={to}
       end={to === "/"}
       className={({ isActive }) =>
-        `group flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors ${child ? `pl-10 ${compact ? "lg:hidden" : ""}` : compact ? "lg:justify-center lg:px-2" : ""} ${isActive ? "bg-rail-active font-medium text-rail-foreground" : "text-rail-muted hover:bg-rail-active hover:text-rail-foreground"}`
+        `group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors ${child ? `pl-10 ${compact ? "lg:hidden" : ""}` : compact ? "lg:justify-center lg:px-2" : ""} ${isActive ? "bg-rail-active font-medium text-rail-foreground" : "text-rail-muted hover:bg-rail-active hover:text-rail-foreground"}`
       }
       title={label}
     >
@@ -115,7 +115,7 @@ export function AppShell() {
         </button>
         <a href="/" aria-label="ERP home" className="flex shrink-0 items-center rounded-md px-1.5 py-1 hover:bg-primary-foreground/10 sm:px-2"><BrandMark onDark showName={false} /></a>
         <div className="relative shrink-0">
-          <button type="button" aria-label="Switch ERP module" aria-expanded={modulesOpen} onClick={() => { setModulesOpen(!modulesOpen); setContextOpen(false); }} className="flex h-9 items-center gap-1 rounded-md px-2 text-xs font-semibold hover:bg-primary-foreground/10 sm:gap-1.5 sm:px-3"><LayoutGrid size={16} /><span className="hidden sm:inline">Procurement</span><ChevronDown size={14} /></button>
+          <button type="button" aria-label="Switch ERP module" aria-expanded={modulesOpen} onClick={() => { setModulesOpen(!modulesOpen); setContextOpen(false); }} className="flex h-9 items-center gap-1 rounded-md px-2 text-sm font-semibold hover:bg-primary-foreground/10 sm:gap-1.5 sm:px-3"><LayoutGrid size={16} /><span className="hidden sm:inline">Procurement</span><ChevronDown size={14} /></button>
           {modulesOpen && <div className="absolute left-0 top-11 z-50 w-56 rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl">
             <p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">My modules</p>
             {canOpenHrm && <a href="/hrm" className="block rounded px-2 py-2 text-sm hover:bg-secondary">Human resources</a>}
@@ -129,7 +129,7 @@ export function AppShell() {
             aria-label="Organisation context"
             aria-expanded={contextOpen}
             onClick={() => { setContextOpen(!contextOpen); setModulesOpen(false); }}
-            className="flex max-w-64 items-center gap-2 rounded-full border border-primary-foreground/40 bg-surface px-2 py-1.5 text-xs text-foreground md:px-3"
+            className="flex max-w-64 items-center gap-2 rounded-full border border-primary-foreground/40 bg-surface px-2 py-1.5 text-sm text-foreground md:px-3"
           >
             <Building2 size={15} className="shrink-0" />
             <span className="hidden truncate md:inline">{activeEntity?.name || branding?.displayName || "Organisation"}{activeBranch ? ` · ${activeBranch.name}` : ""}</span>
@@ -157,7 +157,7 @@ export function AppShell() {
               setQuery(event.target.value);
               setSearchOpen(true);
             }}
-            className="w-full rounded-full border border-primary-foreground/40 bg-surface py-2 pl-10 pr-3 text-xs text-foreground outline-none focus:border-ring"
+            className="w-full rounded-full border border-primary-foreground/40 bg-surface py-2 pl-10 pr-3 text-sm text-foreground outline-none focus:border-ring"
             placeholder="Search procurement"
           />
           {searchOpen && (
@@ -282,7 +282,7 @@ export function AppShell() {
           <button
             onClick={() => setHelp(true)}
           title="Workflow guide"
-          className={`flex w-full items-center gap-2 rounded-lg border border-rail-active bg-rail-active/40 px-3 py-3 text-xs text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
+          className={`flex w-full items-center gap-2 rounded-lg border border-rail-active bg-rail-active/40 px-3 py-3 text-sm text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
           >
             <Sparkles size={16} className="text-primary" />
             <span className={compact ? "lg:sr-only" : ""}>Workflow guide</span>
@@ -300,7 +300,7 @@ export function AppShell() {
             onClick={() => { if (compact && window.innerWidth >= 1024) { setCompact(false); setProcOpen(true); } else setProcOpen(!procOpen); }}
             aria-label="Procurement"
             title="Procurement"
-            className={`mt-3 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
+            className={`mt-3 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
           >
             <ShoppingBag size={17} />
             <span className={compact ? "lg:sr-only" : ""}>Procurement</span>
@@ -316,7 +316,7 @@ export function AppShell() {
             onClick={() => { if (compact && window.innerWidth >= 1024) { setCompact(false); setPayOpen(true); } else setPayOpen(!payOpen); }}
             aria-label="Payables"
             title="Payables"
-            className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
+            className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
           >
             <Wallet size={17} />
             <span className={compact ? "lg:sr-only" : ""}>Payables</span>
@@ -335,7 +335,7 @@ export function AppShell() {
           <Link
             to="/settings"
             title="Settings"
-            className={`flex items-center gap-3 rounded-md px-3 py-2 text-xs text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
           >
             <Settings size={16} />
             <span className={compact ? "lg:sr-only" : ""}>Settings</span>
@@ -345,7 +345,9 @@ export function AppShell() {
       <main
         className={`min-w-0 pb-16 pt-14 transition-all ${compact ? "lg:pl-16" : "lg:pl-64"}`}
       >
-        <Outlet />
+        <div className="mx-auto w-full max-w-6xl">
+          <Outlet />
+        </div>
       </main>
       <footer className="fixed inset-x-0 bottom-0 z-20 flex h-8 items-center justify-between border-t border-border bg-surface px-4 text-[10px] text-muted-foreground">
         <span>Procurement workspace</span>
