@@ -15,10 +15,11 @@ describe("Procurement live readiness", () => {
   it("uses Core's selected IDs and accepts only a matching ready API scope", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity, currencyCode: "ZMW" } }))
       .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities }));
     const result = await fetchProcurementReadiness({ entityId: entity, branch }, undefined, fetcher);
     expect(result.capabilities.vendorDraft).toBe(true);
+    expect(result.defaultCurrencyCode).toBe("ZMW");
     expect(result.capabilities.orders).toBe(false);
     expect(fetcher.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity, "X-Shell-Location": branch });
     expect(fetcher.mock.calls[2][1].credentials).toBe("include");
@@ -31,7 +32,7 @@ describe("Procurement live readiness", () => {
 
     const unmigrated = vi.fn()
       .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity, currencyCode: "ZMW" } }))
       .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: false, capabilities }));
     await expect(fetchProcurementReadiness({}, undefined, unmigrated)).rejects.toBeInstanceOf(ProcurementLiveError);
   });

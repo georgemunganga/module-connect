@@ -8,7 +8,7 @@ The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` throug
 
 | Concern | UI requirement | API/source owner |
 | --- | --- | --- |
-| Identity and scope | Use verified `tenantId`, `legalEntityId`, `workerId`, permissions and allowed company from `/api/procurement/v1/context`. Display labels may change; use stable IDs in requests. | HRMS/shared host validates active worker, company, role and record scope on every request. |
+| Identity and scope | Use verified `tenantId`, `legalEntityId`, `workerId`, permissions, allowed company and `company.currencyCode` from `/api/procurement/v1/context`. Pre-fill the selected company's currency on new drafts; preserve each saved transaction's currency on edit. Display labels may change; use stable IDs in requests. | Core supplies the selected company and default currency. HRMS/shared host validates active worker, company, role and record scope on every request. |
 | Identity on a decision | Show actor, assigned role, delegation and effective authority. Never send a free-text approver name as authorization. | Shared workflow and identity services. |
 | Version | Send server version on edits and transitions. On conflict, offer refresh and compare; preserve unsaved form input. | Procurement API optimistic concurrency. |
 | State | Show current state, next owner, permitted transitions and reason requirements. Keep receipt, invoice, AP and payment progress separate. | Record-owning service returns authoritative state and actions. |

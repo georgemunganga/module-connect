@@ -9,6 +9,7 @@ export type ProcurementReadiness = {
   tenantId: string;
   legalEntityId: string;
   workerId: string;
+  defaultCurrencyCode: string;
   schemaReady: boolean;
   capabilities: Record<ProcurementCapability, boolean>;
 };
@@ -68,7 +69,9 @@ export async function fetchProcurementReadiness(
   catch { throw new ProcurementLiveError("invalid-response"); }
   if (!object(context) || !guid.test(String(context.legalEntityId)) || !guid.test(String(context.workerId))
     || typeof context.tenantId !== "string" || !object(context.company)
-    || context.company.id !== context.legalEntityId)
+    || context.company.id !== context.legalEntityId
+    || typeof context.company.currencyCode !== "string"
+    || !/^[a-z]{3}$/i.test(context.company.currencyCode))
     throw new ProcurementLiveError("invalid-response");
 
   let metaResponse: Response;
@@ -88,6 +91,7 @@ export async function fetchProcurementReadiness(
     tenantId: context.tenantId,
     legalEntityId: context.legalEntityId as string,
     workerId: context.workerId as string,
+    defaultCurrencyCode: (context.company.currencyCode as string).toUpperCase(),
     schemaReady: true,
     capabilities: Object.fromEntries(capabilityKeys.map((key) => [key, resolvedCapabilities[key]])) as Record<ProcurementCapability, boolean>,
   };
