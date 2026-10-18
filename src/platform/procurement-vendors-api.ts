@@ -79,6 +79,19 @@ export interface VendorPage {
   pageSize: number;
 }
 
+export interface VendorDetail extends VendorSummary {
+  isLocal?: boolean;
+  portalAccessState?: string | null;
+  registrationNumber?: string | null;
+  defaultCurrencyCode?: string | null;
+  paymentTermRef?: string | null;
+  taxCategoryRef?: string | null;
+  languageCode?: string | null;
+  remarks?: string | null;
+  contacts?: (VendorContactDraft & { id: string })[];
+  sites?: (VendorSiteDraft & { id: string })[];
+}
+
 export class VendorApiError extends Error {
   readonly status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
@@ -115,10 +128,10 @@ async function request<T>(legalEntityId: string, path: string, init: RequestInit
       const body: unknown = await response.json();
       if (object(body)) reason = String(body.detail ?? body.title ?? body.message ?? "");
     } catch { /* A non-JSON response still needs a useful error. */ }
-    throw new VendorApiError(response.status, reason || (
-      response.status === 401 ? "Sign in to ERP to manage vendors."
-        : response.status === 403 ? "You do not have access to this vendor or company."
-        : response.status === 404 ? "This vendor is no longer available to you."
+    throw new VendorApiError(response.status, response.status === 403
+      ? "You do not have access to this vendor or company."
+      : response.status === 401 ? "Sign in to ERP to manage vendors." : reason || (
+      response.status === 404 ? "This vendor is no longer available to you."
         : response.status === 409 ? "The vendor changed while you were editing. Refresh and compare before saving."
         : "The vendor action could not be completed."
     ));
@@ -146,12 +159,22 @@ export async function listVendorDrafts(
   return body as unknown as VendorPage;
 }
 
-export async function getVendorDraft(legalEntityId: string, id: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+export async function getVendorDraft(legalEntityId: string, id: string, signal?: AbortSignal): Promise<VendorDetail> {
   if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
   const body = await request<unknown>(legalEntityId, `/${id}`, { signal });
   if (!object(body) || body.id !== id || typeof body.version !== "number")
     throw new VendorApiError(0, "The ERP returned invalid vendor details.");
-  return body;
+  return body as unknown as VendorDetail;
+}
+
+export async function addVendorContact(legalEntityId: string, id: string, version: number, contact: VendorContactDraft): Promise<void> {
+  if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/contacts`, { method: "POST", body: JSON.stringify({ version, contact }) });
+}
+
+export async function addVendorSite(legalEntityId: string, id: string, version: number, site: VendorSiteDraft): Promise<void> {
+  if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/sites`, { method: "POST", body: JSON.stringify({ version, site }) });
 }
 
 export async function createVendorDraft(legalEntityId: string, draft: VendorDraft): Promise<{ id: string; number: string; version: number; possibleDuplicate: boolean }> {

@@ -378,7 +378,31 @@
     },
     {
       "path": "/settings/modules/bills/preferences",
-      "title": "Bills — Preferences"
+      "title": "Invoice Checks — Preferences"
+    },
+    {
+      "path": "/settings/modules/request-for-quotes/preferences",
+      "title": "Requests for Quotes — Preferences"
+    },
+    {
+      "path": "/settings/modules/request-for-quotes/approvals",
+      "title": "Requests for Quotes — Approvals"
+    },
+    {
+      "path": "/settings/modules/contracts/preferences",
+      "title": "Supplier Contracts — Preferences"
+    },
+    {
+      "path": "/settings/modules/contracts/approvals",
+      "title": "Supplier Contracts — Approvals"
+    },
+    {
+      "path": "/settings/modules/inspections/preferences",
+      "title": "Inspections — Preferences"
+    },
+    {
+      "path": "/settings/modules/returns/preferences",
+      "title": "Returns — Preferences"
     },
     {
       "path": "/settings/modules/recurring-bills/buttons",

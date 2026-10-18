@@ -29,6 +29,7 @@ import { modules } from "../../data/modules";
 import { Modal, Button } from "../ui";
 import { BrandMark, useErpShell } from "../../lib/erpShell";
 import { ErpSidebarHeader, ErpTopBar } from "@amizopower/erp-ui";
+import { isProcurementLiveMode } from "../../lib/ProcurementLiveGate";
 
 const procurement = [
   ["/procurement-requests", "Purchase Requests"],
@@ -76,7 +77,7 @@ export function AppShell() {
   }, [compact]);
   const activeEntity = entities.find((item) => item.id === selection.entityId) ?? entities[0];
   const activeBranch = branches.find((item) => item.id === selection.branch);
-  const results = records
+  const results = (isProcurementLiveMode ? [] : records)
     .filter((record) =>
       `${record.id} ${record.title} ${record.party}`
         .toLowerCase()

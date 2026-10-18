@@ -1,0 +1,119 @@
+import { expect, test, type Page } from "@playwright/test";
+
+const companyId = "11111111-1111-4111-8111-111111111111";
+const workerId = "22222222-2222-4222-8222-222222222222";
+const vendorId = "33333333-3333-4333-8333-333333333333";
+const capabilities = Object.fromEntries([
+  "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
+  "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "configurationDraft", "contractDraft", "sourcingDraft",
+].map((key) => [key, key === "vendorDraft"]));
+
+type Vendor = Record<string, unknown> & { id: string; version: number; displayName: string; legalName: string; status: string };
+
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean } = {}) {
+  let vendor: Vendor | null = null;
+  await page.addInitScript((entityId) => {
+    localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId }));
+  }, companyId);
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
+    if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
+    if (path === "/api/hrm/admin/locations") return json({ items: [] });
+    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
+    if (path === "/api/procurement/v1/vendors") {
+      if (request.method() === "GET") return options.denyList ? json({ title: "Forbidden" }, 403) : json({ items: vendor ? [{ ...vendor }] : [], total: vendor ? 1 : 0, page: 1, pageSize: 25 });
+      if (request.method() === "POST") {
+        const draft = request.postDataJSON();
+        vendor = { ...draft, id: vendorId, number: "VEN-001", status: "Draft", version: 1, isOrderable: false, defaultCurrencyCode: draft.currencyCode, contacts: [], sites: [] };
+        return json({ id: vendorId, number: "VEN-001", version: 1, possibleDuplicate: false }, 201);
+      }
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}` && vendor) {
+      if (request.method() === "GET") return json(vendor);
+      if (request.method() === "PUT") {
+        if (options.staleUpdate) return json({ detail: "This vendor changed. Refresh it and try again." }, 409);
+        const { version, draft } = request.postDataJSON();
+        if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
+        vendor = { ...vendor, ...draft, defaultCurrencyCode: draft.currencyCode, version: version + 1 };
+        return json({ id: vendorId, status: "Draft", version: vendor.version });
+      }
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/contacts` && vendor) {
+      const { version, contact } = request.postDataJSON();
+      if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
+      vendor = { ...vendor, contacts: [...(vendor.contacts as unknown[]), { ...contact, id: "44444444-4444-4444-8444-444444444444" }], version: version + 1 };
+      return json({ id: vendorId, version: vendor.version }, 201);
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/sites` && vendor) {
+      const { version, site } = request.postDataJSON();
+      if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
+      vendor = { ...vendor, sites: [...(vendor.sites as unknown[]), { ...site, id: "55555555-5555-4555-8555-555555555555" }], version: version + 1 };
+      return json({ id: vendorId, version: vendor.version }, 201);
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/withdraw` && vendor) {
+      const { version } = request.postDataJSON();
+      vendor = { ...vendor, status: "Withdrawn", version: version + 1 };
+      return json({ id: vendorId, status: "Withdrawn", version: vendor.version });
+    }
+    return json({ title: `Unexpected route: ${path}` }, 404);
+  });
+}
+
+test("vendor draft persists through the ERP API across refresh, edit and withdrawal", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/vendors");
+  await expect(page.getByText("Every purchase starts with a vendor")).toBeVisible();
+  await expect(page.getByText("Northstar Office Supply")).toHaveCount(0);
+  await page.getByRole("link", { name: "Add vendor" }).first().click();
+  await page.getByLabel("Company name").fill("Amizo Supplies Ltd");
+  await page.getByLabel("Display name").fill("Amizo Supplies");
+  await expect(page.getByLabel("Currency")).toHaveValue("ZMW");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Amizo Supplies" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Amizo Supplies" })).toBeVisible();
+  await page.getByLabel("Contact name").fill("Jane Buyer");
+  await page.getByRole("button", { name: "Add contact" }).click();
+  await expect(page.getByText("Jane Buyer")).toBeVisible();
+  await page.getByLabel("Address line 1").fill("Plot 10, Cairo Road");
+  await page.getByRole("button", { name: "Add address" }).click();
+  await expect(page.getByText(/Plot 10, Cairo Road/)).toBeVisible();
+  await page.getByRole("link", { name: "Edit vendor" }).click();
+  await page.getByLabel("Display name").fill("Amizo Trading");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Amizo Trading" })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept("No longer needed"));
+  await page.getByRole("button", { name: "Withdraw draft" }).click();
+  await expect(page.getByRole("heading", { name: "Vendors" })).toBeVisible();
+  await expect(page.getByText("Withdrawn")).toBeVisible();
+  await page.getByRole("link", { name: "Home", exact: true }).click();
+  await expect(page.getByText("Procurement transaction screens will open as their live workflows are verified.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Office equipment for new team")).toHaveCount(0);
+});
+
+test("vendor list denial shows an error without demo rows", async ({ page }) => {
+  await mockErp(page, { denyList: true });
+  await page.goto("/procurement/workspace/vendors");
+  await expect(page.getByRole("alert")).toContainText("do not have access");
+  await expect(page.getByText("Northstar Office Supply")).toHaveCount(0);
+});
+
+test("stale edit keeps entered values for comparison", async ({ page }) => {
+  await mockErp(page, { staleUpdate: true });
+  await page.goto("/procurement/workspace/vendors/new");
+  await page.getByLabel("Company name").fill("Amizo Supplies Ltd");
+  await page.getByLabel("Display name").fill("Amizo Supplies");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("link", { name: "Edit vendor" }).click();
+  await page.getByLabel("Display name").fill("Unsaved change");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("alert")).toContainText("changed");
+  await expect(page.getByLabel("Display name")).toHaveValue("Unsaved change");
+});

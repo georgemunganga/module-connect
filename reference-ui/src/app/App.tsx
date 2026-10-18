@@ -7,7 +7,8 @@ import {
 } from "react-router-dom";
 import { AppProvider } from "../lib/store";
 import { ErpShellProvider } from "../lib/erpShell";
-import { ProcurementLiveGate } from "../lib/ProcurementLiveGate";
+import { ProcurementLiveGate, isProcurementLiveMode } from "../lib/ProcurementLiveGate";
+import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/LiveVendors";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -110,7 +111,7 @@ export function App() {
                 path={`/${kind}`}
                 element={
                   <div className="p-5 sm:p-8">
-                    <CatalogList kind={kind} />
+                    {isProcurementLiveMode && kind === "vendors" ? <LiveVendorList /> : <CatalogList kind={kind} />}
                   </div>
                 }
               />,
@@ -119,7 +120,7 @@ export function App() {
                 path={`/${kind}/new`}
                 element={
                   <div className="p-5 sm:p-8">
-                    <CatalogRoute kind={kind} />
+                    {isProcurementLiveMode && kind === "vendors" ? <LiveVendorEditor /> : <CatalogRoute kind={kind} />}
                   </div>
                 }
               />,
@@ -128,7 +129,7 @@ export function App() {
                 path={`/${kind}/:id/edit`}
                 element={
                   <div className="p-5 sm:p-8">
-                    <CatalogRoute kind={kind} />
+                    {isProcurementLiveMode && kind === "vendors" ? <LiveVendorEditor /> : <CatalogRoute kind={kind} />}
                   </div>
                 }
               />,
@@ -139,7 +140,7 @@ export function App() {
                 path={`/${kind}/:id`}
                 element={
                   <div className="p-5 sm:p-8">
-                    <CatalogDetail kind={kind} />
+                  {isProcurementLiveMode && kind === "vendors" ? <LiveVendorDetail /> : <CatalogDetail kind={kind} />}
                   </div>
                 }
               />
@@ -148,7 +149,7 @@ export function App() {
               path="/vendors/:id/:tab"
               element={
                 <div className="p-5 sm:p-8">
-                  <CatalogDetail kind="vendors" />
+                  {isProcurementLiveMode ? <LiveVendorDetail /> : <CatalogDetail kind="vendors" />}
                 </div>
               }
             />

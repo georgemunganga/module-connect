@@ -1,12 +1,17 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { useErpShell } from "./erpShell";
 import { fetchProcurementReadiness, ProcurementLiveError, type ProcurementReadiness } from "./procurement-live";
 
 const liveMode = import.meta.env.VITE_PROCUREMENT_LIVE_MODE === "1";
+const LiveReadiness = createContext<ProcurementReadiness | null>(null);
+export const useLiveReadiness = () => useContext(LiveReadiness);
+export const isProcurementLiveMode = liveMode;
 
 /** Live transactions stay closed until their individual API adapters pass acceptance. */
 export function ProcurementLiveGate({ children }: { children: ReactNode }) {
   const { selection } = useErpShell();
+  const location = useLocation();
   const [state, setState] = useState<{ readiness?: ProcurementReadiness; error?: string }>({});
   useEffect(() => {
     if (!liveMode) return;
@@ -22,6 +27,9 @@ export function ProcurementLiveGate({ children }: { children: ReactNode }) {
   }, [selection.entityId, selection.branch]);
 
   if (!liveMode) return <>{children}</>;
+  const vendorPath = /^\/vendors(?:\/|$)/.test(location.pathname);
+  if (state.readiness && vendorPath && state.readiness.capabilities.vendorDraft)
+    return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
   return <main className="flex min-h-dvh items-center justify-center bg-background px-5 text-foreground">
     <div className="w-full max-w-lg">
       <h1 className="text-2xl font-semibold">Procurement</h1>

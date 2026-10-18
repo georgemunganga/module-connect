@@ -34,8 +34,10 @@ export type AppRecord = {
 export function useStoredState<T>(
   key: string,
   initial: T,
+  persist = true,
 ): [T, (value: T | ((previous: T) => T)) => void] {
   const [state, setState] = useState<T>(() => {
+    if (!persist) return initial;
     try {
       const raw = localStorage.getItem(`procureui.${key}`);
       return raw ? (JSON.parse(raw) as T) : initial;
@@ -44,12 +46,13 @@ export function useStoredState<T>(
     }
   });
   useEffect(() => {
+    if (!persist) return;
     try {
       localStorage.setItem(`procureui.${key}`, JSON.stringify(state));
     } catch {
       /* Browser storage may be unavailable. */
     }
-  }, [key, state]);
+  }, [key, state, persist]);
   return [state, setState];
 }
 export const today = () => new Date().toISOString().slice(0, 10);
@@ -328,7 +331,8 @@ type Store = {
 };
 const Context = createContext<Store | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [records, setRecords] = useStoredState("records.v1", fixtures);
+  const live = import.meta.env.VITE_PROCUREMENT_LIVE_MODE === "1";
+  const [records, setRecords] = useStoredState("records.v1", live ? [] : fixtures, !live);
   const [toast, setToast] = useState("");
   useEffect(() => {
     const vendors = records.filter((record) => record.kind === "vendors");
