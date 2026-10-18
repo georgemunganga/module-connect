@@ -13,6 +13,7 @@ import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveIt
 import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../features/LiveRequests";
 import { LiveSourcingList, LiveSourcingEditor, LiveSourcingDetail } from "../features/LiveSourcing";
 import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../features/LiveContracts";
+import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePlans";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -118,6 +119,10 @@ export function App() {
               <Route path="/contracts/new" element={<LiveContractEditor />} />
               <Route path="/contracts/:id/edit" element={<LiveContractEditor />} />
               <Route path="/contracts/:id" element={<LiveContractDetail />} />
+              <Route path="/plans" element={<LivePlanList />} />
+              <Route path="/plans/new" element={<LivePlanEditor />} />
+              <Route path="/plans/:id/edit" element={<LivePlanEditor />} />
+              <Route path="/plans/:id" element={<LivePlanDetail />} />
             </>}
             {(["items", "vendors"] as const).flatMap((kind) => [
               <Route
