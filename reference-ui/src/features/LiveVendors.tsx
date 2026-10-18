@@ -30,6 +30,7 @@ export function LiveVendorList() {
   const { legalEntityId } = useCompany();
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<VendorPage | null>(null);
   const [error, setError] = useState("");
@@ -37,18 +38,26 @@ export function LiveVendorList() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError("");
-    listVendorDrafts(legalEntityId, { search, page, signal: controller.signal })
+    listVendorDrafts(legalEntityId, { search, status, page, signal: controller.signal })
       .then(setData).catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [legalEntityId, search, page]);
+  }, [legalEntityId, search, status, page]);
   return <div className="p-5 sm:p-8">
     <PageHeader title="Vendors" subtitle="Create and manage vendor drafts for this company." actions={<Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link>} />
     <Panel><div className="p-5">
-      <form className="mb-4 flex max-w-md gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(query.trim()); }}>
+      <form className="mb-4 flex max-w-xl gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(query.trim()); }}>
         <Input aria-label="Search vendors" placeholder="Search vendor name or company ID" value={query} onChange={(event) => setQuery(event.target.value)} />
         <Button type="submit" variant="secondary">Search</Button>
       </form>
+      <Select aria-label="Filter vendors by status" className="mb-4 max-w-xs" value={status}
+        onChange={(event) => { setPage(1); setStatus(event.target.value); }}>
+        <option value="">All statuses</option><option value="Submitted">Submitted for review</option>
+        <option value="More Information Required">More information required</option>
+        <option value="Draft">Draft</option><option value="Approved">Approved</option>
+        <option value="Active">Active</option><option value="Suspended">Suspended</option>
+        <option value="Withdrawn">Withdrawn</option>
+      </Select>
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading vendors…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Vendor</th><th>Company ID</th><th>Country</th><th>Status</th><th>Action</th></tr></thead>
@@ -57,7 +66,9 @@ export function LiveVendorList() {
           <td>{vendor.number}</td><td>{vendor.countryCode}</td><td><Badge>{vendor.status}</Badge></td>
           <td><Link className="text-sm text-primary hover:underline" to={`/vendors/${vendor.id}`}>Open</Link></td>
         </tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="Every purchase starts with a vendor" description="Create and manage your vendors and their contact persons, all in one place." action={<Link to="/vendors/new"><Button>Add vendor</Button></Link>} />}
+      </RecordTable></div> : search || status
+        ? <EmptyState title="No vendors match this view" description="Try a different search or status." />
+        : <EmptyState title="Every purchase starts with a vendor" description="Create and manage your vendors and their contact persons, all in one place." action={<Link to="/vendors/new"><Button>Add vendor</Button></Link>} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
   </div>;

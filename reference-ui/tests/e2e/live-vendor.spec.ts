@@ -33,7 +33,12 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/vendors") {
-      if (request.method() === "GET") return options.denyList ? json({ title: "Forbidden" }, 403) : json({ items: vendor ? [{ ...vendor }] : [], total: vendor ? 1 : 0, page: 1, pageSize: 25 });
+      if (request.method() === "GET") {
+        const selectedStatus = new URL(request.url()).searchParams.get("status");
+        const matches = vendor && (!selectedStatus || vendor.status === selectedStatus);
+        return options.denyList ? json({ title: "Forbidden" }, 403)
+          : json({ items: matches ? [{ ...vendor }] : [], total: matches ? 1 : 0, page: 1, pageSize: 25 });
+      }
       if (request.method() === "POST") {
         const draft = request.postDataJSON();
         vendor = { ...draft, id: vendorId, number: "VEN-001", status: "Draft", version: 1, isOrderable: false, defaultCurrencyCode: draft.currencyCode, contacts: [], sites: [] };
@@ -174,7 +179,11 @@ test("vendor can be submitted for review after category and contact are saved", 
 
 test("reviewer can return a submitted vendor with a visible reason", async ({ page }) => {
   await mockErp(page, { reviewer: true });
-  await page.goto(`/procurement/workspace/vendors/${vendorId}`);
+  await page.goto("/procurement/workspace/vendors");
+  await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
+  await page.getByRole("option", { name: "Submitted for review" }).click();
+  await expect(page.getByText("Acme", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Acme" }).click();
   await expect(page.getByRole("heading", { name: "Request changes" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send back for changes" })).toBeDisabled();
   await page.getByLabel("Changes needed").fill("Confirm the legal address");
@@ -182,4 +191,8 @@ test("reviewer can return a submitted vendor with a visible reason", async ({ pa
   await expect(page.getByText(/Reviewer note: Confirm the legal address/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Request changes" })).toHaveCount(0);
   await expect(page.getByText("No — approval required")).toBeVisible();
+  await page.getByRole("link", { name: "Back to vendors" }).click();
+  await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
+  await page.getByRole("option", { name: "Submitted for review" }).click();
+  await expect(page.getByText("No vendors match this view")).toBeVisible();
 });
