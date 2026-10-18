@@ -8,6 +8,7 @@
 }
 :root {
   font-family: var(--erp-font-family, var(--font-sans));
+  font-size: 17px;
   color: var(--foreground);
   background: var(--background);
   font-synthesis: none;
@@ -17,7 +18,7 @@
 }
 body {
   margin: 0;
-  font-size: 14px;
+  font-size: 1rem;
 }
 button,
 a,
@@ -39,13 +40,14 @@ a:focus-visible {
   .control {
     display: block;
     width: 100%;
+    min-height: 2.75rem;
     border: 1px solid var(--input);
     border-radius: var(--radius);
     padding: 9px 12px;
     background: var(--surface);
     color: var(--foreground);
-    font-size: 13px;
-    line-height: 20px;
+    font-size: .875rem;
+    line-height: 1.25rem;
     outline: none;
     transition:
       border-color 0.15s,
@@ -65,7 +67,7 @@ a:focus-visible {
   }
 }
 .table-head {
-  font-size: 11px;
+  font-size: .75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -73,10 +75,10 @@ a:focus-visible {
   background: var(--surface-muted);
 }
 .table-cell {
-  padding: 17px 20px;
+  padding: 1rem 1.2rem;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
-  font-size: 13px;
+  font-size: .875rem;
 }
 ::-webkit-scrollbar {
   width: 6px;
@@ -100,22 +102,22 @@ a:focus-visible {
 .erp-record-table thead { background: var(--surface-muted); }
 .erp-record-table thead tr { border-bottom: 1px solid var(--border); }
 .erp-record-table thead th {
-  padding: 12px 16px;
+  padding: .75rem 1rem;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: .75rem;
   font-weight: 600;
   letter-spacing: normal;
-  line-height: 20px;
+  line-height: 1.25rem;
   text-transform: none;
   white-space: nowrap;
 }
 .erp-record-table tbody tr { border-bottom: 1px solid var(--border); transition: background-color 150ms ease; }
 .erp-record-table tbody tr:last-child { border-bottom: 0; }
 .erp-record-table tbody tr:hover { background: var(--primary-soft); }
-.erp-record-table tbody :is(td, th) { padding: 12px 16px; vertical-align: middle; }
+.erp-record-table tbody :is(td, th) { padding: .75rem 1rem; vertical-align: middle; }
 .erp-record-table tbody th { text-align: left; }
-.erp-record-table caption:not(.sr-only) { padding: 12px 16px; text-align: left; color: var(--muted-foreground); }
+.erp-record-table caption:not(.sr-only) { padding: .75rem 1rem; text-align: left; color: var(--muted-foreground); }
 .erp-record-table--compact thead th,
-.erp-record-table--compact tbody :is(td, th) { padding: 8px 12px; }
+.erp-record-table--compact tbody :is(td, th) { padding: .5rem .75rem; }
 .erp-record-table--matrix thead th,
 .erp-record-table--matrix tbody :is(td, th) { padding: revert-layer; }
