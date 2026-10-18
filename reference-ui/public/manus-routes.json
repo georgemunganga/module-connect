@@ -205,6 +205,10 @@
       "title": "All Settings"
     },
     {
+      "path": "/settings/reference-data",
+      "title": "Buying categories & methods"
+    },
+    {
       "path": "/settings/general",
       "title": "General"
     },
