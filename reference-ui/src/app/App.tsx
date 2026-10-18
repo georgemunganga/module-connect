@@ -12,6 +12,7 @@ import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/
 import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
 import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../features/LiveRequests";
 import { LiveSourcingList, LiveSourcingEditor, LiveSourcingDetail } from "../features/LiveSourcing";
+import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../features/LiveContracts";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -112,6 +113,12 @@ export function App() {
               ])}
             <Route path="/rfqs/new" element={isProcurementLiveMode ? <LiveSourcingEditor /> : <WizardRoute />} />
             <Route path="/rfqs/:id/edit" element={isProcurementLiveMode ? <LiveSourcingEditor /> : <WizardRoute />} />
+            {isProcurementLiveMode && <>
+              <Route path="/contracts" element={<LiveContractList />} />
+              <Route path="/contracts/new" element={<LiveContractEditor />} />
+              <Route path="/contracts/:id/edit" element={<LiveContractEditor />} />
+              <Route path="/contracts/:id" element={<LiveContractDetail />} />
+            </>}
             {(["items", "vendors"] as const).flatMap((kind) => [
               <Route
                 key={kind}

@@ -31,10 +31,12 @@ export function ProcurementLiveGate({ children }: { children: ReactNode }) {
   const itemPath = /^\/items(?:\/|$)/.test(location.pathname);
   const requestPath = /^\/(?:requests|procurement-requests)(?:\/|$)/.test(location.pathname);
   const sourcingPath = /^\/rfqs(?:\/|$)/.test(location.pathname);
+  const contractPath = /^\/contracts(?:\/|$)/.test(location.pathname);
   if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
-    || (sourcingPath && state.readiness.capabilities.sourcingDraft)))
+    || (sourcingPath && state.readiness.capabilities.sourcingDraft)
+    || (contractPath && state.readiness.capabilities.contractDraft)))
     return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
   return <main className="flex min-h-dvh items-center justify-center bg-background px-5 text-foreground">
     <div className="w-full max-w-lg">

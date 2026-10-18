@@ -305,8 +305,10 @@ export function AppShell() {
               <ChevronRight size={13} className={`ml-auto ${compact ? "lg:hidden" : ""}`} />
             )}
           </button>
-          {procOpen &&
-            procurement.map(([to, label]) => nav(to, label, null, true))}
+          {procOpen && <>
+            {procurement.map(([to, label]) => nav(to, label, null, true))}
+            {isProcurementLiveMode && nav("/contracts", "Contracts", null, true)}
+          </>}
           <button
             onClick={() => { if (compact && window.innerWidth >= 1024) { setCompact(false); setPayOpen(true); } else setPayOpen(!payOpen); }}
             aria-label="Payables"
