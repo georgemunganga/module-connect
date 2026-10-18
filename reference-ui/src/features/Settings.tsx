@@ -56,6 +56,8 @@ import {
 } from "../data/settings";
 
 import { SetupConfig } from "./SetupConfig";
+import { LiveConfiguration } from "./LiveConfiguration";
+import { isProcurementLiveMode } from "../lib/ProcurementLiveGate";
 import { CurrencySettings, TaxSettings } from "./SettingsLists";
 
 type SavePreview = (label: string) => void;
@@ -284,6 +286,7 @@ function SettingsSidebar({
           </button>
         </div>
         <nav aria-label="Procurement settings" className={`px-3 pb-5 ${collapsed ? "lg:px-2" : ""}`}>
+        {isProcurementLiveMode && <SidebarLink label="Buying categories & methods" href="/settings/reference-data" path={path} />}
         {moduleGroups.map((group) => (
           <ModuleSidebarGroup
             key={group.title}
@@ -377,6 +380,7 @@ function SettingsIndex({ search }: { search: string }) {
     title: group.title,
     icon: group.title.includes("Supplier") ? <Users size={17} /> : group.title.includes("Sourcing") ? <FileText size={17} /> : <Receipt size={17} />,
     links: [
+      ...(isProcurementLiveMode && group.title === "Buying" ? [["Buying categories & methods", "/settings/reference-data"]] : []),
       ...(group.title.includes("Supplier") ? [["Vendor Portal", "/settings/vendor-portal"], ["Punchout Catalogs", "/settings/punchout-catalogs"]] : []),
       ...group.slugs.map((slug) => { const module = findModule(slug); return [module?.title ?? slug, `/settings/modules/${slug}/${module?.tabs[0].slug ?? "preferences"}`]; }),
     ],
@@ -428,6 +432,8 @@ function SettingsRouteContent({
   path: string;
   onSavePreview: SavePreview;
 }) {
+  if (path === "/settings/reference-data" && isProcurementLiveMode)
+    return <LiveConfiguration />;
   if (!settingsRoutes.some((route) => route.path === path))
     return (
       <div className="mx-auto max-w-xl rounded-lg border border-border bg-surface p-8">
