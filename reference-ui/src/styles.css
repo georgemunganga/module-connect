@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../../src/theme/tokens.css";
+@source "../node_modules/@amizopower/erp-ui/dist";
 @theme inline {
   --color-blue-50: var(--primary-soft);
   --color-blue-500: var(--primary);

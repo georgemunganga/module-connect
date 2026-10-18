@@ -11,16 +11,17 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@amizopower/erp-ui": "https://codeload.github.com/georgemunganga/erp-ui/tar.gz/4ae7e848360284d78835414e30a7fa4f8b344ac9",
+    "lucide-react": "0.468.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
-    "react-router-dom": "7.9.4",
-    "lucide-react": "0.468.0"
+    "react-router-dom": "7.9.4"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "4.1.14",
     "@types/react": "19.1.16",
     "@types/react-dom": "19.1.9",
     "@vitejs/plugin-react": "5.0.4",
-    "@tailwindcss/vite": "4.1.14",
     "tailwindcss": "4.1.14",
     "typescript": "5.9.3",
     "vite": "7.1.9",

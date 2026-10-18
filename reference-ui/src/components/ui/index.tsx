@@ -15,6 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { X, Check, ChevronDown, FileSearch } from "lucide-react";
+import { Button as ErpButton, Card as ErpCard, Input as ErpInput, Textarea as ErpTextarea } from "@amizopower/erp-ui";
 
 export function Button({
   variant = "primary",
@@ -23,20 +24,8 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
 }) {
-  const colors = {
-    primary: "bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 border-button-primary shadow-sm",
-    secondary: "bg-background text-foreground hover:bg-secondary border-input shadow-sm",
-    ghost:
-      "bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground border-transparent",
-    danger: "bg-danger-soft text-danger border-danger/20 hover:bg-danger/15",
-  };
-  return (
-    <button
-      type="button"
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-6 py-2 text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${colors[variant]} ${className}`}
-      {...props}
-    />
-  );
+  const sharedVariant = variant === "primary" ? "default" : variant === "secondary" ? "outline" : variant === "danger" ? "destructive" : "ghost";
+  return <ErpButton type="button" variant={sharedVariant} className={className} {...props} />;
 }
 export function Field({
   label,
@@ -72,7 +61,7 @@ export function Input({
   className = "",
   ...props
 }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`control ${className}`} {...props} />;
+  return <ErpInput className={className} {...props} />;
 }
 export function Select({
   children,
@@ -211,9 +200,7 @@ export function Textarea({
   className = "",
   ...props
 }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea className={`control min-h-24 resize-y ${className}`} {...props} />
-  );
+  return <ErpTextarea className={`resize-y ${className}`} {...props} />;
 }
 export function Badge({ children }: { children: ReactNode }) {
   const text = String(children).toLowerCase();
@@ -248,9 +235,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section
-      className={`rounded-xl border border-border bg-card text-card-foreground shadow-sm ${className}`}
-    >
+    <ErpCard className={`shadow-sm ${className}`}>
       {title && (
         <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
           <h2 className="font-semibold text-foreground">{title}</h2>
@@ -258,7 +243,7 @@ export function Panel({
         </header>
       )}
       {children}
-    </section>
+    </ErpCard>
   );
 }
 export function PageHeader({
