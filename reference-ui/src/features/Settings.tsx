@@ -387,8 +387,6 @@ function SettingsIndex({ search }: { search: string }) {
     <div className="mx-auto max-w-[1240px]">
       <PageHeader
         title="Procurement settings"
-        subtitle="Configure suppliers, catalogs, requests, orders, receiving, and invoice checks for Procurement."
-        actions={<Badge>Demo workspace</Badge>}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {visibleCards.map((card) => (
