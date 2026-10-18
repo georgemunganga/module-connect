@@ -66,10 +66,17 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       const { version, businessReason } = request.postDataJSON();
       if (!businessReason || !vendor.categoryCode || !(vendor.contacts as unknown[]).length)
         return json({ message: "Category, contact and reason are required." }, 422);
-      if (version !== vendor.version || vendor.status !== "Draft") return json({ message: "Refresh this vendor." }, 409);
+      if (version !== vendor.version || !["Draft", "More Information Required"].includes(vendor.status)) return json({ message: "Refresh this vendor." }, 409);
       vendor = { ...vendor, status: "Submitted", statusReason: businessReason,
         isOrderable: false, version: version + 1 };
       return json({ id: vendorId, status: "Submitted", isOrderable: false, version: vendor.version });
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/return` && vendor) {
+      const { version, reason } = request.postDataJSON();
+      if (version !== vendor.version || vendor.status !== "Submitted") return json({ message: "Refresh this vendor." }, 409);
+      vendor = { ...vendor, status: "More Information Required", statusReason: reason,
+        isOrderable: false, version: version + 1 };
+      return json({ id: vendorId, status: vendor.status, isOrderable: false, version: vendor.version });
     }
     return json({ title: `Unexpected route: ${path}` }, 404);
   });
@@ -144,4 +151,18 @@ test("vendor can be submitted for review after category and contact are saved", 
   await page.reload();
   await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Edit vendor" })).toHaveCount(0);
+  await page.evaluate(async (id) => {
+    const response = await fetch(`/api/procurement/v1/vendors/${id}/return`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: 3, reason: "Confirm legal address" }),
+    });
+    if (!response.ok) throw new Error("Mock reviewer return failed");
+  }, vendorId);
+  await page.reload();
+  await expect(page.getByText(/Reviewer note: Confirm legal address/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit vendor" })).toBeVisible();
+  await page.getByLabel("Why do you need this vendor?").fill("Legal address confirmed");
+  await page.getByRole("button", { name: "Resubmit for review" }).click();
+  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("No — approval required")).toBeVisible();
 });
