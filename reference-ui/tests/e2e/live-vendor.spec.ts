@@ -41,7 +41,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       }
       if (request.method() === "POST") {
         const draft = request.postDataJSON();
-        vendor = { ...draft, id: vendorId, number: "VEN-001", status: "Draft", version: 1, isOrderable: false, defaultCurrencyCode: draft.currencyCode, contacts: [], sites: [] };
+        vendor = { ...draft, id: vendorId, number: "VEN-001", status: "Draft", version: 1, isOrderable: false, defaultCurrencyCode: draft.currencyCode, contacts: [], sites: [], qualifications: [] };
         return json({ id: vendorId, number: "VEN-001", version: 1, possibleDuplicate: false }, 201);
       }
     }
@@ -65,6 +65,13 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       const { version, site } = request.postDataJSON();
       if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
       vendor = { ...vendor, sites: [...(vendor.sites as unknown[]), { ...site, id: "55555555-5555-4555-8555-555555555555" }], version: version + 1 };
+      return json({ id: vendorId, version: vendor.version }, 201);
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/qualifications` && vendor) {
+      const { version, qualification } = request.postDataJSON();
+      if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
+      vendor = { ...vendor, qualifications: [...(vendor.qualifications as unknown[]),
+        { ...qualification, id: "66666666-6666-4666-8666-666666666666", reviewStatus: "Pending" }], version: version + 1 };
       return json({ id: vendorId, version: vendor.version }, 201);
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}/withdraw` && vendor) {
@@ -111,6 +118,16 @@ test("vendor draft persists through the ERP API across refresh, edit and withdra
   await page.getByLabel("Address line 1").fill("Plot 10, Cairo Road");
   await page.getByRole("button", { name: "Add address" }).click();
   await expect(page.getByText(/Plot 10, Cairo Road/)).toBeVisible();
+  await page.getByLabel("Qualification type").fill("Tax clearance");
+  await page.getByLabel("Issue date").fill("2026-01-01");
+  await page.getByLabel("Expiry date").fill("2025-12-31");
+  await expect(page.getByText("Expiry date must be on or after the issue date.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add qualification" })).toBeDisabled();
+  await page.getByLabel("Expiry date").fill("2027-12-31");
+  await page.getByRole("button", { name: "Add qualification" }).click();
+  await expect(page.getByText(/Tax clearance.*Expires 2027-12-31/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/Tax clearance.*Expires 2027-12-31/)).toBeVisible();
   await page.getByRole("link", { name: "Edit vendor" }).click();
   await page.getByLabel("Display name").fill("Amizo Trading");
   await page.getByRole("button", { name: "Save draft" }).click();

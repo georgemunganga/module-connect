@@ -94,6 +94,7 @@ export interface VendorDetail extends VendorSummary {
   remarks?: string | null;
   contacts?: (VendorContactDraft & { id: string })[];
   sites?: (VendorSiteDraft & { id: string })[];
+  qualifications?: (VendorQualificationDraft & { id: string; reviewStatus: string })[];
 }
 
 export class VendorApiError extends Error {
@@ -179,6 +180,13 @@ export async function addVendorContact(legalEntityId: string, id: string, versio
 export async function addVendorSite(legalEntityId: string, id: string, version: number, site: VendorSiteDraft): Promise<void> {
   if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
   await request<unknown>(legalEntityId, `/${id}/sites`, { method: "POST", body: JSON.stringify({ version, site }) });
+}
+
+export async function addVendorQualification(legalEntityId: string, id: string, version: number,
+  qualification: VendorQualificationDraft): Promise<void> {
+  if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/qualifications`,
+    { method: "POST", body: JSON.stringify({ version, qualification }) });
 }
 
 export async function createVendorDraft(legalEntityId: string, draft: VendorDraft): Promise<{ id: string; number: string; version: number; possibleDuplicate: boolean }> {

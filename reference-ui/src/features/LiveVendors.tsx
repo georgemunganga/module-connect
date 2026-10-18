@@ -5,12 +5,12 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Tex
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  addVendorContact, addVendorSite, createVendorDraft, getVendorDraft,
+  addVendorContact, addVendorSite, addVendorQualification, createVendorDraft, getVendorDraft,
   listVendorDrafts, updateVendorDraft, withdrawVendorDraft,
   submitVendorForReview,
   returnVendorForInformation,
   type VendorContactDraft, type VendorDetail, type VendorDraft, type VendorPage,
-  type VendorSiteDraft,
+  type VendorQualificationDraft, type VendorSiteDraft,
 } from "../../../src/platform/procurement-vendors-api";
 
 const empty: VendorDraft = {
@@ -149,6 +149,7 @@ export function LiveVendorDetail() {
   const [reviewReason, setReviewReason] = useState("");
   const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [site, setSite] = useState({ kind: "Billing", addressLine1: "", city: "", countryCode: "ZM" });
+  const [qualification, setQualification] = useState({ qualificationType: "", issuer: "", referenceNumber: "", issuedOn: "", expiresOn: "" });
   const reload = () => { if (!id) return; setLoading(true); getVendorDraft(legalEntityId, id).then(setVendor).catch((cause: unknown) => setError(message(cause))).finally(() => setLoading(false)); };
   useEffect(() => {
     if (!id) return;
@@ -168,6 +169,8 @@ export function LiveVendorDetail() {
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading vendor…</div>;
   if (!vendor) return <div className="p-5 sm:p-8" role="alert">{error || "Vendor not found."}</div>;
   const editable = vendor.status === "Draft" || vendor.status === "More Information Required";
+  const qualificationDatesInvalid = Boolean(qualification.issuedOn && qualification.expiresOn
+    && qualification.expiresOn < qualification.issuedOn);
   return <div className="p-5 sm:p-8">
     <PageHeader title={vendor.displayName} subtitle={[vendor.number, vendor.legalName].filter(Boolean).join(" · ")} actions={<><Badge>{vendor.status}</Badge>{editable && <Link to={`/vendors/${vendor.id}/edit`}><Button variant="secondary">Edit vendor</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
@@ -187,6 +190,15 @@ export function LiveVendorDetail() {
       <Panel title="Addresses"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.sites?.map((row) => <li key={row.id}>{row.kind}: {row.addressLine1}{row.city ? `, ${row.city}` : ""}</li>)}</ul>{!vendor.sites?.length && <p className="text-sm text-muted-foreground">No addresses yet.</p>}
         {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); void act(() => addVendorSite(legalEntityId, vendor.id, vendor.version, { ...site, isPrimary: !vendor.sites?.length, isServiceSite: false } as VendorSiteDraft)).then((saved) => { if (saved) setSite((current) => ({ ...current, addressLine1: "", city: "" })); }); }}>
           <Field label="Address type"><Select value={site.kind} onChange={(event) => setSite({ ...site, kind: event.target.value })}><option>Billing</option><option>Shipping</option><option>Physical</option></Select></Field><Field label="Address line 1"><Input required value={site.addressLine1} onChange={(event) => setSite({ ...site, addressLine1: event.target.value })} /></Field><Field label="City"><Input value={site.city} onChange={(event) => setSite({ ...site, city: event.target.value })} /></Field><Field label="Country code"><Input required maxLength={2} value={site.countryCode} onChange={(event) => setSite({ ...site, countryCode: event.target.value.toUpperCase() })} /></Field><Button type="submit" disabled={busy}>Add address</Button>
+        </form>}</div></Panel>
+      <Panel title="Qualifications"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.qualifications?.map((row) => <li key={row.id}>{row.qualificationType}{row.issuer ? ` · ${row.issuer}` : ""}{row.expiresOn ? ` · Expires ${row.expiresOn}` : ""}<span className="ml-2 text-muted-foreground">{row.reviewStatus}</span></li>)}</ul>{!vendor.qualifications?.length && <p className="text-sm text-muted-foreground">No qualifications added yet.</p>}
+        {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); if (qualificationDatesInvalid) return; void act(() => addVendorQualification(legalEntityId, vendor.id, vendor.version, { ...qualification, issuedOn: qualification.issuedOn || null, expiresOn: qualification.expiresOn || null } as VendorQualificationDraft)).then((saved) => { if (saved) setQualification({ qualificationType: "", issuer: "", referenceNumber: "", issuedOn: "", expiresOn: "" }); }); }}>
+          <Field label="Qualification type"><Input required maxLength={80} value={qualification.qualificationType} onChange={(event) => setQualification({ ...qualification, qualificationType: event.target.value })} /></Field>
+          <Field label="Issued by"><Input value={qualification.issuer} onChange={(event) => setQualification({ ...qualification, issuer: event.target.value })} /></Field>
+          <Field label="Reference number"><Input value={qualification.referenceNumber} onChange={(event) => setQualification({ ...qualification, referenceNumber: event.target.value })} /></Field>
+          <div className="grid gap-3 sm:grid-cols-2"><Field label="Issue date"><Input type="date" value={qualification.issuedOn} onChange={(event) => setQualification({ ...qualification, issuedOn: event.target.value })} /></Field><Field label="Expiry date"><Input type="date" value={qualification.expiresOn} onChange={(event) => setQualification({ ...qualification, expiresOn: event.target.value })} /></Field></div>
+          {qualificationDatesInvalid && <p role="alert" className="text-sm text-red-700">Expiry date must be on or after the issue date.</p>}
+          <Button type="submit" disabled={busy || qualificationDatesInvalid}>Add qualification</Button>
         </form>}</div></Panel>
       <Panel title="Notes"><p className="p-5 text-sm">{vendor.remarks || "No remarks."}</p></Panel>
     </div>
