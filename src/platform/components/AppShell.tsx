@@ -197,15 +197,13 @@ function RailContent({ onNavigate, onOpenGuide, collapsed = false, onToggleColla
 
   return (
     <div className="flex h-full flex-col">
-      <div className={cn("flex items-center gap-2 px-3 py-4", collapsed ? "flex-col px-2" : "justify-between")}>
-        {collapsed ? (
-          <span className="flex size-9 items-center justify-center rounded-md bg-rail-active text-sm font-semibold" title={mod.name}>{mod.shortName}</span>
-        ) : (
+      <div className={cn("flex items-center gap-2 px-3 py-4", collapsed ? "justify-center px-2" : "justify-between")}>
+        {!collapsed ? (
           <div>
             <p className="px-2 text-xs font-semibold uppercase tracking-wide text-rail-muted">Module</p>
             <p className="px-2 text-sm font-semibold text-rail-foreground">{mod.name}</p>
           </div>
-        )}
+        ) : null}
         {onToggleCollapsed ? (
           <Button
             type="button"
@@ -313,12 +311,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   ] : [];
 
   useEffect(() => {
-    setRailCollapsed(window.localStorage.getItem("erp.procurement.rail.collapsed") === "true");
+    setRailCollapsed(window.localStorage.getItem("erp.sidebar.collapsed.v1") === "true");
   }, []);
 
   const toggleRail = () => {
     setRailCollapsed((current) => {
-      window.localStorage.setItem("erp.procurement.rail.collapsed", String(!current));
+      window.localStorage.setItem("erp.sidebar.collapsed.v1", String(!current));
       return !current;
     });
   };

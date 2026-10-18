@@ -22,6 +22,7 @@ import {
   X,
   CircleHelp,
   PanelLeftClose,
+  PanelLeftOpen,
   Sparkles,
   UserRound,
 } from "lucide-react";
@@ -60,7 +61,7 @@ export function AppShell() {
     [help, setHelp] = useState(false),
     [modulesOpen, setModulesOpen] = useState(false),
     [contextOpen, setContextOpen] = useState(false),
-    [compact, setCompact] = useState(false);
+    [compact, setCompact] = useState(() => window.localStorage.getItem("erp.sidebar.collapsed.v1") === "true");
   const [procOpen, setProcOpen] = useState(true),
     [payOpen, setPayOpen] = useState(true);
   useEffect(() => {
@@ -71,6 +72,9 @@ export function AppShell() {
     setModulesOpen(false);
     setContextOpen(false);
   }, [location.pathname]);
+  useEffect(() => {
+    window.localStorage.setItem("erp.sidebar.collapsed.v1", String(compact));
+  }, [compact]);
   const activeEntity = entities.find((item) => item.id === selection.entityId) ?? entities[0];
   const activeBranch = branches.find((item) => item.id === selection.branch);
   const results = records
@@ -91,11 +95,12 @@ export function AppShell() {
       to={to}
       end={to === "/"}
       className={({ isActive }) =>
-        `group flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors ${child ? "pl-10" : ""} ${isActive ? "bg-rail-active font-medium text-rail-foreground" : "text-rail-muted hover:bg-rail-active hover:text-rail-foreground"}`
+        `group flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors ${child ? `pl-10 ${compact ? "lg:hidden" : ""}` : compact ? "lg:justify-center lg:px-2" : ""} ${isActive ? "bg-rail-active font-medium text-rail-foreground" : "text-rail-muted hover:bg-rail-active hover:text-rail-foreground"}`
       }
+      title={label}
     >
       {icon}
-      <span>{label}</span>
+      <span className={compact && !child ? "lg:sr-only" : ""}>{label}</span>
     </NavLink>
   );
   return (
@@ -256,7 +261,7 @@ export function AppShell() {
       )}
       <aside
         aria-label="Main navigation"
-        className={`fixed bottom-0 top-0 z-40 flex w-64 flex-col border-r border-rail-active bg-rail pt-4 text-rail-foreground transition-transform lg:top-14 lg:z-20 lg:pt-0 ${mobile ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} ${compact ? "lg:hidden" : ""}`}
+        className={`fixed bottom-0 top-0 z-40 flex w-64 flex-col border-r border-rail-active bg-rail pt-4 text-rail-foreground transition-[width,transform] duration-200 lg:top-14 lg:z-20 lg:pt-0 ${mobile ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} ${compact ? "lg:w-16" : "lg:w-64"}`}
       >
         <div className="flex items-center justify-between px-4 pb-4 lg:hidden">
           <span className="font-semibold">Procurement</span>
@@ -267,17 +272,24 @@ export function AppShell() {
             <X size={20} />
           </button>
         </div>
-        <div className="px-3 py-4">
-          <button
-            onClick={() => setHelp(true)}
-          className="flex w-full items-center gap-2 rounded-lg border border-rail-active bg-rail-active/40 px-3 py-3 text-xs text-rail-foreground"
-          >
-            <Sparkles size={16} className="text-primary" />
-            <span>Workflow guide</span>
-            <ChevronRight size={14} className="ml-auto" />
+        <div className={`hidden items-center gap-2 px-3 py-4 lg:flex ${compact ? "justify-center px-2" : "justify-between"}`}>
+          {!compact && <div><p className="px-2 text-xs font-semibold uppercase tracking-wide text-rail-muted">Module</p><p className="px-2 text-sm font-semibold text-rail-foreground">Procurement</p></div>}
+          <button type="button" onClick={() => setCompact((value) => !value)} aria-label={compact ? "Expand side menu" : "Collapse side menu"} title={compact ? "Expand side menu" : "Collapse side menu"} className="flex size-8 items-center justify-center rounded-md text-rail-muted hover:bg-rail-active hover:text-rail-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-foreground">
+            {compact ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-5">
+        <div className={`px-3 pb-3 ${compact ? "lg:px-2" : ""}`}>
+          <button
+            onClick={() => setHelp(true)}
+          title="Workflow guide"
+          className={`flex w-full items-center gap-2 rounded-lg border border-rail-active bg-rail-active/40 px-3 py-3 text-xs text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
+          >
+            <Sparkles size={16} className="text-primary" />
+            <span className={compact ? "lg:sr-only" : ""}>Workflow guide</span>
+            <ChevronRight size={14} className={`ml-auto ${compact ? "lg:hidden" : ""}`} />
+          </button>
+        </div>
+        <nav aria-label="Main" className={`flex-1 space-y-1 overflow-y-auto px-3 pb-5 ${compact ? "lg:px-2" : ""}`}>
           {nav("/", "Home", <Home size={17} />)}
           {nav("/requests", "My Requests", <ShoppingBag size={17} />)}
           {nav("/approvals", "Approvals", <CheckCircle2 size={17} />)}
@@ -285,29 +297,33 @@ export function AppShell() {
           {nav("/items", "Items", <Package size={17} />)}
           {nav("/vendors", "Vendors", <Store size={17} />)}
           <button
-            onClick={() => setProcOpen(!procOpen)}
-            className="mt-3 flex w-full items-center gap-3 px-3 py-2.5 text-[13px] text-rail-muted hover:text-rail-foreground"
+            onClick={() => { if (compact && window.innerWidth >= 1024) { setCompact(false); setProcOpen(true); } else setProcOpen(!procOpen); }}
+            aria-label="Procurement"
+            title="Procurement"
+            className={`mt-3 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
           >
             <ShoppingBag size={17} />
-            <span>Procurement</span>
+            <span className={compact ? "lg:sr-only" : ""}>Procurement</span>
             {procOpen ? (
-              <ChevronDown size={13} className="ml-auto" />
+              <ChevronDown size={13} className={`ml-auto ${compact ? "lg:hidden" : ""}`} />
             ) : (
-              <ChevronRight size={13} className="ml-auto" />
+              <ChevronRight size={13} className={`ml-auto ${compact ? "lg:hidden" : ""}`} />
             )}
           </button>
           {procOpen &&
             procurement.map(([to, label]) => nav(to, label, null, true))}
           <button
-            onClick={() => setPayOpen(!payOpen)}
-            className="flex w-full items-center gap-3 px-3 py-2.5 text-[13px] text-rail-muted hover:text-rail-foreground"
+            onClick={() => { if (compact && window.innerWidth >= 1024) { setCompact(false); setPayOpen(true); } else setPayOpen(!payOpen); }}
+            aria-label="Payables"
+            title="Payables"
+            className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
           >
             <Wallet size={17} />
-            <span>Payables</span>
+            <span className={compact ? "lg:sr-only" : ""}>Payables</span>
             {payOpen ? (
-              <ChevronDown size={13} className="ml-auto" />
+              <ChevronDown size={13} className={`ml-auto ${compact ? "lg:hidden" : ""}`} />
             ) : (
-              <ChevronRight size={13} className="ml-auto" />
+              <ChevronRight size={13} className={`ml-auto ${compact ? "lg:hidden" : ""}`} />
             )}
           </button>
           {payOpen && payables.map(([to, label]) => nav(to, label, null, true))}
@@ -315,35 +331,20 @@ export function AppShell() {
           {nav("/budgets", "Budgets", <PieChart size={17} />)}
           {nav("/analytics", "Analytics", <BarChart3 size={17} />)}
         </nav>
-        <div className="border-t border-rail-active p-3">
+        <div className={`border-t border-rail-active p-3 ${compact ? "lg:px-2" : ""}`}>
           <Link
             to="/settings"
-            className="flex items-center gap-3 px-3 py-2 text-xs text-rail-muted hover:text-rail-foreground"
+            title="Settings"
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-xs text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
           >
             <Settings size={16} />
-            Settings
+            <span className={compact ? "lg:sr-only" : ""}>Settings</span>
           </Link>
-          <button
-            onClick={() => setCompact(true)}
-            className="hidden items-center gap-3 px-3 py-2 text-xs text-rail-muted hover:text-rail-foreground lg:flex"
-          >
-            <PanelLeftClose size={16} />
-            Collapse navigation
-          </button>
         </div>
       </aside>
       <main
-        className={`min-w-0 pb-16 pt-14 transition-all ${compact ? "" : "lg:pl-64"}`}
+        className={`min-w-0 pb-16 pt-14 transition-all ${compact ? "lg:pl-16" : "lg:pl-64"}`}
       >
-        {compact && (
-          <button
-            aria-label="Expand navigation"
-            onClick={() => setCompact(false)}
-            className="fixed left-3 top-16 z-20 rounded bg-white p-2 shadow"
-          >
-            <Menu size={18} />
-          </button>
-        )}
         <Outlet />
       </main>
       <footer className="fixed inset-x-0 bottom-0 z-20 flex h-8 items-center justify-between border-t border-border bg-surface px-4 text-[10px] text-muted-foreground">

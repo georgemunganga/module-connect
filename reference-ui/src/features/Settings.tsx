@@ -18,6 +18,8 @@ import {
   Mail,
   Menu,
   Plus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Receipt,
   Search,
   Settings2,
@@ -98,6 +100,10 @@ export function Settings() {
     return () => window.removeEventListener("procureui.reset-settings", reset);
   }, []);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem("erp.sidebar.collapsed.v1") === "true");
+  useEffect(() => {
+    window.localStorage.setItem("erp.sidebar.collapsed.v1", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
   const savePreview = (label: string) => {
     const fields = Array.from(
       document.querySelectorAll<
@@ -201,12 +207,15 @@ export function Settings() {
           open={mobileNavOpen}
           path={currentPath}
           onClose={() => setMobileNavOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((value) => !value)}
+          onExpand={() => setSidebarCollapsed(false)}
         />
         <main className="min-w-0 flex-1 px-4 py-6 pb-10 sm:px-7 lg:px-10">
           {content}
         </main>
       </div>
-      {preview.lastSaved && <div className="fixed bottom-0 left-0 right-0 z-20 flex items-center justify-between border-t border-border bg-surface/95 px-4 py-2.5 text-[11px] text-muted-foreground backdrop-blur sm:px-7 lg:left-64">
+      {preview.lastSaved && <div className={`fixed bottom-0 left-0 right-0 z-20 flex items-center justify-between border-t border-border bg-surface/95 px-4 py-2.5 text-[11px] text-muted-foreground backdrop-blur sm:px-7 ${sidebarCollapsed ? "lg:left-16" : "lg:left-64"}`}>
         <span>Saved preview · {preview.lastSaved}</span>
         <button onClick={() => setSnapshotOpen(true)} className="font-medium text-primary">View snapshot</button>
       </div>}
@@ -235,10 +244,16 @@ function SettingsSidebar({
   open,
   path,
   onClose,
+  collapsed,
+  onToggle,
+  onExpand,
 }: {
   open: boolean;
   path: string;
   onClose: () => void;
+  collapsed: boolean;
+  onToggle: () => void;
+  onExpand: () => void;
 }) {
   const moduleGroups = procurementModuleGroups.map((group) => ({
     title: group.title,
@@ -254,7 +269,7 @@ function SettingsSidebar({
         />
       )}
       <aside
-        className={`fixed bottom-0 left-0 top-[74px] z-40 w-64 overflow-y-auto border-r border-rail-active bg-rail px-3 py-5 text-rail-foreground transition-transform lg:sticky lg:top-[74px] lg:block lg:h-[calc(100vh-74px)] lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed bottom-0 left-0 top-[74px] z-40 w-64 overflow-y-auto border-r border-rail-active bg-rail text-rail-foreground transition-[width,transform] duration-200 lg:sticky lg:top-[74px] lg:block lg:h-[calc(100vh-74px)] lg:translate-x-0 ${collapsed ? "lg:w-16" : "lg:w-64"} ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="mb-3 flex items-center justify-between px-2 lg:hidden">
           <span className="font-semibold">Settings navigation</span>
@@ -262,15 +277,24 @@ function SettingsSidebar({
             <X size={18} />
           </button>
         </div>
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.12em] text-rail-muted">Procurement settings</p>
+        <div className={`hidden items-center gap-2 px-3 py-4 lg:flex ${collapsed ? "justify-center px-2" : "justify-between"}`}>
+          {!collapsed && <div><p className="px-2 text-xs font-semibold uppercase tracking-wide text-rail-muted">Module</p><p className="px-2 text-sm font-semibold text-rail-foreground">Procurement</p></div>}
+          <button type="button" onClick={onToggle} aria-label={collapsed ? "Expand side menu" : "Collapse side menu"} title={collapsed ? "Expand side menu" : "Collapse side menu"} className="flex size-8 items-center justify-center rounded-md text-rail-muted hover:bg-rail-active hover:text-rail-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-foreground">
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        </div>
+        <nav aria-label="Procurement settings" className={`px-3 pb-5 ${collapsed ? "lg:px-2" : ""}`}>
         {moduleGroups.map((group) => (
           <ModuleSidebarGroup
             key={group.title}
             {...group}
             path={path}
             icon={group.title.includes("Supplier") ? groupIcons.General : groupIcons.Purchases}
+            collapsed={collapsed}
+            onExpand={onExpand}
           />
         ))}
+        </nav>
       </aside>
     </>
   );
@@ -281,11 +305,15 @@ function ModuleSidebarGroup({
   items,
   path,
   icon,
+  collapsed,
+  onExpand,
 }: {
   title: string;
   items: ModuleSettingsConfig[];
   path: string;
   icon: ReactNode;
+  collapsed: boolean;
+  onExpand: () => void;
 }) {
   const active = items.some((item) => path.startsWith(`/settings/modules/${item.slug}`)) || (title.includes("Supplier") && ["/settings/vendor-portal", "/settings/punchout-catalogs"].includes(path));
   const [open, setOpen] = useState(active);
@@ -294,19 +322,21 @@ function ModuleSidebarGroup({
     <div className="mb-1">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => { if (collapsed && window.innerWidth >= 1024) { onExpand(); setOpen(true); } else setOpen(!open); }}
         aria-expanded={expanded}
-        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium hover:bg-rail-active ${expanded ? "text-rail-foreground" : "text-rail-muted"}`}
+        aria-label={collapsed ? title : undefined}
+        title={title}
+        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium hover:bg-rail-active ${collapsed ? "lg:justify-center lg:px-2" : ""} ${expanded ? "text-rail-foreground" : "text-rail-muted"}`}
       >
         {icon}
-        <span>{title}</span>
+        <span className={collapsed ? "lg:sr-only" : ""}>{title}</span>
         <ChevronRight
           size={14}
-          className={`ml-auto text-rail-muted transition-transform ${expanded ? "rotate-90" : ""}`}
+          className={`ml-auto text-rail-muted transition-transform ${collapsed ? "lg:hidden" : ""} ${expanded ? "rotate-90" : ""}`}
         />
       </button>
       {expanded && (
-        <div className="ml-3 border-l border-rail-active pl-2">
+        <div className={`ml-3 border-l border-rail-active pl-2 ${collapsed ? "lg:hidden" : ""}`}>
           {title.includes("Supplier") && <><SidebarLink label="Vendor Portal" href="/settings/vendor-portal" path={path} /><SidebarLink label="Punchout Catalogs" href="/settings/punchout-catalogs" path={path} /></>}
           {items.map((item) => (
             <SidebarLink
