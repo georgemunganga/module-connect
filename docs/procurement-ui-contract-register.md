@@ -1,8 +1,8 @@
 # Procurement UI and API contract register
 
-**Status:** working UI blueprint, 16 October 2026. The Procurement screens use local demonstration data. Live mode verifies the ERP session and company, then holds transaction screens until their API adapters are ready. This register describes the boundary to implement; it does not authorize spending, supplier activation, budget reservation, AP posting, or payment.
+**Status:** working UI blueprint, updated 18 October 2026. The Procurement screens use local demonstration data. Both UI entry points check the ERP session, company, and Procurement schema readiness in live mode; the reference workspace holds transaction screens until their API adapters are ready. Source migrations now define commercial and operational records, but they have not been applied to production. This register describes the boundary to implement; it does not authorize spending, supplier activation, budget reservation, AP posting, or payment.
 
-The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` through `PROC-14` own business rules. The [workflow gap register](procurement-ui-workflow-gap-register.md) records incomplete interactions. Each row below should be checked against the 28-section child-feature document before its live adapter is enabled.
+The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` through `PROC-14` own business rules. `GW-ENG-STD-001` is the Tier 3 engineering standard for this ERP programme, and `PROC-BE-05` maps the new schema to live integration gates. The [workflow gap register](procurement-ui-workflow-gap-register.md) records incomplete interactions. Each row below should be checked against the 28-section child-feature document before its live adapter is enabled.
 
 ## Common contract for every record screen
 

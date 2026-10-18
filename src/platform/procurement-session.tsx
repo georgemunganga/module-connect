@@ -95,6 +95,18 @@ async function detectSession(signal: AbortSignal): Promise<ProcurementSession> {
     const context: unknown = await response.json();
     if (!validContext(context))
       return { mode: "unavailable", reason: "Procurement company access was invalid." };
+    const metaResponse = await fetch("/api/procurement/v1/meta", {
+      credentials: "include",
+      cache: "no-store",
+      signal,
+    });
+    if (!metaResponse.ok)
+      return { mode: "unavailable", reason: "Procurement data is not ready." };
+    const meta: unknown = await metaResponse.json();
+    if (!isObject(meta) || meta.tenantId !== context.tenantId ||
+        meta.legalEntityId !== context.legalEntityId || meta.schemaReady !== true ||
+        !isObject(meta.capabilities))
+      return { mode: "unavailable", reason: "Procurement data is not ready." };
     return {
       mode: "live",
       user: { displayName: body.user.displayName, email: body.user.email, roles: Array.isArray(body.user.roles) ? body.user.roles.filter((role): role is string => typeof role === "string") : [] },

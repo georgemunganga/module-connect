@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 import { AppProvider } from "../lib/store";
 import { ErpShellProvider } from "../lib/erpShell";
+import { ProcurementLiveGate } from "../lib/ProcurementLiveGate";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -49,6 +50,7 @@ export function App() {
     <BrowserRouter basename="/procurement/workspace">
       <AppProvider>
         <ErpShellProvider>
+        <ProcurementLiveGate>
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
@@ -211,6 +213,7 @@ export function App() {
           </Route>
           <Route path="/settings/*" element={<Settings />} />
         </Routes>
+        </ProcurementLiveGate>
         </ErpShellProvider>
       </AppProvider>
     </BrowserRouter>
