@@ -98,18 +98,19 @@ export function ListTools({
     closeMenu();
   };
   const label = entity.toLowerCase();
+  const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="secondary"
-          aria-label={`Advanced Search ${entity}`}
-          title="Advanced Search"
+          aria-label={`Filter ${entity} by field`}
+          title={`Filter ${entity} by field`}
           onClick={() => setFilterOpen(true)}
           className="px-2.5"
         >
-          <Filter size={15} /> <span className="hidden sm:inline">Filter</span>
+          <Filter size={15} /> <span>Filter{activeFilterCount ? ` (${activeFilterCount})` : ""}</span>
         </Button>
         <div className="relative">
           <Button
@@ -457,28 +458,36 @@ function AdvancedSearch({
 }) {
   const [draft, setDraft] = useState(active);
   const [filter, setFilter] = useState(currentView ?? `All ${entity}`);
-  const searchEntity =
-    entity === "Vendors" ? "Vendors" : entity === "Items" ? "Items" : entity;
+  const [shownFields, setShownFields] = useState<string[]>(() =>
+    fields.filter((field) => active[field.key]).map((field) => field.key),
+  );
+  const [fieldToAdd, setFieldToAdd] = useState("");
   const submit = () => {
     onViewChange?.(filter);
     onApply(draft);
   };
   return (
-    <Modal title={`Advanced Search · ${entity}`} onClose={onClose} wide>
-      <div
-        className={`mb-5 grid gap-4 ${showSavedView ? "sm:grid-cols-2" : "grid-cols-1"}`}
-      >
-        <Field label="Search">
+    <Modal title={`Filter ${entity}`} onClose={onClose} wide>
+      <p className="mb-5 text-sm text-slate-500">Choose a field, then enter the value you want to find. Add another field to narrow the list further.</p>
+      <div className={`mb-5 grid gap-4 ${showSavedView ? "sm:grid-cols-2" : "grid-cols-1"}`}>
+        <Field label="Filter by">
           <Select
-            aria-label="Search in list entity"
-            value={searchEntity}
-            disabled
+            aria-label="Filter by field"
+            value={fieldToAdd}
+            onChange={(event) => {
+              const key = event.target.value;
+              if (key) setShownFields((current) => [...current, key]);
+              setFieldToAdd("");
+            }}
           >
-            <option>{searchEntity}</option>
+            <option value="">Choose a field</option>
+            {fields.filter((field) => !shownFields.includes(field.key)).map((field) => (
+              <option key={field.key} value={field.key}>{field.label}</option>
+            ))}
           </Select>
         </Field>
         {showSavedView && (
-          <Field label="Filter">
+          <Field label="Saved view">
             <Select
               aria-label="Saved list filter"
               value={filter}
@@ -494,8 +503,15 @@ function AdvancedSearch({
         )}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        {fields.map((field) => (
-          <Field key={field.key} label={field.label}>
+        {fields.filter((field) => shownFields.includes(field.key)).map((field) => (
+          <div key={field.key} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">{field.label}</span>
+              <button type="button" className="text-xs text-slate-500 hover:text-slate-800" aria-label={`Remove ${field.label} filter`} onClick={() => {
+                setShownFields((current) => current.filter((key) => key !== field.key));
+                setDraft((current) => { const next = { ...current }; delete next[field.key]; return next; });
+              }}>Remove</button>
+            </div>
             {field.type === "select" ? (
               <Select
                 aria-label={field.label}
@@ -525,9 +541,10 @@ function AdvancedSearch({
                 placeholder={`Search ${field.label.toLowerCase()}`}
               />
             )}
-          </Field>
+          </div>
         ))}
       </div>
+      {!shownFields.length && <p className="rounded-lg border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">No fields selected yet. Choose one under “Filter by” to get started.</p>}
       <div className="mt-6 flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
         <Button variant="ghost" onClick={onClear}>
           Clear filters
@@ -538,7 +555,7 @@ function AdvancedSearch({
           </Button>
           <Button onClick={submit}>
             <Filter size={14} />
-            Search
+            Apply filters
           </Button>
         </div>
       </div>

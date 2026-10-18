@@ -1,4 +1,5 @@
 import { RecordTable } from "../components/data/RecordTable";
+import { ActiveFilterChips } from "../components/data/ActiveFilterChips";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -415,7 +416,7 @@ export function RecordList({
                 aria-label={`Search ${title}`}
                 value={query}
                 onChange={(event) => { setQuery(event.target.value); setPage(1); }}
-                placeholder="Search records"
+                placeholder={kind === "requests" ? "Search number, description or requester" : "Search number, description or vendor"}
                 className="w-36 rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-400 sm:w-52"
               />
             </div>
@@ -431,6 +432,7 @@ export function RecordList({
             </select>
           </div>
         </div>
+        <ActiveFilterChips fields={filterFields} filters={filters} onChange={(next) => { setFilters(next); setPage(1); }} />
         {selected.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 bg-blue-50 px-5 py-3 text-xs text-blue-700">
             <span>{selected.length} selected</span>

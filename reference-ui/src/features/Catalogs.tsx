@@ -1,4 +1,5 @@
 import { RecordTable } from "../components/data/RecordTable";
+import { ActiveFilterChips } from "../components/data/ActiveFilterChips";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Link,
@@ -754,8 +755,8 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               className="pl-9"
-              placeholder={`Search ${label.toLowerCase()}...`}
-              aria-label={`Search ${label.toLowerCase()}`}
+              placeholder={kind === "vendors" ? "Search name, company, email or phone" : "Search item name, SKU or description"}
+              aria-label={kind === "vendors" ? "Search vendors by name, company, email or phone" : "Search items by name, SKU or description"}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -774,6 +775,7 @@ export function CatalogList({ kind }: { kind: CatalogKind }) {
             </span>
           </div>
         </div>
+        <ActiveFilterChips fields={filterFields} filters={filters} onChange={setFilters} />
         {filtered.length === 0 ? (
           <EmptyState
             title={`No ${label.toLowerCase()} found`}

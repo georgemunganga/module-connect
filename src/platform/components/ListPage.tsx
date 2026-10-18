@@ -1,6 +1,6 @@
 import { RecordTable } from "./RecordTable";
 import { ArrowDownAZ, Columns3, Download, Filter, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -86,6 +86,9 @@ export function ListPage<T extends { id: string }>({
 }) {
   const [query, setQuery] = useState("");
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterFieldId, setFilterFieldId] = useState("");
+  const filterPanelId = useId();
   const [selected, setSelected] = useState<string[]>([]);
   const [sortId, setSortId] = useState("");
   const [sortDescending, setSortDescending] = useState(false);
@@ -140,6 +143,7 @@ export function ListPage<T extends { id: string }>({
       return current.filter((id) => !shownIds.has(id));
     });
   const activeFilters = Object.entries(filterValues).filter(([, v]) => v && v !== "all");
+  const chosenFilter = filters.find((filter) => filter.id === filterFieldId);
 
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm" data-testid="erp-record-list">
@@ -177,26 +181,10 @@ export function ListPage<T extends { id: string }>({
             className="h-9 rounded-lg pl-9"
           />
         </div>
-        {filters.map((f) => (
-          <Select
-            key={f.id}
-            value={filterValues[f.id] ?? "all"}
-            onValueChange={(v) => setFilterValues((s) => ({ ...s, [f.id]: v }))}
-          >
-            <SelectTrigger className="h-9 w-auto min-w-32 rounded-lg" aria-label={f.label}>
-              <Filter className="size-3.5 text-muted-foreground" aria-hidden />
-              <SelectValue placeholder={f.label} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{f.label}: all</SelectItem>
-              {f.options.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ))}
+        {filters.length ? <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg" aria-expanded={filterOpen} aria-controls={filterPanelId} onClick={() => setFilterOpen((open) => !open)}>
+          <Filter className="size-4" aria-hidden />
+          Filter by{activeFilters.length ? ` (${activeFilters.length})` : ""}
+        </Button> : null}
         {sortOptions.length ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -297,8 +285,32 @@ export function ListPage<T extends { id: string }>({
         ) : null}
       </div>
 
+      {filterOpen && filters.length ? (
+        <div id={filterPanelId} className="flex flex-wrap items-end gap-3 border-b border-border bg-surface-muted/40 px-4 py-3">
+          <div className="min-w-48 flex-1 sm:flex-none">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Filter by</label>
+            <Select value={filterFieldId} onValueChange={setFilterFieldId}>
+              <SelectTrigger className="h-9 w-full rounded-lg sm:w-52" aria-label="Choose field to filter by"><SelectValue placeholder="Choose a field" /></SelectTrigger>
+              <SelectContent>{filters.map((filter) => <SelectItem key={filter.id} value={filter.id}>{filter.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          {chosenFilter ? <div className="min-w-48 flex-1 sm:flex-none">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">{chosenFilter.label}</label>
+            <Select value={filterValues[chosenFilter.id] ?? "all"} onValueChange={(value) => setFilterValues((current) => ({ ...current, [chosenFilter.id]: value }))}>
+              <SelectTrigger className="h-9 w-full rounded-lg sm:w-56" aria-label={`Filter by ${chosenFilter.label}`}><SelectValue placeholder={`All ${chosenFilter.label.toLowerCase()}`} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All {chosenFilter.label.toLowerCase()}</SelectItem>
+                {chosenFilter.options.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div> : <p className="pb-2 text-xs text-muted-foreground">Choose a field to see its values.</p>}
+          {activeFilters.length ? <Button type="button" variant="ghost" size="sm" onClick={() => setFilterValues({})}>Clear all</Button> : null}
+        </div>
+      ) : null}
+
       {activeFilters.length ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-xs">
+          <span className="font-medium text-muted-foreground">Filtered by</span>
           {activeFilters.map(([k, v]) => (
             <button
               key={k}

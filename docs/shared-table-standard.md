@@ -6,4 +6,5 @@ Procurement uses the ERP list pattern on every on-screen table. The table surfac
 - The workspace `RecordTable` wraps tables in settings, catalogs, details, sourcing, payables, analytics, and import screens. Use `variant="compact"` for dense previews or editor tables.
 - The connected frontend uses `ListPage` for ordinary directories and its own `RecordTable` for specialized lists. Its base table primitive shares the same visual surface.
 - Wide tables stay inside an `overflow-x-auto` container. The page itself should not scroll horizontally on a phone.
+- Search placeholders name the fields they cover. Filter opens a field chooser instead of showing every possible input at once. Active filters remain visible as removable chips above the table.
 - Standalone printed documents can keep print-specific table styles. Interactive grids keep their cell controls and can use the `matrix` variant when cell sizing is deliberate.
