@@ -23,7 +23,7 @@ import {
   type RequestListTab,
   type RequestOwnerScope,
 } from "../lib/request-views";
-import { Badge, Button, EmptyState, Modal, PageHeader, Select } from "../components/ui";
+import { Badge, Button, EmptyState, Input, Modal, PageHeader, Select } from "../components/ui";
 import { DeleteConfirm } from "../components/data/DetailPrimitives";
 import { StandardDataTable } from "../components/data/StandardDataTable";
 import {
@@ -367,7 +367,7 @@ export function RecordList({
                     <ChevronDown size={13} className="ml-1 inline-block" />
                   </button>
                 </div>
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <span className="sr-only">Request owner scope</span>
                   <Select
                     aria-label="Request owner scope"
@@ -376,7 +376,7 @@ export function RecordList({
                       setRequestScope(event.target.value as RequestOwnerScope);
                       setPage(1);
                     }}
-                    className="max-w-[150px] rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none focus:border-blue-400"
+                    className="max-w-[170px] text-sm"
                   >
                     <option value="mine">My Requests</option>
                     <option value="all">All Requesters</option>
@@ -409,14 +409,14 @@ export function RecordList({
             <div className="relative">
               <Search
                 size={14}
-                className="absolute left-3 top-2.5 text-slate-400"
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
               />
-              <input
+              <Input
                 aria-label={`Search ${title}`}
                 value={query}
                 onChange={(event) => { setQuery(event.target.value); setPage(1); }}
                 placeholder={kind === "requests" ? "Search number, description or requester" : "Search number, description or vendor"}
-                className="w-36 rounded-md border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-blue-400 sm:w-52"
+                className="w-40 pl-10 sm:w-60"
               />
             </div>
             <div className="hidden sm:block">
@@ -424,7 +424,7 @@ export function RecordList({
               aria-label="Sort records"
               value={sort}
               onChange={(event) => setSort(event.target.value)}
-              className="bg-transparent text-xs text-slate-400"
+              className="bg-transparent text-sm text-muted-foreground"
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>

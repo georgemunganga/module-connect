@@ -25,7 +25,7 @@ export function Button({
 }) {
   const colors = {
     primary: "bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 border-button-primary shadow-sm",
-    secondary: "bg-surface text-foreground hover:bg-secondary border-input",
+    secondary: "bg-background text-foreground hover:bg-secondary border-input shadow-sm",
     ghost:
       "bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground border-transparent",
     danger: "bg-danger-soft text-danger border-danger/20 hover:bg-danger/15",
@@ -33,7 +33,7 @@ export function Button({
   return (
     <button
       type="button"
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 py-2 text-base font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${colors[variant]} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-6 py-2 text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${colors[variant]} ${className}`}
       {...props}
     />
   );
@@ -230,7 +230,7 @@ export function Badge({ children }: { children: ReactNode }) {
           : "bg-slate-100 text-slate-500";
   return (
     <span
-      className={`inline-flex rounded px-2 py-1 text-[11px] font-semibold ${color}`}
+      className={`inline-flex items-center rounded-md border border-transparent px-2.5 py-0.5 text-xs font-semibold ${color}`}
     >
       {children}
     </span>
@@ -249,7 +249,7 @@ export function Panel({
 }) {
   return (
     <section
-      className={`rounded-xl border border-border bg-surface ${className}`}
+      className={`rounded-xl border border-border bg-card text-card-foreground shadow-sm ${className}`}
     >
       {title && (
         <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">

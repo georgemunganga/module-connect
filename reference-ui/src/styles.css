@@ -42,18 +42,19 @@ a:focus-visible {
     width: 100%;
     min-height: 2.75rem;
     border: 1px solid var(--input);
-    border-radius: var(--radius);
-    padding: 9px 12px;
-    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 0.5rem 1rem;
+    background: var(--background);
     color: var(--foreground);
     font-size: .875rem;
     line-height: 1.25rem;
     outline: none;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
     transition:
       border-color 0.15s,
       box-shadow 0.15s;
   }
-  .control:focus {
+  .control:focus-visible {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--primary-soft);
   }
