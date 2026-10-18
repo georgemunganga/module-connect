@@ -7,6 +7,7 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   addVendorContact, addVendorSite, createVendorDraft, getVendorDraft,
   listVendorDrafts, updateVendorDraft, withdrawVendorDraft,
+  submitVendorForReview,
   type VendorContactDraft, type VendorDetail, type VendorDraft, type VendorPage,
   type VendorSiteDraft,
 } from "../../../src/platform/procurement-vendors-api";
@@ -79,6 +80,7 @@ export function LiveVendorEditor() {
       setVersion(detail.version);
       setDraft({ ...empty, legalName: detail.legalName, displayName: detail.displayName,
         countryCode: detail.countryCode, registrationNumber: detail.registrationNumber,
+        categoryCode: detail.categoryCode,
         currencyCode: detail.defaultCurrencyCode || defaultCurrencyCode,
         paymentTermRef: detail.paymentTermRef, taxCategoryRef: detail.taxCategoryRef,
         languageCode: detail.languageCode, remarks: detail.remarks,
@@ -106,6 +108,7 @@ export function LiveVendorEditor() {
         <Field label="Company name"><Input required maxLength={300} value={draft.legalName} onChange={(event) => field("legalName", event.target.value)} /></Field>
         <Field label="Display name"><Input required maxLength={300} value={draft.displayName} onChange={(event) => field("displayName", event.target.value)} /></Field>
         <Field label="Company ID"><Input maxLength={120} value={draft.registrationNumber ?? ""} onChange={(event) => field("registrationNumber", event.target.value)} /></Field>
+        <Field label="Vendor category"><Input maxLength={100} value={draft.categoryCode ?? ""} onChange={(event) => field("categoryCode", event.target.value)} /></Field>
         <Field label="Country code" hint="Use a two-letter code, such as ZM."><Input required maxLength={2} value={draft.countryCode} onChange={(event) => field("countryCode", event.target.value.toUpperCase())} /></Field>
       </div></Panel>
       <Panel title="Other details"><div className="grid gap-4 p-5 sm:grid-cols-2">
@@ -130,6 +133,7 @@ export function LiveVendorDetail() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [businessReason, setBusinessReason] = useState("");
   const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [site, setSite] = useState({ kind: "Billing", addressLine1: "", city: "", countryCode: "ZM" });
   const reload = () => { if (!id) return; setLoading(true); getVendorDraft(legalEntityId, id).then(setVendor).catch((cause: unknown) => setError(message(cause))).finally(() => setLoading(false)); };
@@ -154,8 +158,9 @@ export function LiveVendorDetail() {
   return <div className="p-5 sm:p-8">
     <PageHeader title={vendor.displayName} subtitle={[vendor.number, vendor.legalName].filter(Boolean).join(" · ")} actions={<><Badge>{vendor.status}</Badge>{editable && <Link to={`/vendors/${vendor.id}/edit`}><Button variant="secondary">Edit vendor</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    {vendor.status === "Submitted" && <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">Submitted for review{vendor.statusDecidedAt ? ` on ${new Date(vendor.statusDecidedAt).toLocaleDateString()}` : ""}. This vendor cannot receive new purchase orders yet.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""}</p>}
     <div className="grid gap-5 lg:grid-cols-2">
-      <Panel title="Vendor overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Company ID</dt><dd>{vendor.registrationNumber || "—"}</dd><dt>Country</dt><dd>{vendor.countryCode}</dd><dt>Currency</dt><dd>{vendor.defaultCurrencyCode || "—"}</dd><dt>Payment terms</dt><dd>{vendor.paymentTermRef || "—"}</dd><dt>Orderable</dt><dd>{vendor.isOrderable ? "Yes" : "No — approval required"}</dd></dl></Panel>
+      <Panel title="Vendor overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Company ID</dt><dd>{vendor.registrationNumber || "—"}</dd><dt>Category</dt><dd>{vendor.categoryCode || "—"}</dd><dt>Country</dt><dd>{vendor.countryCode}</dd><dt>Currency</dt><dd>{vendor.defaultCurrencyCode || "—"}</dd><dt>Payment terms</dt><dd>{vendor.paymentTermRef || "—"}</dd><dt>Orderable</dt><dd>{vendor.isOrderable ? "Yes" : "No — approval required"}</dd></dl></Panel>
       <Panel title="Contact persons"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.contacts?.map((row) => <li key={row.id}>{row.name}{row.email ? ` · ${row.email}` : ""}</li>)}</ul>{!vendor.contacts?.length && <p className="text-sm text-muted-foreground">No contacts yet.</p>}
         {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); void act(() => addVendorContact(legalEntityId, vendor.id, vendor.version, { ...contact, isPrimary: !vendor.contacts?.length } as VendorContactDraft)).then((saved) => { if (saved) setContact({ name: "", email: "", phone: "" }); }); }}>
           <Field label="Contact name"><Input required value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} /></Field><Field label="Email"><Input type="email" value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} /></Field><Field label="Phone"><Input value={contact.phone} onChange={(event) => setContact({ ...contact, phone: event.target.value })} /></Field><Button type="submit" disabled={busy}>Add contact</Button>
@@ -166,6 +171,12 @@ export function LiveVendorDetail() {
         </form>}</div></Panel>
       <Panel title="Notes"><p className="p-5 text-sm">{vendor.remarks || "No remarks."}</p></Panel>
     </div>
+    {vendor.status === "Draft" && <Panel title="Submit for review" className="mt-5"><div className="space-y-3 p-5">
+      <p className="text-sm text-muted-foreground">Add a vendor category and contact person before submitting. Submission starts review; it does not allow purchase orders yet.</p>
+      <Field label="Why do you need this vendor?"><Textarea rows={2} maxLength={1000} value={businessReason} onChange={(event) => setBusinessReason(event.target.value)} /></Field>
+      <Button disabled={busy || !businessReason.trim() || !vendor.categoryCode || !vendor.contacts?.length}
+        onClick={() => { void act(() => submitVendorForReview(legalEntityId, vendor.id, vendor.version, businessReason.trim())); }}>Submit for review</Button>
+    </div></Panel>}
     {editable && <div className="mt-6"><Button variant="danger" disabled={busy} onClick={() => { const reason = window.prompt("Why are you withdrawing this vendor draft?"); if (reason?.trim()) void act(async () => { await withdrawVendorDraft(legalEntityId, vendor.id, vendor.version, reason.trim()); navigate("/vendors"); }); }}>Withdraw draft</Button></div>}
     <Link to="/vendors" className="mt-5 inline-block text-sm text-primary hover:underline">Back to vendors</Link>
   </div>;

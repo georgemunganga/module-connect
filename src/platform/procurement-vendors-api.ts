@@ -83,6 +83,9 @@ export interface VendorDetail extends VendorSummary {
   isLocal?: boolean;
   portalAccessState?: string | null;
   registrationNumber?: string | null;
+  categoryCode?: string | null;
+  statusReason?: string | null;
+  statusDecidedAt?: string | null;
   defaultCurrencyCode?: string | null;
   paymentTermRef?: string | null;
   taxCategoryRef?: string | null;
@@ -198,4 +201,15 @@ export async function withdrawVendorDraft(legalEntityId: string, id: string, ver
   if (!object(body) || body.id !== id || body.status !== "Withdrawn")
     throw new VendorApiError(0, "The ERP did not confirm the withdrawal. Refresh before trying again.");
   return body as { id: string; version: number; status: string };
+}
+
+export async function submitVendorForReview(legalEntityId: string, id: string, version: number,
+  businessReason: string): Promise<{ id: string; version: number; status: string; isOrderable: boolean }> {
+  if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
+  const body = await request<unknown>(legalEntityId, `/${id}/submit`,
+    { method: "POST", body: JSON.stringify({ version, businessReason }) });
+  if (!object(body) || body.id !== id || body.status !== "Submitted"
+    || body.isOrderable !== false || typeof body.version !== "number")
+    throw new VendorApiError(0, "The ERP did not confirm submission. Refresh before retrying.");
+  return body as { id: string; version: number; status: string; isOrderable: boolean };
 }

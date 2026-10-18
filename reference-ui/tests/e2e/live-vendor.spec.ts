@@ -62,6 +62,15 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       vendor = { ...vendor, status: "Withdrawn", version: version + 1 };
       return json({ id: vendorId, status: "Withdrawn", version: vendor.version });
     }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/submit` && vendor) {
+      const { version, businessReason } = request.postDataJSON();
+      if (!businessReason || !vendor.categoryCode || !(vendor.contacts as unknown[]).length)
+        return json({ message: "Category, contact and reason are required." }, 422);
+      if (version !== vendor.version || vendor.status !== "Draft") return json({ message: "Refresh this vendor." }, 409);
+      vendor = { ...vendor, status: "Submitted", statusReason: businessReason,
+        isOrderable: false, version: version + 1 };
+      return json({ id: vendorId, status: "Submitted", isOrderable: false, version: vendor.version });
+    }
     return json({ title: `Unexpected route: ${path}` }, 404);
   });
 }
@@ -116,4 +125,23 @@ test("stale edit keeps entered values for comparison", async ({ page }) => {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("alert")).toContainText("changed");
   await expect(page.getByLabel("Display name")).toHaveValue("Unsaved change");
+});
+
+test("vendor can be submitted for review after category and contact are saved", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/vendors/new");
+  await page.getByLabel("Company name").fill("Acme Zambia Ltd");
+  await page.getByLabel("Display name").fill("Acme");
+  await page.getByLabel("Vendor category").fill("OFFICE");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("button", { name: "Submit for review" })).toBeDisabled();
+  await page.getByLabel("Contact name").fill("Pat Supplier");
+  await page.getByRole("button", { name: "Add contact" }).click();
+  await page.getByLabel("Why do you need this vendor?").fill("Office equipment sourcing");
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("No — approval required")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit vendor" })).toHaveCount(0);
 });
