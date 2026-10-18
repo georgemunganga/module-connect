@@ -8,6 +8,7 @@ import {
   addVendorContact, addVendorSite, createVendorDraft, getVendorDraft,
   listVendorDrafts, updateVendorDraft, withdrawVendorDraft,
   submitVendorForReview,
+  returnVendorForInformation,
   type VendorContactDraft, type VendorDetail, type VendorDraft, type VendorPage,
   type VendorSiteDraft,
 } from "../../../src/platform/procurement-vendors-api";
@@ -134,6 +135,7 @@ export function LiveVendorDetail() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [businessReason, setBusinessReason] = useState("");
+  const [reviewReason, setReviewReason] = useState("");
   const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [site, setSite] = useState({ kind: "Billing", addressLine1: "", city: "", countryCode: "ZM" });
   const reload = () => { if (!id) return; setLoading(true); getVendorDraft(legalEntityId, id).then(setVendor).catch((cause: unknown) => setError(message(cause))).finally(() => setLoading(false)); };
@@ -160,6 +162,11 @@ export function LiveVendorDetail() {
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     {vendor.status === "Submitted" && <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">Submitted for review{vendor.statusDecidedAt ? ` on ${new Date(vendor.statusDecidedAt).toLocaleDateString()}` : ""}. This vendor cannot receive new purchase orders yet.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""}</p>}
     {vendor.status === "More Information Required" && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">More information is needed before this vendor can be approved.{vendor.statusReason ? ` Reviewer note: ${vendor.statusReason}` : ""} Update the details below, then send the vendor for review again.</p>}
+    {vendor.canReturnForInformation && <Panel title="Request changes" className="mb-5"><div className="space-y-3 p-5">
+      <p className="text-sm text-muted-foreground">Tell the proposer what needs to change. This vendor will remain unavailable for purchase orders.</p>
+      <Field label="Changes needed"><Textarea rows={3} maxLength={1000} required value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
+      <Button disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => returnVendorForInformation(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Send back for changes</Button>
+    </div></Panel>}
     <div className="grid gap-5 lg:grid-cols-2">
       <Panel title="Vendor overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Company ID</dt><dd>{vendor.registrationNumber || "—"}</dd><dt>Category</dt><dd>{vendor.categoryCode || "—"}</dd><dt>Country</dt><dd>{vendor.countryCode}</dd><dt>Currency</dt><dd>{vendor.defaultCurrencyCode || "—"}</dd><dt>Payment terms</dt><dd>{vendor.paymentTermRef || "—"}</dd><dt>Orderable</dt><dd>{vendor.isOrderable ? "Yes" : "No — approval required"}</dd></dl></Panel>
       <Panel title="Contact persons"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.contacts?.map((row) => <li key={row.id}>{row.name}{row.email ? ` · ${row.email}` : ""}</li>)}</ul>{!vendor.contacts?.length && <p className="text-sm text-muted-foreground">No contacts yet.</p>}

@@ -80,6 +80,7 @@ export interface VendorPage {
 }
 
 export interface VendorDetail extends VendorSummary {
+  canReturnForInformation?: boolean;
   isLocal?: boolean;
   portalAccessState?: string | null;
   registrationNumber?: string | null;
@@ -211,5 +212,16 @@ export async function submitVendorForReview(legalEntityId: string, id: string, v
   if (!object(body) || body.id !== id || body.status !== "Submitted"
     || body.isOrderable !== false || typeof body.version !== "number")
     throw new VendorApiError(0, "The ERP did not confirm submission. Refresh before retrying.");
+  return body as { id: string; version: number; status: string; isOrderable: boolean };
+}
+
+export async function returnVendorForInformation(legalEntityId: string, id: string, version: number,
+  reason: string): Promise<{ id: string; version: number; status: string; isOrderable: boolean }> {
+  if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
+  const body = await request<unknown>(legalEntityId, `/${id}/return`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
+  if (!object(body) || body.id !== id || body.status !== "More Information Required"
+    || body.isOrderable !== false || typeof body.version !== "number")
+    throw new VendorApiError(0, "The ERP did not confirm the review decision. Refresh before retrying.");
   return body as { id: string; version: number; status: string; isOrderable: boolean };
 }

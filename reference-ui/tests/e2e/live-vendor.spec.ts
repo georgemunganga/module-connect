@@ -11,8 +11,13 @@ const capabilities = Object.fromEntries([
 
 type Vendor = Record<string, unknown> & { id: string; version: number; displayName: string; legalName: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean } = {}) {
-  let vendor: Vendor | null = null;
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean } = {}) {
+  let vendor: Vendor | null = options.reviewer ? {
+    id: vendorId, number: "VEN-001", legalName: "Acme Zambia Ltd", displayName: "Acme",
+    countryCode: "ZM", categoryCode: "OFFICE", status: "Submitted", version: 3,
+    isOrderable: false, canReturnForInformation: true,
+    contacts: [{ id: "44444444-4444-4444-8444-444444444444", name: "Pat Supplier" }], sites: [],
+  } : null;
   await page.addInitScript((entityId) => {
     localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId }));
   }, companyId);
@@ -20,7 +25,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: options.reviewer ? "Reviewer" : "Buyer", email: "buyer@example.test", roles: [options.reviewer ? "procurement_manager" : "procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
@@ -75,7 +80,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       const { version, reason } = request.postDataJSON();
       if (version !== vendor.version || vendor.status !== "Submitted") return json({ message: "Refresh this vendor." }, 409);
       vendor = { ...vendor, status: "More Information Required", statusReason: reason,
-        isOrderable: false, version: version + 1 };
+        isOrderable: false, canReturnForInformation: false, version: version + 1 };
       return json({ id: vendorId, status: vendor.status, isOrderable: false, version: vendor.version });
     }
     return json({ title: `Unexpected route: ${path}` }, 404);
@@ -164,5 +169,17 @@ test("vendor can be submitted for review after category and contact are saved", 
   await page.getByLabel("Why do you need this vendor?").fill("Legal address confirmed");
   await page.getByRole("button", { name: "Resubmit for review" }).click();
   await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("No — approval required")).toBeVisible();
+});
+
+test("reviewer can return a submitted vendor with a visible reason", async ({ page }) => {
+  await mockErp(page, { reviewer: true });
+  await page.goto(`/procurement/workspace/vendors/${vendorId}`);
+  await expect(page.getByRole("heading", { name: "Request changes" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send back for changes" })).toBeDisabled();
+  await page.getByLabel("Changes needed").fill("Confirm the legal address");
+  await page.getByRole("button", { name: "Send back for changes" }).click();
+  await expect(page.getByText(/Reviewer note: Confirm the legal address/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Request changes" })).toHaveCount(0);
   await expect(page.getByText("No — approval required")).toBeVisible();
 });
