@@ -28,7 +28,9 @@ export function ProcurementLiveGate({ children }: { children: ReactNode }) {
 
   if (!liveMode) return <>{children}</>;
   const vendorPath = /^\/vendors(?:\/|$)/.test(location.pathname);
-  if (state.readiness && vendorPath && state.readiness.capabilities.vendorDraft)
+  const itemPath = /^\/items(?:\/|$)/.test(location.pathname);
+  if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
+    || (itemPath && state.readiness.capabilities.itemDraft)))
     return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
   return <main className="flex min-h-dvh items-center justify-center bg-background px-5 text-foreground">
     <div className="w-full max-w-lg">

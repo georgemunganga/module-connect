@@ -9,6 +9,7 @@ import { AppProvider } from "../lib/store";
 import { ErpShellProvider } from "../lib/erpShell";
 import { ProcurementLiveGate, isProcurementLiveMode } from "../lib/ProcurementLiveGate";
 import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/LiveVendors";
+import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -111,7 +112,7 @@ export function App() {
                 path={`/${kind}`}
                 element={
                   <div className="p-5 sm:p-8">
-                    {isProcurementLiveMode && kind === "vendors" ? <LiveVendorList /> : <CatalogList kind={kind} />}
+                    {isProcurementLiveMode ? kind === "vendors" ? <LiveVendorList /> : <LiveItemList /> : <CatalogList kind={kind} />}
                   </div>
                 }
               />,
@@ -120,7 +121,7 @@ export function App() {
                 path={`/${kind}/new`}
                 element={
                   <div className="p-5 sm:p-8">
-                    {isProcurementLiveMode && kind === "vendors" ? <LiveVendorEditor /> : <CatalogRoute kind={kind} />}
+                    {isProcurementLiveMode ? kind === "vendors" ? <LiveVendorEditor /> : <LiveItemEditor /> : <CatalogRoute kind={kind} />}
                   </div>
                 }
               />,
@@ -129,7 +130,7 @@ export function App() {
                 path={`/${kind}/:id/edit`}
                 element={
                   <div className="p-5 sm:p-8">
-                    {isProcurementLiveMode && kind === "vendors" ? <LiveVendorEditor /> : <CatalogRoute kind={kind} />}
+                    {isProcurementLiveMode ? kind === "vendors" ? <LiveVendorEditor /> : <LiveItemEditor /> : <CatalogRoute kind={kind} />}
                   </div>
                 }
               />,
@@ -140,7 +141,7 @@ export function App() {
                 path={`/${kind}/:id`}
                 element={
                   <div className="p-5 sm:p-8">
-                  {isProcurementLiveMode && kind === "vendors" ? <LiveVendorDetail /> : <CatalogDetail kind={kind} />}
+                  {isProcurementLiveMode ? kind === "vendors" ? <LiveVendorDetail /> : <LiveItemDetail /> : <CatalogDetail kind={kind} />}
                   </div>
                 }
               />
