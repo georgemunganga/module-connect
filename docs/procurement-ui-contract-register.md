@@ -40,7 +40,7 @@ The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` throug
 
 ## Adapter sequence
 
-1. **Draft records:** connect vendor, item and own-request list/detail/create/edit/withdraw to current routes. Preserve the demo adapter for visual review; never silently mix demo rows into live lists.
+1. **Draft records:** connect vendor, item and own-request list/detail/create/edit/withdraw to current routes. The typed vendor draft API client is in `src/platform/procurement-vendors-api.ts`; its list, create, update, withdraw and failure paths are tested, but the Vendor screens are still held in live mode until they use it end to end. Preserve the demo adapter for visual review; never silently mix demo rows into live lists.
 2. **Controlled demand:** add submit, policy, Finance budget, approval and line-allocation contracts. The UI must expose blocked, pending and unknown dependency outcomes.
 3. **Commercial commitment:** add RFx/award, contract and multi-line PO APIs with revision, issuance and supplier response.
 4. **Fulfilment and Finance:** add line receipts, returns, invoice match, AP handoff and callback reconciliation.
