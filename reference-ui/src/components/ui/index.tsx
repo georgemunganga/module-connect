@@ -1,21 +1,15 @@
 import {
-  Children,
-  isValidElement,
   useEffect,
-  useId,
   useRef,
-  useState,
   type ChangeEvent,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
-  type OptionHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { createPortal } from "react-dom";
-import { X, Check, ChevronDown, FileSearch } from "lucide-react";
-import { Button as ErpButton, Card as ErpCard, Input as ErpInput, Textarea as ErpTextarea } from "@amizopower/erp-ui";
+import { X, FileSearch } from "lucide-react";
+import { Button as ErpButton, Card as ErpCard, FormSelect as ErpFormSelect, Input as ErpInput, Switch as ErpSwitch, Textarea as ErpTextarea } from "@amizopower/erp-ui";
 
 export function Button({
   variant = "primary",
@@ -63,138 +57,24 @@ export function Input({
 }: InputHTMLAttributes<HTMLInputElement>) {
   return <ErpInput className={className} {...props} />;
 }
-export function Select({
-  children,
-  className = "",
-  value,
-  defaultValue,
-  onChange,
-  disabled,
-  name,
-  required,
-  id,
-  ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
-  const choices = Children.toArray(children).flatMap((child) => {
-    if (!isValidElement<OptionHTMLAttributes<HTMLOptionElement>>(child)) return [];
-    const label = String(child.props.children ?? "");
-    return [{ value: String(child.props.value ?? label), label, disabled: Boolean(child.props.disabled) }];
-  });
-  const [localValue, setLocalValue] = useState(String(defaultValue ?? choices[0]?.value ?? ""));
-  const selectedValue = value === undefined ? localValue : String(value);
-  const selected = choices.find((choice) => choice.value === selectedValue);
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const [placement, setPlacement] = useState({ left: 0, top: 0, width: 0, maxHeight: 300 });
-  const trigger = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  const listId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const position = () => {
-      const rect = trigger.current?.getBoundingClientRect();
-      if (!rect) return;
-      const below = window.innerHeight - rect.bottom - 12;
-      const above = rect.top - 12;
-      const desiredHeight = Math.min(320, choices.length * 38 + 12);
-      const upward = below < desiredHeight && above > below;
-      const maxHeight = Math.max(120, Math.min(320, upward ? above : below));
-      setPlacement({ left: Math.max(12, Math.min(rect.left, window.innerWidth - rect.width - 12)), top: upward ? Math.max(8, rect.top - Math.min(desiredHeight, maxHeight) - 6) : rect.bottom + 6, width: rect.width, maxHeight });
-    };
-    const outside = (event: PointerEvent) => {
-      if (!trigger.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) setOpen(false);
-    };
-    position();
-    window.addEventListener("resize", position);
-    window.addEventListener("scroll", position, true);
-    document.addEventListener("pointerdown", outside);
-    return () => { window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); document.removeEventListener("pointerdown", outside); };
-  }, [open, choices.length]);
-
-  const choose = (next: string) => {
-    setLocalValue(next);
-    onChange?.({ target: { value: next, name }, currentTarget: { value: next, name } } as ChangeEvent<HTMLSelectElement>);
-    setOpen(false);
-    trigger.current?.focus();
-  };
-  const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === "Escape") { setOpen(false); return; }
-    if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-      event.preventDefault();
-      const available = choices.map((choice, index) => ({ choice, index })).filter(({ choice }) => !choice.disabled);
-      if (!available.length) return;
-      const current = available.findIndex(({ index }) => index === active);
-      const next = event.key === "Home" ? 0 : event.key === "End" ? available.length - 1 : event.key === "ArrowDown" ? (current + 1) % available.length : (current - 1 + available.length) % available.length;
-      setActive(available[next].index);
-      setOpen(true);
-    } else if ((event.key === "Enter" || event.key === " ") && open) {
-      event.preventDefault();
-      if (!choices[active]?.disabled) choose(choices[active].value);
-    }
-  };
-  return (
-    <span className="relative block">
-      <button
-        ref={trigger}
-        type="button"
-        id={id}
-        role="combobox"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        aria-activedescendant={open ? `${listId}-${active}` : undefined}
-        aria-label={props["aria-label"]}
-        aria-required={required || undefined}
-        disabled={disabled}
-        onClick={() => { setActive(Math.max(0, choices.findIndex((choice) => choice.value === selectedValue))); setOpen((current) => !current); }}
-        onKeyDown={onKeyDown}
-        className={`control flex items-center justify-between gap-2 text-left transition-shadow hover:border-primary/60 disabled:cursor-not-allowed ${className}`}
-      >
-        <span className={`min-w-0 flex-1 truncate ${selectedValue === "" ? "text-muted-foreground" : ""}`}>{selected?.label ?? "Select"}</span>
-        <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
-      </button>
-      <select
-        name={name}
-        value={selectedValue}
-        onChange={() => {}}
-        aria-hidden="true"
-        tabIndex={-1}
-        className="sr-only"
-      >
-        {children}
-      </select>
-      {open && typeof document !== "undefined" ? createPortal(<div
-        ref={menu}
-        id={listId}
-        role="listbox"
-        aria-label={props["aria-label"]}
-        className="fixed z-[100] overflow-y-auto rounded-xl border border-border bg-surface p-1.5 text-foreground shadow-2xl"
-        style={{ left: placement.left, top: placement.top, width: placement.width, maxHeight: placement.maxHeight }}
-      >
-        {choices.map((choice, index) => <div
-          key={`${choice.value}-${index}`}
-          id={`${listId}-${index}`}
-          role="option"
-          aria-selected={choice.value === selectedValue}
-          aria-disabled={choice.disabled || undefined}
-          onMouseEnter={() => setActive(index)}
-          onClick={() => { if (!choice.disabled) choose(choice.value); }}
-          className={`flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm ${choice.disabled ? "cursor-not-allowed opacity-45" : index === active ? "bg-primary-soft text-primary" : "hover:bg-secondary"}`}
-        >
-          <span className="min-w-0 truncate">{choice.label}</span>
-          {choice.value === selectedValue ? <Check className="size-4 shrink-0" aria-hidden /> : null}
-        </div>)}
-      </div>, document.body) : null}
-    </span>
-  );
+export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <ErpFormSelect {...props} />;
 }
-export function Switch({ className = "", ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
-  return <span className={`relative inline-flex h-6 w-11 shrink-0 items-center ${className}`}>
-    <input type="checkbox" role="switch" className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed" {...props} />
-    <span aria-hidden="true" className="pointer-events-none h-6 w-11 rounded-full bg-input shadow-inner transition-colors peer-checked:bg-primary peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring peer-disabled:opacity-50" />
-    <span aria-hidden="true" className="pointer-events-none absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5 peer-disabled:opacity-50" />
-  </span>;
+export function Switch({ checked, defaultChecked, onChange, className, name, disabled, required, id, title, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  return <ErpSwitch
+    checked={checked}
+    defaultChecked={defaultChecked}
+    onCheckedChange={(next) => onChange?.({ target: { checked: next, name }, currentTarget: { checked: next, name } } as ChangeEvent<HTMLInputElement>)}
+    className={className}
+    name={name}
+    disabled={disabled}
+    required={required}
+    id={id}
+    title={title}
+    aria-label={props["aria-label"]}
+    aria-labelledby={props["aria-labelledby"]}
+    aria-describedby={props["aria-describedby"]}
+  />;
 }
 export function Textarea({
   className = "",

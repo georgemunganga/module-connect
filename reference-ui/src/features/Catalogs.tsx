@@ -1213,7 +1213,7 @@ export function CatalogEditor({ kind }: { kind: CatalogKind }) {
       </div>
       <PageHeader
         title={title}
-        subtitle="All changes are saved to this browser's fictional demo data only."
+        subtitle={kind === "items" ? "Add the item details below." : "Add the vendor's contact and business details below."}
       />
       <form onSubmit={save} className="space-y-5">
         {kind === "items" ? (

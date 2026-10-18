@@ -21,8 +21,6 @@ import {
   ChevronRight,
   X,
   CircleHelp,
-  PanelLeftClose,
-  PanelLeftOpen,
   Sparkles,
   UserRound,
 } from "lucide-react";
@@ -30,6 +28,7 @@ import { useApp, money } from "../../lib/store";
 import { modules } from "../../data/modules";
 import { Modal, Button } from "../ui";
 import { BrandMark, useErpShell } from "../../lib/erpShell";
+import { ErpSidebarHeader, ErpTopBar } from "@amizopower/erp-ui";
 
 const procurement = [
   ["/procurement-requests", "Purchase Requests"],
@@ -105,7 +104,7 @@ export function AppShell() {
   );
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <header className="fixed inset-x-0 top-0 z-30 flex h-14 min-w-0 items-center gap-1 border-b border-primary/40 bg-primary px-2 text-primary-foreground shadow-sm sm:gap-2 sm:px-3">
+      <ErpTopBar position="fixed" className="flex h-14 min-w-0 items-center gap-1 px-2 sm:gap-2 sm:px-3">
         <button
           className="mr-3 p-1 lg:hidden"
           aria-label="Open navigation"
@@ -252,7 +251,7 @@ export function AppShell() {
             )}
           </div>
         </div>
-      </header>
+      </ErpTopBar>
       {mobile && (
         <div
           className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden"
@@ -272,12 +271,7 @@ export function AppShell() {
             <X size={20} />
           </button>
         </div>
-        <div className={`hidden items-center gap-2 px-3 py-4 lg:flex ${compact ? "justify-center px-2" : "justify-between"}`}>
-          {!compact && <div><p className="px-2 text-xs font-semibold uppercase tracking-wide text-rail-muted">Module</p><p className="px-2 text-sm font-semibold text-rail-foreground">Procurement</p></div>}
-          <button type="button" onClick={() => setCompact((value) => !value)} aria-label={compact ? "Expand side menu" : "Collapse side menu"} title={compact ? "Expand side menu" : "Collapse side menu"} className="flex size-8 items-center justify-center rounded-md text-rail-muted hover:bg-rail-active hover:text-rail-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-foreground">
-            {compact ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          </button>
-        </div>
+        <ErpSidebarHeader moduleName="Procurement" collapsed={compact} onToggle={() => setCompact((value) => !value)} className="hidden lg:flex" />
         <div className={`px-3 pb-3 ${compact ? "lg:px-2" : ""}`}>
           <button
             onClick={() => setHelp(true)}

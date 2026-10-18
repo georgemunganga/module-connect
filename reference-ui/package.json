@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@amizopower/erp-ui": "https://codeload.github.com/georgemunganga/erp-ui/tar.gz/4ae7e848360284d78835414e30a7fa4f8b344ac9",
+    "@amizopower/erp-ui": "https://codeload.github.com/georgemunganga/erp-ui/tar.gz/9b77383480882b67549f803b7ad1f2408df5c737",
     "lucide-react": "0.468.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
