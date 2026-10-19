@@ -70,6 +70,15 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     }
     if (path === `/api/procurement/v1/requests/${requestId}/review` && record)
       return record.status === "Submitted" ? json(record) : json({ message: "Request not available for review." }, 404);
+    if (path === `/api/procurement/v1/requests/${requestId}/approval-readiness` && record) {
+      const blockers = [
+        ...(!options.matchedPolicy && !policyChecked || policyBlocked ? ["BuyingRulesNotMatched"] : []),
+        ...(!options.confirmedBudget ? ["FinanceReservationNotConfirmed"] : []),
+      ];
+      return json({ requestId, requestVersion: record.version, estimatedAmount: 250,
+        currencyCode: record.currencyCode, prerequisitesMet: blockers.length === 0,
+        blockers, isAuthority: false, nextStep: "An independent approver is still required." });
+    }
     if (path === `/api/procurement/v1/requests/${requestId}/withdraw` && record) {
       const { version, reason } = request.postDataJSON();
       if (version !== record.version) return json({ message: "Refresh this request." }, 409);
@@ -238,6 +247,8 @@ test("Procurement returns a blocked request with a note and requester resubmits 
   await page.getByRole("link", { name: "Back to my requests" }).click();
   await page.getByRole("button", { name: "View details" }).click();
   await expect(page.getByRole("cell", { name: "UNKNOWN" })).toBeVisible();
+  await expect(page.getByText("The buying rules still need a successful check.")).toBeVisible();
+  await expect(page.getByText("Finance has not confirmed the full amount in this currency.")).toBeVisible();
   await page.getByRole("button", { name: "Close details" }).click();
   await page.getByRole("button", { name: "Return for changes" }).click();
   await expect(page.getByRole("button", { name: "Send back to requester" })).toBeDisabled();

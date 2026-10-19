@@ -38,6 +38,10 @@ export type PolicyQueuePage = { records: Array<{ id: string; number: string; pur
 export type PolicyCheckResult = { requestId: string; requestVersion: number;
   status: string; isAuthority: false; message?: string | null;
   evaluation?: { id: string; outcome: string; resultCode: string } | null };
+export type ApprovalReadinessStatus = { requestId: string; requestVersion: number;
+  estimatedAmount: number; currencyCode: string; prerequisitesMet: boolean;
+  blockers: string[]; policyEvaluationId?: string | null; financeCheckId?: string | null;
+  isAuthority: false; nextStep: string };
 export class RequestApiError extends Error { constructor(public readonly status: number, message: string) { super(message); } }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -92,6 +96,17 @@ export async function getRequestForReview(companyId: string, id: string, signal?
   if (!validDetail(body) || body.status !== "Submitted")
     throw new RequestApiError(0, "The ERP returned invalid request review details.");
   return body;
+}
+export async function getRequestApprovalReadiness(companyId: string, id: string,
+  signal?: AbortSignal): Promise<ApprovalReadinessStatus> {
+  if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
+  const body: unknown = await request(companyId, `/${id}/approval-readiness`, { signal });
+  if (!object(body) || body.requestId !== id || typeof body.requestVersion !== "number"
+    || typeof body.estimatedAmount !== "number" || typeof body.currencyCode !== "string"
+    || typeof body.prerequisitesMet !== "boolean" || body.isAuthority !== false
+    || !Array.isArray(body.blockers) || body.blockers.some((item: unknown) => typeof item !== "string"))
+    throw new RequestApiError(0, "The ERP returned an invalid approval check.");
+  return body as ApprovalReadinessStatus;
 }
 export async function getOwnRequestBudgetStatus(companyId: string, id: string, signal?: AbortSignal): Promise<OwnBudgetStatus> {
   if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");

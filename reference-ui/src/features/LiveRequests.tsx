@@ -5,16 +5,25 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } 
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  createOwnRequestDraft, getOwnRequestDraft, getRequestForReview, listOwnRequestDrafts,
+  createOwnRequestDraft, getOwnRequestDraft, getRequestForReview, getRequestApprovalReadiness, listOwnRequestDrafts,
   checkRequestPolicy, getOwnRequestBudgetStatus, getOwnRequestPolicyStatus, returnRequestForChanges,
   listRequestsWaitingForPolicy, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
-  type OwnBudgetStatus, type OwnPolicyStatus, type PolicyQueuePage,
+  type ApprovalReadinessStatus, type OwnBudgetStatus, type OwnPolicyStatus, type PolicyQueuePage,
   type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
 } from "../../../src/platform/procurement-requests-api";
 import { listPublishedCatalog, type PublishedCatalogPrice } from "../../../src/platform/procurement-catalog-api";
 
 const emptyLine = (): RequestLineDraft => ({ description: "", unitCode: "each", requestedQuantity: 1, estimatedUnitPrice: 0, categoryCode: "" });
 const errorText = (error: unknown) => error instanceof Error ? error.message : "The request action failed. Try again.";
+const approvalBlockerLabels: Record<string, string> = {
+  RequestNotCurrent: "The request needs to be submitted again.",
+  ApprovalAlreadyOpened: "An approval is already in progress.",
+  NoActiveLines: "The request has no active items or services.",
+  AmountOverflow: "The request amount needs correction.",
+  BuyingRulesNotMatched: "The buying rules still need a successful check.",
+  PinnedPolicyUnavailable: "The saved buying rule is no longer available for review.",
+  FinanceReservationNotConfirmed: "Finance has not confirmed the full amount in this currency.",
+};
 function context() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Requests require ERP company context.");
@@ -39,6 +48,7 @@ export function LiveRequestList() {
   const [returnReason, setReturnReason] = useState("");
   const [savingReturn, setSavingReturn] = useState(false);
   const [reviewDetail, setReviewDetail] = useState<RequestDetail | null>(null);
+  const [reviewReadiness, setReviewReadiness] = useState<ApprovalReadinessStatus | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
@@ -73,14 +83,19 @@ export function LiveRequestList() {
     try {
       await returnRequestForChanges(legalEntityId, returning.id, returning.version, returnReason);
       setPolicyNotice(`${returning.number} was returned to the requester with your note.`);
-      setReturning(null); setReviewDetail(null); setReturnReason(""); setPolicyOffset(0);
+      setReturning(null); setReviewDetail(null); setReviewReadiness(null); setReturnReason(""); setPolicyOffset(0);
       setPolicyQueue(await listRequestsWaitingForPolicy(legalEntityId));
     } catch (cause) { setPolicyError(errorText(cause)); }
     finally { setSavingReturn(false); }
   }
   async function openReview(id: string) {
-    setReviewLoading(true); setPolicyError("");
-    try { setReviewDetail(await getRequestForReview(legalEntityId, id)); }
+    setReviewLoading(true); setPolicyError(""); setReviewReadiness(null);
+    try {
+      const [detail, readiness] = await Promise.all([
+        getRequestForReview(legalEntityId, id), getRequestApprovalReadiness(legalEntityId, id),
+      ]);
+      setReviewDetail(detail); setReviewReadiness(readiness);
+    }
     catch (cause) { setPolicyError(errorText(cause)); }
     finally { setReviewLoading(false); }
   }
@@ -99,6 +114,14 @@ export function LiveRequestList() {
       {policyQueue?.records.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Request</th><th>Purpose</th><th>Lines</th><th>Amount before adjustments</th><th>Status</th><th>Action</th></tr></thead><tbody>{policyQueue.records.map((item) => <tr key={item.id}><td>{item.number}</td><td>{item.purpose}</td><td>{item.lineCount}</td><td>{item.currencyCode} {item.estimatedBaseAmount.toLocaleString()}</td><td>{item.policyOutcome === "Blocked" ? `Needs attention: ${item.policyResultCode || "rule exception"}` : "Waiting for check"}</td><td><div className="flex flex-wrap gap-2">{canReturnRequest && <Button variant="secondary" disabled={reviewLoading} onClick={() => void openReview(item.id)}>View details</Button>}{item.policyOutcome !== "Blocked" && <Button variant="secondary" disabled={checkingId === item.id} onClick={() => void checkPolicy(item.id, item.version)}>{checkingId === item.id ? "Checking…" : "Check buying rules"}</Button>}{canReturnRequest && <Button variant="secondary" onClick={() => { setReturning({ id: item.id, version: item.version, number: item.number }); setReturnReason(""); setPolicyError(""); }}>Return for changes</Button>}</div></td></tr>)}</tbody></RecordTable></div>
         : <p className="text-sm text-muted-foreground">No requests need a buying-rule check or follow-up.</p>}
       {reviewDetail && <div className="mt-4 rounded-lg border border-border p-4"><div className="flex items-center justify-between gap-3"><p className="font-medium">{reviewDetail.number} · {reviewDetail.purpose}</p><Button variant="secondary" onClick={() => setReviewDetail(null)}>Close details</Button></div><p className="mt-2 text-sm text-muted-foreground">Needed by {reviewDetail.neededBy || "not set"} · {reviewDetail.currencyCode}</p>{reviewDetail.notesToApprover && <p className="mt-2 text-sm">Request note: {reviewDetail.notesToApprover}</p>}<div className="mt-3 overflow-x-auto"><RecordTable><thead><tr><th>Item or service</th><th>Category</th><th>Quantity</th><th>Unit price</th></tr></thead><tbody>{reviewDetail.lines.filter((line) => line.approvalStatus !== "Cancelled").map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.categoryCode || "Not set"}</td><td>{line.requestedQuantity} {line.unitCode}</td><td>{reviewDetail.currencyCode} {line.estimatedUnitPrice.toLocaleString()}</td></tr>)}</tbody></RecordTable></div></div>}
+      {reviewDetail && reviewReadiness && <div className="mt-3 rounded-lg border border-border p-4 text-sm">
+        <p className="font-medium">Approval check</p>
+        {reviewReadiness.prerequisitesMet
+          ? <p className="mt-2 text-muted-foreground">Buying rules and Finance evidence are recorded. An independent approver still needs to be assigned.</p>
+          : <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+            {reviewReadiness.blockers.map((blocker) => <li key={blocker}>{approvalBlockerLabels[blocker] || "This request needs another review."}</li>)}
+          </ul>}
+      </div>}
       {returning && <div className="mt-4 max-w-xl space-y-3 rounded-lg border border-border p-4"><p className="font-medium">Return {returning.number} for changes</p><Field label="What should the requester fix?"><Textarea rows={3} maxLength={1000} value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /></Field><p className="text-xs text-muted-foreground">A confirmed Finance reservation must be released before a request can be returned.</p><div className="flex gap-2"><Button disabled={savingReturn || !returnReason.trim()} onClick={() => void saveReturn()}>{savingReturn ? "Returning…" : "Send back to requester"}</Button><Button variant="secondary" disabled={savingReturn} onClick={() => setReturning(null)}>Cancel</Button></div></div>}
       {policyQueue && policyQueue.count > policyQueue.limit && <div className="mt-3 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={policyOffset === 0} onClick={() => setPolicyOffset(Math.max(0, policyOffset - policyQueue.limit))}>Previous</Button><span>{policyOffset + 1}–{Math.min(policyOffset + policyQueue.records.length, policyQueue.count)} of {policyQueue.count}</span><Button variant="secondary" disabled={policyOffset + policyQueue.limit >= policyQueue.count} onClick={() => setPolicyOffset(policyOffset + policyQueue.limit)}>Next</Button></div>}
       <p className="mt-3 text-xs text-muted-foreground">A rule check records the matching policy. It does not approve the request or reserve money.</p>
