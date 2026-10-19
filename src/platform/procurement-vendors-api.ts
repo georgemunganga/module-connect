@@ -185,9 +185,37 @@ export async function addVendorContact(legalEntityId: string, id: string, versio
   await request<unknown>(legalEntityId, `/${id}/contacts`, { method: "POST", body: JSON.stringify({ version, contact }) });
 }
 
+export async function updateVendorContact(legalEntityId: string, id: string, contactId: string,
+  version: number, contact: VendorContactDraft): Promise<void> {
+  if (!guid.test(id) || !guid.test(contactId)) throw new VendorApiError(0, "The vendor contact reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/contacts/${contactId}`,
+    { method: "PUT", body: JSON.stringify({ version, contact }) });
+}
+
+export async function removeVendorContact(legalEntityId: string, id: string, contactId: string,
+  version: number, reason: string): Promise<void> {
+  if (!guid.test(id) || !guid.test(contactId)) throw new VendorApiError(0, "The vendor contact reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/contacts/${contactId}/remove`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
+}
+
 export async function addVendorSite(legalEntityId: string, id: string, version: number, site: VendorSiteDraft): Promise<void> {
   if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
   await request<unknown>(legalEntityId, `/${id}/sites`, { method: "POST", body: JSON.stringify({ version, site }) });
+}
+
+export async function updateVendorSite(legalEntityId: string, id: string, siteId: string,
+  version: number, site: VendorSiteDraft): Promise<void> {
+  if (!guid.test(id) || !guid.test(siteId)) throw new VendorApiError(0, "The vendor address reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/sites/${siteId}`,
+    { method: "PUT", body: JSON.stringify({ version, site }) });
+}
+
+export async function removeVendorSite(legalEntityId: string, id: string, siteId: string,
+  version: number, reason: string): Promise<void> {
+  if (!guid.test(id) || !guid.test(siteId)) throw new VendorApiError(0, "The vendor address reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/sites/${siteId}/remove`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
 }
 
 export async function addVendorQualification(legalEntityId: string, id: string, version: number,

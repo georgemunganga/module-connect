@@ -63,11 +63,37 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       vendor = { ...vendor, contacts: [...(vendor.contacts as unknown[]), { ...contact, id: "44444444-4444-4444-8444-444444444444" }], version: version + 1 };
       return json({ id: vendorId, version: vendor.version }, 201);
     }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/contacts/44444444-4444-4444-8444-444444444444` && vendor && request.method() === "PUT") {
+      const { version, contact } = request.postDataJSON();
+      if (version !== vendor.version) return json({ detail: "This vendor changed. Refresh it." }, 409);
+      vendor = { ...vendor, contacts: (vendor.contacts as Record<string, unknown>[]).map((row) =>
+        row.id === "44444444-4444-4444-8444-444444444444" ? { ...row, ...contact } : row), version: version + 1 };
+      return json({ id: "44444444-4444-4444-8444-444444444444", version: vendor.version });
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/contacts/44444444-4444-4444-8444-444444444444/remove` && vendor) {
+      const { version, reason } = request.postDataJSON();
+      if (version !== vendor.version || !reason) return json({ detail: "A current version and reason are required." }, 422);
+      vendor = { ...vendor, contacts: [], version: version + 1 };
+      return json({ id: "44444444-4444-4444-8444-444444444444", version: vendor.version });
+    }
     if (path === `/api/procurement/v1/vendors/${vendorId}/sites` && vendor) {
       const { version, site } = request.postDataJSON();
       if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
       vendor = { ...vendor, sites: [...(vendor.sites as unknown[]), { ...site, id: "55555555-5555-4555-8555-555555555555" }], version: version + 1 };
       return json({ id: vendorId, version: vendor.version }, 201);
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/sites/55555555-5555-4555-8555-555555555555` && vendor && request.method() === "PUT") {
+      const { version, site } = request.postDataJSON();
+      if (version !== vendor.version) return json({ detail: "This vendor changed. Refresh it." }, 409);
+      vendor = { ...vendor, sites: (vendor.sites as Record<string, unknown>[]).map((row) =>
+        row.id === "55555555-5555-4555-8555-555555555555" ? { ...row, ...site } : row), version: version + 1 };
+      return json({ id: "55555555-5555-4555-8555-555555555555", version: vendor.version });
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/sites/55555555-5555-4555-8555-555555555555/remove` && vendor) {
+      const { version, reason } = request.postDataJSON();
+      if (version !== vendor.version || !reason) return json({ detail: "A current version and reason are required." }, 422);
+      vendor = { ...vendor, sites: [], version: version + 1 };
+      return json({ id: "55555555-5555-4555-8555-555555555555", version: vendor.version });
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}/qualifications` && vendor) {
       const { version, qualification } = request.postDataJSON();
@@ -147,6 +173,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
 }
 
 test("vendor draft persists through the ERP API across refresh, edit and withdrawal", async ({ page }) => {
+  test.setTimeout(90_000);
   await mockErp(page);
   await page.goto("/procurement/workspace/vendors");
   await expect(page.getByText("Every purchase starts with a vendor")).toBeVisible();
@@ -193,6 +220,37 @@ test("vendor list denial shows an error without demo rows", async ({ page }) => 
   await page.goto("/procurement/workspace/vendors");
   await expect(page.getByRole("alert")).toContainText("do not have access");
   await expect(page.getByText("Northstar Office Supply")).toHaveCount(0);
+});
+
+test("vendor draft contact and address can be corrected and removed with a reason", async ({ page }) => {
+  test.setTimeout(90_000);
+  await mockErp(page);
+  await page.goto("/procurement/workspace/vendors/new");
+  await page.getByLabel("Company name").fill("Office Supplies Ltd");
+  await page.getByLabel("Display name").fill("Office Supplies");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByLabel("Contact name").fill("Old person");
+  await page.getByRole("button", { name: "Add contact" }).click();
+  await expect(page.getByText("Old person", { exact: false })).toBeVisible();
+  await page.getByText("Old person", { exact: false }).locator("..").getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Contact name").fill("New person");
+  await page.getByRole("button", { name: "Save contact" }).click();
+  await expect(page.getByText("New person", { exact: false })).toBeVisible();
+  await page.getByLabel("Address line 1").fill("Old road");
+  await page.getByRole("button", { name: "Add address" }).click();
+  await page.getByText(/Billing: Old road/).locator("..").getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Address line 1").fill("New road");
+  await page.getByRole("button", { name: "Save address" }).click();
+  await expect(page.getByText(/Billing: New road/)).toBeVisible();
+  await page.getByText("New person", { exact: false }).locator("..").getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("button", { name: "Remove detail" })).toBeDisabled();
+  await page.getByLabel("Why remove this detail?").fill("Wrong person");
+  await page.getByRole("button", { name: "Remove detail" }).click();
+  await expect(page.getByText("No contacts yet.")).toBeVisible();
+  await page.getByText(/Billing: New road/).locator("..").getByRole("button", { name: "Remove" }).click();
+  await page.getByLabel("Why remove this detail?").fill("Wrong address");
+  await page.getByRole("button", { name: "Remove detail" }).click();
+  await expect(page.getByText("No addresses yet.")).toBeVisible();
 });
 
 test("stale edit keeps entered values for comparison", async ({ page }) => {
