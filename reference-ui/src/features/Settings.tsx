@@ -57,6 +57,7 @@ import {
 
 import { SetupConfig } from "./SetupConfig";
 import { LiveConfiguration } from "./LiveConfiguration";
+import { LivePolicies } from "./LivePolicies";
 import { isProcurementLiveMode } from "../lib/ProcurementLiveGate";
 import { CurrencySettings, TaxSettings } from "./SettingsLists";
 
@@ -287,6 +288,7 @@ function SettingsSidebar({
         </div>
         <nav aria-label="Procurement settings" className={`px-3 pb-5 ${collapsed ? "lg:px-2" : ""}`}>
         {isProcurementLiveMode && <SidebarLink label="Buying categories & methods" href="/settings/reference-data" path={path} />}
+        {isProcurementLiveMode && <SidebarLink label="Buying rules" href="/settings/buying-rules" path={path} />}
         {moduleGroups.map((group) => (
           <ModuleSidebarGroup
             key={group.title}
@@ -381,6 +383,7 @@ function SettingsIndex({ search }: { search: string }) {
     icon: group.title.includes("Supplier") ? <Users size={17} /> : group.title.includes("Sourcing") ? <FileText size={17} /> : <Receipt size={17} />,
     links: [
       ...(isProcurementLiveMode && group.title === "Buying" ? [["Buying categories & methods", "/settings/reference-data"]] : []),
+      ...(isProcurementLiveMode && group.title === "Buying" ? [["Buying rules", "/settings/buying-rules"]] : []),
       ...(group.title.includes("Supplier") ? [["Vendor Portal", "/settings/vendor-portal"], ["Punchout Catalogs", "/settings/punchout-catalogs"]] : []),
       ...group.slugs.map((slug) => { const module = findModule(slug); return [module?.title ?? slug, `/settings/modules/${slug}/${module?.tabs[0].slug ?? "preferences"}`]; }),
     ],
@@ -434,6 +437,8 @@ function SettingsRouteContent({
 }) {
   if (path === "/settings/reference-data" && isProcurementLiveMode)
     return <LiveConfiguration />;
+  if (path === "/settings/buying-rules" && isProcurementLiveMode)
+    return <LivePolicies />;
   if (!settingsRoutes.some((route) => route.path === path))
     return (
       <div className="mx-auto max-w-xl rounded-lg border border-border bg-surface p-8">

@@ -187,6 +187,7 @@ const moduleRoutes = moduleSettings.flatMap((module) =>
 export const settingsRoutes: SettingsRoute[] = [
   { path: "/settings", title: "All Settings" },
   { path: "/settings/reference-data", title: "Buying categories & methods" },
+  { path: "/settings/buying-rules", title: "Buying rules" },
   ...organizationRoutes,
   { path: "/settings/customization/pdf-templates", title: "PDF Templates" },
   {

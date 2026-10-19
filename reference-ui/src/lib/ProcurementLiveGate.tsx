@@ -33,14 +33,15 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const sourcingPath = /^\/rfqs(?:\/|$)/.test(location.pathname);
   const contractPath = /^\/contracts(?:\/|$)/.test(location.pathname);
   const planPath = /^\/plans(?:\/|$)/.test(location.pathname);
-  const referenceSettingsPath = location.pathname === "/settings/reference-data";
+  const configurationSettingsPath = ["/settings/reference-data", "/settings/buying-rules"]
+    .includes(location.pathname);
   if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
     || (sourcingPath && state.readiness.capabilities.sourcingDraft)
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (planPath && state.readiness.capabilities.planningDraft)
-    || (referenceSettingsPath && state.readiness.capabilities.configurationDraft)))
+    || (configurationSettingsPath && state.readiness.capabilities.configurationDraft)))
     return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
   if (state.readiness && unavailable)
     return <LiveReadiness.Provider value={state.readiness}>{unavailable}</LiveReadiness.Provider>;

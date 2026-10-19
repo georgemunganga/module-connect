@@ -209,6 +209,10 @@
       "title": "Buying categories & methods"
     },
     {
+      "path": "/settings/buying-rules",
+      "title": "Buying rules"
+    },
+    {
       "path": "/settings/general",
       "title": "General"
     },
