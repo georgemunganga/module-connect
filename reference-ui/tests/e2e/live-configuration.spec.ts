@@ -11,7 +11,7 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "configurationDraft"]));
 type Reference = Record<string, unknown> & { id: string; code: string; name: string; version: number; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; canApprove?: boolean } = {}) {
   let category: Reference | null = null;
   let method: Reference | null = null;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
@@ -24,7 +24,9 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
+      permissions: options.canApprove ? ["procurement-access", "procurement-configuration-approve"] : [],
+      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     for (const kind of ["categories", "methods"] as const) {
       const base = `/api/procurement/v1/configuration/${kind}`;
@@ -49,6 +51,12 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
           if (kind === "categories") category = saved; else method = saved;
           return json(saved);
         }
+      }
+      if (kind === "categories" && path === `${base}/${id}/activate` && current) {
+        const { version, reason } = request.postDataJSON();
+        if (version !== current.version || !reason) return json({ message: "Refresh or add a review reason." }, 409);
+        category = { ...current, status: "Active", version: current.version + 1 };
+        return json(category);
       }
     }
     return json({ message: `Unexpected route: ${path}` }, 404);
@@ -77,6 +85,19 @@ test("category and buying method drafts persist in Procurement settings", async 
   await page.getByLabel("Name").fill("Request for quotes");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("cell", { name: "Request for quotes" })).toBeVisible();
+});
+
+test("separate reviewer activates a category for buying", async ({ page }) => {
+  await mockErp(page, { canApprove: true });
+  await page.goto("/procurement/workspace/settings/reference-data");
+  await page.getByRole("button", { name: "Add category" }).first().click();
+  await page.getByRole("textbox", { name: "Code", exact: true }).fill("OFFICE");
+  await page.getByLabel("Name").fill("Office equipment");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByLabel("Review reason").fill("Checked category and parent");
+  await page.getByRole("button", { name: "Activate category" }).click();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
 });
 
 test("configuration denial shows no browser-only records", async ({ page }) => {

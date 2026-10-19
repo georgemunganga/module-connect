@@ -5,7 +5,7 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Tex
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  createItemDraft, deactivateItem, getItemDraft, listItemDrafts, updateItemDraft,
+  activateItem, createItemDraft, deactivateItem, getItemDraft, listItemDrafts, updateItemDraft,
   type ItemDetail, type ItemDraft, type ItemPage,
 } from "../../../src/platform/procurement-items-api";
 
@@ -110,11 +110,13 @@ export function LiveItemEditor() {
 
 export function LiveItemDetail() {
   const { id } = useParams();
+  const readiness = useLiveReadiness();
   const company = companyId();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [reviewReason, setReviewReason] = useState("");
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -131,12 +133,26 @@ export function LiveItemDetail() {
     catch (cause) { setError(message(cause)); }
     finally { setBusy(false); }
   }
+  async function activate() {
+    if (!item || !reviewReason.trim()) return;
+    setBusy(true); setError("");
+    try {
+      await activateItem(company, item.id, item.version, reviewReason.trim());
+      setItem(await getItemDraft(company, item.id)); setReviewReason("");
+    } catch (cause) { setError(message(cause)); }
+    finally { setBusy(false); }
+  }
   if (loading) return <div role="status" className="p-5 sm:p-8">Loading item…</div>;
   if (!item) return <div role="alert" className="p-5 sm:p-8">{error || "Item not found."}</div>;
   return <div className="p-5 sm:p-8">
     <PageHeader title={item.name} subtitle={`${item.code} · ${item.kind}`} actions={<><Badge>{item.status}</Badge>{item.status === "Inactive" && <Link to={`/items/${item.id}/edit`}><Button variant="secondary">Edit item</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     <div className="grid gap-5 lg:grid-cols-2"><Panel title="Item overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Category</dt><dd>{item.categoryCode}</dd><dt>Unit</dt><dd>{item.unitCode}</dd><dt>Brand</dt><dd>{item.brand || "—"}</dd><dt>Available for buying</dt><dd>{item.isPurchasable ? "Yes" : "No — approval required"}</dd></dl></Panel><Panel title="Description"><p className="p-5 text-sm">{item.description || "No description."}</p></Panel></div>
+    {item.status === "Inactive" && readiness?.permissions.includes("procurement-item-approve") && <Panel title="Review item" className="mt-5"><div className="space-y-3 p-5">
+      <p className="text-sm text-muted-foreground">Check its category and buying details. Another person must review an item you created.</p>
+      <Field label="Review reason"><Textarea required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
+      <Button disabled={busy || !reviewReason.trim()} onClick={() => void activate()}>{busy ? "Saving…" : "Activate item"}</Button>
+    </div></Panel>}
     {item.status !== "Inactive" && <div className="mt-6"><Button variant="danger" disabled={busy} onClick={() => void retire()}>Make inactive</Button></div>}
     <Link to="/items" className="mt-5 inline-block text-sm text-primary hover:underline">Back to items</Link>
   </div>;

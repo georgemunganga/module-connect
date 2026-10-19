@@ -11,6 +11,7 @@ export type ProcurementReadiness = {
   workerId: string;
   defaultCurrencyCode: string;
   schemaReady: boolean;
+  permissions: string[];
   capabilities: Record<ProcurementCapability, boolean>;
 };
 
@@ -93,6 +94,8 @@ export async function fetchProcurementReadiness(
     workerId: context.workerId as string,
     defaultCurrencyCode: (context.company.currencyCode as string).toUpperCase(),
     schemaReady: true,
+    permissions: Array.isArray(context.permissions)
+      ? context.permissions.filter((permission): permission is string => typeof permission === "string") : [],
     capabilities: Object.fromEntries(capabilityKeys.map((key) => [key, resolvedCapabilities[key]])) as Record<ProcurementCapability, boolean>,
   };
 }

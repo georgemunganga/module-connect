@@ -83,3 +83,12 @@ export async function deactivateItem(companyId: string, id: string, version: num
   if (!validItem(body)) throw new ItemApiError(0, "The ERP did not confirm the item change. Refresh before retrying.");
   return body;
 }
+export async function activateItem(companyId: string, id: string, version: number,
+  reason: string): Promise<ItemSummary> {
+  if (!guid.test(id)) throw new ItemApiError(0, "The item reference is invalid.");
+  const body: unknown = await request(companyId, `/${id}/activate`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
+  if (!validItem(body) || body.status !== "Active" || !body.isPurchasable)
+    throw new ItemApiError(0, "The ERP did not confirm item activation. Refresh before retrying.");
+  return body;
+}

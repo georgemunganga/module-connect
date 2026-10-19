@@ -10,7 +10,7 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "itemDraft"]));
 type Item = Record<string, unknown> & { id: string; version: number; name: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; activeItem?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; activeItem?: boolean; canApprove?: boolean } = {}) {
   let item: Item | null = options.activeItem ? {
     id: itemId, code: "LAPTOP", name: "Business laptop", kind: "Goods", categoryCode: "IT",
     unitCode: "each", status: "Active", isPurchasable: true, isStockItem: false,
@@ -26,7 +26,9 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
+      permissions: options.canApprove ? ["procurement-access", "procurement-item-approve"] : [],
+      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/items") {
       if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403) : json({ items: item ? [item] : [], total: item ? 1 : 0, page: 1, pageSize: 25 });
@@ -51,6 +53,12 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       item = { ...item, status: "Inactive", isPurchasable: false, version: version + 1 };
       return json(item);
     }
+    if (path === `/api/procurement/v1/items/${itemId}/activate` && item) {
+      const { version, reason } = request.postDataJSON();
+      if (version !== item.version || !reason) return json({ message: "Refresh or add a review reason." }, 409);
+      item = { ...item, status: "Active", isPurchasable: true, version: version + 1 };
+      return json(item);
+    }
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
 }
@@ -73,6 +81,19 @@ test("item draft persists through create, refresh and edit without publishing", 
   await page.getByLabel("Item name").fill("Office chair deluxe");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("heading", { name: "Office chair deluxe" })).toBeVisible();
+});
+
+test("authorized reviewer activates an item after checking its category", async ({ page }) => {
+  await mockErp(page, { canApprove: true });
+  await page.goto("/procurement/workspace/items/new");
+  await page.getByLabel("Item name").fill("Office chair");
+  await page.getByLabel("Item code").fill("CHAIR-1");
+  await page.getByLabel("Category code").fill("OFFICE");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByLabel("Review reason").fill("Checked category and item details");
+  await page.getByRole("button", { name: "Activate item" }).click();
+  await expect(page.getByText("Available for buying")).toBeVisible();
+  await expect(page.getByText("Yes", { exact: true })).toBeVisible();
 });
 
 test("item list denial does not show demo items", async ({ page }) => {
