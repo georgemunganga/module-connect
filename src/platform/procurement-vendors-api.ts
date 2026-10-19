@@ -225,6 +225,22 @@ export async function addVendorQualification(legalEntityId: string, id: string, 
     { method: "POST", body: JSON.stringify({ version, qualification }) });
 }
 
+export async function updateVendorQualification(legalEntityId: string, id: string, qualificationId: string,
+  version: number, qualification: VendorQualificationDraft): Promise<void> {
+  if (!guid.test(id) || !guid.test(qualificationId))
+    throw new VendorApiError(0, "The vendor qualification reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/qualifications/${qualificationId}`,
+    { method: "PUT", body: JSON.stringify({ version, qualification }) });
+}
+
+export async function removeVendorQualification(legalEntityId: string, id: string, qualificationId: string,
+  version: number, reason: string): Promise<void> {
+  if (!guid.test(id) || !guid.test(qualificationId))
+    throw new VendorApiError(0, "The vendor qualification reference is invalid.");
+  await request<unknown>(legalEntityId, `/${id}/qualifications/${qualificationId}/remove`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
+}
+
 export async function createVendorDraft(legalEntityId: string, draft: VendorDraft): Promise<{ id: string; number: string; version: number; possibleDuplicate: boolean }> {
   const body = await request<unknown>(legalEntityId, "", { method: "POST", body: JSON.stringify(draft) });
   if (!object(body) || !guid.test(String(body.id)) || typeof body.version !== "number")

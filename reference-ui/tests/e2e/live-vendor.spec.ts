@@ -102,6 +102,19 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
         { ...qualification, id: "66666666-6666-4666-8666-666666666666", reviewStatus: "Pending" }], version: version + 1 };
       return json({ id: vendorId, version: vendor.version }, 201);
     }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/qualifications/66666666-6666-4666-8666-666666666666` && vendor && request.method() === "PUT") {
+      const { version, qualification } = request.postDataJSON();
+      if (version !== vendor.version) return json({ detail: "This vendor changed. Refresh it." }, 409);
+      vendor = { ...vendor, qualifications: (vendor.qualifications as Record<string, unknown>[]).map((row) =>
+        row.id === "66666666-6666-4666-8666-666666666666" ? { ...row, ...qualification } : row), version: version + 1 };
+      return json({ id: "66666666-6666-4666-8666-666666666666", version: vendor.version });
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/qualifications/66666666-6666-4666-8666-666666666666/remove` && vendor) {
+      const { version, reason } = request.postDataJSON();
+      if (version !== vendor.version || !reason) return json({ detail: "A current version and reason are required." }, 422);
+      vendor = { ...vendor, qualifications: [], version: version + 1 };
+      return json({ id: "66666666-6666-4666-8666-666666666666", version: vendor.version });
+    }
     if (path === `/api/procurement/v1/vendors/${vendorId}/qualifications/66666666-6666-4666-8666-666666666666/review` && vendor) {
       const { version, decision, reason } = request.postDataJSON();
       if (version !== vendor.version || !reason || !["Verified", "Rejected"].includes(decision))
@@ -251,6 +264,30 @@ test("vendor draft contact and address can be corrected and removed with a reaso
   await page.getByLabel("Why remove this detail?").fill("Wrong address");
   await page.getByRole("button", { name: "Remove detail" }).click();
   await expect(page.getByText("No addresses yet.")).toBeVisible();
+});
+
+test("vendor draft qualification can be corrected and removed with a reason", async ({ page }) => {
+  test.setTimeout(90_000);
+  await mockErp(page);
+  await page.goto("/procurement/workspace/vendors/new");
+  await page.getByLabel("Company name").fill("Equipment Supplies Ltd");
+  await page.getByLabel("Display name").fill("Equipment Supplies");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByLabel("Qualification type").fill("Insurance");
+  await page.getByLabel("Issued by").fill("Insurer");
+  await page.getByLabel("Reference number").fill("POL-1");
+  await page.getByRole("button", { name: "Add qualification" }).click();
+  await page.getByText(/Insurance · Insurer/).locator("..").getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Reference number").fill("POL-2");
+  await page.getByRole("button", { name: "Save qualification" }).click();
+  await page.reload();
+  await page.getByText(/Insurance · Insurer/).locator("..").getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByLabel("Reference number")).toHaveValue("POL-2");
+  await page.getByText(/Insurance · Insurer/).locator("..").getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("button", { name: "Remove detail" })).toBeDisabled();
+  await page.getByLabel("Why remove this detail?").fill("Entered by mistake");
+  await page.getByRole("button", { name: "Remove detail" }).click();
+  await expect(page.getByText("No qualifications added yet.")).toBeVisible();
 });
 
 test("stale edit keeps entered values for comparison", async ({ page }) => {
