@@ -3,7 +3,8 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Swi
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  createPolicy, getPolicy, listPolicies, previewPolicy, submitPolicyReview, updatePolicy, validatePolicy,
+  createPolicy, decidePolicy, getPolicy, listPolicies, previewPolicy,
+  submitPolicyReview, updatePolicy, validatePolicy,
   type PolicyPage, type PolicyRecord, type PolicyIssue, type PolicyPreview,
 } from "../../../src/platform/procurement-policy-api";
 
@@ -20,6 +21,7 @@ const codes = (value: string) => value.split(",").map((part) => part.trim().toUp
 const day = (value: string | null) => value?.slice(0, 10) ?? "";
 const utc = (value: string) => `${value}T00:00:00.000Z`;
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Buying rules are unavailable.";
+const tomorrow = () => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 const onlyKeys = (value: Record<string, unknown>, allowed: string[]) =>
   Object.keys(value).every((name) => allowed.includes(name));
 
@@ -98,13 +100,16 @@ export function LivePolicies() {
   const [editing, setEditing] = useState<PolicyRecord | "new" | null>(null);
   const [reviewing, setReviewing] = useState<PolicyPage["items"][number] | null>(null);
   const [reviewReason, setReviewReason] = useState("");
+  const [deciding, setDeciding] = useState<PolicyPage["items"][number] | null>(null);
+  const [decisionAction, setDecisionAction] = useState<"publish" | "return">("publish");
+  const [decisionReason, setDecisionReason] = useState("");
   const [previewing, setPreviewing] = useState<PolicyPage["items"][number] | null>(null);
   const [sampleAmount, setSampleAmount] = useState("0");
   const [sampleCategory, setSampleCategory] = useState("");
   const [sampleType, setSampleType] = useState("");
   const [preview, setPreview] = useState<PolicyPreview | null>(null);
   const [key, setKey] = useState("PURCHASE_REQUEST");
-  const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
+  const [start, setStart] = useState(tomorrow);
   const [end, setEnd] = useState("");
   const [rows, setRows] = useState<RuleRow[]>([emptyRule()]);
   const [issues, setIssues] = useState<PolicyIssue[]>([]);
@@ -122,7 +127,7 @@ export function LivePolicies() {
   }, [companyId, refresh]);
 
   const newDraft = () => { setEditing("new"); setKey("PURCHASE_REQUEST");
-    setStart(new Date().toISOString().slice(0, 10)); setEnd(""); setRows([emptyRule()]);
+    setStart(tomorrow()); setEnd(""); setRows([emptyRule()]);
     setIssues([]); setError(""); };
   async function edit(id: string) {
     setError(""); setIssues([]);
@@ -181,6 +186,16 @@ export function LivePolicies() {
     } catch (cause) { setError(errorText(cause)); }
     finally { setSaving(false); }
   }
+  async function makeDecision(event: FormEvent) {
+    event.preventDefault();
+    if (!deciding || !decisionReason.trim()) return;
+    setSaving(true); setError("");
+    try {
+      await decidePolicy(companyId, deciding.id, deciding.version, decisionAction, decisionReason.trim());
+      setDeciding(null); setDecisionReason(""); setRefresh((value) => value + 1);
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setSaving(false); }
+  }
 
   return <div className="mx-auto max-w-5xl space-y-5">
     <PageHeader title="Buying rules" subtitle="Prepare company rules for budgets, quotes and approvals." />
@@ -193,11 +208,16 @@ export function LivePolicies() {
       {listError && <p role="alert" className="mb-4 text-sm text-red-700">{listError}</p>}
       {loading ? <p role="status">Loading buying rules…</p> : page?.items.length
         ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Used for</th><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setPreview(null); setError(""); }}>Try a sample</Button>{record.state === "Draft" && <><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setPreviewing(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
+          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>{record.state === "Draft" && <><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setPreviewing(null); setDeciding(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}{record.state === "PendingReview" && readiness.permissions.includes("procurement-configuration-approve") && <><Button variant="secondary" onClick={() => { setDeciding(record); setDecisionAction("publish"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Publish</Button><Button variant="secondary" onClick={() => { setDeciding(record); setDecisionAction("return"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
         : <EmptyState title="No buying rules yet" description="Add a draft for purchase requests or purchase orders." action={<Button onClick={newDraft}>Add buying rule draft</Button>} />}
       {page && page.total > page.items.length && <p className="mt-3 text-xs text-muted-foreground">Showing the first {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+    {deciding && <form onSubmit={makeDecision}><Panel title={decisionAction === "publish" ? "Publish buying rules" : "Return buying rules for changes"}><div className="space-y-4 p-5">
+      <p className="text-sm text-muted-foreground">{decisionAction === "publish" ? "A separate reviewer must confirm these rules. The start date must be in the future, the rules must cover all purchases, and the effective period cannot overlap another published version. Publication does not approve a purchase." : "Send the rules back to their author with a clear correction note. They can edit the draft and request review again."}</p>
+      <Field label={decisionAction === "publish" ? "Publication reason" : "What needs to change?"}><Input required maxLength={1000} value={decisionReason} onChange={(event) => setDecisionReason(event.target.value)} /></Field>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || !decisionReason.trim()}>{saving ? "Checking…" : decisionAction === "publish" ? "Publish rules" : "Return to author"}</Button><Button variant="secondary" onClick={() => setDeciding(null)}>Cancel</Button></div>
+    </div></Panel></form>}
     {previewing && <form onSubmit={runPreview}><Panel title="Try a sample purchase"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">See which rule a sample purchase matches. This check does not approve or change a purchase. Branch-specific conditions need a fuller preview.</p>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -222,6 +242,7 @@ export function LivePolicies() {
     {editing && <form onSubmit={save}>
       <Panel title={editing === "new" ? "New buying rule draft" : `Edit ${key.replaceAll("_", " ").toLowerCase()} draft`}>
         <div className="space-y-5 p-5">
+          {editing !== "new" && editing.lastReturnReason && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Reviewer asked for changes: {editing.lastReturnReason}</p>}
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Use these rules for"><Select value={key} disabled={editing !== "new"} onChange={(event) => setKey(event.target.value)}><option value="PURCHASE_REQUEST">Purchase requests</option><option value="PURCHASE_ORDER">Purchase orders</option></Select></Field>
             <Field label="Start date"><Input type="date" required value={start} onChange={(event) => setStart(event.target.value)} /></Field>

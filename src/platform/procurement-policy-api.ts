@@ -11,6 +11,7 @@ export type PolicyRecord = PolicyDraft & {
   state: string;
   version: number;
   createdAt: string;
+  lastReturnReason?: string | null;
 };
 export type PolicyPage = {
   items: Array<Pick<PolicyRecord, "id" | "policyKey" | "policyVersionNumber" | "state" | "effectiveFrom" | "effectiveTo" | "version" | "createdAt">>;
@@ -122,4 +123,21 @@ export async function previewPolicy(companyId: string, id: string,
     || !object(body.decision) || typeof body.decision.status !== "string")
     throw new Error("ERP returned an invalid buying rule preview.");
   return body as PolicyPreview;
+}
+export async function decidePolicy(companyId: string, id: string, version: number,
+  action: "publish" | "return", reason: string): Promise<PolicyRecord> {
+  if (!guid.test(id)) throw new Error("Choose a valid buying rule.");
+  const body = await call(companyId, `/${id}/${action === "return" ? "return-for-changes" : "publish"}`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
+  if (!validRecord(body) || body.state !== (action === "publish" ? "Published" : "Draft"))
+    throw new Error("ERP did not confirm the policy decision. Refresh before retrying.");
+  return body;
+}
+export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER"):
+  Promise<{ status: string; isAuthority: false; policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null }> {
+  const body = await call(companyId, `/effective?key=${key}`);
+  if (!object(body) || typeof body.status !== "string" || body.isAuthority !== false)
+    throw new Error("ERP returned an invalid current-policy status.");
+  return body as { status: string; isAuthority: false;
+    policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null };
 }

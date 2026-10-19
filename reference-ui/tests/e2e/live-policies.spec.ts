@@ -8,7 +8,7 @@ const capabilities = Object.fromEntries([
   "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "configurationDraft"]));
 
-async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolean; detailed?: boolean } = {}) {
+async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolean; detailed?: boolean; canApprove?: boolean } = {}) {
   let record: Record<string, unknown> | null = options.detailed ? {
     id: policyId, policyKey: "PURCHASE_REQUEST", policyVersionNumber: 1,
     effectiveFrom: "2026-10-19T00:00:00Z", effectiveTo: null, state: "Draft", version: 1,
@@ -34,7 +34,9 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId,
-      workerId: "22222222-2222-4222-8222-222222222222", permissions: ["procurement-configuration-edit"],
+      workerId: "22222222-2222-4222-8222-222222222222", permissions: options.canApprove
+        ? ["procurement-configuration-edit", "procurement-configuration-approve"]
+        : ["procurement-configuration-edit"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     const base = "/api/procurement/v1/configuration/policies";
@@ -76,6 +78,14 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
         decision: { status: "Match", ruleCode: "DEFAULT", priority: 0,
           budgetReservation: "Required", sourcingMethodCode: null, minimumQuoteCount: null,
           approvalStages: [{ code: "NEED", assignee: "LineManager", mode: "One" }], issues: [] } });
+    }
+    if ((path === `${base}/${policyId}/publish` || path === `${base}/${policyId}/return-for-changes`) && record) {
+      const body = request.postDataJSON();
+      if (body.version !== record.version || !body.reason) return json({ message: "Refresh and enter a reason." }, 409);
+      record = { ...record, state: path.endsWith("/publish") ? "Published" : "Draft",
+        version: Number(record.version) + 1,
+        lastReturnReason: path.endsWith("/publish") ? null : body.reason };
+      return json(record);
     }
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
@@ -149,4 +159,36 @@ test("sample preview explains controls without approving a purchase", async ({ p
   await expect(page.getByRole("status").filter({ hasText: "Matched DEFAULT" })).toBeVisible();
   await expect(page.getByText("This is not a spending approval.")).toBeVisible();
   expect(state.sample()).toMatchObject({ currencyCode: "ZMW", grossAmount: 6000, categoryCode: "IT" });
+});
+
+test("reviewer can publish a future policy after review", async ({ page }) => {
+  await mockErp(page, { canApprove: true });
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("button", { name: "Check and save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).first().click();
+  await page.getByLabel("What should the reviewer check?").fill("Check limits");
+  await page.getByRole("button", { name: "Send for review" }).last().click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await page.getByLabel("Publication reason").fill("Reviewed the rules and dates");
+  await page.getByRole("button", { name: "Publish rules" }).click();
+  await expect(page.getByRole("cell", { name: "Published" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit draft" })).toHaveCount(0);
+});
+
+test("reviewer can return rules for correction", async ({ page }) => {
+  await mockErp(page, { canApprove: true });
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("button", { name: "Check and save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).first().click();
+  await page.getByLabel("What should the reviewer check?").fill("Check limits");
+  await page.getByRole("button", { name: "Send for review" }).last().click();
+  await page.getByRole("button", { name: "Return for changes" }).click();
+  await page.getByLabel("What needs to change?").fill("Add an amount band");
+  await page.getByRole("button", { name: "Return to author" }).click();
+  await expect(page.getByRole("cell", { name: "Draft", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit draft" })).toBeVisible();
+  await page.getByRole("button", { name: "Edit draft" }).click();
+  await expect(page.getByText("Reviewer asked for changes: Add an amount band")).toBeVisible();
 });
