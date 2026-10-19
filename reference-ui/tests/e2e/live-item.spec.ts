@@ -75,6 +75,12 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       price = { ...price, status: "Published", version: 2 };
       return json(price);
     }
+    if (path === `/api/procurement/v1/items/${itemId}/catalog-entries/${priceId}/withdraw` && price) {
+      const { version, reason } = request.postDataJSON();
+      if (version !== price.version || !reason) return json({ message: "Refresh or add a withdrawal reason." }, 409);
+      price = { ...price, status: "Withdrawn", version: version + 1 };
+      return json(price);
+    }
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
 }
@@ -124,6 +130,10 @@ test("authorized reviewer publishes an approved vendor price", async ({ page }) 
   await page.getByLabel("Price review reason").fill("Checked approved vendor and price");
   await page.getByRole("button", { name: "Publish price" }).click();
   await expect(page.getByText("Published", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Withdraw price" }).click();
+  await page.getByLabel("Withdrawal reason").fill("Superseded by a new vendor price");
+  await page.getByRole("button", { name: "Confirm withdrawal" }).click();
+  await expect(page.getByText("Withdrawn", { exact: true })).toBeVisible();
 });
 
 test("item list denial does not show demo items", async ({ page }) => {

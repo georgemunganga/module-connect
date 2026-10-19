@@ -133,3 +133,12 @@ export async function publishCatalogPrice(companyId: string, itemId: string,
     throw new ItemApiError(0, "The ERP did not confirm publication. Refresh before retrying.");
   return body;
 }
+export async function withdrawCatalogPrice(companyId: string, itemId: string,
+  priceId: string, version: number, reason: string): Promise<CatalogPrice> {
+  if (!guid.test(itemId) || !guid.test(priceId)) throw new ItemApiError(0, "The catalog price reference is invalid.");
+  const body: unknown = await request(companyId, `/${itemId}/catalog-entries/${priceId}/withdraw`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
+  if (!validPrice(body) || body.status !== "Withdrawn")
+    throw new ItemApiError(0, "The ERP did not confirm withdrawal. Refresh before retrying.");
+  return body;
+}

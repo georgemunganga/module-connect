@@ -6,7 +6,7 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   activateItem, addCatalogPrice, createItemDraft, deactivateItem, getItemDraft,
-  listCatalogPrices, listItemDrafts, publishCatalogPrice, updateItemDraft,
+  listCatalogPrices, listItemDrafts, publishCatalogPrice, updateItemDraft, withdrawCatalogPrice,
   type CatalogPrice, type ItemDetail, type ItemDraft, type ItemPage,
 } from "../../../src/platform/procurement-items-api";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
@@ -126,6 +126,8 @@ export function LiveItemDetail() {
     effectiveFrom: new Date().toISOString().slice(0, 10) });
   const [publishId, setPublishId] = useState<string | null>(null);
   const [publishReason, setPublishReason] = useState("");
+  const [withdrawId, setWithdrawId] = useState<string | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState("");
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -189,6 +191,18 @@ export function LiveItemDetail() {
     } catch (cause) { setPriceError(message(cause)); }
     finally { setBusy(false); }
   }
+  async function withdrawPrice() {
+    if (!item || !withdrawId || !withdrawReason.trim()) return;
+    const price = prices.find((value) => value.id === withdrawId);
+    if (!price) return;
+    setBusy(true); setPriceError("");
+    try {
+      await withdrawCatalogPrice(company, item.id, price.id, price.version, withdrawReason.trim());
+      setPrices(await listCatalogPrices(company, item.id));
+      setWithdrawId(null); setWithdrawReason("");
+    } catch (cause) { setPriceError(message(cause)); }
+    finally { setBusy(false); }
+  }
   if (loading) return <div role="status" className="p-5 sm:p-8">Loading item…</div>;
   if (!item) return <div role="alert" className="p-5 sm:p-8">{error || "Item not found."}</div>;
   return <div className="p-5 sm:p-8">
@@ -207,13 +221,23 @@ export function LiveItemDetail() {
         <td>{vendors.find((vendor) => vendor.id === price.supplierId)?.displayName ?? "Vendor reference unavailable"}</td>
         <td>{price.currencyCode} {price.unitPrice.toLocaleString()} / {price.unitCode}</td>
         <td>{price.effectiveFrom?.slice(0, 10)}</td><td><Badge>{price.status}</Badge></td>
-        <td>{price.status === "Draft" && readiness?.permissions.includes("procurement-catalog-approve")
-          ? <Button variant="secondary" onClick={() => { setPublishId(price.id); setPublishReason(""); setPriceError(""); }}>Review price</Button> : "—"}</td>
+        <td><div className="flex flex-wrap gap-2">
+          {price.status === "Draft" && readiness?.permissions.includes("procurement-catalog-approve") &&
+            <Button variant="secondary" onClick={() => { setPublishId(price.id); setWithdrawId(null); setPublishReason(""); setPriceError(""); }}>Review price</Button>}
+          {price.status !== "Withdrawn" && readiness?.permissions.includes("procurement-item-manage") &&
+            <Button variant="secondary" onClick={() => { setWithdrawId(price.id); setPublishId(null); setWithdrawReason(""); setPriceError(""); }}>Withdraw price</Button>}
+          {price.status === "Withdrawn" && "—"}
+        </div></td>
       </tr>)}</tbody></RecordTable></div> : <p className="text-sm">No vendor prices added yet.</p>}
       {publishId && <div className="space-y-3 rounded-lg border border-border p-4">
         <p className="text-sm">Review the vendor, amount, unit and dates. A different person must approve a price they entered.</p>
         <Field label="Price review reason"><Textarea required maxLength={1000} value={publishReason} onChange={(event) => setPublishReason(event.target.value)} /></Field>
         <div className="flex gap-2"><Button disabled={busy || !publishReason.trim()} onClick={() => void publishPrice()}>{busy ? "Saving…" : "Publish price"}</Button><Button variant="secondary" onClick={() => setPublishId(null)}>Cancel</Button></div>
+      </div>}
+      {withdrawId && <div className="space-y-3 rounded-lg border border-border p-4">
+        <p className="text-sm">Withdraw this price from future buying. Existing requests keep their history.</p>
+        <Field label="Withdrawal reason"><Textarea required maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field>
+        <div className="flex gap-2"><Button variant="danger" disabled={busy || !withdrawReason.trim()} onClick={() => void withdrawPrice()}>{busy ? "Saving…" : "Confirm withdrawal"}</Button><Button variant="secondary" onClick={() => setWithdrawId(null)}>Cancel</Button></div>
       </div>}
       {readiness?.permissions.includes("procurement-item-manage") && <form className="grid gap-3 border-t border-border pt-4 sm:grid-cols-4" onSubmit={(event) => void addPrice(event)}>
         <Field label="Vendor" className="sm:col-span-2"><Select required value={priceDraft.supplierId} onChange={(event) => setPriceDraft((value) => ({ ...value, supplierId: event.target.value }))}><option value="">Choose approved vendor</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.displayName}</option>)}</Select></Field>
