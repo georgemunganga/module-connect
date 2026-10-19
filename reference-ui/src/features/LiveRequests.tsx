@@ -6,7 +6,7 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   createOwnRequestDraft, getOwnRequestDraft, listOwnRequestDrafts,
-  updateOwnRequestDraft, withdrawOwnRequestDraft,
+  updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
   type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
 } from "../../../src/platform/procurement-requests-api";
 
@@ -33,7 +33,7 @@ export function LiveRequestList() {
     return () => controller.abort();
   }, [legalEntityId, offset]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="My Requests" subtitle="Drafts are saved in ERP. Submission opens after policy and budget checks are ready." actions={<Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link>} />
+    <PageHeader title="My Requests" subtitle="Save a request, then send it for policy and budget review." actions={<Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link>} />
     <Panel><div className="p-5">{error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading requests…</p> : data?.records.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Request</th><th>Purpose</th><th>Lines</th><th>Needed by</th><th>Status</th><th>Action</th></tr></thead>
@@ -120,6 +120,7 @@ export function LiveRequestDetail() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [withdrawReason, setWithdrawReason] = useState("");
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -130,9 +131,16 @@ export function LiveRequestDetail() {
     return () => controller.abort();
   }, [legalEntityId, id]);
   async function withdraw() {
-    if (!record || !window.confirm("Withdraw this draft request?")) return;
+    if (!record || (record.status === "Submitted" && !withdrawReason.trim())) return;
     setBusy(true); setError("");
-    try { await withdrawOwnRequestDraft(legalEntityId, record.id, record.version); navigate("/requests"); }
+    try { await withdrawOwnRequestDraft(legalEntityId, record.id, record.version, withdrawReason.trim() || undefined); navigate("/requests"); }
+    catch (cause) { setError(errorText(cause)); }
+    finally { setBusy(false); }
+  }
+  async function submit() {
+    if (!record) return;
+    setBusy(true); setError("");
+    try { setRecord(await submitOwnRequest(legalEntityId, record.id, record.version)); }
     catch (cause) { setError(errorText(cause)); }
     finally { setBusy(false); }
   }
@@ -142,9 +150,11 @@ export function LiveRequestDetail() {
   return <div className="p-5 sm:p-8">
     <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{record.status === "Draft" && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    {record.status === "Submitted" && <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>}
     <Panel title="Requested lines"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th></tr></thead><tbody>{activeLines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.requestedQuantity}</td><td>{line.unitCode}</td><td>{record.currencyCode} {line.estimatedUnitPrice.toLocaleString()}</td></tr>)}</tbody></RecordTable></div></Panel>
     <div className="mt-5 grid gap-5 lg:grid-cols-2"><Panel title="Delivery"><p className="p-5 text-sm">{record.deliveryAddressText || "No delivery address added."}</p></Panel><Panel title="Note for approver"><p className="p-5 text-sm">{record.notesToApprover || "No note added."}</p></Panel></div>
-    {record.status === "Draft" && <div className="mt-6"><Button variant="danger" disabled={busy} onClick={() => void withdraw()}>Withdraw draft</Button></div>}
+    {record.status === "Draft" && <Panel title="Send for review" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Add a needed-by date to this request or every line before sending it. No budget is reserved by this step.</p><Button disabled={busy || !activeLines.length || (!record.neededBy && activeLines.some((line) => !line.neededBy))} onClick={() => void submit()}>Send for review</Button></div></Panel>}
+    {(record.status === "Draft" || record.status === "Submitted") && <Panel title="Withdraw request" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason" hint={record.status === "Submitted" ? "Required once a request has been sent for review." : "Optional for a draft."}><Textarea rows={2} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || (record.status === "Submitted" && !withdrawReason.trim())} onClick={() => void withdraw()}>Withdraw request</Button></div></Panel>}
     <Link to="/requests" className="mt-5 inline-block text-sm text-primary hover:underline">Back to my requests</Link>
   </div>;
 }

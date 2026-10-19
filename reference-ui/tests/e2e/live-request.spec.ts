@@ -46,14 +46,26 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       }
     }
     if (path === `/api/procurement/v1/requests/${requestId}/withdraw` && record) {
+      const { version, reason } = request.postDataJSON();
+      if (version !== record.version) return json({ message: "Refresh this request." }, 409);
+      if (record.status === "Submitted" && !reason) return json({ message: "Give a withdrawal reason." }, 422);
       record = { ...record, status: "Withdrawn", version: record.version + 1 };
+      return json(record);
+    }
+    if (path === `/api/procurement/v1/requests/${requestId}/submit` && record) {
+      const { version } = request.postDataJSON();
+      if (version !== record.version || record.status !== "Draft") return json({ message: "Refresh this request." }, 409);
+      if (!record.neededBy && record.lines.some((line) => !line.neededBy))
+        return json({ message: "Choose a needed-by date." }, 422);
+      record = { ...record, status: "Submitted", approvalState: "PendingPolicyAndBudget",
+        submittedAt: "2026-10-19T00:00:00Z", version: record.version + 1 };
       return json(record);
     }
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
 }
 
-test("request draft lines persist, edit and withdraw without submission", async ({ page }) => {
+test("request draft lines persist, edit and withdraw", async ({ page }) => {
   await mockErp(page);
   await page.goto("/procurement/workspace/requests");
   await expect(page.getByText("What do you need to buy?")).toBeVisible();
@@ -73,8 +85,25 @@ test("request draft lines persist, edit and withdraw without submission", async 
   await page.getByLabel("Quantity").fill("4");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("4", { exact: true })).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Withdraw draft" }).click();
+  await page.getByRole("button", { name: "Withdraw request" }).click();
+  await expect(page.getByRole("heading", { name: "My Requests" })).toBeVisible();
+  await expect(page.getByText("Withdrawn")).toBeVisible();
+});
+
+test("request submission stays pending policy and budget and needs a withdrawal reason", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Replacement laptops");
+  await page.getByLabel("Item or service 1").fill("Laptop");
+  await page.getByLabel("Needed by").first().fill("2026-11-30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("button", { name: "Send for review" })).toBeEnabled();
+  await page.getByRole("button", { name: "Send for review" }).click();
+  await expect(page.getByText("Sent for policy and budget review.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Withdraw request" })).toBeDisabled();
+  await page.getByLabel("Reason").fill("Request no longer needed");
+  await page.getByRole("button", { name: "Withdraw request" }).click();
   await expect(page.getByRole("heading", { name: "My Requests" })).toBeVisible();
   await expect(page.getByText("Withdrawn")).toBeVisible();
 });

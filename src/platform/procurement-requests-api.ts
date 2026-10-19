@@ -1,4 +1,4 @@
-/** Own purchase-request drafts. Submission and budget/approval decisions are separate contracts. */
+/** Own purchase requests. Submission records demand but does not approve spending. */
 export type RequestLineDraft = {
   id?: string | null; description: string; unitCode: string;
   requestedQuantity: number; estimatedUnitPrice: number;
@@ -17,7 +17,10 @@ export type RequestDraft = {
 };
 export type RequestSummary = { id: string; number: string; purpose: string; status: string;
   currencyCode: string; neededBy?: string | null; createdAt: string; version: number; lineCount: number };
-export type RequestDetail = RequestSummary & Omit<RequestDraft, "lines"> & { lines: (RequestLineDraft & { id: string; lineNumber: number; approvalStatus: string })[] };
+export type RequestDetail = RequestSummary & Omit<RequestDraft, "lines"> & {
+  approvalState?: string | null; submittedAt?: string | null; submittedVersion?: number | null;
+  lines: (RequestLineDraft & { id: string; lineNumber: number; approvalStatus: string })[];
+};
 export type RequestPage = { records: RequestSummary[]; count: number; limit: number; offset: number };
 export class RequestApiError extends Error { constructor(public readonly status: number, message: string) { super(message); } }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -78,9 +81,16 @@ export async function updateOwnRequestDraft(companyId: string, id: string, versi
   if (!validDetail(body)) throw new RequestApiError(0, "The ERP did not confirm the request update. Refresh before retrying.");
   return body;
 }
-export async function withdrawOwnRequestDraft(companyId: string, id: string, version: number): Promise<RequestDetail> {
+export async function submitOwnRequest(companyId: string, id: string, version: number): Promise<RequestDetail> {
   if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
-  const body: unknown = await request(companyId, `/${id}/withdraw`, { method: "POST", body: JSON.stringify({ version }) });
+  const body: unknown = await request(companyId, `/${id}/submit`, { method: "POST", body: JSON.stringify({ version }) });
+  if (!validDetail(body) || body.status !== "Submitted" || body.approvalState !== "PendingPolicyAndBudget")
+    throw new RequestApiError(0, "The ERP did not confirm submission. Refresh before retrying.");
+  return body;
+}
+export async function withdrawOwnRequestDraft(companyId: string, id: string, version: number, reason?: string): Promise<RequestDetail> {
+  if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
+  const body: unknown = await request(companyId, `/${id}/withdraw`, { method: "POST", body: JSON.stringify({ version, reason }) });
   if (!validDetail(body) || body.status !== "Withdrawn") throw new RequestApiError(0, "The ERP did not confirm the withdrawal. Refresh before retrying.");
   return body;
 }
