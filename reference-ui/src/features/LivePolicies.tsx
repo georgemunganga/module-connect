@@ -3,7 +3,7 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Swi
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  createPolicy, getPolicy, listPolicies, updatePolicy, validatePolicy,
+  createPolicy, getPolicy, listPolicies, submitPolicyReview, updatePolicy, validatePolicy,
   type PolicyPage, type PolicyRecord, type PolicyIssue,
 } from "../../../src/platform/procurement-policy-api";
 
@@ -96,6 +96,8 @@ export function LivePolicies() {
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<PolicyRecord | "new" | null>(null);
+  const [reviewing, setReviewing] = useState<PolicyPage["items"][number] | null>(null);
+  const [reviewReason, setReviewReason] = useState("");
   const [key, setKey] = useState("PURCHASE_REQUEST");
   const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
   const [end, setEnd] = useState("");
@@ -151,6 +153,17 @@ export function LivePolicies() {
     finally { setSaving(false); }
   }
 
+  async function sendForReview(event: FormEvent) {
+    event.preventDefault();
+    if (!reviewing || !reviewReason.trim()) return;
+    setSaving(true); setError("");
+    try {
+      await submitPolicyReview(companyId, reviewing.id, reviewing.version, reviewReason.trim());
+      setReviewing(null); setReviewReason(""); setRefresh((value) => value + 1);
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setSaving(false); }
+  }
+
   return <div className="mx-auto max-w-5xl space-y-5">
     <PageHeader title="Buying rules" subtitle="Prepare company rules for budgets, quotes and approvals." />
     <Panel><div className="p-5">
@@ -162,11 +175,16 @@ export function LivePolicies() {
       {listError && <p role="alert" className="mb-4 text-sm text-red-700">{listError}</p>}
       {loading ? <p role="status">Loading buying rules…</p> : page?.items.length
         ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Used for</th><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td>{record.state === "Draft" ? <Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button> : "—"}</td></tr>)}</tbody></RecordTable></div>
+          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td>{record.state === "Draft" ? <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></div> : "—"}</td></tr>)}</tbody></RecordTable></div>
         : <EmptyState title="No buying rules yet" description="Add a draft for purchase requests or purchase orders." action={<Button onClick={newDraft}>Add buying rule draft</Button>} />}
       {page && page.total > page.items.length && <p className="mt-3 text-xs text-muted-foreground">Showing the first {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+    {reviewing && <form onSubmit={sendForReview}><Panel title="Send buying rule for review"><div className="space-y-4 p-5">
+      <p className="text-sm text-muted-foreground">Only the draft author can send it. ERP will check the company currency and active categories, branches and buying methods. A review request does not approve spending.</p>
+      <Field label="What should the reviewer check?"><Input required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || !reviewReason.trim()}>{saving ? "Checking…" : "Send for review"}</Button><Button variant="secondary" onClick={() => setReviewing(null)}>Cancel</Button></div>
+    </div></Panel></form>}
     {editing && <form onSubmit={save}>
       <Panel title={editing === "new" ? "New buying rule draft" : `Edit ${key.replaceAll("_", " ").toLowerCase()} draft`}>
         <div className="space-y-5 p-5">

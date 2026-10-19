@@ -21,6 +21,7 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
           approvalStages: [{ code: "NEED", assignee: "LineManager", mode: "One" }] } }] }),
   } : null;
   let savedRules: Record<string, unknown> | null = null;
+  let reviewNote: string | null = null;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -60,9 +61,16 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
         return json(record);
       }
     }
+    if (path === `${base}/${policyId}/submit-review` && record) {
+      const body = request.postDataJSON();
+      if (body.version !== record.version || !body.reason) return json({ message: "Refresh and enter a reason." }, 409);
+      reviewNote = body.reason;
+      record = { ...record, state: "PendingReview", version: Number(record.version) + 1 };
+      return json(record);
+    }
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
-  return { rules: () => savedRules };
+  return { rules: () => savedRules, reviewNote: () => reviewNote };
 }
 
 test("buying rule draft checks and saves with company currency", async ({ page }) => {
@@ -105,4 +113,17 @@ test("a detailed policy draft cannot be simplified by the basic editor", async (
   await page.getByRole("button", { name: "Edit draft" }).click();
   await expect(page.getByRole("alert")).toContainText("fuller editor");
   await expect(page.getByRole("heading", { name: "Edit purchase request draft" })).toHaveCount(0);
+});
+
+test("draft author can send a checked rule for review without approval", async ({ page }) => {
+  const state = await mockErp(page);
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("button", { name: "Check and save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).first().click();
+  await page.getByLabel("What should the reviewer check?").fill("Confirm approvers and budget rules");
+  await page.getByRole("button", { name: "Send for review" }).last().click();
+  await expect(page.getByRole("cell", { name: "PendingReview" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit draft" })).toHaveCount(0);
+  expect(state.reviewNote()).toBe("Confirm approvers and budget rules");
 });

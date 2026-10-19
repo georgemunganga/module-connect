@@ -93,3 +93,12 @@ export async function updatePolicy(companyId: string, id: string, version: numbe
   if (!validRecord(body)) throw new Error("ERP did not confirm the updated draft. Refresh before retrying.");
   return body;
 }
+export async function submitPolicyReview(companyId: string, id: string, version: number,
+  reason: string): Promise<PolicyRecord> {
+  if (!guid.test(id)) throw new Error("Choose a valid buying rule.");
+  const body = await call(companyId, `/${id}/submit-review`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
+  if (!validRecord(body) || body.state !== "PendingReview")
+    throw new Error("ERP did not confirm the review request. Refresh before retrying.");
+  return body;
+}
