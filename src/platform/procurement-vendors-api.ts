@@ -253,3 +253,13 @@ export async function rejectVendor(legalEntityId: string, id: string, version: n
   if (!object(body) || body.id !== id || body.status !== "Rejected" || body.isOrderable !== false)
     throw new VendorApiError(0, "The ERP did not confirm vendor rejection. Refresh before retrying.");
 }
+
+export async function reviewVendorQualification(legalEntityId: string, id: string,
+  qualificationId: string, version: number, decision: "Verified" | "Rejected", reason: string): Promise<void> {
+  if (!guid.test(id) || !guid.test(qualificationId))
+    throw new VendorApiError(0, "The qualification reference is invalid.");
+  const body = await request<unknown>(legalEntityId, `/${id}/qualifications/${qualificationId}/review`,
+    { method: "POST", body: JSON.stringify({ version, decision, reason }) });
+  if (!object(body) || body.id !== qualificationId || body.reviewStatus !== decision)
+    throw new VendorApiError(0, "The ERP did not confirm the qualification review. Refresh before retrying.");
+}

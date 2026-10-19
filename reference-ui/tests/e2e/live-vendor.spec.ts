@@ -11,12 +11,14 @@ const capabilities = Object.fromEntries([
 
 type Vendor = Record<string, unknown> & { id: string; version: number; displayName: string; legalName: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean; qualification?: boolean } = {}) {
   let vendor: Vendor | null = options.reviewer ? {
     id: vendorId, number: "VEN-001", legalName: "Acme Zambia Ltd", displayName: "Acme",
     countryCode: "ZM", categoryCode: "OFFICE", status: "Submitted", version: 3,
     isOrderable: false, canReturnForInformation: true, canApprove: true, canReject: true,
     contacts: [{ id: "44444444-4444-4444-8444-444444444444", name: "Pat Supplier" }], sites: [],
+    qualifications: options.qualification ? [{ id: "66666666-6666-4666-8666-666666666666",
+      qualificationType: "Tax clearance", expiresOn: "2027-12-31", reviewStatus: "Pending" }] : [],
   } : null;
   await page.addInitScript((entityId) => {
     localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId }));
@@ -73,6 +75,15 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       vendor = { ...vendor, qualifications: [...(vendor.qualifications as unknown[]),
         { ...qualification, id: "66666666-6666-4666-8666-666666666666", reviewStatus: "Pending" }], version: version + 1 };
       return json({ id: vendorId, version: vendor.version }, 201);
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/qualifications/66666666-6666-4666-8666-666666666666/review` && vendor) {
+      const { version, decision, reason } = request.postDataJSON();
+      if (version !== vendor.version || !reason || !["Verified", "Rejected"].includes(decision))
+        return json({ message: "Review requires the current version and a reason." }, 422);
+      vendor = { ...vendor, qualifications: (vendor.qualifications as Record<string, unknown>[])
+        .map((row) => ({ ...row, reviewStatus: decision })), version: version + 1 };
+      return json({ id: "66666666-6666-4666-8666-666666666666", reviewStatus: decision,
+        supplierVersion: vendor.version });
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}/withdraw` && vendor) {
       const { version } = request.postDataJSON();
@@ -241,4 +252,14 @@ test("reviewer must check duplicates before approving a vendor", async ({ page }
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
   await expect(page.getByText("Yes", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Review vendor" })).toHaveCount(0);
+});
+
+test("reviewer can verify a submitted vendor qualification with a reason", async ({ page }) => {
+  await mockErp(page, { reviewer: true, qualification: true });
+  await page.goto(`/procurement/workspace/vendors/${vendorId}`);
+  await expect(page.getByRole("button", { name: "Verify", exact: true })).toBeDisabled();
+  await page.getByLabel("Reason for your decision").fill("Checked tax reference with issuer");
+  await page.getByRole("button", { name: "Verify", exact: true }).click();
+  await expect(page.getByText("Verified", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Verify", exact: true })).toHaveCount(0);
 });
