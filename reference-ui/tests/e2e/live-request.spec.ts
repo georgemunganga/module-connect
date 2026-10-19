@@ -14,19 +14,22 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "requestDraft"]));
 type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean } = {}) {
   let record: RecordValue | null = null;
+  let policyChecked = false;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Requester", email: "requester@example.test", roles: ["employee"] } });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Requester", email: "requester@example.test", roles: [options.policyReviewer ? "procurement_manager" : "employee"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
+      permissions: options.policyReviewer ? ["procurement-policy-evaluate"] : [],
+      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/catalog") return json({ items: [{
       entryId: catalogEntryId, itemId: catalogItemId, supplierId: catalogSupplierId,
@@ -34,6 +37,15 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       unitCode: "each", estimatedUnitPrice: 250, currencyCode: "ZMW",
       supplierName: "Office Supply", publishedVersion: 1,
     }], total: 1, page: 1, pageSize: 25 });
+    if (path === "/api/procurement/v1/requests/policy-queue")
+      return json({ records: record?.status === "Submitted" && !policyChecked ? [{
+        id: requestId, number: record.number, purpose: record.purpose,
+        currencyCode: record.currencyCode, submittedAt: record.submittedAt,
+        version: record.version, lineCount: record.lines.length,
+        estimatedBaseAmount: record.lines.reduce((sum, line) => sum + Number(line.requestedQuantity) * Number(line.estimatedUnitPrice), 0),
+        policyOutcome: options.blockedPolicy ? "Blocked" : null,
+        policyResultCode: options.blockedPolicy ? "InactiveReference" : null,
+      }] : [], count: record?.status === "Submitted" && !policyChecked ? 1 : 0, limit: 50, offset: 0 });
     if (path === "/api/procurement/v1/requests") {
       if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403) : json({ records: record ? [{ ...record, lineCount: record.lines.length }] : [], count: record ? 1 : 0, limit: 50, offset: 0 });
       if (request.method() === "POST") {
@@ -73,6 +85,20 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === `/api/procurement/v1/requests/${requestId}/budget-status` && record)
       return json({ requestId, requestVersion: record.version, status: options.confirmedBudget ? "Available" : "Pending",
         checkedAt: options.confirmedBudget ? "2026-10-19T14:00:00Z" : null, reservationConfirmed: Boolean(options.confirmedBudget) });
+    if (path === `/api/procurement/v1/requests/${requestId}/policy-evaluations` && record) {
+      if (request.postDataJSON().requestVersion !== record.version) return json({ message: "Refresh request." }, 409);
+      policyChecked = true;
+      return json({ requestId, requestVersion: record.version, status: "Matched", isAuthority: false,
+        message: "Buying rules matched. Funding and independent approvals are still required.",
+        evaluation: { id: "99999999-9999-4999-8999-999999999999", outcome: "Matched", resultCode: "RulesMatched" } });
+    }
+    if (path === `/api/procurement/v1/requests/${requestId}/policy-status` && record)
+      return json({ requestId, requestVersion: record.version,
+        status: options.blockedPolicy ? "Blocked" : options.matchedPolicy || policyChecked ? "Matched" : "Pending", isAuthority: false,
+        evaluation: options.blockedPolicy ? { summary: "Buying rules need correction before this request can proceed.",
+          resultCode: "InactiveReference", policyVersionNumber: 1, evaluatedAt: "2026-10-19T14:00:00Z" }
+          : options.matchedPolicy || policyChecked ? { summary: "Buying rules matched. Funding and independent approvals are still required.",
+          resultCode: "RulesMatched", policyVersionNumber: 1, evaluatedAt: "2026-10-19T14:00:00Z" } : null });
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
 }
@@ -109,7 +135,7 @@ test("request draft lines persist, edit and withdraw", async ({ page }) => {
   await page.getByLabel("Item or service 1").fill("Office chair");
   await page.getByLabel("Quantity").fill("3");
   await page.getByLabel("Estimated unit price").fill("1200");
-  await expect(page.getByText("Estimated total: ZMW 3,600")).toBeVisible();
+  await expect(page.getByText("Estimated amount before discounts, tax and delivery: ZMW 3,600")).toBeVisible();
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("heading", { name: "Office chairs for Lusaka" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Office chair" })).toBeVisible();
@@ -135,6 +161,7 @@ test("request submission stays pending policy and budget and needs a withdrawal 
   await page.getByRole("button", { name: "Send for review" }).click();
   await expect(page.getByText("Sent for policy and budget review.", { exact: false })).toBeVisible();
   await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Waiting for Procurement to check this request", { exact: false })).toBeVisible();
   await expect(page.getByText("Waiting for Finance to check the budget.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Withdraw request" })).toBeDisabled();
   await page.getByLabel("Reason").fill("Request no longer needed");
@@ -143,16 +170,47 @@ test("request submission stays pending policy and budget and needs a withdrawal 
   await expect(page.getByText("Withdrawn")).toBeVisible();
 });
 
-test("request shows confirmed Finance budget status without implying approval", async ({ page }) => {
-  await mockErp(page, { confirmedBudget: true });
+test("request shows rule and Finance evidence without implying approval", async ({ page }) => {
+  await mockErp(page, { confirmedBudget: true, matchedPolicy: true });
   await page.goto("/procurement/workspace/requests/new");
   await page.getByLabel("What do you need?").fill("Replacement laptops");
   await page.getByLabel("Item or service 1").fill("Laptop");
   await page.getByLabel("Needed by").first().fill("2026-11-30");
   await page.getByRole("button", { name: "Save draft" }).click();
   await page.getByRole("button", { name: "Send for review" }).click();
+  await expect(page.getByText("Checked; this has not approved the request", { exact: false })).toBeVisible();
   await expect(page.getByText("Finance confirmed funds for this request.")).toBeVisible();
   await expect(page.getByText("This request has not been approved", { exact: false })).toBeVisible();
+});
+
+test("Procurement can check queued buying rules without approving a request", async ({ page }) => {
+  await mockErp(page, { policyReviewer: true });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Replacement laptops");
+  await page.getByLabel("Item or service 1").fill("Laptop");
+  await page.getByLabel("Needed by").first().fill("2026-11-30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).click();
+  await page.getByRole("link", { name: "Back to my requests" }).click();
+  await expect(page.getByRole("heading", { name: "Buying-rule checks and issues" })).toBeVisible();
+  await page.getByRole("button", { name: "Check buying rules" }).click();
+  await expect(page.getByText("Buying rules checked. Funding and approval are still required.")).toBeVisible();
+  await expect(page.getByText("No requests need a buying-rule check or follow-up.")).toBeVisible();
+});
+
+test("a blocked rule result remains visible for Procurement follow-up", async ({ page }) => {
+  await mockErp(page, { policyReviewer: true, blockedPolicy: true });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Unlisted laptops");
+  await page.getByLabel("Item or service 1").fill("Laptop");
+  await page.getByLabel("Needed by").first().fill("2026-11-30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).click();
+  await expect(page.getByText("Buying rules need correction before this request can proceed.")).toBeVisible();
+  await page.getByRole("link", { name: "Back to my requests" }).click();
+  await expect(page.getByText("Needs attention: InactiveReference")).toBeVisible();
+  await expect(page.getByText("Contact Procurement for next steps")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check buying rules" })).toHaveCount(0);
 });
 
 test("request list denial shows no local demo records", async ({ page }) => {

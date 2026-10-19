@@ -26,6 +26,17 @@ export type RequestPage = { records: RequestSummary[]; count: number; limit: num
 export type OwnBudgetStatus = { requestId: string; requestVersion: number;
   status: "Pending" | "Available" | "Insufficient" | "NotConfigured" | "PartiallyAvailable";
   checkedAt?: string | null; reservationConfirmed: boolean };
+export type OwnPolicyStatus = { requestId: string; requestVersion: number;
+  status: "Pending" | "Matched" | "Blocked" | "NotSubmitted";
+  isAuthority: false; evaluation?: { summary: string; resultCode: string;
+    policyVersionNumber: number; evaluatedAt: string } | null };
+export type PolicyQueuePage = { records: Array<{ id: string; number: string; purpose: string;
+  currencyCode: string; submittedAt: string; version: number; lineCount: number;
+  estimatedBaseAmount: number; policyOutcome?: string | null;
+  policyResultCode?: string | null }>; count: number; limit: number; offset: number };
+export type PolicyCheckResult = { requestId: string; requestVersion: number;
+  status: string; isAuthority: false; message?: string | null;
+  evaluation?: { id: string; outcome: string; resultCode: string } | null };
 export class RequestApiError extends Error { constructor(public readonly status: number, message: string) { super(message); } }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -81,6 +92,34 @@ export async function getOwnRequestBudgetStatus(companyId: string, id: string, s
     || typeof body.status !== "string" || typeof body.reservationConfirmed !== "boolean")
     throw new RequestApiError(0, "The ERP returned an invalid budget status.");
   return body as OwnBudgetStatus;
+}
+export async function getOwnRequestPolicyStatus(companyId: string, id: string, signal?: AbortSignal): Promise<OwnPolicyStatus> {
+  if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
+  const body: unknown = await request(companyId, `/${id}/policy-status`, { signal });
+  if (!object(body) || body.requestId !== id || typeof body.requestVersion !== "number"
+    || typeof body.status !== "string" || body.isAuthority !== false)
+    throw new RequestApiError(0, "The ERP returned an invalid buying-rule status.");
+  return body as OwnPolicyStatus;
+}
+export async function listRequestsWaitingForPolicy(companyId: string, offset = 0, signal?: AbortSignal): Promise<PolicyQueuePage> {
+  const body: unknown = await request(companyId, `/policy-queue?limit=50&offset=${Math.max(0, offset)}`, { signal });
+  if (!object(body) || !Array.isArray(body.records) || typeof body.count !== "number"
+    || typeof body.limit !== "number" || typeof body.offset !== "number"
+    || body.records.some((row: unknown) => !object(row) || !guid.test(String(row.id))
+      || typeof row.number !== "string" || typeof row.purpose !== "string"
+      || typeof row.version !== "number" || typeof row.currencyCode !== "string"
+      || typeof row.lineCount !== "number" || typeof row.estimatedBaseAmount !== "number"))
+    throw new RequestApiError(0, "The ERP returned an invalid buying-rule queue.");
+  return body as PolicyQueuePage;
+}
+export async function checkRequestPolicy(companyId: string, id: string, version: number): Promise<PolicyCheckResult> {
+  if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
+  const body: unknown = await request(companyId, `/${id}/policy-evaluations`,
+    { method: "POST", body: JSON.stringify({ requestVersion: version }) });
+  if (!object(body) || body.requestId !== id || body.requestVersion !== version
+    || typeof body.status !== "string" || body.isAuthority !== false)
+    throw new RequestApiError(0, "The ERP returned an invalid buying-rule check.");
+  return body as PolicyCheckResult;
 }
 export async function createOwnRequestDraft(companyId: string, draft: RequestDraft): Promise<RequestDetail> {
   const body: unknown = await request(companyId, "", { method: "POST", body: JSON.stringify(draft) });

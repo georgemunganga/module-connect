@@ -6,8 +6,10 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   createOwnRequestDraft, getOwnRequestDraft, listOwnRequestDrafts,
-  getOwnRequestBudgetStatus, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
-  type OwnBudgetStatus, type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
+  checkRequestPolicy, getOwnRequestBudgetStatus, getOwnRequestPolicyStatus,
+  listRequestsWaitingForPolicy, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
+  type OwnBudgetStatus, type OwnPolicyStatus, type PolicyQueuePage,
+  type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
 } from "../../../src/platform/procurement-requests-api";
 import { listPublishedCatalog, type PublishedCatalogPrice } from "../../../src/platform/procurement-catalog-api";
 
@@ -20,11 +22,18 @@ function context() {
 }
 
 export function LiveRequestList() {
-  const { legalEntityId } = context();
+  const readiness = context();
+  const { legalEntityId } = readiness;
+  const canCheckPolicy = readiness.permissions.includes("procurement-policy-evaluate");
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<RequestPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [policyQueue, setPolicyQueue] = useState<PolicyQueuePage | null>(null);
+  const [policyOffset, setPolicyOffset] = useState(0);
+  const [policyError, setPolicyError] = useState("");
+  const [policyNotice, setPolicyNotice] = useState("");
+  const [checkingId, setCheckingId] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError("");
@@ -33,6 +42,25 @@ export function LiveRequestList() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [legalEntityId, offset]);
+  useEffect(() => {
+    if (!canCheckPolicy) return;
+    const controller = new AbortController();
+    listRequestsWaitingForPolicy(legalEntityId, policyOffset, controller.signal).then(setPolicyQueue)
+      .catch((cause: unknown) => { if (!controller.signal.aborted) setPolicyError(errorText(cause)); });
+    return () => controller.abort();
+  }, [canCheckPolicy, legalEntityId, policyOffset]);
+  async function checkPolicy(id: string, version: number) {
+    setCheckingId(id); setPolicyError(""); setPolicyNotice("");
+    try {
+      const result = await checkRequestPolicy(legalEntityId, id, version);
+      setPolicyNotice(result.status === "Matched"
+        ? "Buying rules checked. Funding and approval are still required."
+        : result.message || "This request needs Procurement attention before it can proceed.");
+      setPolicyOffset(0);
+      setPolicyQueue(await listRequestsWaitingForPolicy(legalEntityId));
+    } catch (cause) { setPolicyError(errorText(cause)); }
+    finally { setCheckingId(null); }
+  }
   return <div className="p-5 sm:p-8">
     <PageHeader title="My Requests" subtitle="Save a request, then send it for policy and budget review." actions={<Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link>} />
     <Panel><div className="p-5">{error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
@@ -42,6 +70,14 @@ export function LiveRequestList() {
       </RecordTable></div> : <EmptyState title="What do you need to buy?" description="Start with a draft request for goods or services." action={<Link to="/requests/new"><Button>New request</Button></Link>} />}
       {data && data.count > data.limit && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - data.limit))}>Previous</Button><span>{offset + 1}–{Math.min(offset + data.limit, data.count)} of {data.count}</span><Button variant="secondary" disabled={offset + data.limit >= data.count} onClick={() => setOffset(offset + data.limit)}>Next</Button></div>}
     </div></Panel>
+    {canCheckPolicy && <Panel title="Buying-rule checks and issues" className="mt-5"><div className="p-5">
+      {policyError && <p role="alert" className="mb-3 text-sm text-red-700">{policyError}</p>}
+      {policyNotice && <p role="status" className="mb-3 text-sm">{policyNotice}</p>}
+      {policyQueue?.records.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Request</th><th>Purpose</th><th>Lines</th><th>Amount before adjustments</th><th>Status</th><th>Action</th></tr></thead><tbody>{policyQueue.records.map((item) => <tr key={item.id}><td>{item.number}</td><td>{item.purpose}</td><td>{item.lineCount}</td><td>{item.currencyCode} {item.estimatedBaseAmount.toLocaleString()}</td><td>{item.policyOutcome === "Blocked" ? `Needs attention: ${item.policyResultCode || "rule exception"}` : "Waiting for check"}</td><td>{item.policyOutcome === "Blocked" ? <span className="text-xs text-muted-foreground">Contact Procurement for next steps</span> : <Button variant="secondary" disabled={checkingId === item.id} onClick={() => void checkPolicy(item.id, item.version)}>{checkingId === item.id ? "Checking…" : "Check buying rules"}</Button>}</td></tr>)}</tbody></RecordTable></div>
+        : <p className="text-sm text-muted-foreground">No requests need a buying-rule check or follow-up.</p>}
+      {policyQueue && policyQueue.count > policyQueue.limit && <div className="mt-3 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={policyOffset === 0} onClick={() => setPolicyOffset(Math.max(0, policyOffset - policyQueue.limit))}>Previous</Button><span>{policyOffset + 1}–{Math.min(policyOffset + policyQueue.records.length, policyQueue.count)} of {policyQueue.count}</span><Button variant="secondary" disabled={policyOffset + policyQueue.limit >= policyQueue.count} onClick={() => setPolicyOffset(policyOffset + policyQueue.limit)}>Next</Button></div>}
+      <p className="mt-3 text-xs text-muted-foreground">A rule check records the matching policy. It does not approve the request or reserve money.</p>
+    </div></Panel>}
   </div>;
 }
 
@@ -102,7 +138,7 @@ export function LiveRequestEditor() {
         ? [line] : [...current.lines, line] }));
     setError("");
   }
-  const total = draft.lines.reduce((sum, line) => sum + line.requestedQuantity * line.estimatedUnitPrice * (1 - (line.discountPercent || 0) / 100), 0);
+  const total = draft.lines.reduce((sum, line) => sum + line.requestedQuantity * line.estimatedUnitPrice, 0);
   async function save(event: FormEvent) {
     event.preventDefault(); setSaving(true); setError("");
     try {
@@ -148,7 +184,7 @@ export function LiveRequestEditor() {
           <div className="flex items-end">{draft.lines.length > 1 && <Button variant="ghost" aria-label={`Remove line ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((_, at) => at !== index) }))}><Trash2 size={16} /></Button>}</div>
         </div>)}
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add line</Button>
-        <p className="text-right text-sm font-semibold">Estimated total: {draft.currencyCode || defaultCurrencyCode} {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+        <p className="text-right text-sm font-semibold">Estimated amount before discounts, tax and delivery: {draft.currencyCode || defaultCurrencyCode} {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
       </div></Panel>
       <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/requests/${id}` : "/requests"}><Button variant="secondary">Cancel</Button></Link></div>
     </form>}
@@ -166,6 +202,8 @@ export function LiveRequestDetail() {
   const [withdrawReason, setWithdrawReason] = useState("");
   const [budget, setBudget] = useState<OwnBudgetStatus | null>(null);
   const [budgetError, setBudgetError] = useState("");
+  const [policy, setPolicy] = useState<OwnPolicyStatus | null>(null);
+  const [policyError, setPolicyError] = useState("");
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -181,6 +219,14 @@ export function LiveRequestDetail() {
     setBudget(null); setBudgetError("");
     getOwnRequestBudgetStatus(legalEntityId, id, controller.signal).then(setBudget)
       .catch((cause: unknown) => { if (!controller.signal.aborted) setBudgetError(errorText(cause)); });
+    return () => controller.abort();
+  }, [legalEntityId, id, record?.status]);
+  useEffect(() => {
+    if (!id || record?.status !== "Submitted") { setPolicy(null); return; }
+    const controller = new AbortController();
+    setPolicy(null); setPolicyError("");
+    getOwnRequestPolicyStatus(legalEntityId, id, controller.signal).then(setPolicy)
+      .catch((cause: unknown) => { if (!controller.signal.aborted) setPolicyError(errorText(cause)); });
     return () => controller.abort();
   }, [legalEntityId, id, record?.status]);
   async function withdraw() {
@@ -205,6 +251,8 @@ export function LiveRequestDetail() {
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     {record.status === "Submitted" && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">
       <p>Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>
+      {policyError ? <p role="alert" className="mt-2 text-red-700">Buying-rule status is unavailable. {policyError}</p>
+        : <p className="mt-2 font-medium">Buying rules: {policy?.status === "Matched" ? "Checked; this has not approved the request" : policy?.status === "Blocked" ? policy.evaluation?.summary || "Needs Procurement attention" : "Waiting for Procurement to check this request"}.</p>}
       {budgetError ? <p role="alert" className="mt-2 text-red-700">Budget status is unavailable. {budgetError}</p>
         : <p className="mt-2 font-medium">Budget: {budget?.status === "Available" && budget.reservationConfirmed ? "Finance confirmed funds for this request" : budget?.status === "Insufficient" ? "Finance found insufficient funds" : budget?.status === "PartiallyAvailable" ? "Finance found only part of the funds" : budget?.status === "NotConfigured" ? "No budget is configured for this request" : "Waiting for Finance to check the budget"}.</p>}
     </div>}

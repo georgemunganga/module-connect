@@ -14,7 +14,7 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
     effectiveFrom: "2026-10-19T00:00:00Z", effectiveTo: null, state: "Draft", version: 1,
     createdAt: "2026-10-19T00:00:00Z",
     rulesJson: JSON.stringify({ schemaVersion: 1, transactionType: "PurchaseRequest", currencyCode: "ZMW",
-      amountBasis: "EstimatedGross", rules: [{ code: "BRANCH", priority: 0,
+      amountBasis: "EstimatedLineBase", rules: [{ code: "BRANCH", priority: 0,
         when: { minimumAmountInclusive: null, maximumAmountExclusive: null, categoryCodes: [], purchaseTypes: [],
           branchIds: ["77777777-7777-4777-8777-777777777777"] },
         result: { budgetReservation: "Required", sourcingMethodCode: null, minimumQuoteCount: null,
@@ -101,7 +101,7 @@ test("buying rule draft checks and saves with company currency", async ({ page }
   await page.getByLabel("Quotes needed (optional)").fill("3");
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await expect(page.getByRole("cell", { name: "Purchase requests" })).toBeVisible();
-  expect(state.rules()).toMatchObject({ currencyCode: "ZMW", amountBasis: "EstimatedGross",
+  expect(state.rules()).toMatchObject({ currencyCode: "ZMW", amountBasis: "EstimatedLineBase",
     rules: [{ when: { minimumAmountInclusive: 5000 }, result: { minimumQuoteCount: 3 } }] });
   await page.reload();
   await expect(page.getByRole("cell", { name: "Purchase requests" })).toBeVisible();
@@ -153,12 +153,12 @@ test("sample preview explains controls without approving a purchase", async ({ p
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await page.getByRole("button", { name: "Try a sample" }).click();
-  await page.getByLabel("Sample amount (ZMW)").fill("6000");
+  await page.getByLabel("Sample line amount before adjustments (ZMW)").fill("6000");
   await page.getByLabel("Sample category").fill("IT");
   await page.getByRole("button", { name: "Check sample" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Matched DEFAULT" })).toBeVisible();
   await expect(page.getByText("This is not a spending approval.")).toBeVisible();
-  expect(state.sample()).toMatchObject({ currencyCode: "ZMW", grossAmount: 6000, categoryCode: "IT" });
+  expect(state.sample()).toMatchObject({ currencyCode: "ZMW", lineBaseAmount: 6000, categoryCode: "IT" });
 });
 
 test("reviewer can publish a future policy after review", async ({ page }) => {

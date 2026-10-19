@@ -28,7 +28,7 @@ const onlyKeys = (value: Record<string, unknown>, allowed: string[]) =>
 function toRuleJson(key: string, currency: string, rows: RuleRow[]): string {
   return JSON.stringify({ schemaVersion: 1,
     transactionType: key === "PURCHASE_ORDER" ? "PurchaseOrder" : "PurchaseRequest",
-    currencyCode: currency, amountBasis: key === "PURCHASE_ORDER" ? "ApprovedGross" : "EstimatedGross",
+    currencyCode: currency, amountBasis: key === "PURCHASE_ORDER" ? "ApprovedLineBase" : "EstimatedLineBase",
     rules: rows.map((row) => ({ code: row.code.trim().toUpperCase(), priority: Number(row.priority),
       when: { minimumAmountInclusive: row.minimum ? Number(row.minimum) : null,
         maximumAmountExclusive: row.maximum ? Number(row.maximum) : null,
@@ -52,7 +52,7 @@ function fromRuleJson(json: string, key: string, currency: string): RuleRow[] | 
       || !onlyKeys(document, ["schemaVersion", "transactionType", "currencyCode", "amountBasis", "rules"])
       || document.currencyCode !== currency
       || document.transactionType !== (key === "PURCHASE_ORDER" ? "PurchaseOrder" : "PurchaseRequest")
-      || document.amountBasis !== (key === "PURCHASE_ORDER" ? "ApprovedGross" : "EstimatedGross")) return null;
+      || document.amountBasis !== (key === "PURCHASE_ORDER" ? "ApprovedLineBase" : "EstimatedLineBase")) return null;
     return document.rules.map((value: unknown) => {
       if (!value || typeof value !== "object") throw new Error("Unknown rule");
       const rule = value as Record<string, unknown>;
@@ -179,7 +179,7 @@ export function LivePolicies() {
     setSaving(true); setError(""); setPreview(null);
     try {
       setPreview(await previewPolicy(companyId, previewing.id, {
-        currencyCode: currency, grossAmount: Number(sampleAmount),
+        currencyCode: currency, lineBaseAmount: Number(sampleAmount),
         categoryCode: sampleCategory.trim().toUpperCase() || null,
         purchaseType: sampleType || null, branchId: null,
       }));
@@ -221,7 +221,7 @@ export function LivePolicies() {
     {previewing && <form onSubmit={runPreview}><Panel title="Try a sample purchase"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">See which rule a sample purchase matches. This check does not approve or change a purchase. Branch-specific conditions need a fuller preview.</p>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label={`Sample amount (${currency})`}><Input type="number" min={0} step="0.0001" required value={sampleAmount} onChange={(event) => setSampleAmount(event.target.value)} /></Field>
+        <Field label={`Sample line amount before adjustments (${currency})`}><Input type="number" min={0} step="0.0001" required value={sampleAmount} onChange={(event) => setSampleAmount(event.target.value)} /></Field>
         <Field label="Sample category"><Input value={sampleCategory} placeholder="IT" onChange={(event) => setSampleCategory(event.target.value.toUpperCase())} /></Field>
         <Field label="Sample purchase type"><Select value={sampleType} onChange={(event) => setSampleType(event.target.value)}><option value="">Any type</option><option value="GOODS">Goods</option><option value="SERVICES">Services</option><option value="ASSETS">Assets</option><option value="SUBSCRIPTIONS">Subscriptions</option></Select></Field>
       </div>
@@ -248,7 +248,7 @@ export function LivePolicies() {
             <Field label="Start date"><Input type="date" required value={start} onChange={(event) => setStart(event.target.value)} /></Field>
             <Field label="End date (optional)"><Input type="date" min={start} value={end} onChange={(event) => setEnd(event.target.value)} /></Field>
           </div>
-          <p className="text-xs text-muted-foreground">Amounts use {currency}. An empty amount or category means there is no limit for that condition. Higher priority wins where rules overlap.</p>
+          <p className="text-xs text-muted-foreground">Amounts use {currency} and equal quantity × unit price before discounts, tax and delivery. An empty amount or category means there is no limit for that condition. Higher priority wins where rules overlap.</p>
           {rows.map((row, index) => <section key={index} className="space-y-4 rounded-xl border border-border bg-surface-muted p-4">
             <div className="flex items-center justify-between"><h3 className="font-semibold">Rule {index + 1}</h3>{rows.length > 1 && <Button variant="secondary" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>Remove rule</Button>}</div>
             <div className="grid gap-4 sm:grid-cols-3">

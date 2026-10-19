@@ -21,7 +21,7 @@ export type PolicyPage = {
 };
 export type PolicyIssue = { path: string; message: string };
 export type PolicyValidation = { isValid: boolean; issues: PolicyIssue[] };
-export type PolicyScenario = { currencyCode: string; grossAmount: number;
+export type PolicyScenario = { currencyCode: string; lineBaseAmount: number;
   categoryCode: string | null; purchaseType: string | null; branchId: string | null };
 export type PolicyPreview = {
   policyId: string; policyVersionNumber: number; state: string; isAuthority: false;
