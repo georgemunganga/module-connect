@@ -92,6 +92,11 @@ test("employee selects a published catalog price and saves its reference on the 
   expect(payload.lines[0].catalogItemId).toBe(catalogItemId);
   expect(payload.lines[0].preferredSupplierId).toBe(catalogSupplierId);
   await expect(page.getByRole("heading", { name: "Purchase Office chair" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("cell", { name: "Office chair" })).toBeVisible();
+  await page.getByRole("link", { name: "Edit request" }).click();
+  await expect(page.getByText("From approved catalog", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Estimated unit price")).toHaveValue("250");
 });
 
 test("request draft lines persist, edit and withdraw", async ({ page }) => {
