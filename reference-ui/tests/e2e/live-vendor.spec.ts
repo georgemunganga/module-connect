@@ -123,8 +123,16 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       if (version !== vendor.version || vendor.status !== "Active") return json({ message: "Refresh this vendor." }, 409);
       if (!reason?.trim() || !existingOrdersReviewed) return json({ message: "Give a reason and review existing orders." }, 422);
       vendor = { ...vendor, status: "Suspended", statusReason: reason, isOrderable: false,
-        canSuspend: false, version: version + 1 };
+        canSuspend: false, canReactivate: true, version: version + 1 };
       return json({ id: vendorId, status: vendor.status, isOrderable: false, version: vendor.version });
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/reactivate` && vendor) {
+      const { version, reason, dueDiligenceReviewed } = request.postDataJSON();
+      if (version !== vendor.version || vendor.status !== "Suspended") return json({ message: "Refresh this vendor." }, 409);
+      if (!reason?.trim() || !dueDiligenceReviewed) return json({ message: "Review the current vendor evidence and give a reason." }, 422);
+      vendor = { ...vendor, status: "Active", statusReason: reason, isOrderable: true,
+        canReactivate: false, canSuspend: true, version: version + 1 };
+      return json({ id: vendorId, status: vendor.status, isOrderable: true, version: vendor.version });
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}/reject` && vendor) {
       const { version, reason } = request.postDataJSON();
@@ -283,6 +291,14 @@ test("reviewer can place an active vendor on hold after checking existing orders
   await expect(page.getByText("Suspended", { exact: true })).toBeVisible();
   await expect(page.getByText("No — on hold")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Place vendor on hold" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Return vendor to active" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Return to active" })).toBeDisabled();
+  await page.getByLabel("How was the issue resolved?").fill("Insurance renewed and verified");
+  await page.getByLabel("I checked the current vendor details and qualifications").check();
+  await page.getByRole("button", { name: "Return to active" }).click();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByText("Yes", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Return vendor to active" })).toHaveCount(0);
 });
 
 test("reviewer can verify a submitted vendor qualification with a reason", async ({ page }) => {

@@ -88,6 +88,7 @@ export interface VendorDetail extends VendorSummary {
   canApprove?: boolean;
   canReject?: boolean;
   canSuspend?: boolean;
+  canReactivate?: boolean;
   isLocal?: boolean;
   portalAccessState?: string | null;
   registrationNumber?: string | null;
@@ -268,6 +269,17 @@ export async function suspendVendor(legalEntityId: string, id: string, version: 
     { method: "POST", body: JSON.stringify({ version, reason: reason.trim(), existingOrdersReviewed }) });
   if (!object(body) || body.id !== id || body.status !== "Suspended" || body.isOrderable !== false)
     throw new VendorApiError(0, "The ERP did not confirm the hold. Refresh before retrying.");
+}
+
+export async function reactivateVendor(legalEntityId: string, id: string, version: number,
+  reason: string, dueDiligenceReviewed: boolean): Promise<void> {
+  if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
+  if (!reason.trim() || reason.trim().length > 1000)
+    throw new VendorApiError(0, "Explain how the vendor issue was resolved.");
+  const body = await request<unknown>(legalEntityId, `/${id}/reactivate`,
+    { method: "POST", body: JSON.stringify({ version, reason: reason.trim(), dueDiligenceReviewed }) });
+  if (!object(body) || body.id !== id || body.status !== "Active" || body.isOrderable !== true)
+    throw new VendorApiError(0, "The ERP did not confirm reactivation. Refresh before retrying.");
 }
 
 export async function getVendorOpenOrders(legalEntityId: string, id: string,

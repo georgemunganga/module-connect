@@ -9,7 +9,8 @@ import {
   getVendorOpenOrders,
   listVendorDrafts, updateVendorDraft, withdrawVendorDraft,
   submitVendorForReview,
-  returnVendorForInformation, approveVendor, rejectVendor, suspendVendor, reviewVendorQualification,
+  returnVendorForInformation, approveVendor, rejectVendor, suspendVendor, reactivateVendor,
+  reviewVendorQualification,
   type VendorContactDraft, type VendorDetail, type VendorDraft, type VendorOpenOrders, type VendorPage,
   type VendorQualificationDraft, type VendorSiteDraft,
 } from "../../../src/platform/procurement-vendors-api";
@@ -150,6 +151,8 @@ export function LiveVendorDetail() {
   const [reviewReason, setReviewReason] = useState("");
   const [duplicatesReviewed, setDuplicatesReviewed] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
+  const [reactivateReason, setReactivateReason] = useState("");
+  const [diligenceReviewed, setDiligenceReviewed] = useState(false);
   const [ordersReviewed, setOrdersReviewed] = useState(false);
   const [openOrders, setOpenOrders] = useState<VendorOpenOrders | null>(null);
   const [ordersError, setOrdersError] = useState("");
@@ -215,6 +218,15 @@ export function LiveVendorDetail() {
       <Button variant="danger" disabled={busy || !openOrders || !suspendReason.trim() || !ordersReviewed}
         onClick={() => { void act(() => suspendVendor(legalEntityId, vendor.id, vendor.version, suspendReason, ordersReviewed)); }}>
         Place on hold
+      </Button>
+    </div></Panel>}
+    {vendor.canReactivate && <Panel title="Return vendor to active" className="mb-5"><div className="space-y-3 p-5">
+      <p className="text-sm text-muted-foreground">Confirm the issue is resolved and check current vendor details, qualifications and payment verification before allowing new orders.</p>
+      <Field label="How was the issue resolved?"><Textarea rows={3} maxLength={1000} value={reactivateReason} onChange={(event) => setReactivateReason(event.target.value)} /></Field>
+      <label className="flex items-center gap-3 text-sm"><Switch checked={diligenceReviewed} onChange={(event) => setDiligenceReviewed(event.target.checked)} />I checked the current vendor details and qualifications</label>
+      <Button disabled={busy || !reactivateReason.trim() || !diligenceReviewed}
+        onClick={() => { void act(() => reactivateVendor(legalEntityId, vendor.id, vendor.version, reactivateReason, diligenceReviewed)); }}>
+        Return to active
       </Button>
     </div></Panel>}
     <div className="grid gap-5 lg:grid-cols-2">
