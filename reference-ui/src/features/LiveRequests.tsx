@@ -6,8 +6,8 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   createOwnRequestDraft, getOwnRequestDraft, listOwnRequestDrafts,
-  updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
-  type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
+  getOwnRequestBudgetStatus, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
+  type OwnBudgetStatus, type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
 } from "../../../src/platform/procurement-requests-api";
 
 const emptyLine = (): RequestLineDraft => ({ description: "", unitCode: "each", requestedQuantity: 1, estimatedUnitPrice: 0, categoryCode: "" });
@@ -121,6 +121,8 @@ export function LiveRequestDetail() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
+  const [budget, setBudget] = useState<OwnBudgetStatus | null>(null);
+  const [budgetError, setBudgetError] = useState("");
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -130,6 +132,14 @@ export function LiveRequestDetail() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [legalEntityId, id]);
+  useEffect(() => {
+    if (!id || record?.status !== "Submitted") { setBudget(null); return; }
+    const controller = new AbortController();
+    setBudgetError("");
+    getOwnRequestBudgetStatus(legalEntityId, id, controller.signal).then(setBudget)
+      .catch((cause: unknown) => { if (!controller.signal.aborted) setBudgetError(errorText(cause)); });
+    return () => controller.abort();
+  }, [legalEntityId, id, record?.status]);
   async function withdraw() {
     if (!record || (record.status === "Submitted" && !withdrawReason.trim())) return;
     setBusy(true); setError("");
@@ -150,7 +160,11 @@ export function LiveRequestDetail() {
   return <div className="p-5 sm:p-8">
     <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{record.status === "Draft" && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
-    {record.status === "Submitted" && <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>}
+    {record.status === "Submitted" && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">
+      <p>Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>
+      {budgetError ? <p role="alert" className="mt-2 text-red-700">Budget status is unavailable. {budgetError}</p>
+        : <p className="mt-2 font-medium">Budget: {budget?.status === "Available" && budget.reservationConfirmed ? "Finance confirmed funds for this request" : budget?.status === "Insufficient" ? "Finance found insufficient funds" : budget?.status === "PartiallyAvailable" ? "Finance found only part of the funds" : budget?.status === "NotConfigured" ? "No budget is configured for this request" : "Waiting for Finance to check the budget"}.</p>}
+    </div>}
     <Panel title="Requested lines"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th></tr></thead><tbody>{activeLines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.requestedQuantity}</td><td>{line.unitCode}</td><td>{record.currencyCode} {line.estimatedUnitPrice.toLocaleString()}</td></tr>)}</tbody></RecordTable></div></Panel>
     <div className="mt-5 grid gap-5 lg:grid-cols-2"><Panel title="Delivery"><p className="p-5 text-sm">{record.deliveryAddressText || "No delivery address added."}</p></Panel><Panel title="Note for approver"><p className="p-5 text-sm">{record.notesToApprover || "No note added."}</p></Panel></div>
     {record.status === "Draft" && <Panel title="Send for review" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Add a needed-by date to this request or every line before sending it. No budget is reserved by this step.</p><Button disabled={busy || !activeLines.length || (!record.neededBy && activeLines.some((line) => !line.neededBy))} onClick={() => void submit()}>Send for review</Button></div></Panel>}

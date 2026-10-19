@@ -22,6 +22,9 @@ export type RequestDetail = RequestSummary & Omit<RequestDraft, "lines"> & {
   lines: (RequestLineDraft & { id: string; lineNumber: number; approvalStatus: string })[];
 };
 export type RequestPage = { records: RequestSummary[]; count: number; limit: number; offset: number };
+export type OwnBudgetStatus = { requestId: string; requestVersion: number;
+  status: "Pending" | "Available" | "Insufficient" | "NotConfigured" | "PartiallyAvailable";
+  checkedAt?: string | null; reservationConfirmed: boolean };
 export class RequestApiError extends Error { constructor(public readonly status: number, message: string) { super(message); } }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -69,6 +72,14 @@ export async function getOwnRequestDraft(companyId: string, id: string, signal?:
   const body: unknown = await request(companyId, `/${id}`, { signal });
   if (!validDetail(body)) throw new RequestApiError(0, "The ERP returned invalid request details.");
   return body;
+}
+export async function getOwnRequestBudgetStatus(companyId: string, id: string, signal?: AbortSignal): Promise<OwnBudgetStatus> {
+  if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
+  const body: unknown = await request(companyId, `/${id}/budget-status`, { signal });
+  if (!object(body) || body.requestId !== id || typeof body.requestVersion !== "number"
+    || typeof body.status !== "string" || typeof body.reservationConfirmed !== "boolean")
+    throw new RequestApiError(0, "The ERP returned an invalid budget status.");
+  return body as OwnBudgetStatus;
 }
 export async function createOwnRequestDraft(companyId: string, draft: RequestDraft): Promise<RequestDetail> {
   const body: unknown = await request(companyId, "", { method: "POST", body: JSON.stringify(draft) });

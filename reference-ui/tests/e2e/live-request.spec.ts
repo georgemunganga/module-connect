@@ -11,7 +11,7 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "requestDraft"]));
 type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean } = {}) {
   let record: RecordValue | null = null;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
@@ -61,6 +61,9 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
         submittedAt: "2026-10-19T00:00:00Z", version: record.version + 1 };
       return json(record);
     }
+    if (path === `/api/procurement/v1/requests/${requestId}/budget-status` && record)
+      return json({ requestId, requestVersion: record.version, status: options.confirmedBudget ? "Available" : "Pending",
+        checkedAt: options.confirmedBudget ? "2026-10-19T14:00:00Z" : null, reservationConfirmed: Boolean(options.confirmedBudget) });
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
 }
@@ -101,11 +104,24 @@ test("request submission stays pending policy and budget and needs a withdrawal 
   await page.getByRole("button", { name: "Send for review" }).click();
   await expect(page.getByText("Sent for policy and budget review.", { exact: false })).toBeVisible();
   await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Waiting for Finance to check the budget.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Withdraw request" })).toBeDisabled();
   await page.getByLabel("Reason").fill("Request no longer needed");
   await page.getByRole("button", { name: "Withdraw request" }).click();
   await expect(page.getByRole("heading", { name: "My Requests" })).toBeVisible();
   await expect(page.getByText("Withdrawn")).toBeVisible();
+});
+
+test("request shows confirmed Finance budget status without implying approval", async ({ page }) => {
+  await mockErp(page, { confirmedBudget: true });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Replacement laptops");
+  await page.getByLabel("Item or service 1").fill("Laptop");
+  await page.getByLabel("Needed by").first().fill("2026-11-30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).click();
+  await expect(page.getByText("Finance confirmed funds for this request.")).toBeVisible();
+  await expect(page.getByText("This request has not been approved", { exact: false })).toBeVisible();
 });
 
 test("request list denial shows no local demo records", async ({ page }) => {
