@@ -1,14 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Switch, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   addVendorContact, addVendorSite, addVendorQualification, createVendorDraft, getVendorDraft,
   listVendorDrafts, updateVendorDraft, withdrawVendorDraft,
   submitVendorForReview,
-  returnVendorForInformation,
+  returnVendorForInformation, approveVendor, rejectVendor,
   type VendorContactDraft, type VendorDetail, type VendorDraft, type VendorPage,
   type VendorQualificationDraft, type VendorSiteDraft,
 } from "../../../src/platform/procurement-vendors-api";
@@ -147,6 +147,7 @@ export function LiveVendorDetail() {
   const [busy, setBusy] = useState(false);
   const [businessReason, setBusinessReason] = useState("");
   const [reviewReason, setReviewReason] = useState("");
+  const [duplicatesReviewed, setDuplicatesReviewed] = useState(false);
   const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [site, setSite] = useState({ kind: "Billing", addressLine1: "", city: "", countryCode: "ZM" });
   const [qualification, setQualification] = useState({ qualificationType: "", issuer: "", referenceNumber: "", issuedOn: "", expiresOn: "" });
@@ -176,10 +177,15 @@ export function LiveVendorDetail() {
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     {vendor.status === "Submitted" && <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">Submitted for review{vendor.statusDecidedAt ? ` on ${new Date(vendor.statusDecidedAt).toLocaleDateString()}` : ""}. This vendor cannot receive new purchase orders yet.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""}</p>}
     {vendor.status === "More Information Required" && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">More information is needed before this vendor can be approved.{vendor.statusReason ? ` Reviewer note: ${vendor.statusReason}` : ""} Update the details below, then send the vendor for review again.</p>}
-    {vendor.canReturnForInformation && <Panel title="Request changes" className="mb-5"><div className="space-y-3 p-5">
-      <p className="text-sm text-muted-foreground">Tell the proposer what needs to change. This vendor will remain unavailable for purchase orders.</p>
-      <Field label="Changes needed"><Textarea rows={3} maxLength={1000} required value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
-      <Button disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => returnVendorForInformation(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Send back for changes</Button>
+    {(vendor.canReturnForInformation || vendor.canApprove || vendor.canReject) && <Panel title="Review vendor" className="mb-5"><div className="space-y-3 p-5">
+      <p className="text-sm text-muted-foreground">Check the company details and documents, then record your decision. Finance verifies payment details separately.</p>
+      <Field label="Reason for your decision"><Textarea rows={3} maxLength={1000} required value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
+      {vendor.canApprove && <label className="flex items-center gap-3 text-sm"><Switch checked={duplicatesReviewed} onChange={(event) => setDuplicatesReviewed(event.target.checked)} />I checked for duplicate vendors</label>}
+      <div className="flex flex-wrap gap-2">
+        {vendor.canApprove && <Button disabled={busy || !reviewReason.trim() || !duplicatesReviewed} onClick={() => { void act(() => approveVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim(), duplicatesReviewed)); }}>Approve vendor</Button>}
+        {vendor.canReturnForInformation && <Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => returnVendorForInformation(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Send back for changes</Button>}
+        {vendor.canReject && <Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => rejectVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Reject vendor</Button>}
+      </div>
     </div></Panel>}
     <div className="grid gap-5 lg:grid-cols-2">
       <Panel title="Vendor overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Company ID</dt><dd>{vendor.registrationNumber || "—"}</dd><dt>Category</dt><dd>{vendor.categoryCode || "—"}</dd><dt>Country</dt><dd>{vendor.countryCode}</dd><dt>Currency</dt><dd>{vendor.defaultCurrencyCode || "—"}</dd><dt>Payment terms</dt><dd>{vendor.paymentTermRef || "—"}</dd><dt>Orderable</dt><dd>{vendor.isOrderable ? "Yes" : "No — approval required"}</dd></dl></Panel>

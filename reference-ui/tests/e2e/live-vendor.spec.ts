@@ -15,7 +15,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
   let vendor: Vendor | null = options.reviewer ? {
     id: vendorId, number: "VEN-001", legalName: "Acme Zambia Ltd", displayName: "Acme",
     countryCode: "ZM", categoryCode: "OFFICE", status: "Submitted", version: 3,
-    isOrderable: false, canReturnForInformation: true,
+    isOrderable: false, canReturnForInformation: true, canApprove: true, canReject: true,
     contacts: [{ id: "44444444-4444-4444-8444-444444444444", name: "Pat Supplier" }], sites: [],
   } : null;
   await page.addInitScript((entityId) => {
@@ -92,7 +92,23 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       const { version, reason } = request.postDataJSON();
       if (version !== vendor.version || vendor.status !== "Submitted") return json({ message: "Refresh this vendor." }, 409);
       vendor = { ...vendor, status: "More Information Required", statusReason: reason,
-        isOrderable: false, canReturnForInformation: false, version: version + 1 };
+        isOrderable: false, canReturnForInformation: false, canApprove: false, canReject: false, version: version + 1 };
+      return json({ id: vendorId, status: vendor.status, isOrderable: false, version: vendor.version });
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/approve` && vendor) {
+      const { version, reason, duplicatesReviewed } = request.postDataJSON();
+      if (version !== vendor.version || vendor.status !== "Submitted") return json({ message: "Refresh this vendor." }, 409);
+      if (!reason || !duplicatesReviewed) return json({ message: "Review duplicates and give a reason." }, 422);
+      vendor = { ...vendor, status: "Active", statusReason: reason,
+        isOrderable: true, canReturnForInformation: false, canApprove: false, canReject: false, version: version + 1 };
+      return json({ id: vendorId, status: vendor.status, isOrderable: true, version: vendor.version });
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/reject` && vendor) {
+      const { version, reason } = request.postDataJSON();
+      if (version !== vendor.version || vendor.status !== "Submitted") return json({ message: "Refresh this vendor." }, 409);
+      if (!reason) return json({ message: "Give a reason." }, 422);
+      vendor = { ...vendor, status: "Rejected", statusReason: reason,
+        isOrderable: false, canReturnForInformation: false, canApprove: false, canReject: false, version: version + 1 };
       return json({ id: vendorId, status: vendor.status, isOrderable: false, version: vendor.version });
     }
     return json({ title: `Unexpected route: ${path}` }, 404);
@@ -201,15 +217,28 @@ test("reviewer can return a submitted vendor with a visible reason", async ({ pa
   await page.getByRole("option", { name: "Submitted for review" }).click();
   await expect(page.getByText("Acme", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Acme" }).click();
-  await expect(page.getByRole("heading", { name: "Request changes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review vendor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send back for changes" })).toBeDisabled();
-  await page.getByLabel("Changes needed").fill("Confirm the legal address");
+  await page.getByLabel("Reason for your decision").fill("Confirm the legal address");
   await page.getByRole("button", { name: "Send back for changes" }).click();
   await expect(page.getByText(/Reviewer note: Confirm the legal address/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Request changes" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Review vendor" })).toHaveCount(0);
   await expect(page.getByText("No — approval required")).toBeVisible();
   await page.getByRole("link", { name: "Back to vendors" }).click();
   await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
   await page.getByRole("option", { name: "Submitted for review" }).click();
   await expect(page.getByText("No vendors match this view")).toBeVisible();
+});
+
+test("reviewer must check duplicates before approving a vendor", async ({ page }) => {
+  await mockErp(page, { reviewer: true });
+  await page.goto(`/procurement/workspace/vendors/${vendorId}`);
+  await expect(page.getByRole("button", { name: "Approve vendor" })).toBeDisabled();
+  await page.getByLabel("Reason for your decision").fill("Registration and contact checked");
+  await expect(page.getByRole("button", { name: "Approve vendor" })).toBeDisabled();
+  await page.getByLabel("I checked for duplicate vendors").check();
+  await page.getByRole("button", { name: "Approve vendor" }).click();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByText("Yes", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review vendor" })).toHaveCount(0);
 });
