@@ -20,6 +20,17 @@ export type PolicyPage = {
 };
 export type PolicyIssue = { path: string; message: string };
 export type PolicyValidation = { isValid: boolean; issues: PolicyIssue[] };
+export type PolicyScenario = { currencyCode: string; grossAmount: number;
+  categoryCode: string | null; purchaseType: string | null; branchId: string | null };
+export type PolicyPreview = {
+  policyId: string; policyVersionNumber: number; state: string; isAuthority: false;
+  coverageIssues: PolicyIssue[];
+  decision: { status: string; ruleCode: string | null; priority: number | null;
+    budgetReservation: string | null; sourcingMethodCode: string | null;
+    minimumQuoteCount: number | null;
+    approvalStages: Array<{ code: string; assignee: string; mode: string }>;
+    issues: PolicyIssue[] };
+};
 
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -101,4 +112,14 @@ export async function submitPolicyReview(companyId: string, id: string, version:
   if (!validRecord(body) || body.state !== "PendingReview")
     throw new Error("ERP did not confirm the review request. Refresh before retrying.");
   return body;
+}
+export async function previewPolicy(companyId: string, id: string,
+  scenario: PolicyScenario): Promise<PolicyPreview> {
+  if (!guid.test(id)) throw new Error("Choose a valid buying rule.");
+  const body = await call(companyId, `/${id}/preview`,
+    { method: "POST", body: JSON.stringify(scenario) });
+  if (!object(body) || body.isAuthority !== false || !Array.isArray(body.coverageIssues)
+    || !object(body.decision) || typeof body.decision.status !== "string")
+    throw new Error("ERP returned an invalid buying rule preview.");
+  return body as PolicyPreview;
 }

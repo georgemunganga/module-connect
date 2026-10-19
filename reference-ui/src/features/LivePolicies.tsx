@@ -3,8 +3,8 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Swi
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  createPolicy, getPolicy, listPolicies, submitPolicyReview, updatePolicy, validatePolicy,
-  type PolicyPage, type PolicyRecord, type PolicyIssue,
+  createPolicy, getPolicy, listPolicies, previewPolicy, submitPolicyReview, updatePolicy, validatePolicy,
+  type PolicyPage, type PolicyRecord, type PolicyIssue, type PolicyPreview,
 } from "../../../src/platform/procurement-policy-api";
 
 type RuleRow = {
@@ -98,6 +98,11 @@ export function LivePolicies() {
   const [editing, setEditing] = useState<PolicyRecord | "new" | null>(null);
   const [reviewing, setReviewing] = useState<PolicyPage["items"][number] | null>(null);
   const [reviewReason, setReviewReason] = useState("");
+  const [previewing, setPreviewing] = useState<PolicyPage["items"][number] | null>(null);
+  const [sampleAmount, setSampleAmount] = useState("0");
+  const [sampleCategory, setSampleCategory] = useState("");
+  const [sampleType, setSampleType] = useState("");
+  const [preview, setPreview] = useState<PolicyPreview | null>(null);
   const [key, setKey] = useState("PURCHASE_REQUEST");
   const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
   const [end, setEnd] = useState("");
@@ -163,6 +168,19 @@ export function LivePolicies() {
     } catch (cause) { setError(errorText(cause)); }
     finally { setSaving(false); }
   }
+  async function runPreview(event: FormEvent) {
+    event.preventDefault();
+    if (!previewing) return;
+    setSaving(true); setError(""); setPreview(null);
+    try {
+      setPreview(await previewPolicy(companyId, previewing.id, {
+        currencyCode: currency, grossAmount: Number(sampleAmount),
+        categoryCode: sampleCategory.trim().toUpperCase() || null,
+        purchaseType: sampleType || null, branchId: null,
+      }));
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setSaving(false); }
+  }
 
   return <div className="mx-auto max-w-5xl space-y-5">
     <PageHeader title="Buying rules" subtitle="Prepare company rules for budgets, quotes and approvals." />
@@ -175,11 +193,27 @@ export function LivePolicies() {
       {listError && <p role="alert" className="mb-4 text-sm text-red-700">{listError}</p>}
       {loading ? <p role="status">Loading buying rules…</p> : page?.items.length
         ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Used for</th><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td>{record.state === "Draft" ? <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></div> : "—"}</td></tr>)}</tbody></RecordTable></div>
+          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setPreview(null); setError(""); }}>Try a sample</Button>{record.state === "Draft" && <><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setPreviewing(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
         : <EmptyState title="No buying rules yet" description="Add a draft for purchase requests or purchase orders." action={<Button onClick={newDraft}>Add buying rule draft</Button>} />}
       {page && page.total > page.items.length && <p className="mt-3 text-xs text-muted-foreground">Showing the first {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+    {previewing && <form onSubmit={runPreview}><Panel title="Try a sample purchase"><div className="space-y-4 p-5">
+      <p className="text-sm text-muted-foreground">See which rule a sample purchase matches. This check does not approve or change a purchase. Branch-specific conditions need a fuller preview.</p>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label={`Sample amount (${currency})`}><Input type="number" min={0} step="0.0001" required value={sampleAmount} onChange={(event) => setSampleAmount(event.target.value)} /></Field>
+        <Field label="Sample category"><Input value={sampleCategory} placeholder="IT" onChange={(event) => setSampleCategory(event.target.value.toUpperCase())} /></Field>
+        <Field label="Sample purchase type"><Select value={sampleType} onChange={(event) => setSampleType(event.target.value)}><option value="">Any type</option><option value="GOODS">Goods</option><option value="SERVICES">Services</option><option value="ASSETS">Assets</option><option value="SUBSCRIPTIONS">Subscriptions</option></Select></Field>
+      </div>
+      <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Checking…" : "Check sample"}</Button><Button variant="secondary" onClick={() => setPreviewing(null)}>Close</Button></div>
+      {preview && <div role="status" className="rounded-lg border border-border bg-surface-muted p-4 text-sm">
+        <p className="font-semibold">{preview.decision.status === "Match" ? `Matched ${preview.decision.ruleCode}` : `Check result: ${preview.decision.status}`}</p>
+        {preview.decision.status === "Match" && <p className="mt-2">Budget: {preview.decision.budgetReservation} · Buying method: {preview.decision.sourcingMethodCode || "No specific method"} · Quotes: {preview.decision.minimumQuoteCount ?? "Not specified"} · Approvers: {preview.decision.approvalStages.map((stage) => stage.assignee).join(", ")}</p>}
+        {!!preview.coverageIssues.length && <div className="mt-3"><p className="font-medium">Rules to review before publication:</p><ul className="list-disc pl-5">{preview.coverageIssues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul></div>}
+        {!!preview.decision.issues.length && <ul className="mt-2 list-disc pl-5">{preview.decision.issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>}
+        <p className="mt-3 text-xs text-muted-foreground">Sample only. This is not a spending approval.</p>
+      </div>}
+    </div></Panel></form>}
     {reviewing && <form onSubmit={sendForReview}><Panel title="Send buying rule for review"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">Only the draft author can send it. ERP will check the company currency and active categories, branches and buying methods. A review request does not approve spending.</p>
       <Field label="What should the reviewer check?"><Input required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>

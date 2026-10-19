@@ -22,6 +22,7 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
   } : null;
   let savedRules: Record<string, unknown> | null = null;
   let reviewNote: string | null = null;
+  let lastSample: Record<string, unknown> | null = null;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -68,9 +69,17 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
       record = { ...record, state: "PendingReview", version: Number(record.version) + 1 };
       return json(record);
     }
+    if (path === `${base}/${policyId}/preview` && record) {
+      lastSample = request.postDataJSON();
+      return json({ policyId, policyVersionNumber: 1, state: record.state,
+        isAuthority: false, coverageIssues: [{ path: "$.rules", message: "Check fallback coverage." }],
+        decision: { status: "Match", ruleCode: "DEFAULT", priority: 0,
+          budgetReservation: "Required", sourcingMethodCode: null, minimumQuoteCount: null,
+          approvalStages: [{ code: "NEED", assignee: "LineManager", mode: "One" }], issues: [] } });
+    }
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
-  return { rules: () => savedRules, reviewNote: () => reviewNote };
+  return { rules: () => savedRules, reviewNote: () => reviewNote, sample: () => lastSample };
 }
 
 test("buying rule draft checks and saves with company currency", async ({ page }) => {
@@ -126,4 +135,18 @@ test("draft author can send a checked rule for review without approval", async (
   await expect(page.getByRole("cell", { name: "PendingReview" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit draft" })).toHaveCount(0);
   expect(state.reviewNote()).toBe("Confirm approvers and budget rules");
+});
+
+test("sample preview explains controls without approving a purchase", async ({ page }) => {
+  const state = await mockErp(page);
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("button", { name: "Check and save draft" }).click();
+  await page.getByRole("button", { name: "Try a sample" }).click();
+  await page.getByLabel("Sample amount (ZMW)").fill("6000");
+  await page.getByLabel("Sample category").fill("IT");
+  await page.getByRole("button", { name: "Check sample" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Matched DEFAULT" })).toBeVisible();
+  await expect(page.getByText("This is not a spending approval.")).toBeVisible();
+  expect(state.sample()).toMatchObject({ currencyCode: "ZMW", grossAmount: 6000, categoryCode: "IT" });
 });
