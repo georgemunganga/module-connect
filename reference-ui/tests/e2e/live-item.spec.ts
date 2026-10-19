@@ -3,6 +3,8 @@ import { expect, test, type Page } from "@playwright/test";
 const companyId = "11111111-1111-4111-8111-111111111111";
 const workerId = "22222222-2222-4222-8222-222222222222";
 const itemId = "66666666-6666-4666-8666-666666666666";
+const priceId = "77777777-7777-4777-8777-777777777777";
+const vendorId = "88888888-8888-4888-8888-888888888888";
 const capabilities = Object.fromEntries([
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
   "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
@@ -16,6 +18,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     unitCode: "each", status: "Active", isPurchasable: true, isStockItem: false,
     isAsset: true, inspectionRequired: true, version: 1,
   } : null;
+  let price: Record<string, unknown> | null = null;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -27,9 +30,10 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
-      permissions: options.canApprove ? ["procurement-access", "procurement-item-approve"] : [],
+      permissions: options.canApprove ? ["procurement-access", "procurement-item-approve", "procurement-item-manage", "procurement-catalog-approve"] : [],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
+    if (path === "/api/procurement/v1/vendors") return json({ items: [{ id: vendorId, number: "SUP-1", displayName: "Office Supply", legalName: "Office Supply Ltd", countryCode: "ZM", status: "Active", isOrderable: true, version: 2, createdAt: "2026-10-19T00:00:00Z" }], total: 1, page: 1, pageSize: 100 });
     if (path === "/api/procurement/v1/items") {
       if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403) : json({ items: item ? [item] : [], total: item ? 1 : 0, page: 1, pageSize: 25 });
       if (request.method() === "POST") {
@@ -58,6 +62,18 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       if (version !== item.version || !reason) return json({ message: "Refresh or add a review reason." }, 409);
       item = { ...item, status: "Active", isPurchasable: true, version: version + 1 };
       return json(item);
+    }
+    if (path === `/api/procurement/v1/items/${itemId}/catalog-entries` && item) {
+      if (request.method() === "GET") return json({ items: price ? [price] : [] });
+      if (request.method() === "POST") {
+        price = { ...request.postDataJSON(), id: priceId, catalogItemId: itemId,
+          status: "Draft", version: 1 };
+        return json(price, 201);
+      }
+    }
+    if (path === `/api/procurement/v1/items/${itemId}/catalog-entries/${priceId}/publish` && price) {
+      price = { ...price, status: "Published", version: 2 };
+      return json(price);
     }
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
@@ -94,6 +110,20 @@ test("authorized reviewer activates an item after checking its category", async 
   await page.getByRole("button", { name: "Activate item" }).click();
   await expect(page.getByText("Available for buying")).toBeVisible();
   await expect(page.getByText("Yes", { exact: true })).toBeVisible();
+});
+
+test("authorized reviewer publishes an approved vendor price", async ({ page }) => {
+  await mockErp(page, { activeItem: true, canApprove: true });
+  await page.goto(`/procurement/workspace/items/${itemId}`);
+  await page.getByRole("combobox", { name: "Vendor" }).click();
+  await page.getByRole("option", { name: "Office Supply" }).click();
+  await page.getByLabel("Unit price (ZMW)").fill("250");
+  await page.getByRole("button", { name: "Add draft price" }).click();
+  await expect(page.getByText("Draft", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Review price" }).click();
+  await page.getByLabel("Price review reason").fill("Checked approved vendor and price");
+  await page.getByRole("button", { name: "Publish price" }).click();
+  await expect(page.getByText("Published", { exact: true })).toBeVisible();
 });
 
 test("item list denial does not show demo items", async ({ page }) => {

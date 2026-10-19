@@ -13,6 +13,16 @@ export type ItemSummary = Pick<ItemDraft, "code" | "name" | "kind" | "categoryCo
 };
 export type ItemDetail = ItemSummary & ItemDraft;
 export type ItemPage = { items: ItemSummary[]; total: number; page: number; pageSize: number };
+export type CatalogPriceDraft = {
+  supplierId: string; currencyCode: string; unitCode: string; unitPrice: number;
+  effectiveFrom: string; effectiveTo?: string | null;
+  taxBasis?: string | null; minimumQuantity?: number | null;
+  maximumQuantity?: number | null; audienceCode?: string | null;
+};
+export type CatalogPrice = Omit<CatalogPriceDraft, "supplierId"> & {
+  id: string; catalogItemId: string; supplierId: string | null;
+  status: string; version: number;
+};
 
 export class ItemApiError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
@@ -90,5 +100,36 @@ export async function activateItem(companyId: string, id: string, version: numbe
     { method: "POST", body: JSON.stringify({ version, reason }) });
   if (!validItem(body) || body.status !== "Active" || !body.isPurchasable)
     throw new ItemApiError(0, "The ERP did not confirm item activation. Refresh before retrying.");
+  return body;
+}
+function validPrice(value: unknown): value is CatalogPrice {
+  return object(value) && guid.test(String(value.id)) && guid.test(String(value.catalogItemId))
+    && typeof value.status === "string" && typeof value.version === "number"
+    && typeof value.unitPrice === "number";
+}
+export async function listCatalogPrices(companyId: string, itemId: string,
+  signal?: AbortSignal): Promise<CatalogPrice[]> {
+  if (!guid.test(itemId)) throw new ItemApiError(0, "The item reference is invalid.");
+  const body: unknown = await request(companyId, `/${itemId}/catalog-entries`, { signal });
+  if (!object(body) || !Array.isArray(body.items) || !body.items.every(validPrice))
+    throw new ItemApiError(0, "The ERP returned an invalid catalog price list.");
+  return body.items;
+}
+export async function addCatalogPrice(companyId: string, itemId: string,
+  draft: CatalogPriceDraft): Promise<CatalogPrice> {
+  if (!guid.test(itemId)) throw new ItemApiError(0, "The item reference is invalid.");
+  const body: unknown = await request(companyId, `/${itemId}/catalog-entries`,
+    { method: "POST", body: JSON.stringify(draft) });
+  if (!validPrice(body) || body.status !== "Draft")
+    throw new ItemApiError(0, "The ERP did not confirm the saved catalog price. Refresh before retrying.");
+  return body;
+}
+export async function publishCatalogPrice(companyId: string, itemId: string,
+  priceId: string, version: number, reason: string): Promise<CatalogPrice> {
+  if (!guid.test(itemId) || !guid.test(priceId)) throw new ItemApiError(0, "The catalog price reference is invalid.");
+  const body: unknown = await request(companyId, `/${itemId}/catalog-entries/${priceId}/publish`,
+    { method: "POST", body: JSON.stringify({ version, reason }) });
+  if (!validPrice(body) || body.status !== "Published")
+    throw new ItemApiError(0, "The ERP did not confirm publication. Refresh before retrying.");
   return body;
 }

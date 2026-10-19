@@ -5,9 +5,11 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Tex
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  activateItem, createItemDraft, deactivateItem, getItemDraft, listItemDrafts, updateItemDraft,
-  type ItemDetail, type ItemDraft, type ItemPage,
+  activateItem, addCatalogPrice, createItemDraft, deactivateItem, getItemDraft,
+  listCatalogPrices, listItemDrafts, publishCatalogPrice, updateItemDraft,
+  type CatalogPrice, type ItemDetail, type ItemDraft, type ItemPage,
 } from "../../../src/platform/procurement-items-api";
+import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 
 const initial: ItemDraft = {
   code: "", name: "", kind: "Goods", categoryCode: "", unitCode: "each",
@@ -117,6 +119,13 @@ export function LiveItemDetail() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [reviewReason, setReviewReason] = useState("");
+  const [prices, setPrices] = useState<CatalogPrice[]>([]);
+  const [vendors, setVendors] = useState<VendorSummary[]>([]);
+  const [priceError, setPriceError] = useState("");
+  const [priceDraft, setPriceDraft] = useState({ supplierId: "", unitPrice: 0,
+    effectiveFrom: new Date().toISOString().slice(0, 10) });
+  const [publishId, setPublishId] = useState<string | null>(null);
+  const [publishReason, setPublishReason] = useState("");
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -124,6 +133,18 @@ export function LiveItemDetail() {
     getItemDraft(company, id, controller.signal).then(setItem)
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [company, id]);
+  useEffect(() => {
+    if (!id) return;
+    const controller = new AbortController();
+    Promise.all([
+      listCatalogPrices(company, id, controller.signal),
+      listVendorDrafts(company, { status: "Active", pageSize: 100, signal: controller.signal }),
+    ]).then(([entries, supplierPage]) => {
+      if (controller.signal.aborted) return;
+      setPrices(entries); setVendors(supplierPage.items.filter((supplier) => supplier.isOrderable));
+    }).catch((cause: unknown) => { if (!controller.signal.aborted) setPriceError(message(cause)); });
     return () => controller.abort();
   }, [company, id]);
   async function retire() {
@@ -142,6 +163,32 @@ export function LiveItemDetail() {
     } catch (cause) { setError(message(cause)); }
     finally { setBusy(false); }
   }
+  async function addPrice(event: FormEvent) {
+    event.preventDefault();
+    if (!item || !priceDraft.supplierId) return;
+    setBusy(true); setPriceError("");
+    try {
+      await addCatalogPrice(company, item.id, {
+        supplierId: priceDraft.supplierId, currencyCode: readiness?.defaultCurrencyCode || "ZMW",
+        unitCode: item.unitCode, unitPrice: priceDraft.unitPrice,
+        effectiveFrom: new Date(`${priceDraft.effectiveFrom}T00:00:00Z`).toISOString(),
+      });
+      setPrices(await listCatalogPrices(company, item.id));
+    } catch (cause) { setPriceError(message(cause)); }
+    finally { setBusy(false); }
+  }
+  async function publishPrice() {
+    if (!item || !publishId || !publishReason.trim()) return;
+    const price = prices.find((value) => value.id === publishId);
+    if (!price) return;
+    setBusy(true); setPriceError("");
+    try {
+      await publishCatalogPrice(company, item.id, price.id, price.version, publishReason.trim());
+      setPrices(await listCatalogPrices(company, item.id));
+      setPublishId(null); setPublishReason("");
+    } catch (cause) { setPriceError(message(cause)); }
+    finally { setBusy(false); }
+  }
   if (loading) return <div role="status" className="p-5 sm:p-8">Loading item…</div>;
   if (!item) return <div role="alert" className="p-5 sm:p-8">{error || "Item not found."}</div>;
   return <div className="p-5 sm:p-8">
@@ -152,6 +199,28 @@ export function LiveItemDetail() {
       <p className="text-sm text-muted-foreground">Check its category and buying details. Another person must review an item you created.</p>
       <Field label="Review reason"><Textarea required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
       <Button disabled={busy || !reviewReason.trim()} onClick={() => void activate()}>{busy ? "Saving…" : "Activate item"}</Button>
+    </div></Panel>}
+    {item.status === "Active" && <Panel title="Catalog prices" className="mt-5"><div className="space-y-4 p-5">
+      <p className="text-sm text-muted-foreground">A vendor price needs a separate review before employees see it in the catalog.</p>
+      {priceError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{priceError}</p>}
+      {prices.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Vendor</th><th>Price</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody>{prices.map((price) => <tr key={price.id}>
+        <td>{vendors.find((vendor) => vendor.id === price.supplierId)?.displayName ?? "Vendor reference unavailable"}</td>
+        <td>{price.currencyCode} {price.unitPrice.toLocaleString()} / {price.unitCode}</td>
+        <td>{price.effectiveFrom?.slice(0, 10)}</td><td><Badge>{price.status}</Badge></td>
+        <td>{price.status === "Draft" && readiness?.permissions.includes("procurement-catalog-approve")
+          ? <Button variant="secondary" onClick={() => { setPublishId(price.id); setPublishReason(""); setPriceError(""); }}>Review price</Button> : "—"}</td>
+      </tr>)}</tbody></RecordTable></div> : <p className="text-sm">No vendor prices added yet.</p>}
+      {publishId && <div className="space-y-3 rounded-lg border border-border p-4">
+        <p className="text-sm">Review the vendor, amount, unit and dates. A different person must approve a price they entered.</p>
+        <Field label="Price review reason"><Textarea required maxLength={1000} value={publishReason} onChange={(event) => setPublishReason(event.target.value)} /></Field>
+        <div className="flex gap-2"><Button disabled={busy || !publishReason.trim()} onClick={() => void publishPrice()}>{busy ? "Saving…" : "Publish price"}</Button><Button variant="secondary" onClick={() => setPublishId(null)}>Cancel</Button></div>
+      </div>}
+      {readiness?.permissions.includes("procurement-item-manage") && <form className="grid gap-3 border-t border-border pt-4 sm:grid-cols-4" onSubmit={(event) => void addPrice(event)}>
+        <Field label="Vendor" className="sm:col-span-2"><Select required value={priceDraft.supplierId} onChange={(event) => setPriceDraft((value) => ({ ...value, supplierId: event.target.value }))}><option value="">Choose approved vendor</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.displayName}</option>)}</Select></Field>
+        <Field label={`Unit price (${readiness.defaultCurrencyCode})`}><Input required type="number" min="0" step="0.0001" value={priceDraft.unitPrice} onChange={(event) => setPriceDraft((value) => ({ ...value, unitPrice: Number(event.target.value) }))} /></Field>
+        <Field label="Price starts"><Input required type="date" value={priceDraft.effectiveFrom} onChange={(event) => setPriceDraft((value) => ({ ...value, effectiveFrom: event.target.value }))} /></Field>
+        <div className="sm:col-span-4 flex items-center gap-3"><Button type="submit" disabled={busy || !vendors.length || !priceDraft.supplierId}>{busy ? "Saving…" : "Add draft price"}</Button>{!vendors.length && <Link to="/vendors" className="text-sm text-primary hover:underline">Add an approved vendor first</Link>}</div>
+      </form>}
     </div></Panel>}
     {item.status !== "Inactive" && <div className="mt-6"><Button variant="danger" disabled={busy} onClick={() => void retire()}>Make inactive</Button></div>}
     <Link to="/items" className="mt-5 inline-block text-sm text-primary hover:underline">Back to items</Link>
