@@ -6,10 +6,11 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   addVendorContact, addVendorSite, addVendorQualification, createVendorDraft, getVendorDraft,
+  getVendorOpenOrders,
   listVendorDrafts, updateVendorDraft, withdrawVendorDraft,
   submitVendorForReview,
-  returnVendorForInformation, approveVendor, rejectVendor, reviewVendorQualification,
-  type VendorContactDraft, type VendorDetail, type VendorDraft, type VendorPage,
+  returnVendorForInformation, approveVendor, rejectVendor, suspendVendor, reviewVendorQualification,
+  type VendorContactDraft, type VendorDetail, type VendorDraft, type VendorOpenOrders, type VendorPage,
   type VendorQualificationDraft, type VendorSiteDraft,
 } from "../../../src/platform/procurement-vendors-api";
 
@@ -44,7 +45,7 @@ export function LiveVendorList() {
     return () => controller.abort();
   }, [legalEntityId, search, status, page]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Vendors" subtitle="Create and manage vendor drafts for this company." actions={<Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link>} />
+    <PageHeader title="Vendors" subtitle="Add vendors, review their details, and manage who can receive new orders." actions={<Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link>} />
     <Panel><div className="p-5">
       <form className="mb-4 flex max-w-xl gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(query.trim()); }}>
         <Input aria-label="Search vendors" placeholder="Search vendor name or company ID" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -148,6 +149,10 @@ export function LiveVendorDetail() {
   const [businessReason, setBusinessReason] = useState("");
   const [reviewReason, setReviewReason] = useState("");
   const [duplicatesReviewed, setDuplicatesReviewed] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [ordersReviewed, setOrdersReviewed] = useState(false);
+  const [openOrders, setOpenOrders] = useState<VendorOpenOrders | null>(null);
+  const [ordersError, setOrdersError] = useState("");
   const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [site, setSite] = useState({ kind: "Billing", addressLine1: "", city: "", countryCode: "ZM" });
   const [qualification, setQualification] = useState({ qualificationType: "", issuer: "", referenceNumber: "", issuedOn: "", expiresOn: "" });
@@ -161,6 +166,15 @@ export function LiveVendorDetail() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId]);
+  useEffect(() => {
+    if (!vendor?.canSuspend) return;
+    const controller = new AbortController();
+    setOpenOrders(null); setOrdersError(""); setOrdersReviewed(false);
+    getVendorOpenOrders(legalEntityId, vendor.id, controller.signal)
+      .then(setOpenOrders)
+      .catch((cause: unknown) => { if (!controller.signal.aborted) setOrdersError(message(cause)); });
+    return () => controller.abort();
+  }, [vendor?.canSuspend, vendor?.id, vendor?.version, legalEntityId]);
   async function act(operation: () => Promise<unknown>): Promise<boolean> {
     setBusy(true); setError("");
     try { await operation(); reload(); return true; }
@@ -177,6 +191,7 @@ export function LiveVendorDetail() {
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     {vendor.status === "Submitted" && <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">Submitted for review{vendor.statusDecidedAt ? ` on ${new Date(vendor.statusDecidedAt).toLocaleDateString()}` : ""}. This vendor cannot receive new purchase orders yet.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""}</p>}
     {vendor.status === "More Information Required" && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">More information is needed before this vendor can be approved.{vendor.statusReason ? ` Reviewer note: ${vendor.statusReason}` : ""} Update the details below, then send the vendor for review again.</p>}
+    {vendor.status === "Suspended" && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">This vendor is on hold and cannot receive new orders.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""} Existing orders remain available for review.</p>}
     {(vendor.canReturnForInformation || vendor.canApprove || vendor.canReject) && <Panel title="Review vendor" className="mb-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Check the company details and documents, then record your decision. Finance verifies payment details separately.</p>
       <Field label="Reason for your decision"><Textarea rows={3} maxLength={1000} required value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
@@ -187,8 +202,23 @@ export function LiveVendorDetail() {
         {vendor.canReject && <Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => rejectVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Reject vendor</Button>}
       </div>
     </div></Panel>}
+    {vendor.canSuspend && <Panel title="Place vendor on hold" className="mb-5"><div className="space-y-3 p-5">
+      <p className="text-sm text-muted-foreground">Stop new orders while the vendor issue is reviewed. Existing orders stay in the system.</p>
+      {ordersError && <p role="alert" className="text-sm text-red-700">{ordersError}</p>}
+      {!openOrders && !ordersError && <p role="status" className="text-sm text-muted-foreground">Checking existing orders…</p>}
+      {openOrders && <div className="text-sm"><p>{openOrders.count === 0 ? "No open orders." : `${openOrders.count} open order${openOrders.count === 1 ? "" : "s"} to review.`}</p>
+        {openOrders.items.length > 0 && <ul className="mt-2 list-disc pl-5">{openOrders.items.map((order) => <li key={order.id}>{order.number} · {order.status} · {order.currencyCode}</li>)}</ul>}
+        {openOrders.count > openOrders.items.length && <p className="mt-2 text-muted-foreground">More open orders exist. Check the full order list before confirming.</p>}
+      </div>}
+      <Field label="Why is this vendor on hold?"><Textarea rows={3} maxLength={1000} value={suspendReason} onChange={(event) => setSuspendReason(event.target.value)} /></Field>
+      <label className="flex items-center gap-3 text-sm"><Switch checked={ordersReviewed} disabled={!openOrders} onChange={(event) => setOrdersReviewed(event.target.checked)} />I checked existing orders and will follow up on any open commitments</label>
+      <Button variant="danger" disabled={busy || !openOrders || !suspendReason.trim() || !ordersReviewed}
+        onClick={() => { void act(() => suspendVendor(legalEntityId, vendor.id, vendor.version, suspendReason, ordersReviewed)); }}>
+        Place on hold
+      </Button>
+    </div></Panel>}
     <div className="grid gap-5 lg:grid-cols-2">
-      <Panel title="Vendor overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Company ID</dt><dd>{vendor.registrationNumber || "—"}</dd><dt>Category</dt><dd>{vendor.categoryCode || "—"}</dd><dt>Country</dt><dd>{vendor.countryCode}</dd><dt>Currency</dt><dd>{vendor.defaultCurrencyCode || "—"}</dd><dt>Payment terms</dt><dd>{vendor.paymentTermRef || "—"}</dd><dt>Orderable</dt><dd>{vendor.isOrderable ? "Yes" : "No — approval required"}</dd></dl></Panel>
+      <Panel title="Vendor overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Company ID</dt><dd>{vendor.registrationNumber || "—"}</dd><dt>Category</dt><dd>{vendor.categoryCode || "—"}</dd><dt>Country</dt><dd>{vendor.countryCode}</dd><dt>Currency</dt><dd>{vendor.defaultCurrencyCode || "—"}</dd><dt>Payment terms</dt><dd>{vendor.paymentTermRef || "—"}</dd><dt>Can receive new orders?</dt><dd>{vendor.isOrderable ? "Yes" : vendor.status === "Suspended" ? "No — on hold" : "No — approval required"}</dd></dl></Panel>
       <Panel title="Contact persons"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.contacts?.map((row) => <li key={row.id}>{row.name}{row.email ? ` · ${row.email}` : ""}</li>)}</ul>{!vendor.contacts?.length && <p className="text-sm text-muted-foreground">No contacts yet.</p>}
         {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); void act(() => addVendorContact(legalEntityId, vendor.id, vendor.version, { ...contact, isPrimary: !vendor.contacts?.length } as VendorContactDraft)).then((saved) => { if (saved) setContact({ name: "", email: "", phone: "" }); }); }}>
           <Field label="Contact name"><Input required value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} /></Field><Field label="Email"><Input type="email" value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} /></Field><Field label="Phone"><Input value={contact.phone} onChange={(event) => setContact({ ...contact, phone: event.target.value })} /></Field><Button type="submit" disabled={busy}>Add contact</Button>

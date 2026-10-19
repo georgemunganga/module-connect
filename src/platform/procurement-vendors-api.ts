@@ -79,10 +79,15 @@ export interface VendorPage {
   pageSize: number;
 }
 
+export type VendorOpenOrders = { supplierId: string; count: number;
+  items: Array<{ id: string; number: string; status: string; currencyCode: string;
+    issuedAt?: string | null }> };
+
 export interface VendorDetail extends VendorSummary {
   canReturnForInformation?: boolean;
   canApprove?: boolean;
   canReject?: boolean;
+  canSuspend?: boolean;
   isLocal?: boolean;
   portalAccessState?: string | null;
   registrationNumber?: string | null;
@@ -252,6 +257,28 @@ export async function rejectVendor(legalEntityId: string, id: string, version: n
     { method: "POST", body: JSON.stringify({ version, reason }) });
   if (!object(body) || body.id !== id || body.status !== "Rejected" || body.isOrderable !== false)
     throw new VendorApiError(0, "The ERP did not confirm vendor rejection. Refresh before retrying.");
+}
+
+export async function suspendVendor(legalEntityId: string, id: string, version: number,
+  reason: string, existingOrdersReviewed: boolean): Promise<void> {
+  if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
+  if (!reason.trim() || reason.trim().length > 1000)
+    throw new VendorApiError(0, "Explain why this vendor must be placed on hold.");
+  const body = await request<unknown>(legalEntityId, `/${id}/suspend`,
+    { method: "POST", body: JSON.stringify({ version, reason: reason.trim(), existingOrdersReviewed }) });
+  if (!object(body) || body.id !== id || body.status !== "Suspended" || body.isOrderable !== false)
+    throw new VendorApiError(0, "The ERP did not confirm the hold. Refresh before retrying.");
+}
+
+export async function getVendorOpenOrders(legalEntityId: string, id: string,
+  signal?: AbortSignal): Promise<VendorOpenOrders> {
+  if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
+  const body = await request<unknown>(legalEntityId, `/${id}/open-orders`, { signal });
+  if (!object(body) || body.supplierId !== id || typeof body.count !== "number"
+    || !Array.isArray(body.items) || body.items.some((item: unknown) => !object(item)
+      || !guid.test(String(item.id)) || typeof item.number !== "string" || typeof item.status !== "string"))
+    throw new VendorApiError(0, "The ERP returned an invalid open-order list.");
+  return body as VendorOpenOrders;
 }
 
 export async function reviewVendorQualification(legalEntityId: string, id: string,

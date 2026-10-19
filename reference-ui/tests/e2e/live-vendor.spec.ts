@@ -111,8 +111,20 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       if (version !== vendor.version || vendor.status !== "Submitted") return json({ message: "Refresh this vendor." }, 409);
       if (!reason || !duplicatesReviewed) return json({ message: "Review duplicates and give a reason." }, 422);
       vendor = { ...vendor, status: "Active", statusReason: reason,
-        isOrderable: true, canReturnForInformation: false, canApprove: false, canReject: false, version: version + 1 };
+        isOrderable: true, canReturnForInformation: false, canApprove: false, canReject: false,
+        canSuspend: true, version: version + 1 };
       return json({ id: vendorId, status: vendor.status, isOrderable: true, version: vendor.version });
+    }
+    if (path === `/api/procurement/v1/vendors/${vendorId}/open-orders` && vendor)
+      return json({ supplierId: vendorId, count: 1, items: [{ id: "77777777-7777-4777-8777-777777777777",
+        number: "PO-101", status: "Issued", currencyCode: "ZMW" }] });
+    if (path === `/api/procurement/v1/vendors/${vendorId}/suspend` && vendor) {
+      const { version, reason, existingOrdersReviewed } = request.postDataJSON();
+      if (version !== vendor.version || vendor.status !== "Active") return json({ message: "Refresh this vendor." }, 409);
+      if (!reason?.trim() || !existingOrdersReviewed) return json({ message: "Give a reason and review existing orders." }, 422);
+      vendor = { ...vendor, status: "Suspended", statusReason: reason, isOrderable: false,
+        canSuspend: false, version: version + 1 };
+      return json({ id: vendorId, status: vendor.status, isOrderable: false, version: vendor.version });
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}/reject` && vendor) {
       const { version, reason } = request.postDataJSON();
@@ -252,6 +264,25 @@ test("reviewer must check duplicates before approving a vendor", async ({ page }
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
   await expect(page.getByText("Yes", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Review vendor" })).toHaveCount(0);
+});
+
+test("reviewer can place an active vendor on hold after checking existing orders", async ({ page }) => {
+  await mockErp(page, { reviewer: true });
+  await page.goto(`/procurement/workspace/vendors/${vendorId}`);
+  await page.getByLabel("Reason for your decision").fill("Registration checked");
+  await page.getByLabel("I checked for duplicate vendors").check();
+  await page.getByRole("button", { name: "Approve vendor" }).click();
+  await expect(page.getByRole("heading", { name: "Place vendor on hold" })).toBeVisible();
+  await expect(page.getByText("1 open order to review.")).toBeVisible();
+  await expect(page.getByText("PO-101 · Issued · ZMW")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Place on hold" })).toBeDisabled();
+  await page.getByLabel("Why is this vendor on hold?").fill("Insurance expired");
+  await page.getByLabel("I checked existing orders and will follow up on any open commitments").check();
+  await page.getByRole("button", { name: "Place on hold" }).click();
+  await expect(page.getByText("This vendor is on hold and cannot receive new orders.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Suspended", { exact: true })).toBeVisible();
+  await expect(page.getByText("No — on hold")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Place vendor on hold" })).toHaveCount(0);
 });
 
 test("reviewer can verify a submitted vendor qualification with a reason", async ({ page }) => {
