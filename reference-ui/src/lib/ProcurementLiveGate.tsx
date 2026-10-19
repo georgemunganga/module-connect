@@ -9,7 +9,7 @@ export const useLiveReadiness = () => useContext(LiveReadiness);
 export const isProcurementLiveMode = liveMode;
 
 /** Live transactions stay closed until their individual API adapters pass acceptance. */
-export function ProcurementLiveGate({ children }: { children: ReactNode }) {
+export function ProcurementLiveGate({ children, unavailable }: { children: ReactNode; unavailable?: ReactNode }) {
   const { selection } = useErpShell();
   const location = useLocation();
   const [state, setState] = useState<{ readiness?: ProcurementReadiness; error?: string }>({});
@@ -42,6 +42,8 @@ export function ProcurementLiveGate({ children }: { children: ReactNode }) {
     || (planPath && state.readiness.capabilities.planningDraft)
     || (referenceSettingsPath && state.readiness.capabilities.configurationDraft)))
     return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
+  if (state.readiness && unavailable)
+    return <LiveReadiness.Provider value={state.readiness}>{unavailable}</LiveReadiness.Provider>;
   return <main className="flex min-h-dvh items-center justify-center bg-background px-5 text-foreground">
     <div className="w-full max-w-lg">
       <h1 className="text-2xl font-semibold">Procurement</h1>

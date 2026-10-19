@@ -115,6 +115,16 @@ test("request list denial shows no local demo records", async ({ page }) => {
   await expect(page.getByText("Office equipment for new team")).toHaveCount(0);
 });
 
+test("pending live workflows keep the ERP menu without sample transactions", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/approvals");
+  await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
+  await expect(page.getByText("This workflow is being connected to your ERP.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Office equipment for new team")).toHaveCount(0);
+  await page.getByRole("link", { name: "My requests" }).last().click();
+  await expect(page.getByRole("heading", { name: "My Requests" })).toBeVisible();
+});
+
 test("stale request edit keeps entered lines", async ({ page }) => {
   await mockErp(page, { staleUpdate: true });
   await page.goto("/procurement/workspace/requests/new");

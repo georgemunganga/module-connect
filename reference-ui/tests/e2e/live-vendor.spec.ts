@@ -164,7 +164,7 @@ test("vendor draft persists through the ERP API across refresh, edit and withdra
   await expect(page.getByRole("heading", { name: "Vendors" })).toBeVisible();
   await expect(page.getByText("Withdrawn")).toBeVisible();
   await page.getByRole("link", { name: "Home", exact: true }).click();
-  await expect(page.getByText("Procurement transaction screens will open as their live workflows are verified.", { exact: false })).toBeVisible();
+  await expect(page.getByText("This workflow is being connected to your ERP.", { exact: false })).toBeVisible();
   await expect(page.getByText("Office equipment for new team")).toHaveCount(0);
 });
 
