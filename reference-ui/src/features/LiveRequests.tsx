@@ -9,6 +9,7 @@ import {
   getOwnRequestBudgetStatus, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
   type OwnBudgetStatus, type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
 } from "../../../src/platform/procurement-requests-api";
+import { listPublishedCatalog, type PublishedCatalogPrice } from "../../../src/platform/procurement-catalog-api";
 
 const emptyLine = (): RequestLineDraft => ({ description: "", unitCode: "each", requestedQuantity: 1, estimatedUnitPrice: 0, categoryCode: "" });
 const errorText = (error: unknown) => error instanceof Error ? error.message : "The request action failed. Try again.";
@@ -53,6 +54,21 @@ export function LiveRequestEditor() {
   const [loading, setLoading] = useState(Boolean(id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogPrices, setCatalogPrices] = useState<PublishedCatalogPrice[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    setCatalogPrices([]); setCatalogLoading(true); setCatalogError("");
+    const timer = window.setTimeout(() => {
+      listPublishedCatalog(legalEntityId, catalogSearch, controller.signal)
+        .then((page) => setCatalogPrices(page.items))
+        .catch((cause: unknown) => { if (!controller.signal.aborted) setCatalogError(errorText(cause)); })
+        .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false); });
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [legalEntityId, catalogSearch]);
   useEffect(() => {
     if (!id) { setDraft({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }); return; }
     const controller = new AbortController();
@@ -70,6 +86,22 @@ export function LiveRequestEditor() {
   }, [legalEntityId, defaultCurrencyCode, id]);
   const field = (key: keyof RequestDraft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   const lineField = (index: number, key: keyof RequestLineDraft, value: string | number | null) => setDraft((current) => ({ ...current, lines: current.lines.map((line, at) => at === index ? { ...line, [key]: value } : line) }));
+  function addCatalogPrice(price: PublishedCatalogPrice) {
+    if (draft.currencyCode?.toUpperCase() !== price.currencyCode.toUpperCase()) {
+      setError(`This price is in ${price.currencyCode}. Choose that request currency before adding it.`);
+      return;
+    }
+    const line: RequestLineDraft = {
+      description: price.name, unitCode: price.unitCode, requestedQuantity: 1,
+      estimatedUnitPrice: price.estimatedUnitPrice, categoryCode: price.categoryCode,
+      purchaseType: price.kind, catalogItemId: price.itemId, catalogEntryId: price.entryId,
+      catalogPublishedVersion: price.publishedVersion, preferredSupplierId: price.supplierId,
+    };
+    setDraft((current) => ({ ...current, purpose: current.purpose || `Purchase ${price.name}`,
+      lines: current.lines.length === 1 && !current.lines[0].description.trim()
+        ? [line] : [...current.lines, line] }));
+    setError("");
+  }
   const total = draft.lines.reduce((sum, line) => sum + line.requestedQuantity * line.estimatedUnitPrice * (1 - (line.discountPercent || 0) / 100), 0);
   async function save(event: FormEvent) {
     event.preventDefault(); setSaving(true); setError("");
@@ -94,13 +126,24 @@ export function LiveRequestEditor() {
         <Field label="Note for approver" className="sm:col-span-2"><Textarea rows={3} value={draft.notesToApprover ?? ""} onChange={(event) => field("notesToApprover", event.target.value)} /></Field>
       </div></Panel>
       <Panel title="What to buy"><div className="space-y-4 p-5">
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <Field label="Search approved items"><Input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search by name or item code" /></Field>
+          {catalogLoading ? <p role="status" className="text-sm">Loading approved items…</p>
+            : catalogError ? <p role="alert" className="text-sm text-red-700">{catalogError}</p>
+            : catalogPrices.length ? <div className="grid gap-2 sm:grid-cols-2">{catalogPrices.map((price) =>
+              <div key={price.entryId} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+                <div><p className="font-medium">{price.name}</p><p className="text-muted-foreground">{price.supplierName} · {price.currencyCode} {price.estimatedUnitPrice.toLocaleString()} / {price.unitCode}</p></div>
+                <Button type="button" variant="secondary" onClick={() => addCatalogPrice(price)}>Use item</Button>
+              </div>)}</div> : <p className="text-sm text-muted-foreground">No approved items found. You can enter an item below.</p>}
+        </div>
         {draft.lines.map((line, index) => <div className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-6" key={line.id ?? `new-${index}`}>
-          <Field label={`Item or service ${index + 1}`} className="sm:col-span-3"><Input required maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field>
+          {line.catalogEntryId && <div className="sm:col-span-6 flex items-center justify-between gap-3 text-sm"><span>From approved catalog · price checked when you send the request</span><Button type="button" variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: current.lines.map((value, at) => at === index ? { ...value, catalogEntryId: null, catalogItemId: null, catalogPublishedVersion: null, preferredSupplierId: null } : value) }))}>Switch to custom item</Button></div>}
+          <Field label={`Item or service ${index + 1}`} className="sm:col-span-3"><Input required readOnly={Boolean(line.catalogEntryId)} maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field>
           <Field label="Quantity"><Input required type="number" min="0.0001" step="0.0001" value={line.requestedQuantity} onChange={(event) => lineField(index, "requestedQuantity", Number(event.target.value))} /></Field>
-          <Field label="Unit"><Input required value={line.unitCode} onChange={(event) => lineField(index, "unitCode", event.target.value)} /></Field>
-          <Field label="Estimated unit price"><Input required type="number" min="0" step="0.0001" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", Number(event.target.value))} /></Field>
-          <Field label="Category"><Input value={line.categoryCode ?? ""} onChange={(event) => lineField(index, "categoryCode", event.target.value)} /></Field>
-          <Field label="Type"><Input value={line.purchaseType ?? ""} onChange={(event) => lineField(index, "purchaseType", event.target.value)} /></Field>
+          <Field label="Unit"><Input required readOnly={Boolean(line.catalogEntryId)} value={line.unitCode} onChange={(event) => lineField(index, "unitCode", event.target.value)} /></Field>
+          <Field label="Estimated unit price"><Input required readOnly={Boolean(line.catalogEntryId)} type="number" min="0" step="0.0001" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", Number(event.target.value))} /></Field>
+          <Field label="Category"><Input readOnly={Boolean(line.catalogEntryId)} value={line.categoryCode ?? ""} onChange={(event) => lineField(index, "categoryCode", event.target.value)} /></Field>
+          <Field label="Type"><Input readOnly={Boolean(line.catalogEntryId)} value={line.purchaseType ?? ""} onChange={(event) => lineField(index, "purchaseType", event.target.value)} /></Field>
           <Field label="Needed by"><Input type="date" value={line.neededBy ?? ""} onChange={(event) => lineField(index, "neededBy", event.target.value)} /></Field>
           <div className="flex items-end">{draft.lines.length > 1 && <Button variant="ghost" aria-label={`Remove line ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((_, at) => at !== index) }))}><Trash2 size={16} /></Button>}</div>
         </div>)}

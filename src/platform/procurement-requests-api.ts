@@ -2,7 +2,8 @@
 export type RequestLineDraft = {
   id?: string | null; description: string; unitCode: string;
   requestedQuantity: number; estimatedUnitPrice: number;
-  catalogItemId?: string | null; preferredSupplierId?: string | null;
+  catalogItemId?: string | null; catalogEntryId?: string | null;
+  catalogPublishedVersion?: number | null; preferredSupplierId?: string | null;
   categoryCode?: string | null; purchaseType?: string | null; neededBy?: string | null;
   discountPercent?: number | null; taxCodeRef?: string | null;
   costCenterRef?: string | null; projectRef?: string | null;

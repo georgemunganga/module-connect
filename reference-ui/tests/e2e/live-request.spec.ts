@@ -4,6 +4,9 @@ const companyId = "11111111-1111-4111-8111-111111111111";
 const workerId = "22222222-2222-4222-8222-222222222222";
 const requestId = "77777777-7777-4777-8777-777777777777";
 const lineId = "88888888-8888-4888-8888-888888888888";
+const catalogEntryId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const catalogItemId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const catalogSupplierId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const capabilities = Object.fromEntries([
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
   "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
@@ -25,6 +28,12 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
+    if (path === "/api/procurement/v1/catalog") return json({ items: [{
+      entryId: catalogEntryId, itemId: catalogItemId, supplierId: catalogSupplierId,
+      code: "CHAIR-1", name: "Office chair", kind: "Goods", categoryCode: "OFFICE",
+      unitCode: "each", estimatedUnitPrice: 250, currencyCode: "ZMW",
+      supplierName: "Office Supply", publishedVersion: 1,
+    }], total: 1, page: 1, pageSize: 25 });
     if (path === "/api/procurement/v1/requests") {
       if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403) : json({ records: record ? [{ ...record, lineCount: record.lines.length }] : [], count: record ? 1 : 0, limit: 50, offset: 0 });
       if (request.method() === "POST") {
@@ -67,6 +76,23 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
 }
+
+test("employee selects a published catalog price and saves its reference on the request", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/requests/new");
+  await expect(page.getByText("Office Supply · ZMW 250 / each")).toBeVisible();
+  await page.getByRole("button", { name: "Use item" }).click();
+  await expect(page.getByLabel("Item or service 1")).toHaveValue("Office chair");
+  await expect(page.getByLabel("Estimated unit price")).toHaveValue("250");
+  await expect(page.getByText("From approved catalog", { exact: false })).toBeVisible();
+  const saving = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/procurement/v1/requests" && request.method() === "POST");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  const payload = (await saving).postDataJSON();
+  expect(payload.lines[0].catalogEntryId).toBe(catalogEntryId);
+  expect(payload.lines[0].catalogItemId).toBe(catalogItemId);
+  expect(payload.lines[0].preferredSupplierId).toBe(catalogSupplierId);
+  await expect(page.getByRole("heading", { name: "Purchase Office chair" })).toBeVisible();
+});
 
 test("request draft lines persist, edit and withdraw", async ({ page }) => {
   await mockErp(page);
