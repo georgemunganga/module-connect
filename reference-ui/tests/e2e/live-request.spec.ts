@@ -14,7 +14,7 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "requestDraft"]));
 type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean } = {}) {
   let record: RecordValue | null = null;
   let policyChecked = false;
   let policyBlocked = Boolean(options.blockedPolicy);
@@ -74,11 +74,14 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       const blockers = [
         ...(!options.matchedPolicy && !policyChecked || policyBlocked ? ["BuyingRulesNotMatched"] : []),
         ...(!options.confirmedBudget ? ["FinanceReservationNotConfirmed"] : []),
+        ...(options.changedRouteLines ? ["PinnedDecisionLinesChanged"] : []),
       ];
       return json({ requestId, requestVersion: record.version, estimatedAmount: 250,
         currencyCode: record.currencyCode, prerequisitesMet: blockers.length === 0,
         blockers, isAuthority: false, canOpenCase: false,
-        approvalRoute: { hasSingleRoute: true, blockers: [], lines: [{ lineId: record.lines[0]?.id,
+        approvalRoute: { hasSingleRoute: !options.changedRouteLines,
+          blockers: options.changedRouteLines ? ["PinnedDecisionLinesChanged"] : [],
+          lines: options.changedRouteLines ? [] : [{ lineId: record.lines[0]?.id,
           stages: [{ code: "NEED", assignee: "LineManager", mode: "One" }] }] },
         nextStep: "An independent approver is still required." });
     }
@@ -236,6 +239,20 @@ test("a blocked rule result remains visible for Procurement follow-up", async ({
   await expect(page.getByText("Needs attention: InactiveReference")).toBeVisible();
   await expect(page.getByRole("button", { name: "Return for changes" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Check buying rules" })).toHaveCount(0);
+});
+
+test("Procurement explains when the saved approval route no longer matches request items", async ({ page }) => {
+  await mockErp(page, { policyReviewer: true, changedRouteLines: true });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Office supplies");
+  await page.getByLabel("Item or service 1").fill("Paper");
+  await page.getByLabel("Needed by").first().fill("2026-11-30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).click();
+  await page.getByRole("link", { name: "Back to my requests" }).click();
+  await page.getByRole("button", { name: "View details" }).click();
+  await expect(page.getByText("The request items changed after the buying-rule check. Run it again.")).toBeVisible();
+  await expect(page.getByText("Approval route from buying rules")).toHaveCount(0);
 });
 
 test("Procurement returns a blocked request with a note and requester resubmits corrected details", async ({ page }) => {

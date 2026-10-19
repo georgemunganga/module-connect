@@ -23,6 +23,12 @@ const approvalBlockerLabels: Record<string, string> = {
   BuyingRulesNotMatched: "The buying rules still need a successful check.",
   PinnedPolicyUnavailable: "The saved buying rule is no longer available for review.",
   FinanceReservationNotConfirmed: "Finance has not confirmed the full amount in this currency.",
+  PinnedDecisionMismatch: "The saved approval route belongs to another request or rule version.",
+  PinnedDecisionInvalid: "The saved approval route cannot be read. Run the buying-rule check again.",
+  PinnedDecisionLinesInvalid: "The saved approval route contains repeated or missing request items.",
+  PinnedDecisionLinesChanged: "The request items changed after the buying-rule check. Run it again.",
+  ApprovalStageMissing: "The saved approval route is missing an approval step.",
+  MixedLineApprovalRoutes: "Request items need separate approval routes before approval can start.",
 };
 function context() {
   const readiness = useLiveReadiness();
