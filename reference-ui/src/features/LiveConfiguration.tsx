@@ -3,7 +3,7 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } 
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  activateCategory, createReference, listReferences, updateReference,
+  activateReference, createReference, listReferences, updateReference,
   type ReferenceDraft, type ReferenceKind, type ReferencePage, type ReferenceRecord,
 } from "../../../src/platform/procurement-configuration-api";
 
@@ -66,7 +66,7 @@ export function LiveConfiguration() {
     if (!activating || !reviewReason.trim()) return;
     setSaving(true); setError("");
     try {
-      await activateCategory(companyId, activating.id, activating.version, reviewReason.trim());
+      await activateReference(companyId, kind, activating.id, activating.version, reviewReason.trim());
       setActivating(null); setReviewReason(""); setRefresh((value) => value + 1);
     } catch (cause) { setError(errorText(cause)); }
     finally { setSaving(false); }
@@ -79,14 +79,14 @@ export function LiveConfiguration() {
     <Panel><div className="p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{labels[kind].plural}</h2><p className="text-sm text-muted-foreground">{labels[kind].description}</p></div><Button onClick={() => begin()}>Add {labels[kind].singular}</Button></div>
       {listError && <p role="alert" className="mb-4 text-sm text-red-600">{listError}</p>}
-      {loading ? <p role="status">Loading {labels[kind].plural.toLowerCase()}…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Code</th><th>Name</th><th>{kind === "categories" ? "Parent" : "Description"}</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td>{item.code}</td><td>{item.name}</td><td>{kind === "categories" ? item.parentCode || "—" : item.description || "—"}</td><td><Badge>{item.status}</Badge></td><td>{item.status === "Draft" ? <div className="flex gap-2"><Button variant="secondary" onClick={() => begin(item)}>Edit</Button>{kind === "categories" && readiness.permissions.includes("procurement-configuration-approve") && <Button variant="secondary" onClick={() => { setActivating(item); setEditing(null); setReviewReason(""); setError(""); }}>Review</Button>}</div> : "—"}</td></tr>)}</tbody></RecordTable></div> : <EmptyState title={`No ${labels[kind].plural.toLowerCase()} yet`} description={`Add a draft ${labels[kind].singular} for this company.`} action={<Button onClick={() => begin()}>Add {labels[kind].singular}</Button>} />}
+      {loading ? <p role="status">Loading {labels[kind].plural.toLowerCase()}…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Code</th><th>Name</th><th>{kind === "categories" ? "Parent" : "Description"}</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td>{item.code}</td><td>{item.name}</td><td>{kind === "categories" ? item.parentCode || "—" : item.description || "—"}</td><td><Badge>{item.status}</Badge></td><td>{item.status === "Draft" ? <div className="flex gap-2"><Button variant="secondary" onClick={() => begin(item)}>Edit</Button>{readiness.permissions.includes("procurement-configuration-approve") && <Button variant="secondary" onClick={() => { setActivating(item); setEditing(null); setReviewReason(""); setError(""); }}>Review</Button>}</div> : "—"}</td></tr>)}</tbody></RecordTable></div> : <EmptyState title={`No ${labels[kind].plural.toLowerCase()} yet`} description={`Add a draft ${labels[kind].singular} for this company.`} action={<Button onClick={() => begin()}>Add {labels[kind].singular}</Button>} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
     {activating && <form onSubmit={activate}><Panel title={`Review ${activating.name}`}><div className="space-y-3 p-5">
-      <p className="text-sm text-muted-foreground">Check the category and its parent before making it available for items. Another person must review a category you created.</p>
+      <p className="text-sm text-muted-foreground">{kind === "categories" ? "Check the category and its parent before making it available for items." : "Check the buying method and any linked policy before making it available."} Another person must review a {labels[kind].singular} you created.</p>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <Field label="Review reason"><Textarea required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
-      <div className="flex gap-2"><Button type="submit" disabled={saving || !reviewReason.trim()}>{saving ? "Saving…" : "Activate category"}</Button><Button variant="secondary" onClick={() => setActivating(null)}>Cancel</Button></div>
+      <div className="flex gap-2"><Button type="submit" disabled={saving || !reviewReason.trim()}>{saving ? "Saving…" : `Activate ${labels[kind].singular}`}</Button><Button variant="secondary" onClick={() => setActivating(null)}>Cancel</Button></div>
     </div></Panel></form>}
     {editing && <form onSubmit={save}><Panel title={editing === "new" ? `New ${labels[kind].singular}` : `Edit ${labels[kind].singular}`}><div className="grid gap-4 p-5 sm:grid-cols-2">
       {error && <p role="alert" className="sm:col-span-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current setting before retrying.</span>}</p>}

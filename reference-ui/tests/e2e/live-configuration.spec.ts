@@ -52,11 +52,12 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
           return json(saved);
         }
       }
-      if (kind === "categories" && path === `${base}/${id}/activate` && current) {
+      if (path === `${base}/${id}/activate` && current) {
         const { version, reason } = request.postDataJSON();
         if (version !== current.version || !reason) return json({ message: "Refresh or add a review reason." }, 409);
-        category = { ...current, status: "Active", version: current.version + 1 };
-        return json(category);
+        const activated = { ...current, status: "Active", version: current.version + 1 };
+        if (kind === "categories") category = activated; else method = activated;
+        return json(activated);
       }
     }
     return json({ message: `Unexpected route: ${path}` }, 404);
@@ -97,6 +98,23 @@ test("separate reviewer activates a category for buying", async ({ page }) => {
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByLabel("Review reason").fill("Checked category and parent");
   await page.getByRole("button", { name: "Activate category" }).click();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+});
+
+test("separate reviewer activates a buying method", async ({ page }) => {
+  await mockErp(page, { canApprove: true });
+  await page.goto("/procurement/workspace/settings/reference-data");
+  await page.getByRole("tab", { name: "Buying methods" }).click();
+  await page.getByRole("button", { name: "Add buying method" }).first().click();
+  await page.getByRole("textbox", { name: "Code", exact: true }).fill("DIRECT");
+  await page.getByLabel("Name").fill("Direct purchase");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByText("Check the buying method and any linked policy", { exact: false })).toBeVisible();
+  await page.getByLabel("Review reason").fill("Reviewed method and scope");
+  const review = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith("/configuration/methods/" + methodId + "/activate"));
+  await page.getByRole("button", { name: "Activate buying method" }).click();
+  expect((await review).postDataJSON()).toMatchObject({ version: 1, reason: "Reviewed method and scope" });
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
 });
 

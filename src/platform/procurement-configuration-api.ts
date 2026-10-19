@@ -75,12 +75,15 @@ export async function updateReference(companyId: string, kind: ReferenceKind,
   if (!valid(body)) throw new ConfigurationApiError(0, "The ERP did not confirm the setting update. Refresh before retrying.");
   return body;
 }
-export async function activateCategory(companyId: string, id: string, version: number,
+export async function activateReference(companyId: string, kind: ReferenceKind, id: string, version: number,
   reason: string): Promise<ReferenceRecord> {
-  if (!guid.test(id)) throw new ConfigurationApiError(0, "The category reference is invalid.");
-  const body = await call(companyId, "categories", `/${id}/activate`,
+  if (!guid.test(id)) throw new ConfigurationApiError(0, "The setting reference is invalid.");
+  const body = await call(companyId, kind, `/${id}/activate`,
     { method: "POST", body: JSON.stringify({ version, reason }) });
   if (!valid(body) || body.status !== "Active")
-    throw new ConfigurationApiError(0, "The ERP did not confirm category activation. Refresh before retrying.");
+    throw new ConfigurationApiError(0, "The ERP did not confirm activation. Refresh before retrying.");
   return body;
 }
+
+export const activateCategory = (companyId: string, id: string, version: number, reason: string) =>
+  activateReference(companyId, "categories", id, version, reason);
