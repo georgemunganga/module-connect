@@ -77,7 +77,10 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       ];
       return json({ requestId, requestVersion: record.version, estimatedAmount: 250,
         currencyCode: record.currencyCode, prerequisitesMet: blockers.length === 0,
-        blockers, isAuthority: false, nextStep: "An independent approver is still required." });
+        blockers, isAuthority: false, canOpenCase: false,
+        approvalRoute: { hasSingleRoute: true, blockers: [], lines: [{ lineId: record.lines[0]?.id,
+          stages: [{ code: "NEED", assignee: "LineManager", mode: "One" }] }] },
+        nextStep: "An independent approver is still required." });
     }
     if (path === `/api/procurement/v1/requests/${requestId}/withdraw` && record) {
       const { version, reason } = request.postDataJSON();
@@ -246,6 +249,9 @@ test("Procurement returns a blocked request with a note and requester resubmits 
   await page.getByRole("button", { name: "Send for review" }).click();
   await page.getByRole("link", { name: "Back to my requests" }).click();
   await page.getByRole("button", { name: "View details" }).click();
+  await expect(page.getByText("Approval route from buying rules")).toBeVisible();
+  await expect(page.getByText("NEED · LineManager")).toBeVisible();
+  await expect(page.getByText("No approval task has opened.", { exact: false })).toBeVisible();
   await expect(page.getByRole("cell", { name: "UNKNOWN" })).toBeVisible();
   await expect(page.getByText("The buying rules still need a successful check.")).toBeVisible();
   await expect(page.getByText("Finance has not confirmed the full amount in this currency.")).toBeVisible();

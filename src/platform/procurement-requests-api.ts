@@ -41,6 +41,8 @@ export type PolicyCheckResult = { requestId: string; requestVersion: number;
 export type ApprovalReadinessStatus = { requestId: string; requestVersion: number;
   estimatedAmount: number; currencyCode: string; prerequisitesMet: boolean;
   blockers: string[]; policyEvaluationId?: string | null; financeCheckId?: string | null;
+  approvalRoute?: { hasSingleRoute: boolean; blockers: string[]; lines: Array<{ lineId: string;
+    stages: Array<{ code: string; assignee: string; mode: string }> }> }; canOpenCase?: false;
   isAuthority: false; nextStep: string };
 export class RequestApiError extends Error { constructor(public readonly status: number, message: string) { super(message); } }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

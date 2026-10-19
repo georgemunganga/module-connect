@@ -121,6 +121,13 @@ export function LiveRequestList() {
           : <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
             {reviewReadiness.blockers.map((blocker) => <li key={blocker}>{approvalBlockerLabels[blocker] || "This request needs another review."}</li>)}
           </ul>}
+        {reviewReadiness.approvalRoute?.lines.length ? <div className="mt-3">
+          <p className="font-medium">Approval route from buying rules</p>
+          {reviewReadiness.approvalRoute.hasSingleRoute
+            ? <ol className="mt-1 list-decimal pl-5 text-muted-foreground">{reviewReadiness.approvalRoute.lines[0].stages.map((stage, index) => <li key={`${stage.code}-${index}`}>{stage.code} · {stage.assignee}</li>)}</ol>
+            : <p className="mt-1 text-amber-800">Request lines need different approval routes. Procurement must split the approvals by line.</p>}
+          <p className="mt-1 text-xs text-muted-foreground">This shows the rule route only. No approval task has opened.</p>
+        </div> : null}
       </div>}
       {returning && <div className="mt-4 max-w-xl space-y-3 rounded-lg border border-border p-4"><p className="font-medium">Return {returning.number} for changes</p><Field label="What should the requester fix?"><Textarea rows={3} maxLength={1000} value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /></Field><p className="text-xs text-muted-foreground">A confirmed Finance reservation must be released before a request can be returned.</p><div className="flex gap-2"><Button disabled={savingReturn || !returnReason.trim()} onClick={() => void saveReturn()}>{savingReturn ? "Returning…" : "Send back to requester"}</Button><Button variant="secondary" disabled={savingReturn} onClick={() => setReturning(null)}>Cancel</Button></div></div>}
       {policyQueue && policyQueue.count > policyQueue.limit && <div className="mt-3 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={policyOffset === 0} onClick={() => setPolicyOffset(Math.max(0, policyOffset - policyQueue.limit))}>Previous</Button><span>{policyOffset + 1}–{Math.min(policyOffset + policyQueue.records.length, policyQueue.count)} of {policyQueue.count}</span><Button variant="secondary" disabled={policyOffset + policyQueue.limit >= policyQueue.count} onClick={() => setPolicyOffset(policyOffset + policyQueue.limit)}>Next</Button></div>}
