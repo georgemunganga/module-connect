@@ -135,7 +135,7 @@ export function LiveRequestDetail() {
   useEffect(() => {
     if (!id || record?.status !== "Submitted") { setBudget(null); return; }
     const controller = new AbortController();
-    setBudgetError("");
+    setBudget(null); setBudgetError("");
     getOwnRequestBudgetStatus(legalEntityId, id, controller.signal).then(setBudget)
       .catch((cause: unknown) => { if (!controller.signal.aborted) setBudgetError(errorText(cause)); });
     return () => controller.abort();
