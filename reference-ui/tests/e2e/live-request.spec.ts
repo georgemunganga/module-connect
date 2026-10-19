@@ -17,6 +17,7 @@ type RecordValue = Record<string, unknown> & { id: string; version: number; purp
 async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean } = {}) {
   let record: RecordValue | null = null;
   let policyChecked = false;
+  let policyBlocked = Boolean(options.blockedPolicy);
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -28,7 +29,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
-      permissions: options.policyReviewer ? ["procurement-policy-evaluate"] : [],
+      permissions: options.policyReviewer ? ["procurement-policy-evaluate", "procurement-request-return"] : [],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/catalog") return json({ items: [{
@@ -43,8 +44,8 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
         currencyCode: record.currencyCode, submittedAt: record.submittedAt,
         version: record.version, lineCount: record.lines.length,
         estimatedBaseAmount: record.lines.reduce((sum, line) => sum + Number(line.requestedQuantity) * Number(line.estimatedUnitPrice), 0),
-        policyOutcome: options.blockedPolicy ? "Blocked" : null,
-        policyResultCode: options.blockedPolicy ? "InactiveReference" : null,
+        policyOutcome: policyBlocked ? "Blocked" : null,
+        policyResultCode: policyBlocked ? "InactiveReference" : null,
       }] : [], count: record?.status === "Submitted" && !policyChecked ? 1 : 0, limit: 50, offset: 0 });
     if (path === "/api/procurement/v1/requests") {
       if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403) : json({ records: record ? [{ ...record, lineCount: record.lines.length }] : [], count: record ? 1 : 0, limit: 50, offset: 0 });
@@ -63,9 +64,12 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
         if (input.version !== record.version) return json({ message: "Stale version" }, 409);
         record = { ...record, ...input, version: input.version + 1,
           lines: input.lines.map((line: Record<string, unknown>, index: number) => ({ ...line, id: line.id || (index ? "99999999-9999-4999-8999-999999999999" : lineId), lineNumber: index + 1, approvalStatus: "Pending" })) };
+        if (record.lines.every((line) => line.categoryCode !== "UNKNOWN")) policyBlocked = false;
         return json(record);
       }
     }
+    if (path === `/api/procurement/v1/requests/${requestId}/review` && record)
+      return record.status === "Submitted" ? json(record) : json({ message: "Request not available for review." }, 404);
     if (path === `/api/procurement/v1/requests/${requestId}/withdraw` && record) {
       const { version, reason } = request.postDataJSON();
       if (version !== record.version) return json({ message: "Refresh this request." }, 409);
@@ -73,13 +77,22 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       record = { ...record, status: "Withdrawn", version: record.version + 1 };
       return json(record);
     }
+    if (path === `/api/procurement/v1/requests/${requestId}/return-for-changes` && record) {
+      const { version, reason } = request.postDataJSON();
+      if (record.status !== "Submitted" || version !== record.version) return json({ message: "Refresh this request." }, 409);
+      if (!reason?.trim()) return json({ message: "Explain what should change." }, 422);
+      if (options.confirmedBudget) return json({ code: "budget-reservation-active", message: "Finance must release the confirmed reservation." }, 409);
+      record = { ...record, status: "ReturnedForChanges", approvalState: "ReturnedForChanges",
+        returnReason: reason, returnedAt: "2026-10-19T15:00:00Z", version: record.version + 1 };
+      return json(record);
+    }
     if (path === `/api/procurement/v1/requests/${requestId}/submit` && record) {
       const { version } = request.postDataJSON();
-      if (version !== record.version || record.status !== "Draft") return json({ message: "Refresh this request." }, 409);
+      if (version !== record.version || !["Draft", "ReturnedForChanges"].includes(record.status)) return json({ message: "Refresh this request." }, 409);
       if (!record.neededBy && record.lines.some((line) => !line.neededBy))
         return json({ message: "Choose a needed-by date." }, 422);
       record = { ...record, status: "Submitted", approvalState: "PendingPolicyAndBudget",
-        submittedAt: "2026-10-19T00:00:00Z", version: record.version + 1 };
+        returnReason: null, returnedAt: null, submittedAt: "2026-10-19T00:00:00Z", version: record.version + 1 };
       return json(record);
     }
     if (path === `/api/procurement/v1/requests/${requestId}/budget-status` && record)
@@ -94,8 +107,8 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     }
     if (path === `/api/procurement/v1/requests/${requestId}/policy-status` && record)
       return json({ requestId, requestVersion: record.version,
-        status: options.blockedPolicy ? "Blocked" : options.matchedPolicy || policyChecked ? "Matched" : "Pending", isAuthority: false,
-        evaluation: options.blockedPolicy ? { summary: "Buying rules need correction before this request can proceed.",
+        status: record.status !== "Submitted" ? "NotSubmitted" : policyBlocked ? "Blocked" : options.matchedPolicy || policyChecked ? "Matched" : "Pending", isAuthority: false,
+        evaluation: policyBlocked ? { summary: "Buying rules need correction before this request can proceed.",
           resultCode: "InactiveReference", policyVersionNumber: 1, evaluatedAt: "2026-10-19T14:00:00Z" }
           : options.matchedPolicy || policyChecked ? { summary: "Buying rules matched. Funding and independent approvals are still required.",
           resultCode: "RulesMatched", policyVersionNumber: 1, evaluatedAt: "2026-10-19T14:00:00Z" } : null });
@@ -209,8 +222,36 @@ test("a blocked rule result remains visible for Procurement follow-up", async ({
   await expect(page.getByText("Buying rules need correction before this request can proceed.")).toBeVisible();
   await page.getByRole("link", { name: "Back to my requests" }).click();
   await expect(page.getByText("Needs attention: InactiveReference")).toBeVisible();
-  await expect(page.getByText("Contact Procurement for next steps")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Return for changes" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Check buying rules" })).toHaveCount(0);
+});
+
+test("Procurement returns a blocked request with a note and requester resubmits corrected details", async ({ page }) => {
+  await mockErp(page, { policyReviewer: true, blockedPolicy: true });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Correct buying category");
+  await page.getByLabel("Item or service 1").fill("Laptop");
+  await page.getByLabel("Category").fill("UNKNOWN");
+  await page.getByLabel("Needed by").first().fill("2026-11-30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).click();
+  await page.getByRole("link", { name: "Back to my requests" }).click();
+  await page.getByRole("button", { name: "View details" }).click();
+  await expect(page.getByRole("cell", { name: "UNKNOWN" })).toBeVisible();
+  await page.getByRole("button", { name: "Close details" }).click();
+  await page.getByRole("button", { name: "Return for changes" }).click();
+  await expect(page.getByRole("button", { name: "Send back to requester" })).toBeDisabled();
+  await page.getByLabel("What should the requester fix?").fill("Choose an active category.");
+  await page.getByRole("button", { name: "Send back to requester" }).click();
+  await expect(page.getByText("was returned to the requester with your note", { exact: false })).toBeVisible();
+  await page.getByRole("link", { name: "Correct buying category" }).click();
+  await expect(page.getByText("Choose an active category.")).toBeVisible();
+  await page.getByRole("link", { name: "Edit request" }).click();
+  await page.getByLabel("Category").fill("OFFICE");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Send for review" }).click();
+  await expect(page.getByText("Choose an active category.")).toHaveCount(0);
+  await expect(page.getByText("This request has not been approved", { exact: false })).toBeVisible();
 });
 
 test("request list denial shows no local demo records", async ({ page }) => {

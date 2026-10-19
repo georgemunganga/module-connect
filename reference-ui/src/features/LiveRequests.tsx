@@ -5,8 +5,8 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } 
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  createOwnRequestDraft, getOwnRequestDraft, listOwnRequestDrafts,
-  checkRequestPolicy, getOwnRequestBudgetStatus, getOwnRequestPolicyStatus,
+  createOwnRequestDraft, getOwnRequestDraft, getRequestForReview, listOwnRequestDrafts,
+  checkRequestPolicy, getOwnRequestBudgetStatus, getOwnRequestPolicyStatus, returnRequestForChanges,
   listRequestsWaitingForPolicy, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
   type OwnBudgetStatus, type OwnPolicyStatus, type PolicyQueuePage,
   type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
@@ -25,6 +25,7 @@ export function LiveRequestList() {
   const readiness = context();
   const { legalEntityId } = readiness;
   const canCheckPolicy = readiness.permissions.includes("procurement-policy-evaluate");
+  const canReturnRequest = readiness.permissions.includes("procurement-request-return");
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<RequestPage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +35,11 @@ export function LiveRequestList() {
   const [policyError, setPolicyError] = useState("");
   const [policyNotice, setPolicyNotice] = useState("");
   const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [returning, setReturning] = useState<{ id: string; version: number; number: string } | null>(null);
+  const [returnReason, setReturnReason] = useState("");
+  const [savingReturn, setSavingReturn] = useState(false);
+  const [reviewDetail, setReviewDetail] = useState<RequestDetail | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError("");
@@ -61,6 +67,23 @@ export function LiveRequestList() {
     } catch (cause) { setPolicyError(errorText(cause)); }
     finally { setCheckingId(null); }
   }
+  async function saveReturn() {
+    if (!returning || !returnReason.trim()) return;
+    setSavingReturn(true); setPolicyError(""); setPolicyNotice("");
+    try {
+      await returnRequestForChanges(legalEntityId, returning.id, returning.version, returnReason);
+      setPolicyNotice(`${returning.number} was returned to the requester with your note.`);
+      setReturning(null); setReviewDetail(null); setReturnReason(""); setPolicyOffset(0);
+      setPolicyQueue(await listRequestsWaitingForPolicy(legalEntityId));
+    } catch (cause) { setPolicyError(errorText(cause)); }
+    finally { setSavingReturn(false); }
+  }
+  async function openReview(id: string) {
+    setReviewLoading(true); setPolicyError("");
+    try { setReviewDetail(await getRequestForReview(legalEntityId, id)); }
+    catch (cause) { setPolicyError(errorText(cause)); }
+    finally { setReviewLoading(false); }
+  }
   return <div className="p-5 sm:p-8">
     <PageHeader title="My Requests" subtitle="Save a request, then send it for policy and budget review." actions={<Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link>} />
     <Panel><div className="p-5">{error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
@@ -73,8 +96,10 @@ export function LiveRequestList() {
     {canCheckPolicy && <Panel title="Buying-rule checks and issues" className="mt-5"><div className="p-5">
       {policyError && <p role="alert" className="mb-3 text-sm text-red-700">{policyError}</p>}
       {policyNotice && <p role="status" className="mb-3 text-sm">{policyNotice}</p>}
-      {policyQueue?.records.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Request</th><th>Purpose</th><th>Lines</th><th>Amount before adjustments</th><th>Status</th><th>Action</th></tr></thead><tbody>{policyQueue.records.map((item) => <tr key={item.id}><td>{item.number}</td><td>{item.purpose}</td><td>{item.lineCount}</td><td>{item.currencyCode} {item.estimatedBaseAmount.toLocaleString()}</td><td>{item.policyOutcome === "Blocked" ? `Needs attention: ${item.policyResultCode || "rule exception"}` : "Waiting for check"}</td><td>{item.policyOutcome === "Blocked" ? <span className="text-xs text-muted-foreground">Contact Procurement for next steps</span> : <Button variant="secondary" disabled={checkingId === item.id} onClick={() => void checkPolicy(item.id, item.version)}>{checkingId === item.id ? "Checking…" : "Check buying rules"}</Button>}</td></tr>)}</tbody></RecordTable></div>
+      {policyQueue?.records.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Request</th><th>Purpose</th><th>Lines</th><th>Amount before adjustments</th><th>Status</th><th>Action</th></tr></thead><tbody>{policyQueue.records.map((item) => <tr key={item.id}><td>{item.number}</td><td>{item.purpose}</td><td>{item.lineCount}</td><td>{item.currencyCode} {item.estimatedBaseAmount.toLocaleString()}</td><td>{item.policyOutcome === "Blocked" ? `Needs attention: ${item.policyResultCode || "rule exception"}` : "Waiting for check"}</td><td><div className="flex flex-wrap gap-2">{canReturnRequest && <Button variant="secondary" disabled={reviewLoading} onClick={() => void openReview(item.id)}>View details</Button>}{item.policyOutcome !== "Blocked" && <Button variant="secondary" disabled={checkingId === item.id} onClick={() => void checkPolicy(item.id, item.version)}>{checkingId === item.id ? "Checking…" : "Check buying rules"}</Button>}{canReturnRequest && <Button variant="secondary" onClick={() => { setReturning({ id: item.id, version: item.version, number: item.number }); setReturnReason(""); setPolicyError(""); }}>Return for changes</Button>}</div></td></tr>)}</tbody></RecordTable></div>
         : <p className="text-sm text-muted-foreground">No requests need a buying-rule check or follow-up.</p>}
+      {reviewDetail && <div className="mt-4 rounded-lg border border-border p-4"><div className="flex items-center justify-between gap-3"><p className="font-medium">{reviewDetail.number} · {reviewDetail.purpose}</p><Button variant="secondary" onClick={() => setReviewDetail(null)}>Close details</Button></div><p className="mt-2 text-sm text-muted-foreground">Needed by {reviewDetail.neededBy || "not set"} · {reviewDetail.currencyCode}</p>{reviewDetail.notesToApprover && <p className="mt-2 text-sm">Request note: {reviewDetail.notesToApprover}</p>}<div className="mt-3 overflow-x-auto"><RecordTable><thead><tr><th>Item or service</th><th>Category</th><th>Quantity</th><th>Unit price</th></tr></thead><tbody>{reviewDetail.lines.filter((line) => line.approvalStatus !== "Cancelled").map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.categoryCode || "Not set"}</td><td>{line.requestedQuantity} {line.unitCode}</td><td>{reviewDetail.currencyCode} {line.estimatedUnitPrice.toLocaleString()}</td></tr>)}</tbody></RecordTable></div></div>}
+      {returning && <div className="mt-4 max-w-xl space-y-3 rounded-lg border border-border p-4"><p className="font-medium">Return {returning.number} for changes</p><Field label="What should the requester fix?"><Textarea rows={3} maxLength={1000} value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /></Field><p className="text-xs text-muted-foreground">A confirmed Finance reservation must be released before a request can be returned.</p><div className="flex gap-2"><Button disabled={savingReturn || !returnReason.trim()} onClick={() => void saveReturn()}>{savingReturn ? "Returning…" : "Send back to requester"}</Button><Button variant="secondary" disabled={savingReturn} onClick={() => setReturning(null)}>Cancel</Button></div></div>}
       {policyQueue && policyQueue.count > policyQueue.limit && <div className="mt-3 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={policyOffset === 0} onClick={() => setPolicyOffset(Math.max(0, policyOffset - policyQueue.limit))}>Previous</Button><span>{policyOffset + 1}–{Math.min(policyOffset + policyQueue.records.length, policyQueue.count)} of {policyQueue.count}</span><Button variant="secondary" disabled={policyOffset + policyQueue.limit >= policyQueue.count} onClick={() => setPolicyOffset(policyOffset + policyQueue.limit)}>Next</Button></div>}
       <p className="mt-3 text-xs text-muted-foreground">A rule check records the matching policy. It does not approve the request or reserve money.</p>
     </div></Panel>}
@@ -247,7 +272,7 @@ export function LiveRequestDetail() {
   if (!record) return <div role="alert" className="p-5 sm:p-8">{error || "Request not found."}</div>;
   const activeLines = record.lines.filter((line) => line.approvalStatus !== "Cancelled");
   return <div className="p-5 sm:p-8">
-    <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{record.status === "Draft" && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
+    <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{(record.status === "Draft" || record.status === "ReturnedForChanges") && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     {record.status === "Submitted" && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">
       <p>Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>
@@ -256,10 +281,11 @@ export function LiveRequestDetail() {
       {budgetError ? <p role="alert" className="mt-2 text-red-700">Budget status is unavailable. {budgetError}</p>
         : <p className="mt-2 font-medium">Budget: {budget?.status === "Available" && budget.reservationConfirmed ? "Finance confirmed funds for this request" : budget?.status === "Insufficient" ? "Finance found insufficient funds" : budget?.status === "PartiallyAvailable" ? "Finance found only part of the funds" : budget?.status === "NotConfigured" ? "No budget is configured for this request" : "Waiting for Finance to check the budget"}.</p>}
     </div>}
+    {record.status === "ReturnedForChanges" && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm"><p className="font-medium">Please update this request and send it again.</p><p className="mt-2">{record.returnReason || "Procurement asked for changes."}</p></div>}
     <Panel title="Requested lines"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th></tr></thead><tbody>{activeLines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.requestedQuantity}</td><td>{line.unitCode}</td><td>{record.currencyCode} {line.estimatedUnitPrice.toLocaleString()}</td></tr>)}</tbody></RecordTable></div></Panel>
     <div className="mt-5 grid gap-5 lg:grid-cols-2"><Panel title="Delivery"><p className="p-5 text-sm">{record.deliveryAddressText || "No delivery address added."}</p></Panel><Panel title="Note for approver"><p className="p-5 text-sm">{record.notesToApprover || "No note added."}</p></Panel></div>
-    {record.status === "Draft" && <Panel title="Send for review" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Add a needed-by date to this request or every line before sending it. No budget is reserved by this step.</p><Button disabled={busy || !activeLines.length || (!record.neededBy && activeLines.some((line) => !line.neededBy))} onClick={() => void submit()}>Send for review</Button></div></Panel>}
-    {(record.status === "Draft" || record.status === "Submitted") && <Panel title="Withdraw request" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason" hint={record.status === "Submitted" ? "Required once a request has been sent for review." : "Optional for a draft."}><Textarea rows={2} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || (record.status === "Submitted" && !withdrawReason.trim())} onClick={() => void withdraw()}>Withdraw request</Button></div></Panel>}
+    {(record.status === "Draft" || record.status === "ReturnedForChanges") && <Panel title="Send for review" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Add a needed-by date to this request or every line before sending it. No budget is reserved by this step.</p><Button disabled={busy || !activeLines.length || (!record.neededBy && activeLines.some((line) => !line.neededBy))} onClick={() => void submit()}>Send for review</Button></div></Panel>}
+    {(record.status === "Draft" || record.status === "Submitted" || record.status === "ReturnedForChanges") && <Panel title="Withdraw request" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason" hint={record.status === "Submitted" ? "Required once a request has been sent for review." : "Optional before review."}><Textarea rows={2} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || (record.status === "Submitted" && !withdrawReason.trim())} onClick={() => void withdraw()}>Withdraw request</Button></div></Panel>}
     <Link to="/requests" className="mt-5 inline-block text-sm text-primary hover:underline">Back to my requests</Link>
   </div>;
 }

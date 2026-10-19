@@ -20,6 +20,7 @@ export type RequestSummary = { id: string; number: string; purpose: string; stat
   currencyCode: string; neededBy?: string | null; createdAt: string; version: number; lineCount: number };
 export type RequestDetail = RequestSummary & Omit<RequestDraft, "lines"> & {
   approvalState?: string | null; submittedAt?: string | null; submittedVersion?: number | null;
+  returnedAt?: string | null; returnedBySubjectId?: string | null; returnReason?: string | null;
   lines: (RequestLineDraft & { id: string; lineNumber: number; approvalStatus: string })[];
 };
 export type RequestPage = { records: RequestSummary[]; count: number; limit: number; offset: number };
@@ -85,6 +86,13 @@ export async function getOwnRequestDraft(companyId: string, id: string, signal?:
   if (!validDetail(body)) throw new RequestApiError(0, "The ERP returned invalid request details.");
   return body;
 }
+export async function getRequestForReview(companyId: string, id: string, signal?: AbortSignal): Promise<RequestDetail> {
+  if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
+  const body: unknown = await request(companyId, `/${id}/review`, { signal });
+  if (!validDetail(body) || body.status !== "Submitted")
+    throw new RequestApiError(0, "The ERP returned invalid request review details.");
+  return body;
+}
 export async function getOwnRequestBudgetStatus(companyId: string, id: string, signal?: AbortSignal): Promise<OwnBudgetStatus> {
   if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
   const body: unknown = await request(companyId, `/${id}/budget-status`, { signal });
@@ -120,6 +128,15 @@ export async function checkRequestPolicy(companyId: string, id: string, version:
     || typeof body.status !== "string" || body.isAuthority !== false)
     throw new RequestApiError(0, "The ERP returned an invalid buying-rule check.");
   return body as PolicyCheckResult;
+}
+export async function returnRequestForChanges(companyId: string, id: string, version: number, reason: string): Promise<RequestDetail> {
+  if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
+  if (!reason.trim() || reason.trim().length > 1000) throw new RequestApiError(0, "Explain what needs to change in up to 1,000 characters.");
+  const body: unknown = await request(companyId, `/${id}/return-for-changes`,
+    { method: "POST", body: JSON.stringify({ version, reason: reason.trim() }) });
+  if (!validDetail(body) || body.status !== "ReturnedForChanges")
+    throw new RequestApiError(0, "The ERP did not confirm the return. Refresh before retrying.");
+  return body;
 }
 export async function createOwnRequestDraft(companyId: string, draft: RequestDraft): Promise<RequestDetail> {
   const body: unknown = await request(companyId, "", { method: "POST", body: JSON.stringify(draft) });
