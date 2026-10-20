@@ -58,6 +58,7 @@ import {
 import { SetupConfig } from "./SetupConfig";
 import { LiveConfiguration } from "./LiveConfiguration";
 import { LivePolicies } from "./LivePolicies";
+import { LiveApprovalSettings } from "./LiveApprovalSettings";
 import { isProcurementLiveMode } from "../lib/ProcurementLiveGate";
 import { CurrencySettings, TaxSettings } from "./SettingsLists";
 
@@ -883,6 +884,8 @@ function renderModuleTab(
 ) {
   if (tab === "preferences")
     return <PreferencesPanel module={module} onSavePreview={onSavePreview} />;
+  if (tab === "approvals" && isProcurementLiveMode && module.slug === "purchase-requests")
+    return <LiveApprovalSettings />;
   if (tab === "approvals")
     return <ApprovalsPanel module={module} onSavePreview={onSavePreview} />;
   if (tab === "fields")
