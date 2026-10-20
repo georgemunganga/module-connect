@@ -128,7 +128,7 @@ test("unready order capabilities do not expose demo or live execution records", 
 });
 test("execution enabled blocks standalone legacy draft creation and edits", async ({ page }) => {
   const evidence = await mock(page, { buyerBoth: true }); await page.goto(`${root}/new`);
-  await expect(page.getByRole("heading", { name: "Create orders from approved requests", exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("do not have access to create orders from approved requests");
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0); expect(evidence.writes).toHaveLength(0);
 });
 test("numeric money in execution detail is rejected instead of rounded for a financial action", async ({ page }) => {

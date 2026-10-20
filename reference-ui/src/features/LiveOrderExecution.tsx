@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Switch, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { pendingOrderCommands as pendingCommands } from "../lib/order-command-memory";
 import { procurementScopeHeaders } from "../../../shared/shell-scope";
 import { getOrderExecution, listOrderExecution, orderCommandBody, OrderExecutionError, recoverOrderCommand, sendOrderCommand,
   type ExecutionOrderDetail, type ExecutionOrderPage, type OrderAction, type OrderCommand, type WorklistView } from "../../../src/platform/procurement-order-execution-api";
@@ -12,7 +13,6 @@ const labels: Record<OrderAction, string> = { Finance: "Record Finance confirmat
 const supported = (code: string): code is OrderAction => Object.hasOwn(labels, code);
 // Unconfirmed payloads survive detail navigation in this signed-in browser lifetime.
 // They are scoped to company, branch, canonical worker and order; never auto-replayed.
-const pendingCommands = new Map<string, OrderCommand>();
 const localNow = () => { const date = new Date(); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 23); };
 
 export function LiveOrderExecutionList() {
@@ -35,7 +35,7 @@ export function LiveOrderExecutionList() {
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [context.legalEntityId, view, page, status, revision, allowed]);
-  return <div className="p-5 sm:p-8"><PageHeader title="Purchase Orders" subtitle="Review the orders assigned to your buying, Finance or sending responsibilities." />
+  return <div className="p-5 sm:p-8"><PageHeader title="Purchase Orders" subtitle="Review the orders assigned to your buying, Finance or sending responsibilities." actions={context.permissions.includes("procurement-po-convert") ? <Link className="text-sm text-primary hover:underline" to="/purchase-orders/new">Create from approved requests</Link> : undefined} />
     {!views.length ? <p role="alert">You do not have access to an order worklist.</p> : <>
       <div role="tablist" aria-label="Order responsibilities" className="mb-5 flex flex-wrap gap-3">{views.map((item) => <Button key={item.code} role="tab" aria-selected={view === item.code}
         variant={view === item.code ? "primary" : "secondary"} onClick={() => { setData(null); setView(item.code); setPage(1); }}>{item.label}</Button>)}</div>
@@ -114,7 +114,7 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
         <tbody>{data.order.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.unitCode}</td><td>{line.quantity}</td><td>{data.order.currencyCode} {line.unitPrice}</td><td>{data.order.currencyCode} {line.taxAmount}</td><td>{line.acceptedQuantity}</td><td>{line.invoicedQuantity}</td></tr>)}</tbody></RecordTable>
         <p className="mt-4 text-right">Before tax: {data.order.currencyCode} {data.totals.lineBaseAmount}</p><p className="text-right font-semibold">Total: {data.order.currencyCode} {data.totals.grossAmount}</p></div></Panel>
       <Panel title="Next actions" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm">ERP checks your current access, amounts, approvals and evidence when you confirm. An available form does not guarantee approval.</p>
-        <div className="flex flex-wrap gap-3">{data.actionCandidates.filter((candidate) => supported(candidate.code) && context.permissions.includes(candidate.permission)).map((candidate) => <div key={candidate.code}>
+        <div className="flex flex-wrap gap-3">{!pending && data.actionCandidates.some((candidate) => candidate.code === "SourceEdit" && candidate.canStart && context.permissions.includes(candidate.permission)) && <Link className="text-sm text-primary hover:underline" to={`/purchase-orders/${id}/edit`}>Edit linked draft</Link>}{data.actionCandidates.filter((candidate) => supported(candidate.code) && context.permissions.includes(candidate.permission)).map((candidate) => <div key={candidate.code}>
           <Button variant="secondary" disabled={busy || !!pending || !candidate.canStart} onClick={() => setAction(candidate.code as OrderAction)}>{labels[candidate.code as OrderAction]}</Button>
           {!candidate.canStart && <p className="mt-2 text-sm text-muted-foreground">Current requirements are not met. Review funding, policy and assigned responsibilities.</p>}</div>)}</div>
         {!data.actionCandidates.some((candidate) => supported(candidate.code) && context.permissions.includes(candidate.permission)) && <p className="text-sm text-muted-foreground">There are no connected actions for your current responsibilities.</p>}

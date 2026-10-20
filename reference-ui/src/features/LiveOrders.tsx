@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { LiveOrderSourceEditor } from "./LiveOrderSourceEditor";
 import { LiveOrderExecutionDetail, LiveOrderExecutionList } from "./LiveOrderExecution";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -70,7 +71,7 @@ function LegacyOrderList() {
 
 export function LiveOrderEditor() {
   const context = useCompany();
-  if (context.capabilities.orders) return <div className="p-5 sm:p-8"><PageHeader title="Create orders from approved requests" /><p>Orders must retain their approved request lines and buying controls. The standalone draft form cannot be used for this workflow.</p><Link className="mt-5 inline-block text-sm text-primary" to="/purchase-orders">Back to purchase orders</Link></div>;
+  if (context.capabilities.orders) return <LiveOrderSourceEditor />;
   return <LegacyOrderEditor />;
 }
 
