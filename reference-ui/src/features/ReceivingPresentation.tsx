@@ -5,7 +5,7 @@ import { Button, Field, Modal, Textarea } from "../components/ui";
 import type { ReceivingDocuments, ReceivingEffect } from "../../../src/platform/procurement-receiving-api";
 export function ReceivingUnavailableAction({ label, reason }: { label: string; reason: string }) {
   const [open, setOpen] = useState(false);
-  return <><Button variant="secondary" onClick={() => setOpen(true)}>{label}</Button><Modal open={open} onClose={() => setOpen(false)} title={label}><p className="text-sm">{reason}</p><Button className="mt-5" variant="secondary" onClick={() => setOpen(false)}>Close explanation</Button></Modal></>;
+  return <><Button variant="secondary" onClick={() => setOpen(true)}>{label}</Button>{open && <Modal onClose={() => setOpen(false)} title={label}><p className="text-sm">{reason}</p><Button className="mt-5" variant="secondary" onClick={() => setOpen(false)}>Close explanation</Button></Modal>}</>;
 }
 export function ReceivingActivity({ effects, recordedAt }: { effects: ReceivingEffect[]; recordedAt?: string | null }) {
   return <ActivityTimeline items={[

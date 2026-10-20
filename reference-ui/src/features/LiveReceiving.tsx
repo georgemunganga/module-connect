@@ -62,7 +62,7 @@ function ReceivingList() {
         renderActions={(row) => { const original = data.items.find((item) => `${item.receiptId ?? item.id}:${item.lineId ?? ""}` === row.id)!; return <Link className="text-sm text-primary hover:underline" to={target(original, view)}>Review delivery</Link>; }} /></Panel> : !error && <EmptyState title="No deliveries need your attention" description="Records and tasks within your current company, branch and responsibilities will appear here." />}
       {data && data.total > data.pageSize && <div className="mt-5 flex gap-3"><Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous deliveries</Button><span>Page {page}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next deliveries</Button></div>}
     </>}
-    <Modal open={!!preview} title="Delivery summary" onClose={() => setPreview(null)}>{preview && <div className="space-y-4"><p>{preview.number ?? preview.deliverableRef ?? "Service"}</p><p>{preview.orderNumber}</p><Badge>{preview.status}</Badge><div><Link className="text-primary hover:underline" to={target(preview, view)}>Review delivery</Link></div></div>}</Modal>
+    {preview && <Modal title="Delivery summary" onClose={() => setPreview(null)}>{preview && <div className="space-y-4"><p>{preview.number ?? preview.deliverableRef ?? "Service"}</p><p>{preview.orderNumber}</p><Badge>{preview.status}</Badge><div><Link className="text-primary hover:underline" to={target(preview, view)}>Review delivery</Link></div></div>}</Modal>}
   </div>;
 }
 type Action = { operation: ReceivingOperation; label: string; lineId?: string; version: number; sourceVersion?: number; quantity?: string };
@@ -160,13 +160,13 @@ function ReceivingDetail({ id, kind, purpose, scopeKey, backPath, returnQuery }:
       {(receipt || record) && activeTab === "history" && <div className="pt-5"><DetailSection title="History"><ReceivingActivity effects={effects} recordedAt={receipt?.recordedAt} /><div className="mt-4"><ReceivingUnavailableAction label="Full activity history" reason="Complete delivery audit and comment history are not connected here yet. Only recorded delivery and acceptance evidence is shown." /></div></DetailSection></div>}
       <div className="flex gap-3"><Link className="text-sm text-primary hover:underline" to={backPath}>{backPath === base ? "Back to deliveries" : "Back to vendor"}</Link><Button variant="secondary" disabled={busy} onClick={() => { setNotice(""); setActionError(""); setRevision((n) => n + 1); }}>Refresh delivery</Button></div>
     </>}
-    <Modal open={!!action} title={action?.label ?? "Delivery action"} onClose={() => { if (!busy) setAction(null); }}><form className="space-y-4" onSubmit={confirm}>
+    {action && <Modal title={action?.label ?? "Delivery action"} onClose={() => { if (!busy) setAction(null); }}><form className="space-y-4" onSubmit={confirm}>
       {action?.operation === "ReceivingCancel" || action?.operation === "ServiceCancel" ? <Field label="Reason for cancelling"><Textarea value={reason} maxLength={2000} onChange={(event) => setReason(event.target.value)} required /></Field> : <>
         {action?.operation !== "ReceivingRecord" && <Field label={action?.operation === "ReceivingInspect" ? "Qualified quantity" : "Quantity to accept"}><Input value={quantity} inputMode="decimal" readOnly={action?.operation === "ServiceCertify"} onChange={(event) => setQuantity(event.target.value)} required /></Field>}
         <Field label="Evidence reference"><Input value={evidence} maxLength={200} onChange={(event) => setEvidence(event.target.value)} required /></Field>
       </>}
       <Field label="I checked the delivery evidence"><Switch checked={verified} onChange={(event) => setVerified(event.target.checked)} /></Field><p className="text-sm text-muted-foreground">ERP checks your current access, site, policy and available quantity when you confirm.</p>
       <Button type="submit" disabled={!verified || busy || !!uncertain}>Confirm delivery action</Button>
-    </form></Modal>
+    </form></Modal>}
   </div>;
 }
