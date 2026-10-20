@@ -86,7 +86,7 @@ test("actual API: exact scoped approval limit is independently activated and rem
     await page.getByRole("switch", { name: "All categories", exact: true }).click();
     await expect(page.getByRole("switch", { name: "All categories", exact: true })).toHaveAttribute("aria-checked", "true");
     await page.getByRole("button", { name: "Save limit draft", exact: true }).click();
-    await check(page.getByRole("status")).toContainText("Draft saved");
+    await check(page.getByRole("status").filter({ hasText: "Draft saved" })).toContainText("Draft saved");
     await check(row().getByRole("cell", { name: `ZMW ${seed.maximumAmount}`, exact: true })).toBeVisible();
     const creates = connection.traffic.filter((entry) => entry.path === api && entry.method === "POST");
     expect(creates).toHaveLength(1); expect(creates[0].status).toBe(201);
