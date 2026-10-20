@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search, ShoppingCart, Receipt, Package, Building2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,8 @@ import { useCommercial, resetCommercial } from "@/modules/procurement/commercial
 import { usePayables, resetPayables } from "@/modules/procurement/payables/store";
 import { resetPlans } from "@/modules/procurement/planning";
 import { resetCatalog } from "@/modules/procurement/catalog";
-import { sameEntity } from "@/modules/procurement/access";
+import { useCatalog } from "@/modules/procurement/catalog";
+import { demoRequester, procurementEntityName, sameEntity } from "@/modules/procurement/access";
 import { useGettingStarted } from "@/modules/procurement/getting-started";
 import type { ProcWorkItem } from "@/modules/procurement/types";
 import { useApp } from "@/platform/app-context";
@@ -91,35 +92,36 @@ function viewFor(role: Role): keyof typeof cardsByView | "auditor" | "supplier" 
   }
 }
 
-const activity = [
-  { when: "3 Oct, 16:12", who: "Grace Wanjiru", what: "Returned PR-2026-1035 — vendor not approved yet" },
-  { when: "2 Oct, 10:40", who: "Lukas Brandt", what: "Approved PR-2026-1038 (€7,200)" },
-  { when: "1 Oct, 09:05", who: "Sanne de Vries", what: "Submitted PR-2026-1042 (€18,450)" },
-];
-
 function ProcHome() {
-  const { role, entityId } = useApp();
+  const { role, entityId, approvalActor } = useApp();
   const gettingStarted = useGettingStarted(entityId);
   const demo = useProcurement();
   const commercial = useCommercial();
   const payables = usePayables();
+  const catalog = useCatalog();
   const view = viewFor(role);
   const queue = useMock(() => procApi.workQueue(role), [role]);
   const ws = workspaces.find((w) => w.id === role)!;
   const canRequest = view === "requester" || view === "approver";
   const visibleRequests = demo.requests.filter((request) => sameEntity(demo.metadata[request.id]?.entity, entityId));
-  const visibleApprovals = demo.approvals.filter((task) => sameEntity(task.recordEntity, entityId) && task.state !== "Completed");
+  const visibleApprovals = demo.approvals.filter((task) => sameEntity(task.recordEntity, entityId) && task.state !== "Completed" && (role !== "manager" || task.assignee === approvalActor));
+  const visibleOrders = commercial.orders.filter((order) => sameEntity(order.entity, entityId));
+  const issuedOrders = visibleOrders.filter((order) => ["Issued", "Acknowledged", "Closed"].includes(order.status));
+  const visibleBills = payables.invoices.filter((invoice) => invoice.entityId === entityId);
+  const requester = demoRequester(role, entityId);
   const cardValue = (card: Card) => {
-    if (card.label === "My open requests") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && !["Closed", "Cancelled", "Rejected"].includes(request.status)).length);
-    if (card.label === "Drafts") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && request.status === "Draft").length);
-    if (card.label === "My orders and deliveries") return String(visibleRequests.filter((request) => request.requester.startsWith("Amara") && (demo.metadata[request.id]?.lines ?? []).some((line) => line.orderedQty > line.receivedQty)).length);
+    if (card.label === "My open requests") return String(visibleRequests.filter((request) => request.requester === requester && !["Closed", "Cancelled", "Rejected"].includes(request.status)).length);
+    if (card.label === "Drafts") return String(visibleRequests.filter((request) => request.requester === requester && request.status === "Draft").length);
+    if (card.label === "My orders and deliveries") return String(visibleRequests.filter((request) => request.requester === requester && (demo.metadata[request.id]?.lines ?? []).some((line) => line.orderedQty > line.receivedQty)).length);
     if (card.label === "Waiting for your approval") return String(visibleApprovals.length);
     if (card.label === "Value awaiting you (EUR)" || card.label === "Value awaiting you (KES)") { const currency = card.label.includes("EUR") ? "EUR" : "KES"; return new Intl.NumberFormat("en", { style: "currency", currency, maximumFractionDigits: 0 }).format(visibleApprovals.filter((task) => task.amount?.currency === currency).reduce((sum, task) => sum + (task.amount?.value ?? 0), 0)); }
     if (card.label === "Approved items to buy") return String(visibleRequests.filter((request) => request.status === "Approved").flatMap((request) => demo.metadata[request.id]?.lines ?? []).filter((line) => line.approval === "Approved" && line.approvedQty > line.allocatedQty + line.orderedQty + line.cancelledQty).length);
+    if (card.label === "Quote deadlines") return String(demo.sourcing.filter((event) => sameEntity(event.entity, entityId) && event.state === "Published").length);
     if (card.label === "Orders ready to send") return String(commercial.orders.filter((order) => sameEntity(order.entity, entityId) && order.status === "Approved").length);
     if (card.label === "Bills needing review") return String(payables.invoices.filter((invoice) => invoice.entityId === entityId && invoice.status === "Exception").length);
     if (card.label === "New vendors to review" || card.label === "Vendors being set up") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && ["Proposed", "Under diligence", "More information required", "Conditional"].includes(supplier.status)).length);
     if (card.label === "Vendors on hold") return String(demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && supplier.status === "Suspended").length);
+    if (card.label === "Deliveries expected") return String(visibleOrders.filter((order) => ["Issued", "Acknowledged"].includes(order.status) && order.line.received < order.line.qty).length);
     return card.value;
   };
   const visibleQueueItems = (items: ProcWorkItem[]) => items.filter((item) => {
@@ -131,6 +133,29 @@ function ProcHome() {
     if (item.id === "q4") return request.status === "Approved" && (demo.metadata[request.id]?.lines ?? []).some((line) => line.approvedQty > line.allocatedQty + line.orderedQty + line.cancelledQty);
     return true;
   });
+  const orderTotals = Object.entries(issuedOrders.reduce<Record<string, number>>((totals, order) => {
+    totals[order.currency] = (totals[order.currency] ?? 0) + order.line.qty * order.line.price;
+    return totals;
+  }, {})).sort(([a], [b]) => a.localeCompare(b));
+  const trendCurrency = orderTotals[0]?.[0];
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date();
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() - 5 + index);
+    const key = date.toISOString().slice(0, 7);
+    return { key, label: date.toLocaleDateString("en", { month: "short", timeZone: "UTC" }), value: issuedOrders.filter((order) => order.currency === trendCurrency && order.issuedAt?.startsWith(key)).reduce((sum, order) => sum + order.line.qty * order.line.price, 0) };
+  });
+  const peak = Math.max(1, ...months.map((month) => month.value));
+  const metrics = [
+    { label: "Issued orders", value: issuedOrders.length, to: "/procurement/orders", icon: ShoppingCart },
+    { label: "Bills needing review", value: visibleBills.filter((bill) => ["Exception", "AP rejected"].includes(bill.status)).length, to: "/procurement/invoices", icon: Receipt },
+    { label: "Available items", value: catalog.filter((item) => item.status === "Active" && !item.block && item.entities.includes(procurementEntityName(entityId))).length, to: "/procurement/catalog", icon: Package },
+    { label: "Active vendors", value: demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && supplier.status === "Active").length, to: "/procurement/suppliers", icon: Building2 },
+  ];
+  const auditRows = [
+    ...visibleRequests.flatMap((request) => request.timeline.map((entry) => ({ when: entry.at, who: entry.actor, what: `${request.id} · ${entry.event}`, to: "/procurement/requests/$id", id: request.id }))),
+    ...visibleOrders.flatMap((order) => order.audit.map((entry) => ({ when: entry.at, who: entry.actor, what: `${order.id} · ${entry.action}`, to: "/procurement/orders/$id", id: order.id }))),
+  ].sort((a, b) => b.when.localeCompare(a.when)).slice(0, 12);
 
   if (view === "supplier") {
     return (
@@ -148,7 +173,7 @@ function ProcHome() {
     <AppShell>
       <PageHeader
         eyebrow={`${ws.label} workspace`}
-        title="Purchasing home"
+        title={canRequest ? `Hello, ${requester.split(" ")[0]}` : "Procurement overview"}
         description={view === "auditor" ? "Search records and review recent activity. You cannot make changes here." : "See what needs your attention and what happens next."}
         primaryAction={
           canRequest ? (
@@ -158,6 +183,7 @@ function ProcHome() {
           ) : undefined
         }
       />
+      <nav aria-label="Home views" className="-mt-2 flex gap-6 border-b text-sm"><span aria-current="page" className="border-b-2 border-primary pb-3 font-medium">Dashboard</span><Link to="/procurement/requests" className="pb-3 text-muted-foreground hover:text-foreground">{canRequest ? "My requests" : "Purchase requests"}</Link></nav>
 
       {role === "proc_admin" && gettingStarted.loaded ? <section className="mb-5 rounded-xl border border-primary/25 bg-primary/5 p-4" aria-labelledby="proc-start-h">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-primary">First use</p><h2 id="proc-start-h" className="mt-1 text-lg font-semibold">{gettingStarted.reviewedCount === 3 ? "Review purchasing setup" : "Set up purchasing"}</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Check buying rules, try a first purchase, and see how bills reach Finance.</p><p className="mt-2 text-xs text-muted-foreground">{gettingStarted.reviewedCount} of 3 steps reviewed · saved in this browser for this company</p></div><Button asChild><Link to="/procurement/getting-started">{gettingStarted.reviewedCount === 3 ? "Open guide" : "Get started"}</Link></Button></div>
@@ -166,9 +192,13 @@ function ProcHome() {
       {role === "proc_admin" ? <div className="mb-4"><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Reset all Procurement demo transactions to their starting data?")) { resetProcurement(); resetCommercial(); resetPayables(); resetPlans(); resetCatalog(); } }}>Reset Procurement demo</Button></div> : null}
 
       {view === "auditor" ? (
-        <AuditorHome />
+        <AuditorHome rows={auditRows} />
       ) : (
         <div className="space-y-8">
+          {view === "buyer" ? <section aria-label="Procurement at a glance" className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map((metric) => <Link key={metric.label} to={metric.to as never} className="flex items-center gap-3 rounded-xl border bg-surface p-4 transition-colors hover:border-primary"><span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><metric.icon className="size-5" aria-hidden /></span><span><span className="block text-xs text-muted-foreground">{metric.label}</span><strong className="mt-1 block text-xl tabular-nums">{metric.value}</strong></span></Link>)}</div>
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]"><div className="rounded-xl border bg-surface p-5"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">Issued purchase orders</h2><p className="mt-1 text-xs text-muted-foreground">Commercial commitments in this company. Finance owns actual spend and payments.</p></div><Link to="/procurement/orders" className="text-sm text-primary hover:underline">View orders →</Link></div><div className="mt-5 flex flex-wrap gap-6">{orderTotals.length ? orderTotals.map(([currency, total]) => <div key={currency}><p className="text-xs text-muted-foreground">{currency} committed</p><p className="mt-1 text-2xl font-semibold tabular-nums">{new Intl.NumberFormat("en", { style: "currency", currency, maximumFractionDigits: 0 }).format(total)}</p></div>) : <p className="text-sm text-muted-foreground">No orders have been issued yet.</p>}</div>{trendCurrency ? <div className="mt-5"><p className="text-xs text-muted-foreground">Last six months · {trendCurrency} issued PO value</p><div className="mt-3 grid h-36 grid-cols-6 items-end gap-3" role="img" aria-label={`Issued purchase order value by month in ${trendCurrency}: ${months.map((month) => `${month.label} ${month.value}`).join(", ")}`}>{months.map((month) => <div key={month.key} className="flex h-full flex-col justify-end gap-1"><div className="min-h-1 rounded-t bg-primary/65" style={{ height: `${Math.max(3, month.value / peak * 100)}%` }} title={`${month.label}: ${month.value} ${trendCurrency}`} /><span className="text-center text-xs text-muted-foreground">{month.label}</span></div>)}</div></div> : null}</div><div className="rounded-xl border bg-surface p-5"><h2 className="font-semibold">Attention required</h2><p className="mt-1 text-xs text-muted-foreground">Open decisions and exceptions for this company.</p><div className="mt-4 space-y-2"><Link to="/procurement/approvals" className="flex justify-between rounded-lg border p-3 text-sm hover:border-primary"><span>Approvals waiting</span><strong>{visibleApprovals.length}</strong></Link><Link to="/procurement/invoices" className="flex justify-between rounded-lg border p-3 text-sm hover:border-primary"><span>Bill exceptions</span><strong>{metrics[1].value}</strong></Link><Link to="/procurement/suppliers" className="flex justify-between rounded-lg border p-3 text-sm hover:border-primary"><span>Vendors in review</span><strong>{demo.suppliers.filter((supplier) => sameEntity(supplier.country, entityId) && ["Proposed", "Under diligence", "More information required", "Conditional"].includes(supplier.status)).length}</strong></Link></div></div></div>
+          </section> : null}
           <section aria-labelledby="summary-h">
             <h2 id="summary-h" className="sr-only">Summary</h2>
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -192,7 +222,7 @@ function ProcHome() {
           </section>
           <Async state={queue}>
             {(items) =>
-              items.length ? (
+              visibleQueueItems(items).length ? (
                 <WorkQueue items={visibleQueueItems(items)} />
               ) : (
                 <EmptyState
@@ -208,7 +238,7 @@ function ProcHome() {
   );
 }
 
-function AuditorHome() {
+function AuditorHome({ rows: activity }: { rows: { when: string; who: string; what: string; to: string; id: string }[] }) {
   const [q, setQ] = useState("");
   const rows = activity.filter((a) => (a.what + a.who).toLowerCase().includes(q.toLowerCase()));
   return (
@@ -223,10 +253,7 @@ function AuditorHome() {
         {rows.length ? (
           <ul className="divide-y">
             {rows.map((a) => (
-              <li key={a.when} className="px-4 py-3 text-sm">
-                <span className="font-medium">{a.what}</span>
-                <span className="block text-xs text-muted-foreground">{a.who} · {a.when}</span>
-              </li>
+              <li key={`${a.id}-${a.when}-${a.what}`} className="px-4 py-3 text-sm"><Link to={a.to as never} params={{ id: a.id } as never} className="font-medium text-primary hover:underline">{a.what}</Link><span className="block text-xs text-muted-foreground">{a.who} · {a.when}</span></li>
             ))}
           </ul>
         ) : (

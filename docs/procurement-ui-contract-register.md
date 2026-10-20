@@ -1,14 +1,38 @@
 # Procurement UI and API contract register
 
-**Status:** working UI blueprint, 16 October 2026. The Procurement screens use local demonstration data. Live mode verifies the ERP session and company, then holds transaction screens until their API adapters are ready. This register describes the boundary to implement; it does not authorize spending, supplier activation, budget reservation, AP posting, or payment.
+**Status:** working UI blueprint, updated 18 October 2026. The Procurement screens use local demonstration data in demo mode. Both UI entry points check the ERP session, company, and Procurement schema readiness in live mode. The reference workspace now has scoped live adapters for **vendor, item, own purchase-request and own sourcing drafts**; all other transaction screens remain held. Source migrations now define commercial and operational records, but they have not been applied to production. This register does not authorize spending, supplier activation, budget reservation, AP posting, or payment.
 
-The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` through `PROC-14` own business rules. The [workflow gap register](procurement-ui-workflow-gap-register.md) records incomplete interactions. Each row below should be checked against the 28-section child-feature document before its live adapter is enabled.
+The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` through `PROC-14` own business rules. `GW-ENG-STD-001` is the Tier 3 engineering standard for this ERP programme, and `PROC-BE-05` maps the new schema to live integration gates. The [workflow gap register](procurement-ui-workflow-gap-register.md) records incomplete interactions. Each row below should be checked against the 28-section child-feature document before its live adapter is enabled.
 
 ## Common contract for every record screen
 
+### 20 October 2026 approval adapter checkpoint
+
+The existing Approvals screen, request opening/history and Budget Finance-release panel now
+have scoped typed API adapters. They support the implemented sequential `One` and parallel
+`All` route, required decision reasons, source/version conflicts, exact UUID/body retry,
+read denial, returned-request recovery and controlled manual Finance confirmation. They
+reuse the ERP controls and remain hidden when the server approval capability is false.
+
+The candidate production bundle `index-DS0SRgqF.js` passed TypeScript, the staged build,
+14 focused mocked approval cases and both real API browser workflows: approval through
+source quantities/history, and return through independent Finance release/edit/resubmission.
+The predecessor candidate also passed the 76-case mocked regression suite. The first real
+run cancelled a cold opening after a five-second test expectation; the backend rolled it
+back with zero cases. The bounded real-suite timing correction then passed against the
+untouched request. Raw first-failure and final evidence is retained; this is not a claim
+that the cold-path response met a five-second performance target.
+
+The real browser fixture used actual mapped APIs, committed migrations and a restricted
+runtime database role. Shell sign-in/branding were synthetic; this does not verify production
+SSO or approve company spending policies. Production backend approval execution remains
+disabled pending the coordinated API/schema/configuration release. PO, receipt, matching,
+AP and payment workflows are not made operational by this UI adapter. The separate named
+approval-limit settings branches remain unverified and are excluded from this candidate.
+
 | Concern | UI requirement | API/source owner |
 | --- | --- | --- |
-| Identity and scope | Use verified `tenantId`, `legalEntityId`, `workerId`, permissions and allowed company from `/api/procurement/v1/context`. Display labels may change; use stable IDs in requests. | HRMS/shared host validates active worker, company, role and record scope on every request. |
+| Identity and scope | Use verified `tenantId`, `legalEntityId`, `workerId`, permissions, allowed company and `company.currencyCode` from `/api/procurement/v1/context`. Pre-fill the selected company's currency on new drafts; preserve each saved transaction's currency on edit. Display labels may change; use stable IDs in requests. | Core supplies the selected company and default currency. HRMS/shared host validates active worker, company, role and record scope on every request. |
 | Identity on a decision | Show actor, assigned role, delegation and effective authority. Never send a free-text approver name as authorization. | Shared workflow and identity services. |
 | Version | Send server version on edits and transitions. On conflict, offer refresh and compare; preserve unsaved form input. | Procurement API optimistic concurrency. |
 | State | Show current state, next owner, permitted transitions and reason requirements. Keep receipt, invoice, AP and payment progress separate. | Record-owning service returns authoritative state and actions. |
@@ -23,14 +47,15 @@ The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` throug
 
 | Screen | Visible decision or action | Source contract today | Contract needed before live use |
 | --- | --- | --- | --- |
-| Getting started / Settings | Review policy, people, vendors, items and Finance connection | Demo; context endpoint exists | Server setup status per company with owner, validation, effective date and dependency health. Review ticks stay separate from readiness. |
-| Items / Catalog | Maintain item, unpublished offer, search approved catalog | Draft API: `/api/procurement/v1/items`, `/catalog` | Item publish/eligibility decision, supplier-backed offer and audience/site rules; only published entries enter employee catalog. |
-| Vendors | Create/edit draft, contacts, sites, qualifications, withdraw | Draft API: `/api/procurement/v1/vendors` | Diligence, independent Finance verification, activation/suspension and supplier portal identity; `status` and `isOrderable` remain separate. |
-| My Requests | Create/edit/withdraw draft with lines | Draft API: `/api/procurement/v1/requests` | Submit, policy and Finance budget result, approvals, line allocation, cancellation and close. Each line needs stable ID and quantities for approved, allocated, ordered, accepted and cancelled. |
+| Getting started / Settings | Review policy, people, vendors, items and Finance connection | Procurement category/method drafts use typed scoped APIs in the existing Settings shell at `/settings/reference-data` when live mode is ready; three mocked Playwright cases cover create/edit, denial and stale updates. Other settings remain gated. | Server setup status per company with owner, validation, effective date and dependency health. Review ticks stay separate from readiness. Published procurement policies remain pending. |
+| Items / Catalog | List/create/edit draft item, view detail, deactivate | Draft API: `/api/procurement/v1/items`, `/catalog`; live Items workspace adapter and Playwright flow implemented in source | Catalog entry editor, item publish/eligibility decision, supplier-backed offer and audience/site rules; only published entries enter employee catalog. Production access still requires migration and release gates. |
+| Vendors | List/search/filter/create/edit/withdraw draft; add contact, address and qualification details; submit complete draft for review; reviewer return; revise and resubmit a returned vendor | Draft, submit and reviewer-return API: `/api/procurement/v1/vendors`; live proposer and reviewer detail adapters with mocked Playwright flows implemented in source. Status filtering exposes submitted records to reviewers and gives filtered empty results a distinct message. The API supplies a reviewer action flag after role, record state and self-review checks. Qualification type, issuer, reference and dates can be recorded in drafts; an invalid expiry is blocked. Submission requires category, contact and business reason; reviewer return requires a reason and a distinct actor. Every transition records a decision, and the vendor remains non-orderable. | Assigned review queue, document evidence upload and qualification decision UI, duplicate disposition, diligence, independent Finance verification, activation/suspension and supplier portal identity; `status` and `isOrderable` remain separate. Production access still requires migration and release gates. |
+| My Requests | List/create/edit/withdraw own draft with lines | Draft API: `/api/procurement/v1/requests`; live My Requests workspace adapter and Playwright flow implemented in source | Submit, policy and Finance budget result, approvals, line allocation, cancellation and close. Each line needs stable ID and quantities for approved, allocated, ordered, accepted and cancelled. Production access still requires migration and release gates. |
+| Purchase Plans | Draft, revise, cancel and review department forecast | Typed own-record list/create/edit/cancel adapter under `/api/procurement/v1/plans` in live mode; three mocked Playwright cases cover persistence, denied access and stale edits | Submission, approval, active versions, PR utilization and Finance period validation remain pending. A plan never reserves budget by itself. |
 | Approvals / Budgets | Approve, return, reject, delegate, request exception | Demo | Workflow task ID, stage/quorum, assignee IDs, policy version, Finance budget reference, reason and immutable decision. Hard failures cannot advance without an authorized exception. |
-| Get Quotes | Route approved lines, invite suppliers, publish, receive sealed bids | Demo | RFx version, invitation delivery, Q&A audience, bid receipt/version, opening authority and late/surrogate evidence. Supplier users see only their own participation. |
+| Get Quotes | Prepare own RFQ/RFP/tender draft; later route approved lines, invite suppliers, publish and receive sealed bids | Draft API: `/api/procurement/v1/sourcing`; reference RFQ list/editor/detail live adapter and mocked Playwright flow implemented. P9 retains cancelled line history. | Approved PR-line conversion, publish authority, invitation delivery, Q&A audience, bid receipt/version, opening authority and late/surrogate evidence remain governed. Supplier users see only their own participation. Production access still requires migration and release gates. |
 | Compare Quotes | Score, recommend and award selected lines | Demo | Evaluator score records, conflict declaration, normalized comparison, award approval and per-line remaining balance. Award does not itself issue a PO. |
-| Contracts | Draft, review, sign reference, amend, renew, release | Demo | Signed version, effective dates, ceiling drawdown, amendment authority and renewal/termination outcome. Finance owns recurring payable schedules. |
+| Contracts | Draft, review, sign reference, amend, renew, release | Typed own-record list/create/edit/cancel adapter under `/api/procurement/v1/contracts` in live mode; five mocked Playwright cases cover persistence, denial, stale edit, supplier availability and supplier search | Signed version, effective dates, ceiling drawdown, amendment authority and renewal/termination outcome remain governed. Finance owns recurring payable schedules. |
 | Purchase Orders | Draft, approve, issue, acknowledge, revise, close | Demo | Multi-line source allocation and schedules, approved revision, dispatch idempotency and delivery outcome; receipt and invoice progress are independent. |
 | Deliveries & Services | Receive/inspect, accept, reverse, return | Demo | PO-line quantities, acceptance evidence, service milestone, reversal event, supplier replacement/credit and Inventory/Asset acknowledgment. |
 | Bills / Inbox | Intake, duplicate check, match, resolve, send to AP | Demo | Invoice lines and source versions, configurable two/three-way result per line, exception owner, correction history and idempotent handoff. |
@@ -40,7 +65,7 @@ The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` throug
 
 ## Adapter sequence
 
-1. **Draft records:** connect vendor, item and own-request list/detail/create/edit/withdraw to current routes. Preserve the demo adapter for visual review; never silently mix demo rows into live lists.
+1. **Draft records:** the reference workspace's Vendor, Item, My Requests, RFQ and Contracts list, editor and detail use typed clients in `src/platform/` when live mode and their respective capability are ready. Playwright covers create, refresh, edit, denied access and stale edits; Vendor also covers contacts, addresses and withdrawal; Item also covers deactivation; Request also covers line persistence and withdrawal; RFQ and Contract also cover reasoned cancellation. The live gate blocks other transaction routes. These are source acceptance tests with contract mocks, not a production migration, supplier activation, catalog publication, request submission, RFQ publication or contract activation. Preserve the demo adapter for visual review; never silently mix demo rows into live lists.
 2. **Controlled demand:** add submit, policy, Finance budget, approval and line-allocation contracts. The UI must expose blocked, pending and unknown dependency outcomes.
 3. **Commercial commitment:** add RFx/award, contract and multi-line PO APIs with revision, issuance and supplier response.
 4. **Fulfilment and Finance:** add line receipts, returns, invoice match, AP handoff and callback reconciliation.
