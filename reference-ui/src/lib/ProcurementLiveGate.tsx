@@ -37,7 +37,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
-  const configurationSettingsPath = ["/settings/reference-data", "/settings/buying-rules", "/settings/modules/purchase-requests/approvals"]
+  const configurationSettingsPath = ["/settings/reference-data", "/settings/buying-rules", "/settings/modules/purchase-requests/approvals", "/settings/modules/purchase-orders/approvals"]
     .includes(location.pathname);
   if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)

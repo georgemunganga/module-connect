@@ -884,8 +884,8 @@ function renderModuleTab(
 ) {
   if (tab === "preferences")
     return <PreferencesPanel module={module} onSavePreview={onSavePreview} />;
-  if (tab === "approvals" && isProcurementLiveMode && module.slug === "purchase-requests")
-    return <LiveApprovalSettings />;
+  if (tab === "approvals" && isProcurementLiveMode && ["purchase-requests", "purchase-orders"].includes(module.slug))
+    return <LiveApprovalSettings initialAction={module.slug === "purchase-orders" ? "PurchaseOrder.Approve" : "PurchaseRequest.Approve"} />;
   if (tab === "approvals")
     return <ApprovalsPanel module={module} onSavePreview={onSavePreview} />;
   if (tab === "fields")

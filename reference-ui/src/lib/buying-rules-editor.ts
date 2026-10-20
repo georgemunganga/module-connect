@@ -3,19 +3,23 @@ export type RuleRow = {
   categoryCodes: string; purchaseType: string; budget: "Required" | "ExceptionReview";
   method: string; quotes: string; stages: Array<{ code: string; assignee: string; mode: "One" | "All" }>;
 };
-export const emptyRule = (): RuleRow => ({ code: "DEFAULT", priority: 0, minimum: "", maximum: "",
+export const approvalAssigneesForPolicy = (key: string): readonly string[] => key === "PURCHASE_REQUEST"
+  ? ["LineManager", "ProcurementManager"] : key === "PURCHASE_ORDER" ? ["ProcurementManager"] : [];
+export const emptyRule = (key = "PURCHASE_REQUEST"): RuleRow => ({ code: "DEFAULT", priority: 0, minimum: "", maximum: "",
   categoryCodes: "", purchaseType: "", budget: "Required", method: "", quotes: "",
-  stages: [{ code: "NEED", assignee: "LineManager", mode: "One" }] });
+  stages: [{ code: key === "PURCHASE_ORDER" ? "COMMERCIAL" : "NEED", assignee: key === "PURCHASE_ORDER" ? "ProcurementManager" : "LineManager", mode: "One" }] });
 const codes = (value: string) => value.split(",").map((part) => part.trim().toUpperCase()).filter(Boolean);
 const onlyKeys = (value: Record<string, unknown>, allowed: string[]) =>
   Object.keys(value).every((name) => allowed.includes(name));
 
 export function toRuleJson(key: string, currency: string, rows: RuleRow[]): string {
+  const assignees = approvalAssigneesForPolicy(key);
+  if (!assignees.length) throw new Error("This purchase type is not supported by the editor. Keep its rules read-only.");
   const header = JSON.stringify({ schemaVersion: 1,
     transactionType: key === "PURCHASE_ORDER" ? "PurchaseOrder" : "PurchaseRequest",
     currencyCode: currency, amountBasis: key === "PURCHASE_ORDER" ? "ApprovedLineBase" : "EstimatedLineBase" });
   const rules = rows.map((row) => {
-    if (row.stages.some((stage) => !["LineManager", "ProcurementManager"].includes(stage.assignee)))
+    if (row.stages.some((stage) => !assignees.includes(stage.assignee)))
       throw new Error("This approval assignment is not connected. Keep the saved rules read-only.");
     const identity = JSON.stringify({ code: row.code.trim().toUpperCase(), priority: Number(row.priority) });
     const conditions = JSON.stringify({ categoryCodes: codes(row.categoryCodes), purchaseTypes: row.purchaseType ? [row.purchaseType] : [], branchIds: [] });
@@ -70,6 +74,8 @@ function parseExactThresholds(json: string): Record<string, unknown> {
 
 export function fromRuleJson(json: string, key: string, currency: string): RuleRow[] | null {
   try {
+    const assignees = approvalAssigneesForPolicy(key);
+    if (!assignees.length) return null;
     const document = parseExactThresholds(json);
     if (document.schemaVersion !== 1 || !Array.isArray(document.rules)
       || !onlyKeys(document, ["schemaVersion", "transactionType", "currencyCode", "amountBasis", "rules"])
@@ -94,7 +100,7 @@ export function fromRuleJson(json: string, key: string, currency: string): RuleR
       const stages = result.approvalStages as Array<Record<string, unknown>>;
       if (stages.some((stage) => !onlyKeys(stage, ["code", "assignee", "mode"])
         || !["One", "All"].includes(String(stage.mode)) || typeof stage.code !== "string"
-        || !["LineManager", "ProcurementManager"].includes(String(stage.assignee))))
+        || !assignees.includes(String(stage.assignee))))
         throw new Error("This draft uses a different approval assignment.");
       return { code: String(rule.code ?? ""), priority: Number(rule.priority ?? 0),
         minimum: when.minimumAmountInclusive == null ? "" : String(when.minimumAmountInclusive),

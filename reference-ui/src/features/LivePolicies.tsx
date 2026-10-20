@@ -8,18 +8,21 @@ import {
   type PolicyPage, type PolicyRecord, type PolicyIssue, type PolicyPreview,
 } from "../../../src/platform/procurement-policy-api";
 
-import { emptyRule, exactPolicyAmount, fromRuleJson, toRuleJson, type RuleRow } from "../lib/buying-rules-editor";
+import { emptyRule, exactPolicyAmount, fromRuleJson, toRuleJson, approvalAssigneesForPolicy, type RuleRow } from "../lib/buying-rules-editor";
 
 const day = (value: string | null) => value?.slice(0, 10) ?? "";
 const utc = (value: string) => `${value}T00:00:00.000Z`;
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Buying rules are unavailable.";
+const supportedKey = (key: string) => key === "PURCHASE_REQUEST" || key === "PURCHASE_ORDER";
+const policyLabel = (key: string) => key === "PURCHASE_REQUEST" ? "Purchase requests" : key === "PURCHASE_ORDER" ? "Purchase orders" : "Unsupported type — read-only";
 const tomorrow = () => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 
-export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean }) {
+export function LivePolicies({ onlyPolicyKey }: { onlyPolicyKey?: "PURCHASE_REQUEST" | "PURCHASE_ORDER" }) {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Buying rules require an ERP company.");
   const companyId = readiness.legalEntityId;
   const currency = readiness.defaultCurrencyCode;
+  const initialKey = onlyPolicyKey ?? "PURCHASE_REQUEST";
   const canEdit = readiness.permissions.includes("procurement-configuration-edit");
   const [page, setPage] = useState<PolicyPage | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -35,10 +38,10 @@ export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean })
   const [sampleCategory, setSampleCategory] = useState("");
   const [sampleType, setSampleType] = useState("");
   const [preview, setPreview] = useState<PolicyPreview | null>(null);
-  const [key, setKey] = useState("PURCHASE_REQUEST");
+  const [key, setKey] = useState<string>(initialKey);
   const [start, setStart] = useState(tomorrow);
   const [end, setEnd] = useState("");
-  const [rows, setRows] = useState<RuleRow[]>([emptyRule()]);
+  const [rows, setRows] = useState<RuleRow[]>([emptyRule(initialKey)]);
   const [issues, setIssues] = useState<PolicyIssue[]>([]);
   const [error, setError] = useState("");
   const [listError, setListError] = useState("");
@@ -54,8 +57,8 @@ export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean })
     return () => controller.abort();
   }, [companyId, refresh]);
 
-  const newDraft = () => { setUnsupported(null); setEditing("new"); setKey("PURCHASE_REQUEST");
-    setStart(tomorrow()); setEnd(""); setRows([emptyRule()]);
+  const newDraft = () => { setUnsupported(null); setEditing("new"); setKey(initialKey);
+    setStart(tomorrow()); setEnd(""); setRows([emptyRule(initialKey)]);
     setIssues([]); setError(""); };
   async function edit(id: string) {
     setError(""); setIssues([]); setUnsupported(null);
@@ -92,6 +95,16 @@ export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean })
     finally { setSaving(false); }
   }
 
+  async function beginReview(record: PolicyPage["items"][number]) {
+    setError(""); setEditing(null); setReviewing(null); setPreviewing(null); setDeciding(null); setUnsupported(null);
+    try {
+      const fresh = await getPolicy(companyId, record.id);
+      if (!fromRuleJson(fresh.rulesJson, fresh.policyKey, currency)?.length) {
+        setUnsupported(fresh); setError("These saved rules use unsupported settings. Keep them read-only until their setup is verified."); return;
+      }
+      setReviewing(fresh); setReviewReason("");
+    } catch (cause) { setError(errorText(cause)); }
+  }
   async function sendForReview(event: FormEvent) {
     event.preventDefault();
     if (!reviewing || !reviewReason.trim()) return;
@@ -134,7 +147,7 @@ export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean })
     setError(""); setEditing(null); setReviewing(null); setPreviewing(null); setDeciding(null); setUnsupported(null);
     try {
       const fresh = await getPolicy(companyId, record.id);
-      if (action === "publish" && !fromRuleJson(fresh.rulesJson, fresh.policyKey, currency)?.length) {
+      if (!fromRuleJson(fresh.rulesJson, fresh.policyKey, currency)?.length) {
         setUnsupported(fresh);
         setError("These rules need settings or approval assignments that are not connected to this editor. Keep them read-only until their setup is verified.");
         return;
@@ -143,9 +156,9 @@ export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean })
     } catch (cause) { setError(errorText(cause)); }
   }
 
-  const visible = page?.items.filter((record) => !requestOnly || record.policyKey === "PURCHASE_REQUEST");
+  const visible = page?.items.filter((record) => !onlyPolicyKey || record.policyKey === onlyPolicyKey);
   return <div className="mx-auto max-w-5xl space-y-5">
-    {!requestOnly && <PageHeader title="Buying rules" subtitle="Prepare company rules for budgets, quotes and approvals." />}
+    {!onlyPolicyKey && <PageHeader title="Buying rules" subtitle="Prepare company rules for budgets, quotes and approvals." />}
     <Panel><div className="p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-semibold">Rules for {currency}</h2>
@@ -155,7 +168,7 @@ export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean })
       {listError && <p role="alert" className="mb-4 text-sm text-red-700">{listError}</p>}
       {loading ? <p role="status">Loading buying rules…</p> : visible?.length
         ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Used for</th><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>{visible.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>{record.state === "Draft" && canEdit && <><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setPreviewing(null); setDeciding(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}{record.state === "PendingReview" && readiness.permissions.includes("procurement-configuration-approve") && <><Button variant="secondary" onClick={() => void beginDecision(record, "publish")}>Publish</Button><Button variant="secondary" onClick={() => void beginDecision(record, "return")}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
+          <tbody>{visible.map((record) => <tr key={record.id}><td>{policyLabel(record.policyKey)}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>{!supportedKey(record.policyKey) && <Button variant="secondary" onClick={() => void edit(record.id)}>View saved rules</Button>}{record.state === "Draft" && canEdit && supportedKey(record.policyKey) && <><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => void beginReview(record)}>Send for review</Button></>}{record.state === "PendingReview" && supportedKey(record.policyKey) && readiness.permissions.includes("procurement-configuration-approve") && <><Button variant="secondary" onClick={() => void beginDecision(record, "publish")}>Publish</Button><Button variant="secondary" onClick={() => void beginDecision(record, "return")}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
         : <EmptyState title="No buying rules yet" description="Add a draft for purchase requests or purchase orders." action={canEdit ? <Button onClick={newDraft}>Add buying rule draft</Button> : undefined} />}
       {page && page.total > page.items.length && <p className="mt-3 text-xs text-muted-foreground">Showing the first {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
@@ -192,11 +205,17 @@ export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean })
         <div className="space-y-5 p-5">
           {editing !== "new" && editing.lastReturnReason && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Reviewer asked for changes: {editing.lastReturnReason}</p>}
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Use these rules for"><Select value={key} disabled={requestOnly || editing !== "new"} onChange={(event) => setKey(event.target.value)}><option value="PURCHASE_REQUEST">Purchase requests</option>{!requestOnly && <option value="PURCHASE_ORDER">Purchase orders</option>}</Select></Field>
+            <Field label="Use these rules for"><Select value={key} disabled={!!onlyPolicyKey || editing !== "new"} onChange={(event) => {
+              const next = event.target.value; setKey(next);
+              // Only a new unsaved draft can change type. Require an explicit reviewer
+              // choice instead of silently converting any existing approval steps.
+              setRows((current) => current.map((row) => ({ ...row, stages: row.stages.map((stage) => ({ ...stage,
+                assignee: approvalAssigneesForPolicy(next).includes(stage.assignee) ? stage.assignee : "" })) })));
+            }}>{onlyPolicyKey !== "PURCHASE_ORDER" && <option value="PURCHASE_REQUEST">Purchase requests</option>}{onlyPolicyKey !== "PURCHASE_REQUEST" && <option value="PURCHASE_ORDER">Purchase orders</option>}</Select></Field>
             <Field label="Start date"><Input type="date" required value={start} onChange={(event) => setStart(event.target.value)} /></Field>
             <Field label="End date (optional)"><Input type="date" min={start} value={end} onChange={(event) => setEnd(event.target.value)} /></Field>
           </div>
-          <p className="text-xs text-muted-foreground">Amounts use {currency} and equal quantity × unit price before discounts, tax and delivery. An empty amount or category means there is no limit for that condition. Higher priority wins where rules overlap.</p>
+          <p className="text-sm text-muted-foreground">{key === "PURCHASE_ORDER" ? "Order approval uses the approved order line amount. Finance confirms the full amount including tax separately." : "Request approval uses the estimated request line amount."} Amounts use {currency} and equal quantity × unit price before discounts, tax and delivery. An empty amount or category means there is no limit for that condition. Higher priority wins where rules overlap.</p>
           {rows.map((row, index) => <section key={index} className="space-y-4 rounded-xl border border-border bg-surface-muted p-4">
             <div className="flex items-center justify-between"><h3 className="font-semibold">Rule {index + 1}</h3>{rows.length > 1 && <Button variant="secondary" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>Remove rule</Button>}</div>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -213,15 +232,15 @@ export function LivePolicies({ requestOnly = false }: { requestOnly?: boolean })
             <fieldset><legend className="mb-2 text-sm font-medium">Approval steps (in order)</legend><div className="space-y-3 text-sm">
               {row.stages.map((stage, position) => <div key={position} className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-3">
                 <Field label={`Step ${position + 1} code`}><Input required maxLength={100} value={stage.code} onChange={(event) => changeRow(index, { stages: row.stages.map((item, i) => i === position ? { ...item, code: event.target.value.toUpperCase() } : item) })} /></Field>
-                <Field label={`Step ${position + 1} reviewers`}><Select value={stage.assignee} onChange={(event) => changeRow(index, { stages: row.stages.map((item, i) => i === position ? { ...item, assignee: event.target.value } : item) })}><option value="LineManager">Line manager</option><option value="BudgetOwner" disabled>Budget owner — mapping not connected</option><option value="ProcurementManager">Procurement managers</option></Select></Field>
+                <Field label={`Step ${position + 1} reviewers`}><Select value={stage.assignee} onChange={(event) => changeRow(index, { stages: row.stages.map((item, i) => i === position ? { ...item, assignee: event.target.value } : item) })}><option value="">Choose reviewers</option>{key === "PURCHASE_REQUEST" && <option value="LineManager">Line manager</option>}<option value="BudgetOwner" disabled>Budget owner — mapping not connected</option><option value="ProcurementManager">Procurement managers</option></Select></Field>
                 <Field label={`Step ${position + 1} decision rule`}><Select value={stage.mode} onChange={(event) => changeRow(index, { stages: row.stages.map((item, i) => i === position ? { ...item, mode: event.target.value as "One" | "All" } : item) })}><option value="One">One eligible reviewer</option><option value="All">All eligible reviewers</option></Select></Field>
                 <div className="flex flex-wrap gap-2 sm:col-span-3"><Button variant="secondary" disabled={!position} onClick={() => { const next = [...row.stages]; [next[position - 1], next[position]] = [next[position], next[position - 1]]; changeRow(index, { stages: next }); }}>Move step up</Button><Button variant="secondary" disabled={position === row.stages.length - 1} onClick={() => { const next = [...row.stages]; [next[position + 1], next[position]] = [next[position], next[position + 1]]; changeRow(index, { stages: next }); }}>Move step down</Button><Button variant="secondary" onClick={() => changeRow(index, { stages: row.stages.filter((_, i) => i !== position) })}>Remove step {position + 1}</Button></div>
               </div>)}
               <Button variant="secondary" onClick={() => changeRow(index, { stages: [...row.stages, { code: `STEP_${row.stages.length + 1}`, assignee: "ProcurementManager", mode: "One" }] })}>Add approval step</Button>
-              <p className="text-muted-foreground">People must also have active finite approval limits. Missing or ambiguous assignments stop approval routing; these choices do not grant authority.</p>
+              <p className="text-muted-foreground">{key === "PURCHASE_ORDER" ? "Order steps use procurement reviewers with purchase order approval limits. " : ""}People must also have active finite approval limits. Missing or ambiguous assignments stop approval routing; these choices do not grant authority.</p>
             </div></fieldset>
           </section>)}
-          <Button variant="secondary" onClick={() => setRows((current) => [...current, { ...emptyRule(), code: `RULE_${current.length + 1}`, priority: current.length }])}>Add another rule</Button>
+          <Button variant="secondary" onClick={() => setRows((current) => [...current, { ...emptyRule(key), code: `RULE_${current.length + 1}`, priority: current.length }])}>Add another rule</Button>
           {!!issues.length && <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Check these rule details:</p><ul className="mt-2 list-disc pl-5">{issues.map((issue, index) => <li key={index}>{issue.path}: {issue.message}</li>)}</ul></div>}
           <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Checking…" : "Check and save draft"}</Button><Button variant="secondary" onClick={() => { setEditing(null); setIssues([]); }}>Cancel</Button></div>
         </div>
