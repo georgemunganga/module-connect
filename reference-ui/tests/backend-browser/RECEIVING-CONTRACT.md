@@ -28,3 +28,25 @@ Frontend base: `375861d`. Backend fixture: `5acc2e4` (`--serve --receiving`), wi
 - Broad `receiving` capability remains false while granular receiving capabilities gate the actual UI. No matching/AP authorization is fabricated.
 
 Only ERP shell authentication/branding/organization presentation is synthetic. Procurement context, metadata, sources, queues, reads, commands, authorization failures, replay and persisted effects use the real API. Actor-specific fixture headers are a test-only authentication bridge, not production authentication.
+
+
+## Actual first-run correction
+
+The first complete browser case reached real goods acceptance, both service
+drafts and the first service certification, then exhausted its 180-second total
+case budget on the resource-limited server. Its original log, trace, screenshot
+and incomplete database remain protected under `20261020_151917_browser`. The
+independent completion verifier correctly rejected the incomplete service state.
+No actual browser pass is claimed for that run.
+
+Coverage is now split into **two serial cases**, goods then services, each with
+the original 180-second limit. Every former command, privacy, exact quantity,
+replay, source-CAS and combined eight-command assertion remains. Each response
+is written to owner-private traffic evidence immediately, and final evidence is
+saved before route cleanup so page timeout cannot prevent capture. The final
+service evidence combines both cases. Serial mode skips service verification if
+goods fails; no used fixture may be retried. This changes test organization only;
+the frozen application asset hashes and transport timeouts are unchanged.
+
+Playwright `--list` successfully discovers both cases. A fresh backend fixture
+and the real browser execution remain required after this correction.
