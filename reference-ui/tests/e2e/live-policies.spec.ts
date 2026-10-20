@@ -109,6 +109,29 @@ test("buying rule draft checks and saves with company currency", async ({ page }
   await expect(page.getByLabel("Amount from (ZMW)")).toHaveValue("5000");
 });
 
+test("approval step editor retains One and All decisions, custom codes and exact financial thresholds", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByLabel("Amount from (ZMW)").fill("99999999999999.9998");
+  await page.getByLabel("Amount below (ZMW)").fill("99999999999999.9999");
+  await page.getByRole("button", { name: "Add approval step", exact: true }).click();
+  await page.getByLabel("Step 2 code", { exact: true }).fill("PROC");
+  await page.getByRole("combobox", { name: "Step 2 decision rule", exact: true }).click();
+  await page.getByRole("option", { name: "All eligible reviewers", exact: true }).click();
+  // Capture the raw policy JSON string, not a parsed JS Number that would itself round it.
+  const saved = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/policies"));
+  await page.getByRole("button", { name: "Check and save draft", exact: true }).click();
+  const payload = (await saved).postDataJSON();
+  expect(payload.rulesJson).toContain('"minimumAmountInclusive":99999999999999.9998');
+  expect(payload.rulesJson).toContain('"maximumAmountExclusive":99999999999999.9999');
+  await page.getByRole("button", { name: "Edit draft", exact: true }).click();
+  await expect(page.getByLabel("Amount from (ZMW)")).toHaveValue("99999999999999.9998");
+  await expect(page.getByLabel("Amount below (ZMW)")).toHaveValue("99999999999999.9999");
+  await expect(page.getByLabel("Step 2 code", { exact: true })).toHaveValue("PROC");
+  await expect(page.getByRole("combobox", { name: "Step 2 decision rule", exact: true })).toHaveText("All eligible reviewers");
+});
+
 test("invalid buying rule stays in the editor with a field issue", async ({ page }) => {
   await mockErp(page, { invalid: true });
   await page.goto("/procurement/workspace/settings/buying-rules");
@@ -130,7 +153,8 @@ test("a detailed policy draft cannot be simplified by the basic editor", async (
   await mockErp(page, { detailed: true });
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Edit draft" }).click();
-  await expect(page.getByRole("alert")).toContainText("fuller editor");
+  await expect(page.getByRole("alert")).toContainText("read-only");
+  await expect(page.getByLabel("Saved rule definition")).toHaveAttribute("readonly", "");
   await expect(page.getByRole("heading", { name: "Edit purchase request draft" })).toHaveCount(0);
 });
 
