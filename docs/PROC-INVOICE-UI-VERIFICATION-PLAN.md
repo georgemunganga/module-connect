@@ -1,6 +1,6 @@
 # Invoice UI candidate — serialized verification plan
 
-Status: commands prepared only. Candidate application source `3352c2f`, reviewed without a blocker. No command in this document has run. Root owns the current receiving browser/backend resource slot. Await explicit clearance; no concurrent Node, browser, SDK or DB job.
+Original plan status: commands prepared only; subsequent execution is recorded in [verification evidence](PROC-INVOICE-UI-VERIFICATION-EVIDENCE.md). Candidate application source `3352c2f`, reviewed without a blocker. No command in this document has run. Root owns the current receiving browser/backend resource slot. Await explicit clearance; no concurrent Node, browser, SDK or DB job.
 
 ## Isolation and resource contract
 
