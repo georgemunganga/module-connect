@@ -14,14 +14,21 @@ const capabilities = Object.fromEntries([
   "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "vendorDraft" || key === "invoiceIntake"]));
 
-async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number; comparison?: boolean; readinessDenied?: boolean; staleReview?: boolean } = {}) {
+async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number; comparison?: boolean; readinessDenied?: boolean; staleReview?: boolean; matching?: boolean; loseMappingResponse?: boolean; unknownAcceptance?: boolean } = {}) {
   let invoice: Record<string, unknown> | null = options.seed ? {
     id: invoiceId, supplierId: vendorId, supplierName: "Office Supplier", invoiceNumber: "INV-DOC-1",
     invoiceDate: "2026-10-20", currencyCode: "ZMW", status: "Received", intakeChannel: "Manual",
     grossAmount: 100, netAmount: 100, taxAmount: 0, version: 1,
     lines: [{ id: lineId, lineNumber: 1, description: "Supplies", quantity: 1, unitPrice: 100, taxAmount: 0 }],
   } : null;
-  const documents: Record<string, unknown>[] = [];
+  const sourceOrder = "77777777-7777-4777-8777-777777777777", issued = "88888888-8888-4888-8888-888888888888";
+  const poLine = "99999999-9999-4999-8999-999999999999", policy = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const accepted = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", mapping = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const documentVersion = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  let currentMapping: string | null = null, mappingResponseLost = false;
+  const saved = new Map<string, Record<string, unknown>>();
+  const documents: Record<string, unknown>[] = options.matching ? [{ documentId: vendorId, versionId: documentVersion, versionNumber: 1,
+    fileName: "Original invoice.pdf", mediaType: "application/pdf", sizeBytes: 100, sha256: "a".repeat(64), scanState: "Available", canDownload: true }] : [];
   const uploadKeys = new Map<string, Record<string, unknown>>();
   let lostResponse = false;
   await page.addInitScript(({ entityId, branch }) => {
@@ -45,11 +52,11 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
     if (url.pathname === "/api/procurement/v1/context") return json({ tenantId: "amizo",
       legalEntityId: companyId, workerId,
       permissions: canCapture ? ["procurement-access", "procurement-vendor-read",
-        "procurement-invoice-read", "procurement-invoice-capture"]
+        "procurement-invoice-read", "procurement-invoice-capture", ...(options.matching ? ["procurement-invoice-match"] : [])]
         : ["procurement-access", "procurement-invoice-read"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo",
-      legalEntityId: companyId, schemaReady: true, capabilities: { ...capabilities, invoiceDocuments: options.documents === true, invoiceComparison: options.comparison === true } });
+      legalEntityId: companyId, schemaReady: true, capabilities: { ...capabilities, invoiceDocuments: options.documents === true, invoiceComparison: options.comparison === true || options.matching === true } });
     if (url.pathname === "/api/procurement/v1/vendors") return json({ items: [{ id: vendorId,
       number: "VEN-001", displayName: "Office Supplier", legalName: "Office Supplier Ltd",
       countryCode: "ZM", status: "Active", isOrderable: true, version: 1,
@@ -100,11 +107,41 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
     if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}/finance-readiness` && invoice) {
       if (options.readinessDenied) return json({ message: "Denied" }, 403);
       return json({ invoiceId, invoiceVersion: options.staleReview ? 2 : invoice.version, invoiceStatus: "Received", state: "Blocked", canPrepareHandoff: false,
-        evidence: { matchingSchemaAvailable: false, mappingState: "Unavailable", mappingVersionId: null, mappingRevision: null, mappingOriginalCurrent: null,
-          comparisonId: null, comparisonInvoiceVersion: null, comparisonOriginalCurrent: null, recordedComparison: null, unresolvedExceptionCount: null, comparisonCurrentness: "NotRevalidated" },
+        evidence: { matchingSchemaAvailable: options.matching === true, mappingState: currentMapping ? "ReviewRequired" : options.matching ? "NotMapped" : "Unavailable", mappingVersionId: currentMapping, mappingRevision: currentMapping ? 1 : null, mappingOriginalCurrent: currentMapping ? true : null,
+          comparisonId: null, comparisonInvoiceVersion: null, comparisonOriginalCurrent: null, recordedComparison: null, unresolvedExceptionCount: options.matching ? 0 : null, comparisonCurrentness: "NotRevalidated" },
         blockers: [{ code: "InvoiceValidationAuthorityUnavailable", message: "Invoice approval and accounting validation are not connected yet." },
           { code: "FinanceReceiverUnavailable", message: "A Finance receiver is not connected for supplier invoices." }],
         nextSteps: [{ code: "ReviewInvoiceDocuments", message: "Check the original invoice documents." }] });
+    }
+    if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}/matching/sources` && invoice) return json({ invoiceId, invoiceVersion: invoice.version, policyVersionId: policy,
+      items: [{ orderId: sourceOrder, orderNumber: "PO-1", issuedVersionId: issued, purchaseOrderLineId: poLine, description: "Supplies", unitCode: "EACH", quantity: "1", unitPrice: "100", taxAmount: "0", categoryCode: "OFFICE",
+        method: "ThreeWay", acceptanceKind: "Goods", sourceState: "VerifiedIssued", blocker: null, canAllocate: false, canPostToFinance: false }], total: 1, page: 1, pageSize: 25, isAuthority: false, canPostToFinance: false });
+    if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}/matching/sources/${sourceOrder}/lines/${poLine}/acceptances` && invoice) return json({ invoiceId, invoiceVersion: invoice.version,
+      orderId: sourceOrder, issuedVersionId: issued, purchaseOrderLineId: poLine, policyVersionId: policy, method: "ThreeWay", state: options.unknownAcceptance ? "Unavailable" : "VerifiedHistorical",
+      blocker: options.unknownAcceptance ? "AcceptanceHistoryUnavailable" : null,
+      items: options.unknownAcceptance ? [] : [{ id: accepted, reference: "GRN-1", kind: "Goods", sourceVersion: 1, goodsReceiptLineId: accepted, serviceAcceptanceId: null,
+        acceptedQuantity: "1", returnedQuantity: "0", historicalNetQuantity: "1", acceptedNetAmount: "100", returnedNetAmount: "0", historicalNetAmount: "100", acceptedAt: "2026-10-20T10:00:00Z", canAllocate: false, canPostToFinance: false }],
+      total: options.unknownAcceptance ? null : 1, page: 1, pageSize: 25, availabilityMeaning: "HistoricalPhysicalFactsOnly", isAuthority: false, canAllocate: false, canPostToFinance: false });
+    if ([`/api/procurement/v1/invoices/${invoiceId}/matching/mappings`, `/api/procurement/v1/invoices/${invoiceId}/matching/compare`].includes(url.pathname) && request.method() === "POST" && invoice) {
+      const mappingOperation = url.pathname.endsWith("/mappings"), key = request.headers()["idempotency-key"];
+      const input = request.postDataJSON(); expect(input.version).toBe(invoice.version);
+      if (mappingOperation) { expect(input.purchaseOrderId).toBe(sourceOrder); expect(input.issuedVersionId).toBe(issued);
+        expect(input.lines).toEqual([{ invoiceLineId: lineId, purchaseOrderLineId: poLine, goodsReceiptLineId: accepted, serviceAcceptanceId: null,
+          invoiceUnitCode: "EACH", documentVersionId: documentVersion, documentLineReference: "Page 1 line 1" }]); currentMapping = mapping;
+      } else expect(input.mappingVersionId).toBe(currentMapping);
+      invoice.version = Number(invoice.version) + 1;
+      const body = { invoiceId, commandKey: key, commandPermission: mappingOperation ? "procurement-invoice-capture" : "procurement-invoice-match", commandSchemaVersion: 1,
+        recordedHistoricalResult: true, isCurrentApproval: false, canPostToFinance: false,
+        result: mappingOperation ? { id: mapping, version: invoice.version, mappingRevision: 1, mappingSha256: "a".repeat(64), verificationState: "Unverified" }
+          : { id: accepted, version: invoice.version, outcome: "Blocked", matchingState: "ComparisonBlocked", hasCapacityClaim: false, canPostToFinance: false, discrepancies: [{ invoiceLineId: lineId, code: "OwnerHistoryUnavailable" }] } };
+      saved.set(key, body);
+      if (mappingOperation && options.loseMappingResponse && !mappingResponseLost) { mappingResponseLost = true; return route.abort("failed"); }
+      return json(body);
+    }
+    if (url.pathname.startsWith(`/api/procurement/v1/invoices/${invoiceId}/matching/commands/`) && invoice) {
+      const key = url.pathname.split("/").at(-1)!; const body = saved.get(key);
+      return body ? json({ operation: url.searchParams.get("operation"), commandKey: key, recordedHistoricalResult: true, isCurrentReplayAuthorization: false,
+        currentInvoiceVersion: invoice.version, canPostToFinance: false, recordedResult: body }) : json({ message: "Not found" }, 404);
     }
     if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}/matching` && invoice) return json({ invoiceId, version: invoice.version,
       canPostToFinance: false, isInvoiceApproval: false, matchingStateIsRecordedResult: true,
@@ -273,4 +310,64 @@ test("Changing Core branch clears original invoice, documents and review before 
   release?.();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByText("99999999999999.9999", { exact: true })).toHaveCount(0);
+});
+
+
+async function enterInvoiceLinks(page: Page) {
+  await page.getByRole("button", { name: "Link invoice lines", exact: true }).click();
+  await page.getByRole("button", { name: "Choose source", exact: true }).click();
+  await page.getByRole("combobox", { name: "Receipt or service confirmation" }).click();
+  await page.getByRole("option", { name: "GRN-1 · 1 · Goods receipt", exact: true }).click();
+  await page.getByLabel("Unit on original invoice").fill("EACH");
+  await page.getByRole("combobox", { name: "Original invoice document" }).click();
+  await page.getByRole("option", { name: "Original invoice.pdf · Version 1", exact: true }).click();
+  await page.getByLabel("Line or page reference in document").fill("Page 1 line 1");
+}
+
+test("Invoice links and explicit comparison use the current version without implying approval", async ({ page }) => {
+  await mockErp(page, true, { seed: true, documents: true, matching: true });
+  const writes: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("/matching/") && request.method() === "POST") writes.push(request.url()); });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await expect(page.getByRole("button", { name: "Link invoice lines", exact: true })).toBeVisible(); expect(writes).toEqual([]);
+  await enterInvoiceLinks(page);
+  expect(writes).toEqual([]);
+  await page.getByRole("button", { name: "Save line links", exact: true }).click();
+  await expect(page.getByText("Line links saved. Original units and documents still need verified review.", { exact: true })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  await page.getByRole("button", { name: "Run invoice comparison", exact: true }).click();
+  await expect(page.getByText("Comparison recorded. Review the saved issues before continuing.", { exact: true })).toBeVisible();
+  expect(writes).toHaveLength(2);
+  await expect(page.getByRole("button", { name: /pay|post|approve|send to finance/i })).toHaveCount(0);
+});
+
+test("Lost mapping response offers only original-key GET recovery, never another POST", async ({ page }) => {
+  await mockErp(page, true, { seed: true, documents: true, matching: true, loseMappingResponse: true });
+  const writes: { key: string; body: string | null }[] = [], recoveries: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/matching/mappings") && request.method() === "POST") writes.push({ key: request.headers()["idempotency-key"], body: request.postData() });
+    if (request.url().includes("/matching/commands/") && request.method() === "GET") recoveries.push(request.url());
+  });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`); await enterInvoiceLinks(page);
+  await page.getByRole("button", { name: "Save line links", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Check saved invoice action", exact: true })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  await expect(page.getByRole("button", { name: "Save line links", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Run invoice comparison", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Check saved invoice action", exact: true }).click();
+  await expect(page.getByText("Saved result found. Line links saved. Original units and documents still need verified review.", { exact: true })).toBeVisible();
+  expect(writes).toHaveLength(1); expect(recoveries).toHaveLength(1);
+  expect(recoveries[0]).toContain(`/commands/${writes[0].key}?operation=InvoiceMapping`);
+});
+
+test("Unknown acceptance history is unavailable and cannot be saved as zero capacity", async ({ page }) => {
+  await mockErp(page, true, { seed: true, documents: true, matching: true, unknownAcceptance: true });
+  let writes = 0; page.on("request", (request) => { if (request.url().includes("/matching/") && request.method() === "POST") writes++; });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await page.getByRole("button", { name: "Link invoice lines", exact: true }).click();
+  await page.getByRole("button", { name: "Choose source", exact: true }).click();
+  await expect(page.getByText("Receipt history needs review. It cannot be treated as zero.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No accepted receipt evidence is recorded for this line.", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Save line links", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "every invoice line" })).toBeVisible(); expect(writes).toBe(0);
 });

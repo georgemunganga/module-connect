@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Badge, Button, Panel } from "../components/ui";
+import { InvoiceMatchingPanel } from "./InvoiceMatching";
 import { RecordTable } from "../components/data/RecordTable";
 import { getInvoiceFinanceReadiness, getInvoiceMatchingHistory, InvoiceReviewError,
   type InvoiceFinanceReadiness, type InvoiceMatchingHistory, type InvoiceReviewSummary } from "../../../src/platform/procurement-invoice-review-api";
@@ -21,7 +22,7 @@ function Summary({ value, currency, lineLabel }: { value: InvoiceReviewSummary; 
 }
 export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currency, lines, comparisonAvailable, refresh }: {
   company: string; invoiceId: string; invoiceVersion: number; currency: string;
-  lines: { id: string; lineNumber: number; description: string }[]; comparisonAvailable: boolean; refresh: () => void;
+  lines: { id: string; lineNumber: number; description: string }[]; comparisonAvailable: boolean; refresh: (message?: string) => void;
 }) {
   const [readiness, setReadiness] = useState<InvoiceFinanceReadiness | null>(null);
   const [history, setHistory] = useState<InvoiceMatchingHistory | null>(null);
@@ -48,7 +49,7 @@ export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currenc
   }, [company, invoiceId, invoiceVersion, comparisonAvailable, lineKey]);
   const lineLabel = (id: string | null) => id ? `Line ${lines.find((line) => line.id === id)?.lineNumber ?? "—"}` : "Invoice";
   return <section className="mt-5 space-y-5" aria-label="Invoice review and Finance">
-    <Panel title="Review and Finance" action={<Button variant="secondary" onClick={refresh} disabled={loading}>Refresh invoice</Button>}>
+    <Panel title="Review and Finance" action={<Button variant="secondary" onClick={() => refresh()} disabled={loading}>Refresh invoice</Button>}>
       <div className="space-y-4 p-5">
         {loading ? <p role="status">Loading invoice review…</p> : <>
           {errors.map((message) => <p key={message} role="alert" className="text-sm text-red-700">{message}</p>)}
@@ -63,6 +64,8 @@ export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currenc
         </>}
       </div>
     </Panel>
+    {!loading && comparisonAvailable && readiness && errors.length === 0 && <InvoiceMatchingPanel invoiceId={invoiceId} invoiceVersion={invoiceVersion}
+      lines={lines} readiness={readiness} refresh={refresh} />}
     {!loading && history && <Panel title="Recorded review history"><div className="space-y-5 p-5">
       <p className="text-sm text-muted-foreground">Saved results are history. They are not a current invoice approval or permission to pay.</p>
       {history.mappings.length > 0 && <div><h3 className="mb-2 font-medium">Invoice line links</h3><ul className="space-y-2 text-sm">{history.mappings.map((mapping) =>

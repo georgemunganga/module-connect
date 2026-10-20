@@ -153,6 +153,7 @@ function InvoiceDetailContent() {
   const { legalEntityId, capabilities, permissions } = useCompany();
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -169,6 +170,7 @@ function InvoiceDetailContent() {
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."}</div>;
   return <div className="p-5 sm:p-8">
     <PageHeader title={`Invoice ${invoice.invoiceNumber}`} subtitle={`${invoice.supplierName || "Vendor"} · ${invoice.currencyCode}`} actions={<Badge>{invoice.status}</Badge>} />
+    {notice && <p role="status" className="mb-5 text-sm">{notice}</p>}
     <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">{invoice.nextStep}</p>
     <div className="mb-5 grid gap-5 sm:grid-cols-2"><Panel title="Invoice details"><dl className="grid grid-cols-2 gap-3 p-5 text-sm">
       <dt>Invoice date</dt><dd>{invoice.invoiceDate}</dd><dt>Due date</dt><dd>{invoice.dueDate || "—"}</dd>
@@ -185,7 +187,7 @@ function InvoiceDetailContent() {
     {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
     <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
       company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
-      comparisonAvailable={capabilities.invoiceComparison} refresh={() => setRefresh((value) => value + 1)} />
+      comparisonAvailable={capabilities.invoiceComparison} refresh={(message) => { setNotice(message ?? ""); setRefresh((value) => value + 1); }} />
     <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/bills">Back to bills</Link>
   </div>;
 }
