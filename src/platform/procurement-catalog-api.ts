@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Published catalog prices available to an employee in the selected ERP company. */
 export type PublishedCatalogPrice = {
   entryId: string; itemId: string; code: string; name: string; kind: string;
@@ -27,7 +29,7 @@ export async function listPublishedCatalog(companyId: string, search = "", signa
   let response: Response;
   try {
     response = await fetch(`/api/procurement/v1/catalog?${query}`, {
-      credentials: "include", cache: "no-store", signal, headers: { "X-Shell-Entity": companyId },
+      credentials: "include", cache: "no-store", signal, headers: procurementScopeHeaders(companyId),
     });
   } catch {
     throw new Error("The buying catalog is unavailable. You can still enter a non-catalog item.");

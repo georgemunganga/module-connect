@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Own RFQ/RFP/tender drafts. Publication, bids and award require separate governed APIs. */
 export type SourcingLineDraft = {
   id?: string | null;
@@ -39,7 +41,7 @@ async function call<T>(companyId: string, path: string, init: RequestInit = {}):
   let response: Response;
   try {
     const headers = new Headers(init.headers);
-    headers.set("X-Shell-Entity", companyId);
+    Object.entries(procurementScopeHeaders(companyId)).forEach(([key, value]) => headers.set(key, value));
     if (init.body) headers.set("Content-Type", "application/json");
     response = await fetch(`/api/procurement/v1/sourcing${path}`,
       { ...init, credentials: "include", cache: "no-store", headers });

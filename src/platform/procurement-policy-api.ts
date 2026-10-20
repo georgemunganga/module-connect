@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Company-scoped Procurement policy drafts. Validation never activates a policy. */
 export type PolicyDraft = {
   policyKey: string;
@@ -40,7 +42,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
 async function call(companyId: string, path: string, init: RequestInit = {}): Promise<unknown> {
   if (!guid.test(companyId)) throw new Error("Choose an ERP company before editing buying rules.");
   const headers = new Headers(init.headers);
-  headers.set("X-Shell-Entity", companyId);
+  Object.entries(procurementScopeHeaders(companyId)).forEach(([key, value]) => headers.set(key, value));
   if (init.body) headers.set("Content-Type", "application/json");
   let response: Response;
   try {

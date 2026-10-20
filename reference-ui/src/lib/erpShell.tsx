@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../shared/branding";
+import { ERP_SHELL_STORAGE_KEY } from "../../../shared/shell-scope";
 
 type Branding = {
   displayName: string;
@@ -35,7 +36,7 @@ type ErpShellContext = {
   selectBranch: (id: string, entityId: string) => void;
 };
 
-const SHELL_KEY = "erp.shell.state.v1";
+const SHELL_KEY = ERP_SHELL_STORAGE_KEY;
 const SESSION_KEY = "erp.oidc.session";
 const ShellContext = createContext<ErpShellContext | null>(null);
 function readSelection(): ShellSelection {

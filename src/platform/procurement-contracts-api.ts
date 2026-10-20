@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Commercial contract drafts. Review, signature, activation and drawdowns are separate workflows. */
 export type ContractDraft = {
   supplierId: string; title: string; contractType: string; currencyCode: string;
@@ -24,7 +26,7 @@ async function call(companyId: string, path: string, init: RequestInit = {}): Pr
   let response: Response;
   try {
     const headers = new Headers(init.headers);
-    headers.set("X-Shell-Entity", companyId);
+    Object.entries(procurementScopeHeaders(companyId)).forEach(([key, value]) => headers.set(key, value));
     if (init.body) headers.set("Content-Type", "application/json");
     response = await fetch(`/api/procurement/v1/contracts${path}`,
       { ...init, credentials: "include", cache: "no-store", headers });

@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Draft item stewardship. Catalog publication and eligibility are separate workflows. */
 export type ItemDraft = {
   code: string; name: string; kind: string; categoryCode: string; unitCode: string;
@@ -35,7 +37,7 @@ async function request<T>(companyId: string, path: string, init: RequestInit = {
   let response: Response;
   try {
     const headers = new Headers(init.headers);
-    headers.set("X-Shell-Entity", companyId);
+    Object.entries(procurementScopeHeaders(companyId)).forEach(([key, value]) => headers.set(key, value));
     if (init.body) headers.set("Content-Type", "application/json");
     response = await fetch(`/api/procurement/v1/items${path}`, { ...init, credentials: "include", cache: "no-store", headers });
   } catch { throw new ItemApiError(0, "Item records are unavailable. Your changes were not confirmed."); }

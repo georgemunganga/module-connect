@@ -6,6 +6,7 @@ const companyId = "11111111-1111-4111-8111-111111111111";
 const workerId = "22222222-2222-4222-8222-222222222222";
 const vendorId = "33333333-3333-4333-8333-333333333333";
 const invoiceId = "44444444-4444-4444-8444-444444444444";
+const branchId = "55555555-5555-4555-8555-555555555555";
 const capabilities = Object.fromEntries([
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
   "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal",
@@ -14,14 +15,17 @@ const capabilities = Object.fromEntries([
 
 async function mockErp(page: Page, canCapture = true) {
   let invoice: Record<string, unknown> | null = null;
-  await page.addInitScript((entityId) => {
-    localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId }));
-  }, companyId);
+  await page.addInitScript(({ entityId, branch }) => {
+    localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch }));
+  }, { entityId: companyId, branch: branchId });
   await page.route("**/api/**", (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const json = (body: unknown, status = 200) => route.fulfill({ status,
       contentType: "application/json", body: JSON.stringify(body) });
+    if (url.pathname.startsWith("/api/procurement/v1/")
+      && (request.headers()["x-shell-entity"] !== companyId || request.headers()["x-shell-location"] !== branchId))
+      return json({ message: "The selected branch was not sent." }, 403);
     if (url.pathname === "/api/hrm/auth/me") return json({ authenticated: true,
       user: { isActive: true, displayName: "AP Processor", email: "ap@example.test", roles: ["ap_processor"] } });
     if (url.pathname === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
@@ -50,7 +54,7 @@ async function mockErp(page: Page, canCapture = true) {
       const netAmount = input.lines.reduce((sum: number, line: { quantity: number; unitPrice: number }) =>
         sum + line.quantity * line.unitPrice, 0);
       const taxAmount = input.lines.reduce((sum: number, line: { taxAmount: number }) => sum + line.taxAmount, 0);
-      invoice = { ...input, id: invoiceId, supplierName: "Office Supplier", status: "Received",
+      invoice = { ...input, id: invoiceId, branchRef: branchId, supplierName: "Office Supplier", status: "Received",
         intakeChannel: "Manual", invoiceNumber: input.invoiceNumber.trim(),
         currencyCode: input.currencyCode.toUpperCase(), netAmount, taxAmount,
         grossAmount: netAmount + taxAmount, version: 1, createdAt: "2026-10-20T00:00:00Z",

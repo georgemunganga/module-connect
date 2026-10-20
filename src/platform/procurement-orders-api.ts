@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Internal PO drafts. Approval, issue, commitment and supplier dispatch are separate gates. */
 export type OrderDraftLine = {
   id?: string | null; description: string; unitCode: string; quantity: number;
@@ -10,7 +12,7 @@ export type OrderDraftInput = {
   expectedDeliveryOn?: string | null; lines: OrderDraftLine[];
 };
 export type OrderSummary = {
-  id: string; number: string; supplierId: string; supplierName?: string | null;
+  id: string; number: string; supplierId: string; branchRef?: string | null; supplierName?: string | null;
   currencyCode: string; status: "Draft" | "Cancelled";
   expectedDeliveryOn?: string | null; version: number; createdAt: string;
 };
@@ -32,7 +34,7 @@ export class OrderDraftError extends Error {
 async function request(legalEntityId: string, path: string, init: RequestInit = {}): Promise<unknown> {
   if (!guid.test(legalEntityId)) throw new OrderDraftError(0, "Choose an ERP company first.");
   const headers = new Headers(init.headers);
-  headers.set("X-Shell-Entity", legalEntityId);
+  Object.entries(procurementScopeHeaders(legalEntityId)).forEach(([key, value]) => headers.set(key, value));
   if (init.body) headers.set("Content-Type", "application/json");
   let response: Response;
   try {

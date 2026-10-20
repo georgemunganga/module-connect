@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Department procurement forecasts. Draft plans never reserve budget or authorize a purchase. */
 export type PlanLineDraft = {
   id?: string | null; catalogItemId?: string | null; description: string;
@@ -29,7 +31,7 @@ async function call(companyId: string, path: string, init: RequestInit = {}): Pr
   let response: Response;
   try {
     const headers = new Headers(init.headers);
-    headers.set("X-Shell-Entity", companyId);
+    Object.entries(procurementScopeHeaders(companyId)).forEach(([key, value]) => headers.set(key, value));
     if (init.body) headers.set("Content-Type", "application/json");
     response = await fetch(`/api/procurement/v1/plans${path}`,
       { ...init, credentials: "include", cache: "no-store", headers });

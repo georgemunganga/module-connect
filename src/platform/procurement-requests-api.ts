@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Own purchase requests. Submission records demand but does not approve spending. */
 export type RequestLineDraft = {
   id?: string | null; description: string; unitCode: string;
@@ -56,7 +58,7 @@ async function request<T>(companyId: string, path: string, init: RequestInit = {
   let response: Response;
   try {
     const headers = new Headers(init.headers);
-    headers.set("X-Shell-Entity", companyId);
+    Object.entries(procurementScopeHeaders(companyId)).forEach(([key, value]) => headers.set(key, value));
     if (init.body) headers.set("Content-Type", "application/json");
     response = await fetch(`/api/procurement/v1/requests${path}`, { ...init, credentials: "include", cache: "no-store", headers });
   } catch { throw new RequestApiError(0, "Requests are unavailable. Your changes were not confirmed."); }

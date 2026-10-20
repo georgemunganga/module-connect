@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Manual invoice intake only. Finance owns posting and payment. */
 export type InvoiceLineInput = {
   description: string; quantity: number; unitPrice: number; taxAmount: number;
@@ -9,7 +11,7 @@ export type InvoiceIntakeInput = {
   lines: InvoiceLineInput[];
 };
 export type InvoiceSummary = {
-  id: string; supplierId: string; supplierName?: string | null;
+  id: string; supplierId: string; branchRef?: string | null; supplierName?: string | null;
   invoiceNumber: string; invoiceDate: string; currencyCode: string;
   grossAmount: number; status: "Received"; intakeChannel: string;
   version: number; createdAt: string;
@@ -32,7 +34,7 @@ export class InvoiceIntakeError extends Error {
 async function request(legalEntityId: string, path: string, init: RequestInit = {}): Promise<unknown> {
   if (!guid.test(legalEntityId)) throw new InvoiceIntakeError(0, "Choose an ERP company first.");
   const headers = new Headers(init.headers);
-  headers.set("X-Shell-Entity", legalEntityId);
+  Object.entries(procurementScopeHeaders(legalEntityId)).forEach(([key, value]) => headers.set(key, value));
   if (init.body) headers.set("Content-Type", "application/json");
   let response: Response;
   try {

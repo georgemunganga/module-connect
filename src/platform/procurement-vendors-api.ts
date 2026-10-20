@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Supplier intake and review API. Finance retains payment-detail verification. */
 export interface VendorContactDraft {
   name: string;
@@ -116,7 +118,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
 
 function verifyScope(legalEntityId: string) {
   if (!guid.test(legalEntityId)) throw new VendorApiError(0, "Choose an ERP company before opening vendors.");
-  return { "X-Shell-Entity": legalEntityId };
+  return procurementScopeHeaders(legalEntityId);
 }
 
 async function request<T>(legalEntityId: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -124,7 +126,7 @@ async function request<T>(legalEntityId: string, path: string, init: RequestInit
   let response: Response;
   try {
     const headers = new Headers(init.headers);
-    headers.set("X-Shell-Entity", scope["X-Shell-Entity"]);
+    Object.entries(scope).forEach(([key, value]) => headers.set(key, value));
     if (init.body) headers.set("Content-Type", "application/json");
     response = await fetch(`/api/procurement/v1/vendors${path}`, {
       ...init,

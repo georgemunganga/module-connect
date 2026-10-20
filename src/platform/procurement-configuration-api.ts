@@ -1,3 +1,5 @@
+import { procurementScopeHeaders } from "../../shared/shell-scope";
+
 /** Procurement-owned reference drafts. Core owns company, currency, tax and identity masters. */
 export type ReferenceKind = "categories" | "methods";
 export type ReferenceDraft = {
@@ -20,7 +22,7 @@ async function call(companyId: string, kind: ReferenceKind, path: string,
   let response: Response;
   try {
     const headers = new Headers(init.headers);
-    headers.set("X-Shell-Entity", companyId);
+    Object.entries(procurementScopeHeaders(companyId)).forEach(([key, value]) => headers.set(key, value));
     if (init.body) headers.set("Content-Type", "application/json");
     response = await fetch(`/api/procurement/v1/configuration/${kind}${path}`,
       { ...init, credentials: "include", cache: "no-store", headers });
