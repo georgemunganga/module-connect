@@ -41,10 +41,12 @@ async function mock(page: Page, options: Options = {}) {
       if (path === `${api}/service-acceptances/${id}` || path === `${api}/service-acceptances/${id}/certification-task`) return json(service(path.endsWith("certification-task")));
     }
     if (request.method() === "POST" && (path.startsWith(api + "/receipts/") || path.startsWith(api + "/service-acceptances/"))) {
-      writes.push({ path, body: request.postData()!, key: request.headers()["idempotency-key"] }); changed = true;
+      writes.push({ path, body: request.postData()!, key: request.headers()["idempotency-key"] });
+      // Saving a draft is not arrival or certification. Only a final command changes retained evidence.
+      changed = path !== api + "/receipts/drafts" && path !== api + "/service-acceptances/drafts";
       if (options.stale) return json({ message: "Current evidence changed" }, 409);
       if (options.lost || options.createLost) return route.abort("failed");
-      return json({ id, version: 3, status: "Recorded" });
+      return json({ id, version: 3, status: changed ? "Recorded" : "Draft" });
     }
     unexpected.push(path); return json({ message: "Unexpected receiving fixture endpoint" }, 404);
   });
