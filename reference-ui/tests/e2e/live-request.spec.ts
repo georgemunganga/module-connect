@@ -83,6 +83,10 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
           blockers: options.changedRouteLines ? ["PinnedDecisionLinesChanged"] : [],
           lines: options.changedRouteLines ? [] : [{ lineId: record.lines[0]?.id,
           stages: [{ code: "NEED", assignee: "LineManager", mode: "One" }] }] },
+        assignmentPlan: { resolved: !options.changedRouteLines, blockers: [],
+          stages: options.changedRouteLines ? [] : [{ code: "NEED", assigneeKind: "LineManager",
+            mode: "One", blocker: null,
+            candidates: [{ subjectId: "manager-1", displayName: "Jane Manager" }] }] },
         nextStep: "An independent approver is still required." });
     }
     if (path === `/api/procurement/v1/requests/${requestId}/withdraw` && record) {
@@ -267,7 +271,7 @@ test("Procurement returns a blocked request with a note and requester resubmits 
   await page.getByRole("link", { name: "Back to my requests" }).click();
   await page.getByRole("button", { name: "View details" }).click();
   await expect(page.getByText("Approval route from buying rules")).toBeVisible();
-  await expect(page.getByText("NEED · LineManager")).toBeVisible();
+  await expect(page.getByText("NEED · LineManager · Jane Manager")).toBeVisible();
   await expect(page.getByText("No approval task has opened.", { exact: false })).toBeVisible();
   await expect(page.getByRole("cell", { name: "UNKNOWN" })).toBeVisible();
   await expect(page.getByText("The buying rules still need a successful check.")).toBeVisible();

@@ -130,7 +130,14 @@ export function LiveRequestList() {
         {reviewReadiness.approvalRoute?.lines.length ? <div className="mt-3">
           <p className="font-medium">Approval route from buying rules</p>
           {reviewReadiness.approvalRoute.hasSingleRoute
-            ? <ol className="mt-1 list-decimal pl-5 text-muted-foreground">{reviewReadiness.approvalRoute.lines[0].stages.map((stage, index) => <li key={`${stage.code}-${index}`}>{stage.code} · {stage.assignee}</li>)}</ol>
+            ? <ol className="mt-1 list-decimal pl-5 text-muted-foreground">{reviewReadiness.approvalRoute.lines[0].stages.map((stage, index) => {
+              const assigned = reviewReadiness.assignmentPlan?.stages[index];
+              const people = assigned?.candidates.map((candidate) => candidate.displayName).join(", ");
+              return <li key={`${stage.code}-${index}`}>{stage.code} · {stage.assignee}
+                {people ? ` · ${people}` : " · person to be assigned"}
+                {assigned?.blocker === "ApproverChoiceRequired" ? " · choose an approver before starting" : ""}
+              </li>;
+            })}</ol>
             : <p className="mt-1 text-amber-800">Request lines need different approval routes. Procurement must split the approvals by line.</p>}
           <p className="mt-1 text-xs text-muted-foreground">This shows the rule route only. No approval task has opened.</p>
         </div> : null}
