@@ -145,8 +145,9 @@ export function LiveInvoiceDetail() {
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
-    setLoading(true); setError("");
-    getInvoiceIntake(legalEntityId, id, controller.signal).then(setInvoice)
+    setLoading(true); setError(""); setInvoice(null);
+    getInvoiceIntake(legalEntityId, id, controller.signal)
+      .then((result) => { if (!controller.signal.aborted) setInvoice(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -168,7 +169,7 @@ export function LiveInvoiceDetail() {
       <tbody>{invoice.lines.map((line) => <tr key={line.id}><td>{line.lineNumber}</td><td>{line.description}</td>
         <td>{line.quantity}</td><td>{money(line.unitPrice, invoice.currencyCode)}</td><td>{money(line.taxAmount, invoice.currencyCode)}</td></tr>)}</tbody>
     </RecordTable></div></Panel>
-    {capabilities.invoiceDocuments && <InvoiceDocumentPanel invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
+    {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
     <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/bills">Back to bills</Link>
   </div>;
 }

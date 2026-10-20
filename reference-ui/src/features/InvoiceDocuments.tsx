@@ -70,10 +70,11 @@ export function InvoiceDocumentPanel({ invoiceId, canUpload }: { invoiceId: stri
       {data && ` Up to ${data.limits.maxOwnerFiles} files, ${Math.ceil(data.limits.maxFileBytes / 1024 / 1024)} MB each.`}</p>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="text-sm">{notice}</p>}
+    {canUpload && data && data.items.length >= data.limits.maxOwnerFiles && <p className="text-sm text-muted-foreground">File limit reached. You can still retry an interrupted upload.</p>}
     {canUpload && data && <form onSubmit={upload} className="flex flex-wrap items-end gap-3">
       <Field label="Invoice document"><Input key={inputKey} type="file" accept="application/pdf,image/png,image/jpeg" disabled={busy}
         onChange={(event) => { setFile(event.target.files?.[0] ?? null); uploadKey.current = crypto.randomUUID(); setError(""); }} /></Field>
-      <Button type="submit" variant="secondary" disabled={busy || !file || data.items.length >= data.limits.maxOwnerFiles}>{busy ? "Working…" : "Add document"}</Button>
+      <Button type="submit" variant="secondary" disabled={busy || !file}>{busy ? "Working…" : "Add document"}</Button>
     </form>}
     {loading ? <p role="status">Loading documents…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
       <thead><tr><th>File</th><th>Size</th><th>Security check</th><th>Action</th></tr></thead>

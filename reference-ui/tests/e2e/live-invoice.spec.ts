@@ -13,7 +13,7 @@ const capabilities = Object.fromEntries([
   "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "vendorDraft" || key === "invoiceIntake"]));
 
-async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean } = {}) {
+async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number } = {}) {
   let invoice: Record<string, unknown> | null = options.seed ? {
     id: invoiceId, supplierId: vendorId, supplierName: "Office Supplier", invoiceNumber: "INV-DOC-1",
     invoiceDate: "2026-10-20", currencyCode: "ZMW", status: "Received", intakeChannel: "Manual",
@@ -72,7 +72,7 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
     }
     const documentPath = `/api/procurement/v1/invoices/${invoiceId}/documents`;
     if (url.pathname === documentPath) {
-      if (request.method() === "GET") return json({ items: documents, limits: { maxFileBytes: 10 * 1024 * 1024, maxOwnerFiles: 10 } });
+      if (request.method() === "GET") return json({ items: documents, limits: { maxFileBytes: 10 * 1024 * 1024, maxOwnerFiles: options.fileLimit ?? 10 } });
       if (!canCapture) return json({ message: "Invoice document access denied." }, 403);
       const key = request.headers()["idempotency-key"];
       if (!key || request.headers()["content-type"] !== "application/octet-stream")
@@ -133,13 +133,17 @@ test("read-only invoice user cannot start intake", async ({ page }) => {
 
 
 test("invoice document upload recovers a lost response without duplicating evidence", async ({ page }) => {
-  await mockErp(page, true, { documents: true, seed: true, loseUploadResponse: true });
+  await mockErp(page, true, { documents: true, seed: true, loseUploadResponse: true, fileLimit: 1 });
   await page.goto(`/procurement/workspace/bills/${invoiceId}`);
   await expect(page.getByText("No documents added yet.")).toBeVisible();
   await page.getByLabel("Invoice document").setInputFiles({ name: "original invoice.pdf", mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.7 synthetic evidence") });
   await page.getByRole("button", { name: "Add document", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("not confirmed");
+  await page.getByRole("button", { name: "Refresh status", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "original invoice.pdf", exact: true })).toHaveCount(1);
+  await expect(page.getByText("File limit reached.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add document", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Add document", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("File saved and checked.");
   await expect(page.getByRole("cell", { name: "original invoice.pdf", exact: true })).toHaveCount(1);
@@ -169,3 +173,25 @@ test("read-only invoice access does not grant document upload", async ({ page })
   await expect(page.getByLabel("Invoice document")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add document", exact: true })).toHaveCount(0);
 });
+
+for (const status of [403, 404]) {
+  test(`invoice navigation clears previous details and document actions after ${status}`, async ({ page }) => {
+    await mockErp(page, true, { documents: true, seed: true });
+    const missingId = "88888888-8888-4888-8888-888888888888";
+    await page.route(`**/api/procurement/v1/invoices/${missingId}`, (route) => route.fulfill({
+      status, contentType: "application/json", body: JSON.stringify({ message: "Invoice not found." }),
+    }));
+    await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+    await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Invoice document")).toBeVisible();
+    await page.evaluate((path) => {
+      history.pushState(null, "", path);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }, `/procurement/workspace/bills/${missingId}`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      status === 403 ? "You do not have invoice access" : "Invoice not found.");
+    await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Invoice document")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add document", exact: true })).toHaveCount(0);
+  });
+}
