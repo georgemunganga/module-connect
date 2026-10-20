@@ -85,7 +85,7 @@ export async function fetchProcurementReadiness(
   const resolvedCapabilities = object(meta) && object(meta.capabilities) ? meta.capabilities : null;
   if (!object(meta) || meta.tenantId !== context.tenantId || meta.legalEntityId !== context.legalEntityId
     || meta.schemaReady !== true || !resolvedCapabilities
-    || !capabilityKeys.every((key) => typeof resolvedCapabilities[key] === "boolean"))
+    || !capabilityKeys.every((key) => key === "invoiceIntake" || typeof resolvedCapabilities[key] === "boolean"))
     throw new ProcurementLiveError("unavailable");
 
   return {
@@ -96,6 +96,7 @@ export async function fetchProcurementReadiness(
     schemaReady: true,
     permissions: Array.isArray(context.permissions)
       ? context.permissions.filter((permission): permission is string => typeof permission === "string") : [],
-    capabilities: Object.fromEntries(capabilityKeys.map((key) => [key, resolvedCapabilities[key]])) as Record<ProcurementCapability, boolean>,
+    capabilities: Object.fromEntries(capabilityKeys.map((key) =>
+      [key, key === "invoiceIntake" ? resolvedCapabilities[key] === true : resolvedCapabilities[key]])) as Record<ProcurementCapability, boolean>,
   };
 }

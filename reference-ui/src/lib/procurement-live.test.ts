@@ -25,6 +25,20 @@ describe("Procurement live readiness", () => {
     expect(fetcher.mock.calls[2][1].credentials).toBe("include");
   });
 
+  it("keeps existing pages ready while an older API omits the new invoice capability", async () => {
+    const earlierCapabilities = Object.fromEntries(Object.entries(capabilities)
+      .filter(([key]) => key !== "invoiceIntake"));
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker,
+        company: { id: entity, currencyCode: "ZMW" } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity,
+        schemaReady: true, capabilities: earlierCapabilities }));
+    const result = await fetchProcurementReadiness({ entityId: entity }, undefined, fetcher);
+    expect(result.capabilities.vendorDraft).toBe(true);
+    expect(result.capabilities.invoiceIntake).toBe(false);
+  });
+
   it("never falls back to demo data when sign-in or schema readiness fails", async () => {
     const signedOut = vi.fn().mockResolvedValue(json({ authenticated: false }));
     await expect(fetchProcurementReadiness({}, undefined, signedOut)).rejects.toMatchObject({ code: "sign-in" });
