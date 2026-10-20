@@ -82,7 +82,7 @@ test("approved requests support exact partial consolidation and controlled cance
   await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
   const creation = calls.find(x => x.path.endsWith("/from-approved-sources"))!;
   expect((creation.body as { sources: Selection[] }).sources.map(x => x.quantity)).toEqual(["12345678901234.5678", "2.0001"]); expect(creation.key).toMatch(/^[0-9a-f-]{36}$/i);
-  await page.getByLabel("Reason", { exact: true }).fill("No longer required"); await page.getByRole("button", { name: "Cancel draft and release its quantities" }).click();
+  await page.getByRole("textbox", { name: "Reason", exact: true }).fill("No longer required"); await page.getByRole("button", { name: "Cancel draft and release its quantities" }).click();
   await expect(page.getByText("Cancelled", { exact: true })).toBeVisible(); expect(calls.filter(x => x.method === "POST")).toHaveLength(2);
   await expect(page.getByRole("button", { name: /publish|send to vendor|award/i })).toHaveCount(0);
 });
@@ -113,12 +113,12 @@ test("governed capability does not substitute for explicit conversion permission
 test("cancel validation permits correction while interrupted cancellation and recovery404 retain original GET-only key", async ({ page }) => {
   const calls = await mock(page, { seed: true, rejectCancelOnce: true, loseCancel: true, cancelRecovery404Once: true });
   await page.goto(`/procurement/workspace/rfqs/${event}?source=approved`);
-  await page.getByLabel("Reason", { exact: true }).fill("Please correct this reason");
+  await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Please correct this reason");
   await page.getByRole("button", { name: "Cancel draft and release its quantities", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Check the quote details");
   await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Reason", { exact: true })).toHaveValue("Please correct this reason");
-  await page.getByLabel("Reason", { exact: true }).fill("No longer required");
+  await expect(page.getByRole("textbox", { name: "Reason", exact: true })).toHaveValue("Please correct this reason");
+  await page.getByRole("textbox", { name: "Reason", exact: true }).fill("No longer required");
   await page.getByRole("button", { name: "Cancel draft and release its quantities", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
   const mutations = calls.filter(x => x.method === "POST" && x.path.endsWith("/source-cancel"));
