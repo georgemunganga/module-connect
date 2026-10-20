@@ -31,7 +31,8 @@ function useCompany() {
 }
 
 export function LiveVendorList() {
-  const { legalEntityId } = useCompany();
+  const { legalEntityId, permissions } = useCompany();
+  const canCreate = permissions.includes("procurement-vendor-create");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -48,7 +49,7 @@ export function LiveVendorList() {
     return () => controller.abort();
   }, [legalEntityId, search, status, page]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Vendors" subtitle="Add vendors, review their details, and manage who can receive new orders." actions={<Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link>} />
+    <PageHeader title="Vendors" subtitle="Add vendors, review their details, and manage who can receive new orders." actions={canCreate ? <Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link> : undefined} />
     <Panel><div className="p-5">
       <form className="mb-4 flex max-w-xl gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(query.trim()); }}>
         <Input aria-label="Search vendors" placeholder="Search vendor name or company ID" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -72,7 +73,7 @@ export function LiveVendorList() {
         </tr>)}</tbody>
       </RecordTable></div> : search || status
         ? <EmptyState title="No vendors match this view" description="Try a different search or status." />
-        : <EmptyState title="Every purchase starts with a vendor" description="Create and manage your vendors and their contact persons, all in one place." action={<Link to="/vendors/new"><Button>Add vendor</Button></Link>} />}
+        : <EmptyState title="Every purchase starts with a vendor" description="Create and manage your vendors and their contact persons, all in one place." action={canCreate ? <Link to="/vendors/new"><Button>Add vendor</Button></Link> : undefined} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
   </div>;

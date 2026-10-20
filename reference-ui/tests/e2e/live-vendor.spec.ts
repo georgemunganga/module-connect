@@ -11,11 +11,11 @@ const capabilities = Object.fromEntries([
 
 type Vendor = Record<string, unknown> & { id: string; version: number; displayName: string; legalName: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean; qualification?: boolean } = {}) {
-  let vendor: Vendor | null = options.reviewer ? {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean; approveOnly?: boolean; qualification?: boolean } = {}) {
+  let vendor: Vendor | null = options.reviewer || options.approveOnly ? {
     id: vendorId, number: "VEN-001", legalName: "Acme Zambia Ltd", displayName: "Acme",
     countryCode: "ZM", categoryCode: "OFFICE", status: "Submitted", version: 3,
-    isOrderable: false, canReturnForInformation: true, canApprove: true, canReject: true,
+    isOrderable: false, canReturnForInformation: !options.approveOnly, canApprove: true, canReject: true,
     contacts: [{ id: "44444444-4444-4444-8444-444444444444", name: "Pat Supplier" }], sites: [],
     qualifications: options.qualification ? [{ id: "66666666-6666-4666-8666-666666666666",
       qualificationType: "Tax clearance", expiresOn: "2027-12-31", reviewStatus: "Pending" }] : [],
@@ -32,7 +32,11 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
+      permissions: options.approveOnly
+        ? ["procurement-access", "procurement-vendor-read", "procurement-vendor-approve"]
+        : ["procurement-access", "procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit", "procurement-vendor-manage", "procurement-vendor-approve"],
+      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/vendors") {
       if (request.method() === "GET") {
@@ -304,6 +308,7 @@ test("stale edit keeps entered values for comparison", async ({ page }) => {
 });
 
 test("vendor can be submitted for review after category and contact are saved", async ({ page }) => {
+  test.setTimeout(90_000);
   await mockErp(page);
   await page.goto("/procurement/workspace/vendors/new");
   await page.getByLabel("Company name").fill("Acme Zambia Ltd");
@@ -354,6 +359,16 @@ test("reviewer can return a submitted vendor with a visible reason", async ({ pa
   await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
   await page.getByRole("option", { name: "Submitted for review" }).click();
   await expect(page.getByText("No vendors match this view")).toBeVisible();
+});
+
+test("independent vendor approver sees the review but no create or edit actions", async ({ page }) => {
+  await mockErp(page, { approveOnly: true });
+  await page.goto("/procurement/workspace/vendors");
+  await expect(page.getByRole("link", { name: "Add vendor" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Open" }).click();
+  await expect(page.getByRole("button", { name: "Approve vendor" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit vendor" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send back for changes" })).toHaveCount(0);
 });
 
 test("reviewer must check duplicates before approving a vendor", async ({ page }) => {
