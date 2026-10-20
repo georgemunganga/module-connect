@@ -68,7 +68,7 @@ function sourceRow(row: unknown): RfqSource {
   // Four-decimal source originals are validated before use; no financial Number coercion.
   try { invoiceDecimal(row.availableQuantity); invoiceDecimal(row.approvedUnitEstimate); } catch { throw invalid(); }
   if ((row.availableQuantity === "0") !== (row.state === "FullyAllocated")) throw invalid();
-  return { ...base, state: row.state, canSelect: row.canSelect, branchRef: row.branchRef, description: row.description, unitCode: row.unitCode,
+  return { ...base, state: row.state, canSelect: row.state === "Available", branchRef: row.branchRef, description: row.description, unitCode: row.unitCode,
     categoryCode: row.categoryCode, expectedRequestVersion: row.expectedRequestVersion, sourceLineVersion: row.sourceLineVersion,
     availableQuantity: row.availableQuantity, approvedUnitEstimate: row.approvedUnitEstimate, currencyCode: row.currencyCode,
     minimumQuoteCount: row.minimumQuoteCount, sourceSubmissionId: row.sourceSubmissionId, sourceCaseId: row.sourceCaseId, methodId: row.methodId, methodRevision: row.methodRevision };
@@ -105,7 +105,7 @@ export async function getGovernedRfq(company: string, eventId: string, signal?: 
       || line.allocationState !== (body.status === "Draft" ? "Reserved" : "Released")) throw invalid();
     return { id: line.id, purchaseRequestId: line.purchaseRequestId, purchaseRequestLineId: line.purchaseRequestLineId,
       description: line.description, unitCode: line.unitCode, categoryCode: line.categoryCode, quantity: line.quantity as string,
-      approvedUnitEstimate: line.approvedUnitEstimate as string, estimatedValue: line.estimatedValue as string, allocationState: line.allocationState };
+      approvedUnitEstimate: line.approvedUnitEstimate as string, estimatedValue: line.estimatedValue as string, allocationState: line.allocationState as RfqDetail["lines"][number]["allocationState"] };
   });
   if (new Set(lines.map(x => x.id)).size !== lines.length || new Set(lines.map(x => x.purchaseRequestLineId)).size !== lines.length) throw invalid();
   return { id: eventId, number: body.number, title: body.title, method: body.method, currencyCode: body.currencyCode, status: body.status,

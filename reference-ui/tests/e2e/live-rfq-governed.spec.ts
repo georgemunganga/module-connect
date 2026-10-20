@@ -6,9 +6,10 @@ const company = "11111111-1111-4111-8111-111111111111", worker = "22222222-2222-
 const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4444-4444-8444-444444444444";
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
+type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
 async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean } = {}) {
-  const calls: { method: string; path: string; body: any; key?: string }[] = []; const receipts = new Map<string, unknown>();
-  let lost = false, status = "Draft", version = 1, selected: any[] = [], exists = Boolean(options.seed);
+  const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
+  let lost = false, status = "Draft", version = 1, selected: Selection[] = [], exists = Boolean(options.seed);
   const sources = [lineA, lineB].map((id, at) => ({ purchaseRequestId: at ? prB : prA, purchaseRequestLineId: id, requestNumber: `PR-${at + 1}`,
     state: "Available", canSelect: true, branchRef: branch, description: at ? "Printer paper" : "Office notebooks", unitCode: "EACH", categoryCode: "OFFICE",
     expectedRequestVersion: 4, sourceLineVersion: 1, availableQuantity: "99999999999999.9999", approvedUnitEstimate: "0.0001", currencyCode: "ZMW",
@@ -42,7 +43,7 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
       if (url.pathname.endsWith("/approved-sources")) return json({ items: sources, candidateTotal: 2, page: 1, pageSize: 25, eligibilityMeaning: "CurrentPreviewOnly", canPublish: false });
       if (url.pathname.endsWith("/source-drafts")) return json({ items: exists ? [{ ...record(), state: "VerifiedRetainedDraft" }] : [], total: exists ? 1 : 0, page: 1, pageSize: 25, canPublish: false });
       if (url.pathname.endsWith("/from-approved-sources")) {
-        const body = request.postDataJSON(); selected = body.sources; exists = true;
+        const body = request.postDataJSON() as { sources: Selection[] }; selected = body.sources; exists = true;
         const saved = { eventId: event, number: "RF-1", status, version, originalDraftFingerprint: "a".repeat(64), commandKey: request.headers()["idempotency-key"],
           recordedHistoricalResult: true, canPublish: false, supplierDeliveryState: "NotStarted", financeReservationChanged: false };
         receipts.set(`Create/${saved.commandKey}`, saved);
@@ -73,7 +74,7 @@ test("approved requests support exact partial consolidation and controlled cance
   expect(calls.filter(x => x.method === "POST")).toHaveLength(0); await page.getByRole("button", { name: "Create internal draft", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
   const creation = calls.find(x => x.path.endsWith("/from-approved-sources"))!;
-  expect(creation.body.sources.map((x: any) => x.quantity)).toEqual(["12345678901234.5678", "2.0001"]); expect(creation.key).toMatch(/^[0-9a-f-]{36}$/i);
+  expect((creation.body as { sources: Selection[] }).sources.map(x => x.quantity)).toEqual(["12345678901234.5678", "2.0001"]); expect(creation.key).toMatch(/^[0-9a-f-]{36}$/i);
   await page.getByLabel("Reason", { exact: true }).fill("No longer required"); await page.getByRole("button", { name: "Cancel draft and release its quantities" }).click();
   await expect(page.getByText("Cancelled", { exact: true })).toBeVisible(); expect(calls.filter(x => x.method === "POST")).toHaveLength(2);
   await expect(page.getByRole("button", { name: /publish|send to vendor|award/i })).toHaveCount(0);
