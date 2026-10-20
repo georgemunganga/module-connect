@@ -116,7 +116,8 @@ function reply(body: unknown, command: InvoiceMatchingCommand): InvoiceMatchingR
   if (!object(body) || body.invoiceId !== command.invoiceId || body.commandKey !== command.key || body.commandPermission !== permission
     || body.commandSchemaVersion !== 1 || body.recordedHistoricalResult !== true || body.isCurrentApproval !== false || body.canPostToFinance !== false || !object(body.result)) throw invalid();
   const r = body.result;
-  if (!id(r.id) || !int(r.version)) throw invalid();
+  let intended: unknown; try { intended = JSON.parse(command.body); } catch { throw invalid(); }
+  if (!object(intended) || !int(intended.version) || !id(r.id) || !int(r.version) || r.version <= intended.version) throw invalid();
   if (command.operation === "InvoiceMapping") {
     if (r.verificationState !== "Unverified" || !int(r.mappingRevision) || !text(r.mappingSha256) || !/^[a-f0-9]{64}$/i.test(r.mappingSha256)) throw invalid();
     return { invoiceId: command.invoiceId, key: command.key, operation: command.operation, id: r.id, version: r.version, outcome: "MappingUnverified", mappingRevision: r.mappingRevision, issues: [] };

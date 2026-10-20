@@ -61,6 +61,8 @@ describe("invoice matching adapter", () => {
     expect(fetch).toHaveBeenCalledTimes(1); expect(fetch.mock.calls[0][1].body).toBe(command.body);
     expect(fetch.mock.calls[0][1].headers.get("Idempotency-Key")).toBe(key);
     respond({ ...envelope(command), isCurrentApproval: true }); await expect(sendInvoiceMatching(company, command)).rejects.toThrow("confirm");
+    const old = envelope(command); respond({ ...old, result: { ...old.result, version: 3 } });
+    await expect(sendInvoiceMatching(company, command)).rejects.toThrow("confirm");
   });
   it("treats Blocked comparison as a recorded outcome and excludes private source blockers", async () => {
     const command = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: doc, reason: null }, key);
