@@ -33,9 +33,10 @@ function manifest(): Manifest {
   return value;
 }
 
-async function connect(page: Page, fixture: Manifest) {
+async function connect(page: Page, fixture: Manifest, trafficPath: string) {
   let actor: Actor = "buyer";
   const traffic: Traffic[] = [];
+  const record = (row: Traffic) => { traffic.push(row); writeFileSync(trafficPath, JSON.stringify(traffic, null, 2) + "\n", { mode: 0o600 }); };
   const headers = (next: Actor) => ({ [fixture.authenticationHeader]: fixture.actors[next].principalId,
     "X-Shell-Entity": fixture.companyId, "X-Shell-Location": fixture.branchId });
   await page.addInitScript(({ entityId, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })),
@@ -49,7 +50,7 @@ async function connect(page: Page, fixture: Manifest) {
       const upstream = await route.fetch({ url: `${fixture.baseUrl}${url.pathname}${url.search}`, timeout: 45_000, maxRetries: 0,
         headers: { ...request.headers(), ...headers(acting) } });
       const text = await upstream.text(); let response: unknown; try { response = JSON.parse(text); } catch { response = text; }
-      traffic.push({ origin: "browser", actor: acting, method: request.method(), path: url.pathname, status: upstream.status(), body: request.postData(),
+      record({ origin: "browser", actor: acting, method: request.method(), path: url.pathname, status: upstream.status(), body: request.postData(),
         key: request.headers()["idempotency-key"], response });
       return route.fulfill({ response: upstream });
     }
@@ -68,7 +69,7 @@ async function connect(page: Page, fixture: Manifest) {
       const result = await page.request.fetch(fixture.baseUrl + path, { method, data: body, timeout: 45_000,
         headers: { ...headers(next), ...(body ? { "Content-Type": "application/json" } : {}), ...(key ? { "Idempotency-Key": key } : {}) } });
       const text = await result.text(); let response: unknown; try { response = JSON.parse(text); } catch { response = text; }
-      traffic.push({ origin: "verification", actor: next, method, path, status: result.status(), body: body ?? null, key, response });
+      record({ origin: "verification", actor: next, method, path, status: result.status(), body: body ?? null, key, response });
       return result;
     } };
 }
@@ -84,8 +85,8 @@ async function deliveryAction(page: Page, name: string, path: string, evidence: 
   await check(dialog).toHaveCount(0); await check(page.getByRole("status").filter({ hasText: /^Saved:/ })).toBeVisible();
 }
 
-test("actual receiving API: physical excess, independent inspection/acceptance and two current-version partial service certificates", async ({ page }, info) => {
-  const fixture = manifest(), seed = fixture.receiving, connection = await connect(page, fixture);
+async function scenario(page: Page, fixture: Manifest, trafficPath: string) {
+  const seed = fixture.receiving, connection = await connect(page, fixture, trafficPath);
   const read = async <T,>(actor: Actor, path: string): Promise<T> => {
     const response = await connection.request(actor, root + path); expect(response.status(), await response.text()).toBe(200); return response.json() as Promise<T>;
   };
@@ -113,7 +114,15 @@ test("actual receiving API: physical excess, independent inspection/acceptance a
     await check(page).toHaveURL(new RegExp(`/purchase-receives/${created.id}\\?kind=${kind}`));
     return created;
   };
-  try {
+  return { seed, connection, read, goods, service, writes, create };
+}
+const allTraffic: Traffic[] = [];
+test.describe.serial("actual receiving API", () => {
+  test("physical excess, independent inspection and acceptance", async ({ page }, info) => {
+    allTraffic.length = 0;
+    const fixture = manifest(), trafficPath = info.outputPath("actual-receiving-api-traffic.json");
+    const { seed, connection, read, goods, writes, create } = await scenario(page, fixture, trafficPath);
+    try {
     const meta = await read<{ capabilities: Record<string, boolean> }>("requester", "/meta");
     expect(meta.capabilities).toMatchObject({ receiving: false, receivingDrafts: true, receivingGoods: true, receivingInspection: true, receivingServices: true });
     const created = await create("goods"), id = created.id;
@@ -153,6 +162,19 @@ test("actual receiving API: physical excess, independent inspection/acceptance a
     expect(replay.status(), await replay.text()).toBe(200); expect(await replay.json()).toEqual(acceptCommand.response);
     expect((await goods("acceptor", id)).lineReadiness[0].effects).toHaveLength(1);
 
+    } finally {
+      // Persist first: timeout teardown may have already closed the page.
+      writeFileSync(trafficPath, JSON.stringify(connection.traffic, null, 2) + "\n", { mode: 0o600 });
+      await page.unrouteAll({ behavior: "wait" }).catch(() => {});
+      allTraffic.push(...connection.traffic);
+      writeFileSync(trafficPath, JSON.stringify(connection.traffic, null, 2) + "\n", { mode: 0o600 });
+      await info.attach("actual-receiving-api-traffic", { path: trafficPath, contentType: "application/json" });
+    }
+  });
+  test("two current-version partial service certificates and complete command evidence", async ({ page }, info) => {
+    const fixture = manifest(), trafficPath = info.outputPath("actual-receiving-api-traffic.json");
+    const { seed, connection, read, service, writes, create } = await scenario(page, fixture, trafficPath);
+    try {
     let previousSourceVersion = 0;
     for (const index of [1, 2]) {
       const draft = await create("service", index), normal = await service("requester", draft.id);
@@ -177,7 +199,8 @@ test("actual receiving API: physical excess, independent inspection/acceptance a
       expect(certified.capacity.orderRemainingQuantity).toBe(index === 1 ? "0.5" : "0");
       await check(page.getByText("Accepted quantity: 0.5 · Accepted value: ZMW 50", { exact: true })).toBeVisible();
     }
-    const commands = writes(); expect(commands).toHaveLength(8);
+    const combinedTraffic = [...allTraffic, ...connection.traffic];
+    const commands = combinedTraffic.filter(row => row.origin === "browser" && row.method === "POST"); expect(commands).toHaveLength(8);
     expect(commands.map(row => row.actor)).toEqual(["requester", "requester", "manager1", "acceptor", "requester", "manager2", "requester", "manager2"]);
     for (const command of commands) { expect(command.status).toBe(200); expect(command.key).toMatch(/^[0-9a-f-]{36}$/i); }
     expect(new Set(commands.map(row => row.key)).size).toBe(8);
@@ -186,15 +209,16 @@ test("actual receiving API: physical excess, independent inspection/acceptance a
       lines: [{ purchaseOrderLineId: seed.goods.purchaseOrderLineId, receivedQuantity: "2", rejectedQuantity: "0" }] });
     for (const command of [commands[4], commands[6]]) expect(JSON.parse(command.body!)).toMatchObject({ purchaseOrderId: seed.service.orderId,
       issuedVersionId: seed.service.issuedVersionId, purchaseOrderLineId: seed.service.purchaseOrderLineId, quantity: "0.5" });
-    const purposeReads = connection.traffic.filter(row => row.origin === "browser" && ["manager1", "manager2"].includes(row.actor));
+    const purposeReads = combinedTraffic.filter(row => row.origin === "browser" && ["manager1", "manager2"].includes(row.actor));
     expect(purposeReads.some(row => row.path.includes("/inspection-task"))).toBe(true);
     expect(purposeReads.some(row => row.path.includes("/certification-task"))).toBe(true);
     expect(purposeReads.some(row => row.path.includes("/receiving/worklist") || row.path.includes("/receiving/sources") || /^\/api\/procurement\/v1\/(receipts|service-acceptances)\/[^/]+$/.test(row.path))).toBe(false);
-    expect(connection.traffic.some(row => /\/orders|\/invoices|\/finance-handoffs/.test(row.path))).toBe(false);
-  } finally {
-    await page.unrouteAll({ behavior: "wait" });
-    const trafficPath = info.outputPath("actual-receiving-api-traffic.json");
-    writeFileSync(trafficPath, JSON.stringify(connection.traffic, null, 2) + "\n", { mode: 0o600 });
-    await info.attach("actual-receiving-api-traffic", { path: trafficPath, contentType: "application/json" });
-  }
+    expect(combinedTraffic.some(row => /\/orders|\/invoices|\/finance-handoffs/.test(row.path))).toBe(false);
+    } finally {
+      writeFileSync(trafficPath, JSON.stringify([...allTraffic, ...connection.traffic], null, 2) + "\n", { mode: 0o600 });
+      await page.unrouteAll({ behavior: "wait" }).catch(() => {});
+      writeFileSync(trafficPath, JSON.stringify([...allTraffic, ...connection.traffic], null, 2) + "\n", { mode: 0o600 });
+      await info.attach("actual-receiving-api-traffic", { path: trafficPath, contentType: "application/json" });
+    }
+  });
 });

@@ -102,3 +102,30 @@ awaits the backend mapping correction, generated migration and real PostgreSQL
 receiving probe. No production asset or capability was changed. Prior PR/PO and
 settings evidence remains scoped to its recorded older assets; no blanket
 whole-module release or regression claim is made from these receiving cases.
+
+
+## Actual backend browser gate completed — 20 October 2026
+
+Source-only warnings above describe earlier checkpoints. The fresh private
+`20261020_153636_browser` fixture subsequently passed both serial actual API
+Playwright cases (**2 passed, 2.8m, exit0**) on test `a563616` and the unchanged
+frozen `132ab18` app bundle (HTML/JS/CSS hashes rechecked OK). All eight UI
+commands, exact decimal/source/version assertions, purpose-role denials,
+response replay and complete command/privacy assertions passed. Procurement
+business responses were forwarded to the real API; only ERP shell presentation
+and test authentication were synthetic.
+
+Graceful server shutdown then passed the independent owner-side database
+verifier with exit0: physical2/qualified2/accepted1/held1; two service0.5/net50
+certificates; independent workers; conserved PR/PO counters; eight command/audit
+records and five outbox effects; no invoice/AP authority. The API and preview
+were stopped. Owner-private evidence includes per-response traffic and terminal
+logs; production was not deployed.
+
+The first combined180-second case timed out after partial execution; its trace,
+screenshot, logs and incomplete DB remain preserved under
+`20261020_151917_browser`. Its owner verifier correctly rejected completion.
+The successful retry used a fresh DB and split the same assertions into goods
+and service cases, retaining180 seconds per case without changing app assets
+or API request timeouts. This completes the receiving integration checkpoint,
+not all Procurement features or production release gates.

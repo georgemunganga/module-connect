@@ -28,3 +28,52 @@ Frontend base: `375861d`. Backend fixture: `5acc2e4` (`--serve --receiving`), wi
 - Broad `receiving` capability remains false while granular receiving capabilities gate the actual UI. No matching/AP authorization is fabricated.
 
 Only ERP shell authentication/branding/organization presentation is synthetic. Procurement context, metadata, sources, queues, reads, commands, authorization failures, replay and persisted effects use the real API. Actor-specific fixture headers are a test-only authentication bridge, not production authentication.
+
+
+## Actual first-run correction
+
+The first complete browser case reached real goods acceptance, both service
+drafts and the first service certification, then exhausted its 180-second total
+case budget on the resource-limited server. Its original log, trace, screenshot
+and incomplete database remain protected under `20261020_151917_browser`. The
+independent completion verifier correctly rejected the incomplete service state.
+No actual browser pass is claimed for that run.
+
+Coverage is now split into **two serial cases**, goods then services, each with
+the original 180-second limit. Every former command, privacy, exact quantity,
+replay, source-CAS and combined eight-command assertion remains. Each response
+is written to owner-private traffic evidence immediately, and final evidence is
+saved before route cleanup so page timeout cannot prevent capture. The final
+service evidence combines both cases. Serial mode skips service verification if
+goods fails; no used fixture may be retried. This changes test organization only;
+the frozen application asset hashes and transport timeouts are unchanged.
+
+Playwright `--list` successfully discovers both cases. A fresh backend fixture
+and the real browser execution remain required after this correction.
+
+
+## Actual backend browser gate completed — 20 October 2026
+
+Source-only warnings above describe earlier checkpoints. The fresh private
+`20261020_153636_browser` fixture subsequently passed both serial actual API
+Playwright cases (**2 passed, 2.8m, exit0**) on test `a563616` and the unchanged
+frozen `132ab18` app bundle (HTML/JS/CSS hashes rechecked OK). All eight UI
+commands, exact decimal/source/version assertions, purpose-role denials,
+response replay and complete command/privacy assertions passed. Procurement
+business responses were forwarded to the real API; only ERP shell presentation
+and test authentication were synthetic.
+
+Graceful server shutdown then passed the independent owner-side database
+verifier with exit0: physical2/qualified2/accepted1/held1; two service0.5/net50
+certificates; independent workers; conserved PR/PO counters; eight command/audit
+records and five outbox effects; no invoice/AP authority. The API and preview
+were stopped. Owner-private evidence includes per-response traffic and terminal
+logs; production was not deployed.
+
+The first combined180-second case timed out after partial execution; its trace,
+screenshot, logs and incomplete DB remain preserved under
+`20261020_151917_browser`. Its owner verifier correctly rejected completion.
+The successful retry used a fresh DB and split the same assertions into goods
+and service cases, retaining180 seconds per case without changing app assets
+or API request timeouts. This completes the receiving integration checkpoint,
+not all Procurement features or production release gates.
