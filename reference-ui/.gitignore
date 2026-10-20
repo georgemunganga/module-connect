@@ -13,3 +13,4 @@ __pycache__/
 *.py[cod]
 .invoice-verification-dist/
 .invoice-test-results/
+.invoice-backend-results/
