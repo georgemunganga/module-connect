@@ -105,7 +105,7 @@ export function LiveConfiguration() {
         <Field label="Expense account reference"><Input maxLength={100} value={draft.expenseAccountRef || ""} onChange={(event) => field("expenseAccountRef", event.target.value || null)} /></Field>
       </> : <Field label="Description" className="sm:col-span-2"><Textarea maxLength={2000} value={draft.description || ""} onChange={(event) => field("description", event.target.value || null)} /></Field>}
       {kind === "methods" && <Field label="Purchase route" className="sm:col-span-2">
-        <Select value={draft.executionRoute ?? "Unconfigured"} disabled={!supportedRoute(draft.executionRoute)} onChange={(event) => field("executionRoute", event.target.value)}>
+        <Select aria-label="Purchase route" value={draft.executionRoute ?? "Unconfigured"} disabled={!supportedRoute(draft.executionRoute)} onChange={(event) => field("executionRoute", event.target.value)}>
           {!supportedRoute(draft.executionRoute) && <option value={draft.executionRoute}>Unsupported purchase route</option>}
           {routes.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
         </Select>
