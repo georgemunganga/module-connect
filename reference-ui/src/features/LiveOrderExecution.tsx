@@ -3,10 +3,12 @@ import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Switch, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
+import type { ApprovalAction } from "../../../src/platform/procurement-approvals-api";
 import { pendingOrderCommands as pendingCommands } from "../lib/order-command-memory";
 import { procurementScopeHeaders } from "../../../shared/shell-scope";
 import { getOrderExecution, listOrderExecution, orderCommandBody, OrderExecutionError, recoverOrderCommand, sendOrderCommand,
-  type ExecutionOrderDetail, type ExecutionOrderPage, type OrderAction, type OrderCommand, type WorklistView } from "../../../src/platform/procurement-order-execution-api";
+  type ExecutionOrderDetail, type ExecutionOrderPage, type OrderAction, type OrderCommand, type OrderCommandOperation, type WorklistView } from "../../../src/platform/procurement-order-execution-api";
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : "The order could not be confirmed.";
 const labels: Record<OrderAction, string> = { Finance: "Record Finance confirmation", DraftFinanceRelease: "Record draft funds release",
   FinanceRelease: "Record funds release", Submit: "Send order for approval", Issue: "Authorise sending", Delivery: "Record sending outcome" };
@@ -64,26 +66,27 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
   const [data, setData] = useState<ExecutionOrderDetail | null>(null), [loading, setLoading] = useState(true), [revision, setRevision] = useState(0);
   const [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false), [action, setAction] = useState<OrderAction | null>(null);
   const [pending, setPending] = useState<OrderCommand | null>(() => pendingCommands.get(scopeKey) ?? null);
+  const [decision, setDecision] = useState<{ assignmentId: string; caseVersion: number; assignmentVersion: number; action: ApprovalAction; reason: string } | null>(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    const abort = new AbortController(); setData(null); setLoading(true); setError(""); setAction(null);
+    const abort = new AbortController(); setData(null); setLoading(true); setError(""); setAction(null); setDecision(null);
     getOrderExecution(company, id, abort.signal).then((result) => { if (!abort.signal.aborted) setData(result); })
       .catch((cause: unknown) => { if (!abort.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [company, id, revision]);
-  async function execute(body: string, operation: OrderAction) {
+  async function execute(body: string, operation: OrderCommandOperation, assignmentId?: string) {
     if (pending || pendingCommands.has(scopeKey) || busy) return;
-    const command: OrderCommand = { orderId: id, operation, key: crypto.randomUUID(), body };
+    const command: OrderCommand = { orderId: id, operation, key: crypto.randomUUID(), body, assignmentId };
     pendingCommands.set(scopeKey, command); setPending(command); setBusy(true); setError("");
     try {
       const reply = await sendOrderCommand(company, command);
       pendingCommands.delete(scopeKey);
-      if (alive.current) { setPending(null); setAction(null); setNotice(`Saved: ${reply.status}. ${reply.nextStep || "Refresh to review the current order."}`); setRevision((n) => n + 1); }
+      if (alive.current) { setPending(null); setAction(null); setDecision(null); setNotice(`Saved: ${reply.status}. ${reply.nextStep || "Refresh to review the current order."}`); setRevision((n) => n + 1); }
     } catch (cause) {
       if (alive.current) {
-        setError(errorText(cause)); setAction(null);
+        setError(errorText(cause)); setAction(null); setDecision(null);
         if (cause instanceof OrderExecutionError && [400, 401, 403, 404, 409, 422].includes(cause.status)) {
           pendingCommands.delete(scopeKey); setPending(null); setData(null); setNotice(errorText(cause)); setRevision((n) => n + 1);
         }
@@ -109,7 +112,9 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
     {notice && <p role="status" className="mb-5 text-sm">{notice}</p>}{error && <p role="alert" className="mb-5 text-sm text-red-700">{error}</p>}{recovery}
     {loading ? <p role="status">Loading order review…</p> : data ? <>
       <Panel title="Order details"><dl className="grid grid-cols-2 gap-3 p-5 text-sm"><dt>Status</dt><dd><Badge>{data.order.status}</Badge></dd><dt>Finance</dt><dd>{data.financeStatus === "CommitmentHeld" ? "Funds reserved for this order" : "No confirmed funds held"}</dd>
-        <dt>Deliver to</dt><dd>{data.order.shipToRef || "—"}</dd><dt>Bill to</dt><dd>{data.order.billToRef || "—"}</dd><dt>Payment terms</dt><dd>{data.order.paymentTermRef || "—"}</dd><dt>Commercial revision</dt><dd>{data.order.currentRevision}</dd></dl></Panel>
+        <dt>Deliver to</dt><dd>{data.order.shipToRef || "—"}</dd><dt>Bill to</dt><dd>{data.order.billToRef || "—"}</dd><dt>Payment terms</dt><dd>{data.order.paymentTermRef || "—"}</dd><dt>Commercial revision</dt><dd>{data.order.currentRevision}</dd></dl>
+        {(data.order.status === "Returned" || data.order.status === "Rejected") && data.financeStatus === "CommitmentHeld" && <p className="px-5 pb-5 text-sm">Finance must confirm the release or restoration of held funds before this order can be changed.</p>}
+      </Panel>
       <Panel title="Order lines" className="mt-5"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Description</th><th>Unit</th><th>Quantity</th><th>Unit price</th><th>Tax</th><th>Received</th><th>Invoiced</th></tr></thead>
         <tbody>{data.order.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.unitCode}</td><td>{line.quantity}</td><td>{data.order.currencyCode} {line.unitPrice}</td><td>{data.order.currencyCode} {line.taxAmount}</td><td>{line.acceptedQuantity}</td><td>{line.invoicedQuantity}</td></tr>)}</tbody></RecordTable>
         <p className="mt-4 text-right">Before tax: {data.order.currencyCode} {data.totals.lineBaseAmount}</p><p className="text-right font-semibold">Total: {data.order.currencyCode} {data.totals.grossAmount}</p></div></Panel>
@@ -119,6 +124,14 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
           {!candidate.canStart && <p className="mt-2 text-sm text-muted-foreground">Current requirements are not met. Review funding, policy and assigned responsibilities.</p>}</div>)}</div>
         {!data.actionCandidates.some((candidate) => supported(candidate.code) && context.permissions.includes(candidate.permission)) && <p className="text-sm text-muted-foreground">There are no connected actions for your current responsibilities.</p>}
       </div></Panel>
+      {context.permissions.includes("procurement-po-approve") && <Panel title="Your order approval" className="mt-5"><div className="space-y-3 p-5">
+        <p className="text-sm">Decide only on your active assignment. ERP rechecks current authority, funding and all source controls.</p>
+        {data.actionCandidates.some((candidate) => candidate.code === "Decide" && candidate.canStart && context.permissions.includes(candidate.permission))
+          ? data.cases.filter((workflow) => workflow.state === "Pending" && workflow.sourceVersion === data.order.currentRevision).flatMap((workflow) => workflow.stages.filter((stage) => stage.state === "Active")
+            .flatMap((stage) => stage.assignments.filter((assignment) => assignment.assignedToMe && assignment.state === "Pending").map((assignment) => <div key={assignment.id} className="space-y-2"><p className="text-sm">Your decision · {stage.code}</p><div className="flex flex-wrap gap-3">{(["Approve", "Reject", "Return"] as const).map((action) => <Button key={action} variant={action === "Approve" ? "primary" : "secondary"}
+              disabled={busy || !!pending || !!decision} onClick={() => { setError(""); setDecision({ assignmentId: assignment.id, caseVersion: workflow.version, assignmentVersion: assignment.version, action, reason: "" }); }}>{action === "Return" ? "Return for changes" : action}</Button>)}</div></div>)))
+          : <p className="text-sm text-muted-foreground">No active decision is available for your current assignment and permissions.</p>}
+      </div></Panel>}
       <Panel title="Finance evidence" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm">Evidence records Finance decisions; this page does not move money or create a Finance ledger entry.</p>
         {data.financeEvidence.length ? data.financeEvidence.map((entry) => <p key={entry.id} className="text-sm">{entry.commitmentReference} · {entry.currencyCode} {entry.confirmedGrossAmount} · {entry.releaseConfirmed ? "Released" : "Held"} · {entry.evidenceReference}</p>) : <p>No Finance confirmation recorded.</p>}
         {data.financeResolutions.map((entry) => <p key={entry.id} className="text-sm">{entry.outcome} · {entry.currencyCode} {entry.releasedGrossAmount} · {entry.evidenceReference} · {entry.reason}</p>)}
@@ -130,6 +143,12 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
         {data.deliveries.map((entry) => <p key={entry.id} className="text-sm">{entry.outcome} · {entry.channel} · {entry.evidenceReference} · {new Date(entry.observedAt).toLocaleString()}</p>)}
         {!data.cases.length && !data.issued.length && <p>No approval or sending history yet.</p>}
       </div></Panel>
+      {decision && !pending && <ApprovalDecisionDialog action={decision.action} recordLabel="order" reason={decision.reason} busy={busy} error={error}
+        onReason={(reason) => setDecision({ ...decision, reason })} onCancel={() => setDecision(null)} onConfirm={() => {
+          if (decision.action !== "Approve" && !decision.reason.trim()) return;
+          void execute(orderCommandBody({ action: decision.action, reason: decision.reason.trim() || null, expectedOrderVersion: data.order.version,
+            expectedCaseVersion: decision.caseVersion, expectedAssignmentVersion: decision.assignmentVersion }), "Decide", decision.assignmentId);
+        }} />}
       {action && !pending && <OrderActionForm key={`${action}:${data.order.version}`} action={action} data={data} busy={busy} onClose={() => setAction(null)} onConfirm={execute} />}
     </> : !loading && !error && <p role="alert">This order is unavailable in your current scope.</p>}
     <div className="mt-5 flex gap-3"><Link className="text-sm text-primary hover:underline" to="/purchase-orders">Back to purchase orders</Link><Button variant="secondary" disabled={busy} onClick={() => setRevision((n) => n + 1)}>Refresh order</Button></div>

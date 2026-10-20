@@ -42,7 +42,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
-    || (approvalPath && state.readiness.capabilities.approvals)
+    || (approvalPath && (state.readiness.capabilities.approvals || state.readiness.capabilities.orders))
     || (sourcingPath && state.readiness.capabilities.sourcingDraft)
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (planPath && state.readiness.capabilities.planningDraft)

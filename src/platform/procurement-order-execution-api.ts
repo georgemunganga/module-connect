@@ -16,14 +16,15 @@ export type ExecutionOrderDetail = {
   sourceReservationReferences: string[]; financeEvidence: FinanceEvidence[];
   financeResolutions: { id: string; outcome: string; releasedGrossAmount: string; currencyCode: string; evidenceReference: string; confirmedAt: string; reason: string }[];
   submissions: { id: string; commercialRevision: number; submittedAt: string; coreApprovalCaseId: string }[];
-  cases: { id: string; state: string; sourceVersion: number; stages: { id: string; code: string; state: string }[] }[];
+  cases: { id: string; state: string; sourceVersion: number; version: number; stages: { id: string; code: string; state: string;
+    assignments: { id: string; state: string; version: number; assignedToMe: boolean }[] }[] }[];
   decisions: { id: string; action: string; reason: string | null; decidedAt: string }[];
   issued: { id: string; revisionNumber: number; authorizedAt: string }[];
   deliveries: { id: string; outcome: string; channel: string; evidenceReference: string; observedAt: string }[];
   actionCandidates: OrderCandidate[]; configuredDeliveryChannels: string[]; commandValidationRequired: true;
 };
-export type OrderCommandOperation = OrderAction | "Convert" | "SourceEdit";
-export type OrderCommand = { orderId: string | null; operation: OrderCommandOperation; key: string; body: string };
+export type OrderCommandOperation = OrderAction | "Convert" | "SourceEdit" | "Decide";
+export type OrderCommand = { orderId: string | null; operation: OrderCommandOperation; key: string; body: string; assignmentId?: string };
 export type OrderExecutionReply = { id: string; status: string; version: number; nextStep: string };
 export class OrderExecutionError extends Error { constructor(readonly status: number, message: string) { super(message); } }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -74,13 +75,15 @@ export async function getOrderExecution(company: string, id: string, signal?: Ab
       && typeof row.currencyCode === "string" && typeof row.evidenceReference === "string")
     || !["financeResolutions", "submissions", "cases", "decisions", "issued", "deliveries"].every((key) => Array.isArray(body[key]) && body[key].every(object))) throw invalid();
   for (const row of body.cases as Record<string, unknown>[]) if (!Array.isArray(row.stages) || !row.stages.every((stage) => object(stage)
-    && typeof stage.id === "string" && typeof stage.code === "string" && typeof stage.state === "string")) throw invalid();
+    && typeof stage.id === "string" && typeof stage.code === "string" && typeof stage.state === "string"
+    && Array.isArray(stage.assignments) && stage.assignments.every((assignment) => object(assignment) && uuid.test(String(assignment.id))
+      && typeof assignment.state === "string" && int(assignment.version) && typeof assignment.assignedToMe === "boolean")) || !int(row.version)) throw invalid();
   for (const row of body.issued as Record<string, unknown>[]) if (!uuid.test(String(row.id)) || !int(row.revisionNumber) || typeof row.authorizedAt !== "string") throw invalid();
   // Financial output never passes through Number; wider products retain every decimal.
   for (const resolution of body.financeResolutions as Record<string, unknown>[]) if (!exact(resolution.releasedGrossAmount)) throw invalid();
   return body as unknown as ExecutionOrderDetail;
 }
-const paths: Record<OrderCommandOperation, string> = { Convert: "from-approved-sources", SourceEdit: "source-draft", Finance: "finance-confirmations", DraftFinanceRelease: "draft-finance-release-confirmations",
+const paths: Record<OrderCommandOperation, string> = { Decide: "", Convert: "from-approved-sources", SourceEdit: "source-draft", Finance: "finance-confirmations", DraftFinanceRelease: "draft-finance-release-confirmations",
   FinanceRelease: "finance-release-confirmations", Submit: "submit", Issue: "issue", Delivery: "delivery-confirmations" };
 /** Encode only validated exact monetary tokens as JSON numbers, without IEEE754 conversion.
  * The existing server command contracts bind decimal JSON numbers (not strings). */
@@ -94,7 +97,9 @@ export function orderCommandBody(fields: Record<string, unknown>, decimalFields:
 }
 export async function sendOrderCommand(company: string, command: OrderCommand): Promise<OrderExecutionReply> {
   if ((command.operation !== "Convert" && (!command.orderId || !uuid.test(command.orderId))) || !uuid.test(command.key)) throw invalid();
-  const path = command.operation === "Convert" ? `/${paths.Convert}` : `/${command.orderId}/${paths[command.operation]}`;
+  if (command.operation === "Decide" && !uuid.test(command.assignmentId ?? "")) throw invalid();
+  const path = command.operation === "Convert" ? `/${paths.Convert}` : command.operation === "Decide"
+    ? `/${command.orderId}/assignments/${command.assignmentId}/decisions` : `/${command.orderId}/${paths[command.operation]}`;
   const body = await call(company, path, { method: command.operation === "SourceEdit" ? "PUT" : "POST", headers: { "Idempotency-Key": command.key }, body: command.body });
   if (!object(body) || !uuid.test(String(body.id)) || (command.orderId !== null && body.id !== command.orderId) || typeof body.status !== "string" || !int(body.version)) throw invalid();
   return body as unknown as OrderExecutionReply;
@@ -103,7 +108,7 @@ export async function recoverOrderCommand(company: string, command: OrderCommand
   const body = await call(company, `/command-receipts/${command.operation}/${command.key}${command.orderId ? `?orderId=${command.orderId}` : ""}`);
   if (!object(body) || body.state !== "RecordedHistoricalOutcome" || !uuid.test(String(body.purchaseOrderId)) || (command.orderId !== null && body.purchaseOrderId !== command.orderId)
     || body.commandKey !== command.key || body.operation !== command.operation || body.replayAuthorized !== false
-    || !object(body.recordedResult) || body.recordedResult.id !== body.purchaseOrderId
+    || !object(body.recordedResult) || body.recordedResult.id !== body.purchaseOrderId || typeof body.recordedResult.status !== "string"
     || !int(body.currentOrderVersion) || typeof body.currentOrderStatus !== "string") throw invalid();
   return { orderId: String(body.purchaseOrderId), historicalStatus: String(body.recordedResult.status), currentStatus: body.currentOrderStatus };
 }
@@ -143,4 +148,16 @@ export function sourceOrderCommandBody(draft: ExactOrderDraft, sourceOrVersion: 
     return { draftLineIndex, purchaseRequestId: row.requestId, purchaseRequestLineId: row.lineId, expectedRequestVersion: row.requestVersion };
   });
   return `{"draft":${encoded},"sources":${JSON.stringify(sources)}}`;
+}
+
+export type AssignedOrderApproval = { assignmentId: string; caseId: string; orderId: string; assignmentVersion: number; caseVersion: number;
+  code: string; openedAt: string; number: string; orderVersion: number; status: string; currencyCode: string };
+export type AssignedOrderApprovalPage = { items: AssignedOrderApproval[]; total: number; page: number; pageSize: number };
+export async function listAssignedOrderApprovals(company: string, page = 1, signal?: AbortSignal): Promise<AssignedOrderApprovalPage> {
+  const body = await call(company, `/assigned-approvals?page=${page}&pageSize=25`, { signal });
+  if (!object(body) || !Array.isArray(body.items) || !int(body.total) || !int(body.page) || !int(body.pageSize)
+    || !body.items.every((row) => object(row) && uuid.test(String(row.assignmentId)) && uuid.test(String(row.caseId)) && uuid.test(String(row.orderId))
+      && int(row.assignmentVersion) && int(row.caseVersion) && int(row.orderVersion) && typeof row.number === "string"
+      && typeof row.code === "string" && typeof row.openedAt === "string" && typeof row.currencyCode === "string" && typeof row.status === "string")) throw invalid();
+  return body as unknown as AssignedOrderApprovalPage;
 }
