@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import type { ExecutionOrderDetail } from "../../../src/platform/procurement-order-execution-api";
 
@@ -168,6 +168,10 @@ test("actual PO API: approved source, independent Finance and assigned reviewer,
     const afterReplay = await detail("buyer", id); expect(afterReplay.deliveries).toHaveLength(1); expect(afterReplay.issued).toHaveLength(1); expect(afterReplay.order.status).toBe("Issued");
   } finally {
     await page.unrouteAll({ behavior: "wait" });
-    await info.attach("actual-order-api-traffic", { body: JSON.stringify(connection.traffic, null, 2), contentType: "application/json" });
+    // Materialize evidence before attaching: the list reporter does not persist inline
+    // successful attachments. This synthetic fixture contains no credentials.
+    const trafficPath = info.outputPath("actual-order-api-traffic.json");
+    writeFileSync(trafficPath, JSON.stringify(connection.traffic, null, 2) + "\n", { mode: 0o600 });
+    await info.attach("actual-order-api-traffic", { path: trafficPath, contentType: "application/json" });
   }
 });
