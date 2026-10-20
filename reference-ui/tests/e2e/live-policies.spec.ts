@@ -257,12 +257,13 @@ test("historical PO rules with request-only reviewers stay read-only and cannot 
   const evidence = await mockErp(page, { legacyOrder: true });
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Edit draft", exact: true }).click();
-  await expect(page.getByLabel("Saved rule definition", { exact: true })).toHaveValue(/LineManager/);
+  await expect(page.getByRole("textbox", { name: "Saved rule definition", exact: true })).toHaveValue(/LineManager/);
+  await expect(page.getByRole("textbox", { name: "Saved rule definition", exact: true })).toHaveAttribute("readonly", "");
   await expect(page.getByRole("button", { name: "Check and save draft", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Send for review", exact: true }).click();
-  await expect(page.getByLabel("Saved rule definition", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Saved rule definition", exact: true })).toBeVisible();
   await expect(page.getByLabel("What should the reviewer check?", { exact: true })).toHaveCount(0);
-  expect(evidence.reviewNote()).toBe("");
+  expect(evidence.reviewNote()).toBeNull();
   expect(evidence.rules()).toBeNull();
 });
 

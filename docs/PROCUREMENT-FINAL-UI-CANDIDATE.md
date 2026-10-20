@@ -104,3 +104,12 @@ identifies the saved status explicitly; exact held amount and restored reservati
 assertions remain. This changes no application source/assets or timeout. Original
 trace and log remain in `browser-final30-a8251e6-results` and its adjacent log.
 Only that failed case and the remaining 24 cases continue.
+
+The final-25 run passed 23 cases, then the historical unsupported PO reviewer test
+used an exact wrapping-label lookup that includes the textarea JSON in label text.
+The actual accessibility tree already exposes the correct textbox name and unchanged
+LineManager definition in read-only mode. The test now uses that textbox role/name,
+checks readonly explicitly, and expects the fixture’s unchanged null review-note
+value (no review POST). No application or timeout change is needed. Original evidence
+is retained under `browser-final25-e62a31c-results`. Only the failed case and the one
+remaining PO/PR module settings case continue.
