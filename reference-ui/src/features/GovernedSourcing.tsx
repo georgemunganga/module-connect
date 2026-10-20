@@ -108,7 +108,14 @@ export function GovernedSourcingDetail({ id }: { id: string }) {
     try { command = cancelRfqCommand(record, reason, crypto.randomUUID()); } catch (error) { setError(message(error)); return; }
     setPending(command); setBusy(true);
     try { await sendRfqCommand(legalEntityId, command); setPending(null); setReason(""); setRefresh(value => value + 1); }
-    catch (error) { if (error instanceof RfqExecutionError && (error.status === 401 || error.status === 403 || error.status === 404)) setRecord(null); setError(message(error)); }
+    catch (error) {
+      // A validated 400/422 rejection did not apply this command: retain the reason
+      // for correction and require a fresh explicit submission. Unknown outcomes
+      // keep their original UUID and expose GET-only recovery instead.
+      if (error instanceof RfqExecutionError && (error.status === 400 || error.status === 422)) setPending(null);
+      if (error instanceof RfqExecutionError && (error.status === 401 || error.status === 403 || error.status === 404)) setRecord(null);
+      setError(message(error));
+    }
     finally { setBusy(false); }
   }
   async function recover() {

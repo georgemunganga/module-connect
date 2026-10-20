@@ -113,3 +113,23 @@ Frontend owns presentation/typed transport. Procurement owns draft/source/reserv
 ## 28. Open Decisions / Assumptions
 
 Backend governed RFQ schema readiness and actual PG verification remain pending; default-off capability means source-only UI cannot activate live workflow. Exact archive/reload recovery UX for commands after a full browser reload remains outside this in-memory adapter; server receipt persists and no auto retry occurs. Award-to-PO transfer and source amendments are separate contracts. No production release claim.
+
+### Distinct source review follow-up — cancellation outcome classification
+
+After a definite cancellation400/422 validation rejection, clear only the prepared pending command and retain current reason/record for correction. A later user submission receives a new UUID. Transport interruption/5xx remains unconfirmed with its original UUID. A recovery404 does not prove absence or release permission: keep the original pending command and offer GET-only recovery; clear the current detail rather than expose a stale action.
+
+A sixth focused transport-mock browser case is authored (unrun): first cancellation422 leaves reason editable; second explicit cancellation has a new key but loses its response after recording; first receipt GET404 keeps the original second key and no cancel POST button; second GET with that same Cancel/key recovers the recorded200 response and reloads authoritative Cancelled detail. Assert exactly two POSTs total and two recovery GETs with identical original second key. Existing five cases are retained, with no broader test duplication. Source-only, no Node/build/browser execution or deployment.
+
+### Prepared serialized frontend gates (not executed)
+
+Coordinator must first clear the single host slot, verify port3043 is free, choose a fresh private evidence directory and retain prior artifacts. Use cached Node22/packages, heap512, one worker; stop at first failure. Run from `reference-ui` in the frozen RFQ worktree, with `NODE_OPTIONS=--max-old-space-size=512` and `CI=1`. Each invocation is sequential with `set -o pipefail` and its own retained log; do not overwrite existing `.rfq-verification-dist` or `.rfq-test-results`.
+
+```sh
+node node_modules/vitest/vitest.mjs run tests/rfq-execution-contract.test.ts src/lib/procurement-live.test.ts src/lib/procurement-scope.test.ts --pool=forks --maxWorkers=1 --minWorkers=1 --no-file-parallelism
+node node_modules/typescript/bin/tsc --noEmit
+node scripts/generate-routes.mjs
+VITE_PROCUREMENT_LIVE_MODE=1 node node_modules/vite/bin/vite.js build --outDir .rfq-verification-dist
+node node_modules/@playwright/test/cli.js test --config playwright.rfq.config.ts --workers=1 --max-failures=1 --reporter=line
+```
+
+The RFQ config selects exactly six new governed transport cases plus three existing ad hoc regression cases, with isolated port3043/output directories. Retain source SHA, logs, browser traces/screenshots and artifact SHA256 after the build. Actual backend RFQ/PG/browser proof remains a separate pending milestone; a mock pass cannot enable production readiness.

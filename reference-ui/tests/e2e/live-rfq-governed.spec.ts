@@ -7,9 +7,9 @@ const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
 type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
-async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean } = {}) {
+async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean } = {}) {
   const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
-  let lost = false, status = "Draft", version = 1, selected: Selection[] = [], exists = Boolean(options.seed);
+  let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false, status = "Draft", version = 1, selected: Selection[] = [], exists = Boolean(options.seed);
   const sources = [lineA, lineB].map((id, at) => ({ purchaseRequestId: at ? prB : prA, purchaseRequestLineId: id, requestNumber: `PR-${at + 1}`,
     state: "Available", canSelect: true, branchRef: branch, description: at ? "Printer paper" : "Office notebooks", unitCode: "EACH", categoryCode: "OFFICE",
     expectedRequestVersion: 4, sourceLineVersion: 1, availableQuantity: "99999999999999.9999", approvedUnitEstimate: "0.0001", currencyCode: "ZMW",
@@ -50,11 +50,18 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
         if (options.loseCreate && !lost) { lost = true; return route.abort("failed"); } return json(saved, 201);
       }
       if (url.pathname.includes("/command-receipts/")) { const operationKey = url.pathname.split("/command-receipts/")[1]; const saved = receipts.get(operationKey);
-        return saved ? json({ operation: operationKey.split("/")[0], commandKey: operationKey.split("/")[1], originalStatusCode: 201,
+        const operation = operationKey.split("/")[0];
+        if (operation === "Cancel" && options.cancelRecovery404Once && !cancelRecoveryMissed) { cancelRecoveryMissed = true; return json({}, 404); }
+        return saved ? json({ operation, commandKey: operationKey.split("/")[1], originalStatusCode: operation === "Create" ? 201 : 200,
           responseJson: JSON.stringify(saved), recordedHistoricalResult: true, canPublish: false }) : json({}, 404); }
-      if (url.pathname.endsWith("/source-cancel")) { status = "Cancelled"; version++;
-        return json({ eventId: event, number: "RF-1", status, version, originalDraftFingerprint: "a".repeat(64), commandKey: request.headers()["idempotency-key"],
-          recordedHistoricalResult: true, canPublish: false, supplierDeliveryState: "NotStarted", financeReservationChanged: false }); }
+      if (url.pathname.endsWith("/source-cancel")) {
+        if (options.rejectCancelOnce && !cancelRejected) { cancelRejected = true; return json({ message: "Check the cancellation details" }, 422); }
+        status = "Cancelled"; version++;
+        const saved = { eventId: event, number: "RF-1", status, version, originalDraftFingerprint: "a".repeat(64), commandKey: request.headers()["idempotency-key"],
+          recordedHistoricalResult: true, canPublish: false, supplierDeliveryState: "NotStarted", financeReservationChanged: false };
+        receipts.set(`Cancel/${saved.commandKey}`, saved);
+        if (options.loseCancel && !cancelLost) { cancelLost = true; return route.abort("failed"); }
+        return json(saved); }
       if (url.pathname.endsWith("/source-draft")) return exists ? json(record()) : json({}, 404);
       if (url.pathname === "/api/procurement/v1/sourcing") return json({ items: [], total: 0, page: 1, pageSize: 25 });
     }
@@ -101,4 +108,30 @@ test("branch change clears old governed detail immediately and reloads under cur
 test("governed capability does not substitute for explicit conversion permission", async ({ page }) => {
   const calls = await mock(page, { deny: true }); await page.goto("/procurement/workspace/rfqs/new?source=approved");
   await expect(page.getByRole("alert")).toContainText("not available"); expect(calls.some(x => x.path.endsWith("/approved-sources") || x.method === "POST")).toBe(false);
+});
+
+test("cancel validation permits correction while interrupted cancellation and recovery404 retain original GET-only key", async ({ page }) => {
+  const calls = await mock(page, { seed: true, rejectCancelOnce: true, loseCancel: true, cancelRecovery404Once: true });
+  await page.goto(`/procurement/workspace/rfqs/${event}?source=approved`);
+  await page.getByLabel("Reason", { exact: true }).fill("Please correct this reason");
+  await page.getByRole("button", { name: "Cancel draft and release its quantities", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Check the quote details");
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Reason", { exact: true })).toHaveValue("Please correct this reason");
+  await page.getByLabel("Reason", { exact: true }).fill("No longer required");
+  await page.getByRole("button", { name: "Cancel draft and release its quantities", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+  const mutations = calls.filter(x => x.method === "POST" && x.path.endsWith("/source-cancel"));
+  expect(mutations).toHaveLength(2); expect(mutations[0].key).not.toBe(mutations[1].key);
+  const originalKey = mutations[1].key!;
+  await page.getByRole("button", { name: "Check saved result", exact: true }).click();
+  await expect(page.getByRole("alert").first()).toContainText("not available");
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel draft and release its quantities", exact: true })).toHaveCount(0);
+  expect(calls.filter(x => x.method === "POST")).toHaveLength(2);
+  await page.getByRole("button", { name: "Check saved result", exact: true }).click();
+  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
+  const checks = calls.filter(x => x.path.includes("/command-receipts/"));
+  expect(checks).toHaveLength(2); expect(checks.every(x => x.method === "GET" && x.path.endsWith(`/Cancel/${originalKey}`))).toBe(true);
+  expect(calls.filter(x => x.method === "POST")).toHaveLength(2);
 });
