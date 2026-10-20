@@ -1,7 +1,7 @@
 # Receiving UI parity audit and source correction
 
-**Baseline inspected:** imported `RecordList`, `RecordDetail`, `TransactionEditor`, `LineEditor` and their shared presentation components at frontend `95a3f9e`.  
-**Finding:** The first live adapter reused ERP primitives but reduced the original list tools and detail/form arrangement. This audit records concrete differences and the source corrections.  
+**Baseline inspected:** imported `RecordList`, `RecordDetail`, `TransactionEditor`, `LineEditor` and their shared presentation components at frontend `95a3f9e`.
+**Finding:** The first live adapter reused ERP primitives but reduced the original list tools and detail/form arrangement. This audit records concrete differences and the source corrections.
 **Verification:** Source inspection and authored tests only; no Node, TypeScript, build, browser, SDK or database job. No deployed assets or capability flags changed.
 
 ## Observed controls and disposition
