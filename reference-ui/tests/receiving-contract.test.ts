@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getReceipt, receivingCommandPath, receivingQuantity, recoverReceiving, sendReceiving, type ReceivingCommand } from "../../src/platform/procurement-receiving-api";
+import { getService, getReceipt, receivingCommandPath, receivingQuantity, recoverReceiving, sendReceiving, type ReceivingCommand } from "../../src/platform/procurement-receiving-api";
 const company = "11111111-1111-4111-8111-111111111111", order = "22222222-2222-4222-8222-222222222222", target = "33333333-3333-4333-8333-333333333333", line = "44444444-4444-4444-8444-444444444444", key = "55555555-5555-4555-8555-555555555555";
 const command = (operation: ReceivingCommand["operation"] = "ReceivingAccept"): ReceivingCommand => ({ operation, orderId: order, targetId: target, lineId: line, key, method: "POST", body: '{"quantity":"99999999999999.9999","version":2,"sourceVersion":4,"evidenceReference":"EVIDENCE"}' });
 afterEach(() => vi.unstubAllGlobals());
@@ -38,5 +38,38 @@ describe("receiving exact values and command contracts", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: target, version: 1, executionVersion: 1, status: "Held", matchingAuthorityAvailable: false,
       draftActionCandidates: [], lineReadiness: [], lines: [{ id: line, version: 1, sourceVersion: 1, receivedQuantity: 99999999999999.9999, initiallyRejectedQuantity: "0", rejectedQuantity: "0", acceptedQuantity: "0", unacceptedHeldQuantity: "1" }] }))));
     await expect(getReceipt(company, target, false)).rejects.toThrow("incomplete");
+  });
+});
+
+
+describe("service detail contract after partial certification", () => {
+  const detail = (sourceVersion: number, task = false) => ({ id: target, version: 2, executionVersion: 1,
+    sourceVersion, status: "PendingCertification", matchingAuthorityAvailable: false,
+    intendedQuantity: "0.5000", acceptedQuantity: "0", acceptedNetAmount: "0", currentAcceptedQuantity: "0", currentAcceptedNetAmount: "0",
+    capacity: { verified: true, orderRemainingQuantity: "0.5000", physicalRemainingQuantity: null, acceptableQuantity: "0.5000", blocker: null },
+    actionCandidates: [{ action: "Certify", candidate: true, blocker: null }],
+    readPurpose: task ? "AssignedServiceCertification" : "Receipt", ...(task ? {} : { notes: "Supplier service note", cancellationReason: null }) });
+  it("uses the current scoped source revision on each read, without inferring zero from an unbound draft", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(detail(3))))
+      .mockResolvedValueOnce(new Response(JSON.stringify(detail(5)))); vi.stubGlobal("fetch", fetch);
+    expect((await getService(company, target, false)).sourceVersion).toBe(3);
+    const current = await getService(company, target, false);
+    expect(current.sourceVersion).toBe(5); expect(current.intendedQuantity).toBe("0.5000");
+    expect(fetch.mock.calls.every(([path]) => path === `/api/procurement/v1/service-acceptances/${target}`)).toBe(true);
+  });
+  it("keeps long draft notes separate from a read-only cancellation reason", async () => {
+    const notes = "n".repeat(1500), payload = { ...detail(3), status: "Cancelled", notes, cancellationReason: "Service no longer required" };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(payload))));
+    const current = await getService(company, target, false);
+    expect(current.notes).toBe(notes); expect(current.cancellationReason).toBe("Service no longer required");
+  });
+  it("task-only reads neither request a broad receipt detail nor accept private narrative fields", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(detail(5, true))))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...detail(5, true), notes: "Should not be shared" })));
+    vi.stubGlobal("fetch", fetch);
+    const current = await getService(company, target, true);
+    expect(current.sourceVersion).toBe(5); expect(Object.hasOwn(current, "notes")).toBe(false); expect(Object.hasOwn(current, "cancellationReason")).toBe(false);
+    await expect(getService(company, target, true)).rejects.toThrow("incomplete");
+    expect(fetch.mock.calls.every(([path]) => path === `/api/procurement/v1/service-acceptances/${target}/certification-task`)).toBe(true);
   });
 });
