@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select } from "../components/ui";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
-import { procurementScopeHeaders } from "../../../shared/shell-scope";
+import { useErpShell } from "../lib/erpShell";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
@@ -139,6 +139,16 @@ export function LiveInvoiceEditor() {
 }
 
 export function LiveInvoiceDetail() {
+  const context = useCompany();
+  const { selection } = useErpShell();
+  const { id = "" } = useParams();
+  // Remount the whole original/document/review surface immediately on reactive
+  // scope or verified principal changes; effects alone clear old content too late.
+  const contextKey = JSON.stringify([context.tenantId, context.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
+    context.workerId, context.permissions, context.capabilities]);
+  return <InvoiceDetailContent key={`${contextKey}:${id}`} />;
+}
+function InvoiceDetailContent() {
   const { id } = useParams();
   const { legalEntityId, capabilities, permissions } = useCompany();
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
@@ -173,7 +183,7 @@ export function LiveInvoiceDetail() {
         <td>{line.quantity}</td><td>{money(line.unitPrice, invoice.currencyCode)}</td><td>{money(line.taxAmount, invoice.currencyCode)}</td></tr>)}</tbody>
     </RecordTable></div></Panel>
     {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
-    <InvoiceReviewPanel key={`${legalEntityId}:${procurementScopeHeaders(legalEntityId)["X-Shell-Location"] ?? ""}:${invoice.id}:${invoice.version}`}
+    <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
       company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
       comparisonAvailable={capabilities.invoiceComparison} refresh={() => setRefresh((value) => value + 1)} />
     <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/bills">Back to bills</Link>

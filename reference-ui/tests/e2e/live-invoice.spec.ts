@@ -248,3 +248,29 @@ for (const option of ["readinessDenied", "staleReview"] as const) test(`Invoice 
   await expect(page.getByText("99999999999999.9999", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
 });
+
+
+test("Changing Core branch clears original invoice, documents and review before delayed replacement reads", async ({ page }) => {
+  await mockErp(page, true, { seed: true, documents: true, comparison: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recorded review history" })).toBeVisible();
+  let release: (() => void) | undefined;
+  const delayed = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/api/procurement/v1/invoices/${invoiceId}`, async (route) => {
+    await delayed;
+    await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ message: "Invoice unavailable in this branch." }) });
+  });
+  const replacementBranch = "77777777-7777-4777-8777-777777777777";
+  await page.evaluate(({ company, branch }) => {
+    const key = "erp.shell.state.v1", oldValue = localStorage.getItem(key);
+    const newValue = JSON.stringify({ entityId: company, branch }); localStorage.setItem(key, newValue);
+    window.dispatchEvent(new StorageEvent("storage", { key, oldValue, newValue }));
+  }, { company: companyId, branch: replacementBranch });
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Recorded review history" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Documents", exact: true })).toHaveCount(0);
+  release?.();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByText("99999999999999.9999", { exact: true })).toHaveCount(0);
+});
