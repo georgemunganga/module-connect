@@ -41,3 +41,30 @@ Vendor return context is preserved only for a valid internal vendor ID and curre
 Three additional authored browser cases cover shared table/selection/columns with unavailable export, retained detail tabs with unavailable comments/files, and source form/discard behavior. A client contract case checks supported worklist state versus unsupported task filtering. Existing13 cases retain current company/branch headers, exact quantities, overdelivery truth, named purpose tasks, privacy, current source CAS, stale navigation and unknown-write recovery.
 
 All modified presentation and transport now require the serialized unit/TypeScript/build/browser gate; none is claimed passing. Purpose-only privacy restrictions, missing-capability default false, actor/scope keys, original command payload/key and authoritative server guards must remain intact during fixes.
+
+
+## Actual backend browser gate completed — 20 October 2026
+
+Source-only warnings above describe earlier checkpoints. The fresh private
+`20261020_153636_browser` fixture subsequently passed both serial actual API
+Playwright cases (**2 passed, 2.8m, exit0**) on test `a563616` and the unchanged
+frozen `132ab18` app bundle (HTML/JS/CSS hashes rechecked OK). All eight UI
+commands, exact decimal/source/version assertions, purpose-role denials,
+response replay and complete command/privacy assertions passed. Procurement
+business responses were forwarded to the real API; only ERP shell presentation
+and test authentication were synthetic.
+
+Graceful server shutdown then passed the independent owner-side database
+verifier with exit0: physical2/qualified2/accepted1/held1; two service0.5/net50
+certificates; independent workers; conserved PR/PO counters; eight command/audit
+records and five outbox effects; no invoice/AP authority. The API and preview
+were stopped. Owner-private evidence includes per-response traffic and terminal
+logs; production was not deployed.
+
+The first combined180-second case timed out after partial execution; its trace,
+screenshot, logs and incomplete DB remain preserved under
+`20261020_151917_browser`. Its owner verifier correctly rejected completion.
+The successful retry used a fresh DB and split the same assertions into goods
+and service cases, retaining180 seconds per case without changing app assets
+or API request timeouts. This completes the receiving integration checkpoint,
+not all Procurement features or production release gates.
