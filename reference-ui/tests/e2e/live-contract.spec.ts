@@ -6,7 +6,7 @@ const vendorId = "33333333-3333-4333-8333-333333333333";
 const contractId = "44444444-4444-4444-8444-444444444444";
 const capabilities = Object.fromEntries([
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
-  "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
   "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "contractDraft"]));
 type ContractRecord = Record<string, unknown> & { id: string; version: number; title: string; status: string };

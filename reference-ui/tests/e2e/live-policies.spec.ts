@@ -4,7 +4,7 @@ const companyId = "11111111-1111-4111-8111-111111111111";
 const policyId = "99999999-9999-4999-8999-999999999999";
 const capabilities = Object.fromEntries([
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
-  "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
   "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "configurationDraft"]));
 

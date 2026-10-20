@@ -14,6 +14,7 @@ import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../featur
 import { LiveSourcingList, LiveSourcingEditor, LiveSourcingDetail } from "../features/LiveSourcing";
 import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../features/LiveContracts";
 import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePlans";
+import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -83,6 +84,7 @@ export function App() {
                 path={`/${module.key}`}
                 element={isProcurementLiveMode && module.key === "requests" ? <LiveRequestList />
                   : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingList />
+                    : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceList />
                     : <RecordList key={module.key} kind={module.key} />}
               />
             ))}
@@ -90,13 +92,12 @@ export function App() {
               <Route
                 key={`${module.key}-detail`}
                 path={`/${module.key}/:id`}
-                element={
-                  <div className="p-5 sm:p-8">
+                element={isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceDetail />
+                  : <div className="p-5 sm:p-8">
                     {isProcurementLiveMode && module.key === "requests" ? <LiveRequestDetail />
                       : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingDetail />
                         : <RecordRoute kind={module.key} />}
-                  </div>
-                }
+                  </div>}
               />
             ))}
             {Object.values(modules)
@@ -106,7 +107,8 @@ export function App() {
                   key={`${module.key}-new`}
                   path={`/${module.key}/new`}
                   element={
-                    isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor /> : <EditorRoute
+                    isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
+                      : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceEditor /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />
                   }
@@ -115,7 +117,8 @@ export function App() {
                   key={`${module.key}-edit`}
                   path={`/${module.key}/:id/edit`}
                   element={
-                    isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor /> : <EditorRoute
+                    isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
+                      : isProcurementLiveMode && module.key === "bills" ? <PendingLiveWorkflow /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />
                   }
@@ -199,11 +202,8 @@ export function App() {
             />
             <Route
               path="/inbox"
-              element={
-                <div className="p-5 sm:p-8">
-                  <PayablesInbox />
-                </div>
-              }
+              element={isProcurementLiveMode ? <LiveInvoiceList />
+                : <div className="p-5 sm:p-8"><PayablesInbox /></div>}
             />
             <Route
               path="/batch-payments"

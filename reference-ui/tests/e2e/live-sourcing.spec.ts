@@ -6,7 +6,7 @@ const eventId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const lineId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const capabilities = Object.fromEntries([
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
-  "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
   "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "sourcingDraft"]));
 type EventRecord = Record<string, unknown> & {

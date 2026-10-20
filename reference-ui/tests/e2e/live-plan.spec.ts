@@ -6,7 +6,7 @@ const planId = "55555555-5555-4555-8555-555555555555";
 const lineId = "66666666-6666-4666-8666-666666666666";
 const capabilities = Object.fromEntries([
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
-  "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
   "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "planningDraft"]));
 type PlanRecord = Record<string, unknown> & {

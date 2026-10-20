@@ -2,7 +2,7 @@ export type ShellSelection = { entityId?: string; branch?: string };
 
 export type ProcurementCapability =
   | "vendorDraft" | "itemDraft" | "requestDraft" | "approvals" | "sourcing"
-  | "contracts" | "orders" | "receiving" | "invoiceValidation" | "financeHandoff" | "supplierPortal"
+  | "contracts" | "orders" | "receiving" | "invoiceIntake" | "invoiceValidation" | "financeHandoff" | "supplierPortal"
   | "planningDraft" | "configurationDraft" | "contractDraft" | "sourcingDraft";
 
 export type ProcurementReadiness = {
@@ -18,7 +18,7 @@ export type ProcurementReadiness = {
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const capabilityKeys: ProcurementCapability[] = [
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
-  "orders", "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
+  "orders", "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
 ];
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));

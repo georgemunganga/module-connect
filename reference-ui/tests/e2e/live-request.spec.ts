@@ -9,7 +9,7 @@ const catalogItemId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const catalogSupplierId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const capabilities = Object.fromEntries([
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
-  "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
   "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "requestDraft"]));
 type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
