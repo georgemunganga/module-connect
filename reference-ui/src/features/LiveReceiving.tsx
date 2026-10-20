@@ -6,7 +6,7 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { procurementScopeHeaders } from "../../../shared/shell-scope";
 import { getReceipt, getService, listReceiving, receivingQuantity, recoverReceiving, ReceivingError, sendReceiving,
   type ReceiptDetail, type ReceivingCandidate, type ReceivingCommand, type ReceivingOperation, type ReceivingPage, type ReceivingSummary, type ReceivingView, type ServiceDetail } from "../../../src/platform/procurement-receiving-api";
-const pending = new Map<string, ReceivingCommand>();
+import { pendingReceivingCommands as pending } from "../lib/receiving-command-memory";
 const message = (cause: unknown) => cause instanceof Error ? cause.message : "The delivery could not be loaded.";
 const base = "/purchase-receives";
 function target(row: ReceivingSummary, view: ReceivingView) {
@@ -120,6 +120,7 @@ function ReceivingDetail({ id, kind, purpose, scopeKey }: { id: string; kind: st
         {context.capabilities.receivingServices && candidates(record.actionCandidates, (item) => item.action === "Certify" ? { operation: "ServiceCertify", label: "Confirm service", version: record.version, sourceVersion: record.sourceVersion, quantity: record.intendedQuantity ?? undefined } : null)}
         {record.effects?.map((effect) => <p key={effect.id} className="text-sm">{effect.kind} · {effect.quantity} · {effect.netAmount} · {effect.evidenceReference}</p>)}
       </div></Panel> : null}
+      {!task && draftActions.some((item) => item.action === "EditDraft" && item.candidate) && !uncertain && <Link className="text-sm text-primary hover:underline" to={`${base}/${id}/edit?kind=${kind}`}>Edit delivery draft</Link>}
       {candidates(draftActions, (item) => item.action === "CancelDraft" ? { operation: service ? "ServiceCancel" : "ReceivingCancel", label: "Cancel draft", version: (record ?? receipt)!.version } : null)}
       <div className="flex gap-3"><Link className="text-sm text-primary hover:underline" to={base}>Back to deliveries</Link><Button variant="secondary" disabled={busy} onClick={() => { setNotice(""); setActionError(""); setRevision((n) => n + 1); }}>Refresh delivery</Button></div>
     </>}
