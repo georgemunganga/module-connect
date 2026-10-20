@@ -80,3 +80,7 @@ Proposed fixture flag `PROCUREMENT_MATCHING_BROWSER_VERIFY_ON_STOP=1`. Owner use
 ## Required implementation order and release limits
 
 Root reviews this proposed contract → backend author adds only tools fixture/finite CoreDocs setup while model stable → centralized P26 compile/domain/model/migration/actual restricted PG gates → fresh owner-private serve fixture → frontend actual two-case browser gate against frozen invoice assets → independent owner verifier → integration review. No production mutation, deployment, shared-host release-hold bypass or qualified Finance/approval completion claim. PR34 remains draft; issues27/30 and releasehold29 stay open until their actual gates are met.
+
+### Exact-original UI candidate follow-up
+
+A separate frontend candidate preserves original quantity/rate/tax as decimal strings, uses exact BigInt scale8 aggregate previews and reads numeric original invoice JSON lexemes losslessly. The two actual scenario cases and strict one-invoice owner-verifier contract remain unchanged; no wide invoice is inserted into that fixture. A separate mock-transport browser case exercises wide4dp input, exact string POST and raw numeric4dp detail response. Backend finite-role/actualDB wide18,4 tests remain separate evidence. This source amendment is not an executed frontend gate or a replacement for the next candidate's TSC/build/unit/mock/actual2-case verification.

@@ -1,8 +1,10 @@
+import { invoiceDecimal, invoiceTotals } from "./procurement-invoice-exact";
+import { parseInvoiceOriginalJson } from "./procurement-invoice-json";
 import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 /** Manual invoice intake only. Finance owns posting and payment. */
 export type InvoiceLineInput = {
-  description: string; quantity: number; unitPrice: number; taxAmount: number;
+  description: string; quantity: string; unitPrice: string; taxAmount: string;
   taxCodeRef?: string | null; costCenterRef?: string | null;
 };
 export type InvoiceIntakeInput = {
@@ -13,12 +15,12 @@ export type InvoiceIntakeInput = {
 export type InvoiceSummary = {
   id: string; supplierId: string; branchRef?: string | null; supplierName?: string | null;
   invoiceNumber: string; invoiceDate: string; currencyCode: string;
-  grossAmount: number; status: "Received"; intakeChannel: string;
+  grossAmount: string; status: "Received"; intakeChannel: string;
   version: number; createdAt: string;
 };
 export type InvoiceDetail = InvoiceSummary & {
   purchaseOrderId?: string | null; dueDate?: string | null;
-  netAmount: number; taxAmount: number; nextStep: string;
+  netAmount: string; taxAmount: string; nextStep: string;
   lines: (InvoiceLineInput & { id: string; lineNumber: number })[];
 };
 export type InvoicePage = { items: InvoiceSummary[]; total: number; page: number; pageSize: number };
@@ -58,16 +60,17 @@ async function request(legalEntityId: string, path: string, init: RequestInit = 
               : "The invoice action could not be completed."));
   }
   if (binary) return response.blob();
-  try { return await response.json(); }
+  try { return parseInvoiceOriginalJson(await response.text()); }
   catch { throw new InvoiceIntakeError(0, "The ERP returned an invalid invoice response."); }
 }
 
 export async function listInvoiceIntake(legalEntityId: string, page = 1, signal?: AbortSignal): Promise<InvoicePage> {
   const body = await request(legalEntityId, `?page=${page}&pageSize=25`, { signal });
   if (!object(body) || !Array.isArray(body.items) || typeof body.total !== "number"
-    || typeof body.page !== "number" || typeof body.pageSize !== "number"
+    || !Number.isSafeInteger(body.total) || typeof body.page !== "number" || !Number.isSafeInteger(body.page)
+    || typeof body.pageSize !== "number" || !Number.isSafeInteger(body.pageSize)
     || !body.items.every((row: unknown) => object(row) && guid.test(String(row.id))
-      && typeof row.invoiceNumber === "string" && row.status === "Received"))
+      && typeof row.invoiceNumber === "string" && row.status === "Received" && typeof row.grossAmount === "string"))
     throw new InvoiceIntakeError(0, "The ERP returned an invalid invoice list.");
   return body as unknown as InvoicePage;
 }
@@ -75,13 +78,22 @@ export async function listInvoiceIntake(legalEntityId: string, page = 1, signal?
 export async function getInvoiceIntake(legalEntityId: string, id: string, signal?: AbortSignal): Promise<InvoiceDetail> {
   if (!guid.test(id)) throw new InvoiceIntakeError(0, "Invoice reference is invalid.");
   const body = await request(legalEntityId, `/${id}`, { signal });
-  if (!object(body) || body.id !== id || body.status !== "Received" || !Array.isArray(body.lines))
+  if (!object(body) || body.id !== id || body.status !== "Received" || !Array.isArray(body.lines)
+    || ![body.netAmount, body.taxAmount, body.grossAmount].every((amount) => typeof amount === "string")
+    || !Number.isSafeInteger(body.version)
+    || !body.lines.every((line: unknown) => object(line) && typeof line.quantity === "string"
+      && typeof line.unitPrice === "string" && typeof line.taxAmount === "string"))
     throw new InvoiceIntakeError(0, "The ERP returned invalid invoice details.");
   return body as unknown as InvoiceDetail;
 }
 
 export async function captureInvoiceIntake(legalEntityId: string, input: InvoiceIntakeInput): Promise<{ id: string }> {
-  const body = await request(legalEntityId, "", { method: "POST", body: JSON.stringify(input) });
+  // Reject already-rounded number inputs, validate all lines/totals before issuing any request.
+  const lines = input.lines.map((line) => ({ ...line, quantity: invoiceDecimal(line.quantity),
+    unitPrice: invoiceDecimal(line.unitPrice), taxAmount: invoiceDecimal(line.taxAmount) }));
+  const totals = invoiceTotals(lines);
+  Object.values(totals).forEach(invoiceDecimal); // Stored original headers require18,4 too; never round.
+  const body = await request(legalEntityId, "", { method: "POST", body: JSON.stringify({ ...input, lines }) });
   if (!object(body) || !guid.test(String(body.id)) || body.status !== "Received")
     throw new InvoiceIntakeError(0, "The ERP did not confirm this invoice. Check the list before retrying.");
   return body as { id: string };
