@@ -111,3 +111,18 @@ Evidence directory: `/home/amizo/erp-backups/procurement-final-ui-20261020/`.
 - Passing-run limitation: the list reporter did not materialize the inline successful traffic attachment; trace policy retained traces only on failure. No passing trace/traffic file is claimed. The fixture was not reused merely to generate an artifact. Final durable database verification is owned and reported separately by the coordinator.
 
 All three frozen artifact SHA256 checks passed after the successful run. Own preview/browser processes exited and port3011 was closed before handing the private server back for coordinator-controlled graceful stop and persisted-state verification. No production publish was performed by this gate.
+
+## Actual mapped-backend authority settings browser gate
+
+The unchanged D-b3 application passed the actual authority settings workflow against a separate fresh private restricted sandbox (`settings_browser_20261020_v2`). Test source `2729876` includes only durable passing-traffic capture and a semantic saved-status locator correction relative to the prior authored actual test. All Procurement business responses came from the real loopback API; ERP shell presentation remained explicitly synthetic.
+
+The browser created the exact finite branch limit `99999999999999.9999`, submitted it as its author, activated it through independent Finance review, and verified scoped read-only visibility/actions for the reader. Assertions also denied the reader's revoke request with403 and confirmed unchanged saved evidence. UI writes were Create201, Submit200 and Activate200. Outcome: **1 passed (56.4 seconds)**, case47.0 seconds. No production deployment or whole-system acceptance is implied.
+
+The first settings fixture stopped after successful Create201 because an unfiltered test status locator matched both saved feedback and concurrent list-loading feedback. The test now selects the saved feedback explicitly; no application, business assertion or timeout change was made. First-run trace, screenshot and private traffic remain in `actual-settings-first-8abe082-results/`. A fresh v2 fixture was used for the complete successful run.
+
+Successful evidence under `/home/amizo/erp-backups/procurement-final-ui-20261020/`:
+
+- `actual-settings-v2-2729876.log` and `actual-settings-v2-2729876-results/.last-run.json`.
+- `actual-settings-v2-2729876-results/authority-settings-actual--52459-ains-read-only-for-a-reader-chromium/actual-settings-api-traffic.json` (mode0600), SHA256 `4ba97a06fe844716792508edb52d93169897500e4b093ea7b2b76535c701cd34`.
+
+The saved traffic records forwarded browser API requests. Direct fixture verification reads and the negative reader-revoke probe execute against the same real API and are asserted by the test, but are not entries in that browser-forwarding traffic array. Artifact hashes remained unchanged and port3011 was closed at handoff. The coordinator owns backend shutdown and database lifecycle; the agent made no further API calls after capture.
