@@ -61,3 +61,19 @@ After resource clearance, verify the integrated source:
 Preserve first failure logs/traces. Fix actual contract/type defects and record any changed
 source/build hash. Do not run extra SDK jobs, start databases, alter restored-data permissions,
 serve a restored database or overwrite public assets during this verification.
+
+## First combined browser gate and correction
+
+The first frozen `613ae83` / `index-COjxy97z.js` gate passed 17 cases, including all
+14 existing PR approval regressions, then stopped on the authority stale-review case.
+The trace showed the expected activation 409 followed by successful authoritative list
+refresh; the obsolete action was removed. The list loading effect also cleared the
+command conflict message, leaving no explanation for the user. No timeout/assertion
+change was made. The correction retains command failure separately from list errors,
+clearing it on explicit new action/filter/page/refresh acknowledgement. The existing
+stale-review browser scenario remains the regression test.
+
+Original first-run trace, screenshot, context, logs and five original candidate files
+are retained under `/home/amizo/erp-backups/procurement-final-ui-20261020/`. The static
+preview/browser exited before source changes; corrected source requires TypeScript and
+a new frozen staged build before browser continuation. This is not deployment evidence.
