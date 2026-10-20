@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select } from "../components/ui";
+import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
@@ -137,7 +138,7 @@ export function LiveInvoiceEditor() {
 
 export function LiveInvoiceDetail() {
   const { id } = useParams();
-  const { legalEntityId } = useCompany();
+  const { legalEntityId, capabilities, permissions } = useCompany();
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -167,6 +168,7 @@ export function LiveInvoiceDetail() {
       <tbody>{invoice.lines.map((line) => <tr key={line.id}><td>{line.lineNumber}</td><td>{line.description}</td>
         <td>{line.quantity}</td><td>{money(line.unitPrice, invoice.currencyCode)}</td><td>{money(line.taxAmount, invoice.currencyCode)}</td></tr>)}</tbody>
     </RecordTable></div></Panel>
+    {capabilities.invoiceDocuments && <InvoiceDocumentPanel invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
     <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/bills">Back to bills</Link>
   </div>;
 }

@@ -31,11 +31,11 @@ export class InvoiceIntakeError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
-async function request(legalEntityId: string, path: string, init: RequestInit = {}): Promise<unknown> {
+async function request(legalEntityId: string, path: string, init: RequestInit = {}, binary = false): Promise<unknown> {
   if (!guid.test(legalEntityId)) throw new InvoiceIntakeError(0, "Choose an ERP company first.");
   const headers = new Headers(init.headers);
   Object.entries(procurementScopeHeaders(legalEntityId)).forEach(([key, value]) => headers.set(key, value));
-  if (init.body) headers.set("Content-Type", "application/json");
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   let response: Response;
   try {
     response = await fetch(`/api/procurement/v1/invoices${path}`, {
@@ -57,6 +57,7 @@ async function request(legalEntityId: string, path: string, init: RequestInit = 
             : response.status === 409 ? "This invoice is already recorded. Search the invoice list before trying again."
               : "The invoice action could not be completed."));
   }
+  if (binary) return response.blob();
   try { return await response.json(); }
   catch { throw new InvoiceIntakeError(0, "The ERP returned an invalid invoice response."); }
 }
@@ -84,4 +85,47 @@ export async function captureInvoiceIntake(legalEntityId: string, input: Invoice
   if (!object(body) || !guid.test(String(body.id)) || body.status !== "Received")
     throw new InvoiceIntakeError(0, "The ERP did not confirm this invoice. Check the list before retrying.");
   return body as { id: string };
+}
+
+export type InvoiceDocument = {
+  documentId: string; versionId: string; versionNumber: number; fileName: string;
+  mediaType: string; sizeBytes: number; sha256: string;
+  scanState: "Quarantined" | "Scanning" | "Available" | "Rejected" | "ScanFailed";
+  failureCode?: string | null; canDownload: boolean;
+};
+function documentPath(invoiceId: string, versionId?: string): string {
+  if (!guid.test(invoiceId) || (versionId && !guid.test(versionId)))
+    throw new InvoiceIntakeError(0, "Document reference is invalid.");
+  return `/${invoiceId}/documents${versionId ? `/${versionId}` : ""}`;
+}
+function readDocument(value: unknown): InvoiceDocument {
+  if (!object(value) || !guid.test(String(value.documentId)) || !guid.test(String(value.versionId))
+    || typeof value.fileName !== "string" || typeof value.sizeBytes !== "number" || value.sizeBytes < 1
+    || typeof value.versionNumber !== "number" || typeof value.mediaType !== "string"
+    || typeof value.sha256 !== "string" || !/^[0-9a-f]{64}$/i.test(value.sha256)
+    || !["Quarantined", "Scanning", "Available", "Rejected", "ScanFailed"].includes(String(value.scanState))
+    || typeof value.canDownload !== "boolean" || (value.canDownload && value.scanState !== "Available"))
+    throw new InvoiceIntakeError(0, "The ERP returned invalid document details.");
+  return value as unknown as InvoiceDocument;
+}
+export type InvoiceDocuments = { items: InvoiceDocument[]; limits: { maxFileBytes: number; maxOwnerFiles: number } };
+export async function listInvoiceDocuments(company: string, invoiceId: string, signal?: AbortSignal): Promise<InvoiceDocuments> {
+  const result = await request(company, documentPath(invoiceId), { signal });
+  if (!object(result) || !Array.isArray(result.items) || !object(result.limits)
+    || typeof result.limits.maxFileBytes !== "number" || result.limits.maxFileBytes < 1 || result.limits.maxFileBytes > 100 * 1024 * 1024
+    || typeof result.limits.maxOwnerFiles !== "number" || result.limits.maxOwnerFiles < 1 || result.limits.maxOwnerFiles > 100)
+    throw new InvoiceIntakeError(0, "Documents could not be loaded.");
+  return { items: result.items.map(readDocument), limits: result.limits as InvoiceDocuments["limits"] };
+}
+export async function uploadInvoiceDocument(company: string, invoiceId: string, file: File, uploadKey: string): Promise<InvoiceDocument> {
+  if (!guid.test(uploadKey)) throw new InvoiceIntakeError(0, "Choose the file again before uploading.");
+  if (!file.size || file.size > 100 * 1024 * 1024) throw new InvoiceIntakeError(0, "Choose a file within the allowed size that is not empty.");
+  return readDocument(await request(company, documentPath(invoiceId), { method: "POST", body: file,
+    headers: { "Content-Type": "application/octet-stream", "X-Document-Name": encodeURIComponent(file.name), "Idempotency-Key": uploadKey } }));
+}
+export async function retryInvoiceDocumentScan(company: string, invoiceId: string, versionId: string): Promise<InvoiceDocument> {
+  return readDocument(await request(company, documentPath(invoiceId, versionId) + "/retry-scan", { method: "POST" }));
+}
+export async function downloadInvoiceDocument(company: string, invoiceId: string, versionId: string): Promise<Blob> {
+  return await request(company, documentPath(invoiceId, versionId) + "/download", {}, true) as Blob;
 }

@@ -2,7 +2,7 @@ export type ShellSelection = { entityId?: string; branch?: string };
 
 export type ProcurementCapability =
   | "vendorDraft" | "itemDraft" | "requestDraft" | "approvals" | "sourcing"
-  | "contracts" | "orders" | "orderDraft" | "receiving" | "invoiceIntake" | "invoiceValidation" | "financeHandoff" | "supplierPortal"
+  | "contracts" | "orders" | "orderDraft" | "receiving" | "invoiceIntake" | "invoiceDocuments" | "invoiceValidation" | "financeHandoff" | "supplierPortal"
   | "planningDraft" | "configurationDraft" | "contractDraft" | "sourcingDraft";
 
 export type ProcurementReadiness = {
@@ -18,7 +18,7 @@ export type ProcurementReadiness = {
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const capabilityKeys: ProcurementCapability[] = [
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
-  "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
+  "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
 ];
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -85,7 +85,7 @@ export async function fetchProcurementReadiness(
   const resolvedCapabilities = object(meta) && object(meta.capabilities) ? meta.capabilities : null;
   if (!object(meta) || meta.tenantId !== context.tenantId || meta.legalEntityId !== context.legalEntityId
     || meta.schemaReady !== true || !resolvedCapabilities
-    || !capabilityKeys.every((key) => key === "invoiceIntake" || key === "orderDraft"
+    || !capabilityKeys.every((key) => key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments"
       || typeof resolvedCapabilities[key] === "boolean"))
     throw new ProcurementLiveError("unavailable");
 
@@ -98,7 +98,7 @@ export async function fetchProcurementReadiness(
     permissions: Array.isArray(context.permissions)
       ? context.permissions.filter((permission): permission is string => typeof permission === "string") : [],
     capabilities: Object.fromEntries(capabilityKeys.map((key) =>
-      [key, key === "invoiceIntake" || key === "orderDraft"
+      [key, key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments"
         ? resolvedCapabilities[key] === true : resolvedCapabilities[key]])) as Record<ProcurementCapability, boolean>,
   };
 }
