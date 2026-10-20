@@ -23,9 +23,23 @@ Built output names: `.invoice-verification-dist/assets/index-Bj0myMuD.js` and `i
 
 Central session73483 terminated0: **16/16 passed in6.9minutes** against unchanged app source `dccbc14`. This includes the new wide4dp capture/raw-numeric-response browser case (21.3seconds) alongside the existing invoice/document/mapping/comparison/recovery/permission cases. Evidence: `/home/amizo/erp-backups/procurement-invoice-ui-20261020_1752/browser.log`. The slow-file advisory is retained; no parallel job or timeout change was used by this documentation task. This terminal result supersedes the earlier pending checkpoint only; it is mock transport proof.
 
-## Pending actual verification
+## Actual business API browser and independent owner gate — passed
 
-The existing two actual P26 backend/browser scenarios and strict one-invoice persisted owner verifier must still run against this exact new candidate. Their source/fixture counts are unchanged. Earlier mock/actual results from other candidate hashes are not proof for this one. No deployment or production enablement is authorized by this record; release hold#29 and base invoice review PR#34 remain applicable.
+Fresh private fixture `20261020_183557_browser` ran against this exact application candidate. Playwright session26932 exited0: **2/2 cases passed in2.3minutes**. The actual business API covered invoice capture, Core document upload/scan/download, approved-source selection, Unverified mapping, explicit Blocked comparison, original-key GET-only recovery after a lost response, reader403 and authorized foreign-branch404 denials. These scenarios do not claim qualified unit evidence or Finance/AP/payment execution.
+
+After the browser finished, the API was stopped and NEW independent owner contexts verified the persisted original amounts/version, mapping, comparison, command receipts, audit/outbox, document hashes/lifecycle and unchanged upstream PR/PO/receiving effects. Exposure remained Unknown with zero allocations and no active claim. Backend/owner session20786 exited0. The known-fixture-only scanner verifies test bytes; it is not production malware protection.
+
+Protected logs, manifest and copied Playwright traces/results are retained at `/home/amizo/erp-backups/procurement-invoice-postgres-20261020/20261020_183557_browser`. Frozen SHA256:
+
+| Artifact | SHA256 |
+| --- | --- |
+| HTML | `60196e68e0918e56cdae6300f98f4750b5d8ba16817f848a013f077188f0ebf6` |
+| JS index-Bj0myMuD | `bb816e26955de8be16b13e7e31cc2a59de84b6b51691ba823f9d031176933064` |
+| CSS index-Bddc462I | `7f163297e91fa0e3fc3cde778b88996063082e96fb088d9866bfac750639d888` |
+| API | `4cb6f14612afa75ccfe9f73f064bc89331b718d3436e77875e4c7034d69b7f12` |
+| Verification tool | `d55b8a275d29456640db9044203819fc9e4ff1cf60fc63d1f86d02d7c261fcf5` |
+
+Backend application source3613559 and test-only tool36c5d38 were frozen for this run. The separate full CLI denial/concurrency/readiness gate is still pending. No deployment or production enablement follows from these results; release hold#29 and base invoice review PR#34 remain applicable.
 
 ## Review scope
 
