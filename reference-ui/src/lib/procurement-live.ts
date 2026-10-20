@@ -4,7 +4,7 @@ export type ProcurementCapability =
   | "vendorDraft" | "itemDraft" | "requestDraft" | "approvals" | "sourcing"
   | "contracts" | "orders" | "orderDraft" | "receiving" | "invoiceIntake" | "invoiceDocuments" | "invoiceValidation" | "financeHandoff" | "supplierPortal"
   | "planningDraft" | "configurationDraft" | "contractDraft" | "sourcingDraft"
-  | "receivingDrafts" | "receivingGoods" | "receivingInspection" | "receivingServices";
+  | "receivingDrafts" | "receivingGoods" | "receivingInspection" | "receivingServices" | "invoiceComparison";
 
 export type ProcurementReadiness = {
   tenantId: string;
@@ -19,9 +19,9 @@ export type ProcurementReadiness = {
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const capabilityKeys: ProcurementCapability[] = [
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
-  "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft", "receivingDrafts", "receivingGoods", "receivingInspection", "receivingServices",
+  "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft", "receivingDrafts", "receivingGoods", "receivingInspection", "receivingServices", "invoiceComparison",
 ];
-const optionalCapability = (key: ProcurementCapability) => key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments" || key.startsWith("receiving") && key !== "receiving";
+const optionalCapability = (key: ProcurementCapability) => key === "invoiceComparison" || key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments" || key.startsWith("receiving") && key !== "receiving";
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 

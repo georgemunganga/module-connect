@@ -18,6 +18,7 @@ describe("Procurement live readiness", () => {
       .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity, currencyCode: "ZMW" } }))
       .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities }));
     const result = await fetchProcurementReadiness({ entityId: entity, branch }, undefined, fetcher);
+    expect(result.capabilities.invoiceComparison).toBe(false);
     expect(result.capabilities.vendorDraft).toBe(true);
     expect(result.defaultCurrencyCode).toBe("ZMW");
     expect(result.capabilities.orders).toBe(false);

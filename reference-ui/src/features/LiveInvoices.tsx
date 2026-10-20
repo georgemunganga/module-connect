@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select } from "../components/ui";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
+import { InvoiceReviewPanel } from "./InvoiceReview";
+import { procurementScopeHeaders } from "../../../shared/shell-scope";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
@@ -140,6 +142,7 @@ export function LiveInvoiceDetail() {
   const { id } = useParams();
   const { legalEntityId, capabilities, permissions } = useCompany();
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
+  const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -151,7 +154,7 @@ export function LiveInvoiceDetail() {
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [id, legalEntityId]);
+  }, [id, legalEntityId, refresh]);
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."}</div>;
   return <div className="p-5 sm:p-8">
@@ -170,6 +173,9 @@ export function LiveInvoiceDetail() {
         <td>{line.quantity}</td><td>{money(line.unitPrice, invoice.currencyCode)}</td><td>{money(line.taxAmount, invoice.currencyCode)}</td></tr>)}</tbody>
     </RecordTable></div></Panel>
     {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
+    <InvoiceReviewPanel key={`${legalEntityId}:${procurementScopeHeaders(legalEntityId)["X-Shell-Location"] ?? ""}:${invoice.id}:${invoice.version}`}
+      company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
+      comparisonAvailable={capabilities.invoiceComparison} refresh={() => setRefresh((value) => value + 1)} />
     <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/bills">Back to bills</Link>
   </div>;
 }
