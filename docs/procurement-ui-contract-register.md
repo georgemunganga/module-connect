@@ -6,6 +6,30 @@ The ERP feature specifications in `newworld-erp/docs/procurement/PROC-00` throug
 
 ## Common contract for every record screen
 
+### 20 October 2026 approval adapter checkpoint
+
+The existing Approvals screen, request opening/history and Budget Finance-release panel now
+have scoped typed API adapters. They support the implemented sequential `One` and parallel
+`All` route, required decision reasons, source/version conflicts, exact UUID/body retry,
+read denial, returned-request recovery and controlled manual Finance confirmation. They
+reuse the ERP controls and remain hidden when the server approval capability is false.
+
+The candidate production bundle `index-DS0SRgqF.js` passed TypeScript, the staged build,
+14 focused mocked approval cases and both real API browser workflows: approval through
+source quantities/history, and return through independent Finance release/edit/resubmission.
+The predecessor candidate also passed the 76-case mocked regression suite. The first real
+run cancelled a cold opening after a five-second test expectation; the backend rolled it
+back with zero cases. The bounded real-suite timing correction then passed against the
+untouched request. Raw first-failure and final evidence is retained; this is not a claim
+that the cold-path response met a five-second performance target.
+
+The real browser fixture used actual mapped APIs, committed migrations and a restricted
+runtime database role. Shell sign-in/branding were synthetic; this does not verify production
+SSO or approve company spending policies. Production backend approval execution remains
+disabled pending the coordinated API/schema/configuration release. PO, receipt, matching,
+AP and payment workflows are not made operational by this UI adapter. The separate named
+approval-limit settings branches remain unverified and are excluded from this candidate.
+
 | Concern | UI requirement | API/source owner |
 | --- | --- | --- |
 | Identity and scope | Use verified `tenantId`, `legalEntityId`, `workerId`, permissions, allowed company and `company.currencyCode` from `/api/procurement/v1/context`. Pre-fill the selected company's currency on new drafts; preserve each saved transaction's currency on edit. Display labels may change; use stable IDs in requests. | Core supplies the selected company and default currency. HRMS/shared host validates active worker, company, role and record scope on every request. |
