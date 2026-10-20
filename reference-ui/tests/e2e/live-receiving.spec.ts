@@ -141,7 +141,7 @@ test("detail keeps related comments documents and history sections without local
 test("draft preserves attachment help sticky actions and discard confirmation", async ({ page }) => {
   const evidence = await mock(page); await page.goto(root + "/new"); await page.getByRole("switch", { name: "Select PO-ISSUED Issued delivery line", exact: true }).click();
   await page.getByRole("textbox", { name: "Received quantity 1", exact: true }).fill("3.1250");
-  await expect(page.getByRole("textbox", { name: "Vendor", exact: true })).toHaveAttribute("readonly", ""); await expect(page.getByRole("textbox", { name: "Transaction title", exact: true })).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: /^Vendor\b/ })).toHaveAttribute("readonly", ""); await expect(page.getByRole("textbox", { name: /^Transaction title\b/ })).toBeDisabled();
   await page.getByRole("button", { name: "Cancel", exact: true }).click(); await expect(page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Keep editing", exact: true }).click(); await expect(page.getByRole("textbox", { name: "Received quantity 1", exact: true })).toHaveValue("3.1250"); expect(evidence.writes).toHaveLength(0);
 });
