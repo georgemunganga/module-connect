@@ -77,3 +77,13 @@ Original first-run trace, screenshot, context, logs and five original candidate 
 are retained under `/home/amizo/erp-backups/procurement-final-ui-20261020/`. The static
 preview/browser exited before source changes; corrected source requires TypeScript and
 a new frozen staged build before browser continuation. This is not deployment evidence.
+
+The corrected `5896c2f` / `index-D-b3C2fm.js` build passed the failed authority
+regression, then all seven authority and eight method configuration cases. The next
+PO rejection case stopped before POST because its new exact-name test locator omitted
+the shared Field help text: actual accessible textbox name is `Reason Explain what
+needs to change.`. Only that PO test selector is corrected; required-reason assertions,
+control behavior, timeout and all application source/assets remain unchanged. Original
+trace/screenshot/context are retained. Root authorised retaining the exact staged build
+and the 14 PR plus 15 authority/method checkpoints while rerunning the PO and remaining
+policy suites. Aggregate coverage must not be described as one uninterrupted green run.
