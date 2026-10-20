@@ -133,3 +133,10 @@ node node_modules/@playwright/test/cli.js test --config playwright.rfq.config.ts
 ```
 
 The RFQ config selects exactly six new governed transport cases plus three existing ad hoc regression cases, with isolated port3043/output directories. Retain source SHA, logs, browser traces/screenshots and artifact SHA256 after the build. Actual backend RFQ/PG/browser proof remains a separate pending milestone; a mock pass cannot enable production readiness.
+
+
+### First central frontend gate — partial pass, retained browser failure
+
+Application source7196a41, session28763: **28/28** focused contract/readiness/scope tests passed (10new RFQ +14scope +4metadata), TypeScript noEmit passed, route generation remained clean and dedicated candidate build passed (1,760modules,41.10seconds). Built JSindex-8RiYc3Ex and CSSindex-Bddc462I; normal large-chunk advisory retained. Private evidence and frozen asset hashes: `/home/amizo/erp-backups/procurement-rfq-ui-20261020_190214`.
+
+The9-case transport browser gate stopped at its configured first failure: **5 passed,1 failed,3 did not run**,53.8seconds, process exit1. Sixth-case exact getByLabel('Reason') could not find the textarea after422, although the retained screenshot/accessibility snapshot show textbox Reason with the original value and editable cancellation action. No passing cancellation recovery is inferred. Preserve the failed trace/results before diagnosis; do not weaken the original-key, GET-only and no-repeat-POST assertions. Full actual business API/PostgreSQL proof and deployment remain pending.
