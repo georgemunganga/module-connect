@@ -16,6 +16,7 @@ import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../fea
 import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePlans";
 import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
+import { LiveBudgets } from "../features/LiveBudgets";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -193,7 +194,7 @@ export function App() {
               path="/budgets"
               element={
                 <div className="p-5 sm:p-8">
-                  <Budgets />
+                  {isProcurementLiveMode ? <LiveBudgets /> : <Budgets />}
                 </div>
               }
             />
