@@ -22,7 +22,7 @@ export function LiveApprovalQueue() {
   const requests = context.capabilities.approvals && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
   const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
   const [type, setType] = useState<"requests" | "orders">(() => requests ? "requests" : "orders");
-  if (!requests && !orders) return <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
+  if (!requests && !orders) return context.capabilities.approvals ? <RequestApprovalQueue /> : <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
   if (!orders) return <RequestApprovalQueue />;
   if (!requests) return <LiveOrderApprovalQueue />;
   return <><div className="flex gap-3 px-5 pt-5 sm:px-8" role="tablist" aria-label="Approval records">
