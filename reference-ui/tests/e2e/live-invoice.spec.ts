@@ -259,7 +259,7 @@ test("Bills detail explains missing invoice approval and Finance without creatin
   await expect(page.getByText("Not ready for Finance", { exact: true })).toBeVisible();
   await expect(page.getByText("Invoice approval and accounting validation are not connected yet.")).toBeVisible();
   await expect(page.getByText("Check the original invoice documents.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /pay|post|approve|compare|send to finance/i })).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("button", { name: /pay|post|approve|compare|send to finance/i })).toHaveCount(0);
   await page.getByRole("button", { name: "Refresh invoice", exact: true }).click();
   await expect(page.getByText("Not ready for Finance", { exact: true })).toBeVisible();
   expect(writes).toEqual([]);
@@ -274,7 +274,7 @@ test("Recorded comparison keeps exact values and remains separate from approval 
   await expect(page.getByText("ZMW 100.00000001", { exact: true })).toBeVisible();
   await expect(page.getByText("Finance history is not connected.", { exact: false })).toBeVisible();
   await expect(page.getByText("Saved results are history. They are not a current invoice approval or permission to pay.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /pay|post|approve|compare|send to finance/i })).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("button", { name: /pay|post|approve|compare|send to finance/i })).toHaveCount(0);
 });
 
 for (const option of ["readinessDenied", "staleReview"] as const) test(`Invoice review clears history on ${option}`, async ({ page }) => {
@@ -338,7 +338,7 @@ test("Invoice links and explicit comparison use the current version without impl
   await page.getByRole("button", { name: "Run invoice comparison", exact: true }).click();
   await expect(page.getByText("Comparison recorded. Review the saved issues before continuing.", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(2);
-  await expect(page.getByRole("button", { name: /pay|post|approve|send to finance/i })).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("button", { name: /pay|post|approve|send to finance/i })).toHaveCount(0);
 });
 
 test("Lost mapping response offers only original-key GET recovery, never another POST", async ({ page }) => {

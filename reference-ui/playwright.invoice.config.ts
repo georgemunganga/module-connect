@@ -8,6 +8,7 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   retries: 0,
+  maxFailures: 1,
   outputDir: ".invoice-test-results",
   use: { ...release.use, baseURL: "http://127.0.0.1:3041" },
   webServer: {
