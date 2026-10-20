@@ -125,7 +125,13 @@ function AuthorityForm({ company, currency, record, seed, scope, onSaved, onCanc
     effectiveFrom: new Date().toISOString(), effectiveUntil: null, allBranches: false, branchRef: scope.branchId,
     allDepartments: false, departmentRef: scope.departmentId, allCategories: false, categoryCodes: [] });
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false);
-  const alive = useRef(true); useEffect(() => () => { alive.current = false; }, []);
+  const alive = useRef(true);
+  useEffect(() => {
+    // StrictMode replays setup after cleanup in development; the same ref must
+    // become live again so successful saves and unconfirmed results stay visible.
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
   const field = <K extends keyof AuthorityDraft>(key: K, value: AuthorityDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
   async function save(event: FormEvent) {
     event.preventDefault(); if (uncertain) return;
