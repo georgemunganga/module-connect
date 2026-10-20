@@ -8,7 +8,7 @@ const capabilities = Object.fromEntries([
   "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "configurationDraft"]));
 
-async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolean; detailed?: boolean; canApprove?: boolean } = {}) {
+async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolean; detailed?: boolean; canApprove?: boolean; legacyOrder?: boolean } = {}) {
   let record: Record<string, unknown> | null = options.detailed ? {
     id: policyId, policyKey: "PURCHASE_REQUEST", policyVersionNumber: 1,
     effectiveFrom: "2026-10-19T00:00:00Z", effectiveTo: null, state: "Draft", version: 1,
@@ -20,6 +20,16 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
         result: { budgetReservation: "Required", sourcingMethodCode: null, minimumQuoteCount: null,
           approvalStages: [{ code: "NEED", assignee: "LineManager", mode: "One" }] } }] }),
   } : null;
+  if (options.legacyOrder) record = {
+    id: policyId, policyKey: "PURCHASE_ORDER", policyVersionNumber: 1,
+    effectiveFrom: "2026-10-19T00:00:00Z", effectiveTo: null, state: "Draft", version: 1,
+    createdAt: "2026-10-19T00:00:00Z",
+    rulesJson: JSON.stringify({ schemaVersion: 1, transactionType: "PurchaseOrder", currencyCode: "ZMW",
+      amountBasis: "ApprovedLineBase", rules: [{ code: "LEGACY_ORDER", priority: 0,
+        when: { minimumAmountInclusive: null, maximumAmountExclusive: null, categoryCodes: [], purchaseTypes: [], branchIds: [] },
+        result: { budgetReservation: "Required", sourcingMethodCode: null, minimumQuoteCount: null,
+          approvalStages: [{ code: "NEED", assignee: "LineManager", mode: "One" }] } }] }),
+  };
   let savedRules: Record<string, unknown> | null = null;
   let reviewNote: string | null = null;
   let lastSample: Record<string, unknown> | null = null;
@@ -35,8 +45,8 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId,
       workerId: "22222222-2222-4222-8222-222222222222", permissions: options.canApprove
-        ? ["procurement-configuration-edit", "procurement-configuration-approve"]
-        : ["procurement-configuration-edit"],
+        ? ["procurement-configuration-read", "procurement-configuration-edit", "procurement-configuration-approve"]
+        : ["procurement-configuration-read", "procurement-configuration-edit"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     const base = "/api/procurement/v1/configuration/policies";
@@ -215,4 +225,62 @@ test("reviewer can return rules for correction", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Edit draft" })).toBeVisible();
   await page.getByRole("button", { name: "Edit draft" }).click();
   await expect(page.getByText("Reviewer asked for changes: Add an amount band")).toBeVisible();
+});
+
+
+test("PO policy setup requires procurement reviewers and preserves approved line basis", async ({ page }) => {
+  await mockErp(page); await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Use these rules for", exact: true }).click();
+  await page.getByRole("option", { name: "Purchase orders", exact: true }).click();
+  await page.getByRole("combobox", { name: "Step 1 reviewers", exact: true }).click();
+  await expect(page.getByRole("option", { name: "Line manager", exact: true })).toHaveCount(0);
+  await page.getByRole("option", { name: "Procurement managers", exact: true }).click();
+  await page.getByLabel("Step 1 code", { exact: true }).fill("ORDER_COMMITTEE");
+  await page.getByRole("combobox", { name: "Step 1 decision rule", exact: true }).click();
+  await page.getByRole("option", { name: "All eligible reviewers", exact: true }).click();
+  await page.getByLabel("Amount below (ZMW)").fill("99999999999999.9999");
+  const saved = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/policies"));
+  await page.getByRole("button", { name: "Check and save draft", exact: true }).click();
+  const payload = (await saved).postDataJSON();
+  expect(payload.policyKey).toBe("PURCHASE_ORDER");
+  expect(payload.rulesJson).toContain('"amountBasis":"ApprovedLineBase"');
+  expect(payload.rulesJson).toContain('"maximumAmountExclusive":99999999999999.9999');
+  expect(JSON.parse(payload.rulesJson).rules[0].result.approvalStages).toEqual([{ code: "ORDER_COMMITTEE", assignee: "ProcurementManager", mode: "All" }]);
+  await page.getByRole("button", { name: "Edit draft", exact: true }).click();
+  await expect(page.getByLabel("Amount below (ZMW)")).toHaveValue("99999999999999.9999");
+  await expect(page.getByRole("combobox", { name: "Use these rules for", exact: true })).toBeDisabled();
+});
+
+
+test("historical PO rules with request-only reviewers stay read-only and cannot be sent for review", async ({ page }) => {
+  const evidence = await mockErp(page, { legacyOrder: true });
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Edit draft", exact: true }).click();
+  await expect(page.getByLabel("Saved rule definition", { exact: true })).toHaveValue(/LineManager/);
+  await expect(page.getByRole("button", { name: "Check and save draft", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Send for review", exact: true }).click();
+  await expect(page.getByLabel("Saved rule definition", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("What should the reviewer check?", { exact: true })).toHaveCount(0);
+  expect(evidence.reviewNote()).toBe("");
+  expect(evidence.rules()).toBeNull();
+});
+
+
+test("PO module approval settings reuse the editor with PO defaults without changing request settings", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/settings/modules/purchase-orders/approvals");
+  await page.getByRole("button", { name: "Add buying rule draft", exact: true }).first().click();
+  await expect(page.getByRole("combobox", { name: "Use these rules for", exact: true })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Use these rules for", exact: true })).toHaveText("Purchase orders");
+  await expect(page.getByRole("combobox", { name: "Step 1 reviewers", exact: true })).toHaveText("Procurement managers");
+  const saved = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/policies"));
+  await page.getByRole("button", { name: "Check and save draft", exact: true }).click();
+  const body = (await saved).postDataJSON();
+  expect(body.policyKey).toBe("PURCHASE_ORDER");
+  expect(JSON.parse(body.rulesJson).amountBasis).toBe("ApprovedLineBase");
+  await page.goto("/procurement/workspace/settings/modules/purchase-requests/approvals");
+  await page.getByRole("button", { name: "Add buying rule draft", exact: true }).first().click();
+  await expect(page.getByRole("combobox", { name: "Use these rules for", exact: true })).toHaveText("Purchase requests");
+  await expect(page.getByRole("combobox", { name: "Step 1 reviewers", exact: true })).toHaveText("Line manager");
 });
