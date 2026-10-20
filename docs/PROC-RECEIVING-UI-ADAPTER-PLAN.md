@@ -68,3 +68,37 @@ When the coordinator grants resources, run focused `tests/receiving-contract.tes
 A concrete comparison with the generic imported receiving list/detail/editor found lost toolbar, tab, activity/document and sticky form controls. See [parity matrix](PROC-RECEIVING-UI-PARITY-AUDIT.md). The correction reuses actual ListTools, StandardDataTable, ActiveFilterChips, DetailTabs, DetailSection and ActivityTimeline, restores scoped row preview/selection/column controls, supported server status filtering, explicit unsupported search/sort/export help, related/comments/history/document sections and sticky draft/record/cancel arrangement with discard confirmation. Normal receiving document references remain read-only; secure upload/download and comments never become browser-local mutations. Source vendor/reference/coding are retained, and missing title/pricing projections are explained rather than fabricated.
 
 Purpose-only task privacy and action/version guards remain intact. Vendor return context is retained only as permitted internal navigation, without becoming data authority. Automatic deep-link source selection remains pending a bounded backend source lookup/filter contract. All parity changes and the additional three browser plus one client case are source-only and await the same serialized verification gate. Existing verified D-b3 assets remain untouched.
+
+
+## Executed adapter verification — 20 October 2026
+
+The corrected candidate passed 12 focused unit tests (nine exact receiving-client
+contracts and three capability/readiness contracts). TypeScript initially found
+four receiving callers using an unsupported `Modal.open` prop. Commit `375861d`
+uses the existing shared modal's conditional mounting contract; its TypeScript
+check passed. Later `132ab18` changes only table/fieldset containment and long-note
+wrapping, plus a synthetic fixture correction; the staged build passed with
+1,751 transformed modules. Application JavaScript is `index-DIY8nmB6.js`, CSS is
+`index-D5afYw44.css`. These assets remain frozen for browser continuation.
+
+**16 distinct mocked-API browser scenarios have passing checkpoints; this is not
+one uninterrupted green 16-case run.** Fifteen passed in
+`browser-132ab18-first.log`. The final parity case initially used exact field
+names although the shared Field includes descriptive help in its accessible name.
+Test-only `3f85e3d` retains the read-only/disabled/discard assertions and uses
+unambiguous name prefixes; that case passed separately in
+`browser-parity-locator.log`. The previously passing 15 cases and application
+assets were unchanged. First-run traces, screenshots and failures remain retained.
+The earlier `375861d` browser attempt exposed a fixture that marked every POST,
+including draft saving, as recorded arrival; its correction distinguishes drafts
+from final commands without changing the business assertions.
+
+Protected local evidence: `/home/amizo/erp-backups/procurement-receiving-ui-20261020/`.
+Asset hashes are recorded in `assets-132ab18.sha256`. These tests mock business
+responses: they prove adapter behavior, not real authorization, persistence or
+receipt accounting. The actual API browser case and fixture are authored in
+`tests/backend-browser/receiving.spec.ts` and `RECEIVING-CONTRACT.md`; execution
+awaits the backend mapping correction, generated migration and real PostgreSQL
+receiving probe. No production asset or capability was changed. Prior PR/PO and
+settings evidence remains scoped to its recorded older assets; no blanket
+whole-module release or regression claim is made from these receiving cases.
