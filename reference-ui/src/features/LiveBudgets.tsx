@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { FinanceReleasePanel } from "./FinanceReleasePanel";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
@@ -100,6 +101,7 @@ export function LiveBudgets() {
         </form>
         <div><h3 className="mb-3 font-semibold">Previous Finance checks</h3>{historyLoading ? <p role="status">Loading check history…</p> : history.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Checked</th><th>Outcome</th><th>Finance reference</th><th>Evidence</th><th>Reservation</th><th>Request version</th></tr></thead><tbody>{history.map((check) => <tr key={check.id}><td>{new Date(check.checkedAt).toLocaleString()}</td><td><Badge>{check.status}</Badge></td><td>{check.financeCheckRef}</td><td>{check.evidenceRef}</td><td>{check.reservationRef || "—"}</td><td>{check.requestVersion}</td></tr>)}</tbody></RecordTable></div> : <p className="text-sm text-muted-foreground">No Finance checks recorded yet.</p>}</div>
       </div></Panel>}
+      <FinanceReleasePanel />
     </div>}
   </div>;
 }

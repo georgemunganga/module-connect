@@ -29,6 +29,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   if (!liveMode) return <>{children}</>;
   const vendorPath = /^\/vendors(?:\/|$)/.test(location.pathname);
   const itemPath = /^\/items(?:\/|$)/.test(location.pathname);
+  const approvalPath = /^\/approvals(?:\/|$)/.test(location.pathname);
   const requestPath = /^\/(?:requests|procurement-requests)(?:\/|$)/.test(location.pathname);
   const sourcingPath = /^\/rfqs(?:\/|$)/.test(location.pathname);
   const contractPath = /^\/contracts(?:\/|$)/.test(location.pathname);
@@ -41,6 +42,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
+    || (approvalPath && state.readiness.capabilities.approvals)
     || (sourcingPath && state.readiness.capabilities.sourcingDraft)
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (planPath && state.readiness.capabilities.planningDraft)

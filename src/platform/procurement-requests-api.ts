@@ -21,7 +21,7 @@ export type RequestDraft = {
 export type RequestSummary = { id: string; number: string; purpose: string; status: string;
   currencyCode: string; neededBy?: string | null; createdAt: string; version: number; lineCount: number };
 export type RequestDetail = RequestSummary & Omit<RequestDraft, "lines"> & {
-  approvalState?: string | null; submittedAt?: string | null; submittedVersion?: number | null;
+  approvalState?: string | null; approvalInstanceRef?: string | null; submittedAt?: string | null; submittedVersion?: number | null;
   returnedAt?: string | null; returnedBySubjectId?: string | null; returnReason?: string | null;
   lines: (RequestLineDraft & { id: string; lineNumber: number; approvalStatus: string })[];
 };

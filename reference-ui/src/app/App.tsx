@@ -10,6 +10,7 @@ import { ErpShellProvider } from "../lib/erpShell";
 import { ProcurementLiveGate, isProcurementLiveMode } from "../lib/ProcurementLiveGate";
 import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/LiveVendors";
 import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
+import { LiveApprovalQueue, LiveApprovalDetail } from "../features/LiveApprovals";
 import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../features/LiveRequests";
 import { LiveSourcingList, LiveSourcingEditor, LiveSourcingDetail } from "../features/LiveSourcing";
 import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../features/LiveContracts";
@@ -39,6 +40,14 @@ function EditorRoute({ kind }: { kind: Exclude<ModuleKey, "rfqs"> }) {
       kind={kind}
     />
   );
+}
+function LiveRequestRoute() {
+  const location = useLocation();
+  return <LiveRequestDetail key={location.pathname} />;
+}
+function LiveApprovalRoute() {
+  const location = useLocation();
+  return <LiveApprovalDetail key={location.pathname} />;
 }
 function WizardRoute() {
   const location = useLocation();
@@ -74,8 +83,9 @@ export function App() {
             <Route path="/" element={<Dashboard />} />
             <Route
               path="/approvals"
-              element={<RecordList kind="requests" approval />}
+              element={isProcurementLiveMode ? <LiveApprovalQueue /> : <RecordList kind="requests" approval />}
             />
+            <Route path="/approvals/:id" element={isProcurementLiveMode ? <LiveApprovalRoute /> : <PendingLiveWorkflow />} />
             <Route
               path="/procurement-requests"
               element={isProcurementLiveMode ? <LiveRequestList /> : <RecordList kind="requests" procurement />}
@@ -98,7 +108,7 @@ export function App() {
                 element={isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceDetail />
                   : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderDetail />
                   : <div className="p-5 sm:p-8">
-                    {isProcurementLiveMode && module.key === "requests" ? <LiveRequestDetail />
+                    {isProcurementLiveMode && module.key === "requests" ? <LiveRequestRoute />
                       : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingDetail />
                         : <RecordRoute kind={module.key} />}
                   </div>}
