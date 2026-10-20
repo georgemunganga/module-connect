@@ -5,7 +5,7 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { ApprovalApiError, confirmFinanceRelease, listFinanceReleases,
   type FinanceReleaseCommand, type FinanceReleaseQueue, type FinanceReleaseRow } from "../../../src/platform/procurement-approvals-api";
 const message = (cause: unknown) => cause instanceof Error ? cause.message : "Finance release evidence could not be confirmed.";
-const localNow = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+const localNow = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 23);
 export function FinanceReleasePanel() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Finance releases require ERP company context.");
@@ -59,7 +59,7 @@ export function FinanceReleasePanel() {
       <p className="text-sm">Manual evidence for {selected.reservationReference} · {selected.currencyCode} {selected.reservedAmount.toLocaleString()}.</p>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <Field label="Release evidence reference"><Input required maxLength={500} disabled={busy || !!pending} value={reference} onChange={(event) => setReference(event.target.value)} /></Field>
-      <Field label="Finance confirmation date and time" hint="Shown in your local time zone."><Input type="datetime-local" required disabled={busy || !!pending} value={confirmedAt} onChange={(event) => setConfirmedAt(event.target.value)} /></Field>
+      <Field label="Finance confirmation date and time" hint="Shown in your local time zone."><Input type="datetime-local" step="0.001" required disabled={busy || !!pending} value={confirmedAt} onChange={(event) => setConfirmedAt(event.target.value)} /></Field>
       <Field label="Reason"><Textarea required maxLength={2000} disabled={busy || !!pending} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
       {pending && !busy && <p className="text-sm">The response was not confirmed. Retry this same evidence to recover its saved result.</p>}
       <div className="flex gap-3"><Button type="submit" disabled={busy || !reference.trim() || !reason.trim() || !confirmedAt}>{busy ? "Saving…" : pending ? "Retry same confirmation" : "Confirm release evidence"}</Button><Button variant="secondary" disabled={busy || !!pending} onClick={() => setSelected(null)}>Cancel</Button></div>
