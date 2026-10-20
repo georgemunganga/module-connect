@@ -85,7 +85,7 @@ async function open(page: Page, connection: Awaited<ReturnType<typeof connect>>,
 async function decide(page: Page, action: "Approve" | "Return", reason: string) {
   await page.getByRole("button", { name: action === "Return" ? "Return for changes" : action, exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel(action === "Approve" ? "Comment (optional)" : "Reason", { exact: true }).fill(reason);
+  await dialog.getByLabel(action === "Approve" ? "Comment (optional)" : "Reason").fill(reason);
   await dialog.getByRole("button", { name: "Confirm decision", exact: true }).click();
 }
 
@@ -149,7 +149,7 @@ test("actual API: Return locks editing until independent manual Finance release,
     await dialog.getByLabel("Reason", { exact: true }).fill("Independent Finance verified full release under the synthetic approved manual policy");
     // Use the actual current local timestamp, never a fabricated future confirmation.
     const now = new Date();
-    await dialog.getByLabel("Finance confirmation date and time", { exact: true }).fill(new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 23));
+    await dialog.getByLabel("Finance confirmation date and time").fill(new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 23));
     await dialog.getByRole("button", { name: "Confirm release evidence", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("The requester can now make changes");
     await connection.visit("requester", `/requests/${request.id}`);

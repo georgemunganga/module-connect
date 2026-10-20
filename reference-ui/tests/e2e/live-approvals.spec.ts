@@ -225,7 +225,7 @@ test("Finance records manual release evidence and recovers the exact interrupted
   await page.goto(`${root}/budgets`);
   await page.getByRole("button", { name: "Record release evidence" }).click();
   const dialog = page.getByRole("dialog");
-  const confirmationTime = dialog.getByLabel("Finance confirmation date and time", { exact: true });
+  const confirmationTime = dialog.getByLabel("Finance confirmation date and time");
   await expect(confirmationTime).toHaveAttribute("step", "0.001");
   await confirmationTime.fill("2026-10-20T11:30:15.789");
   await expect(dialog.getByRole("button", { name: "Confirm release evidence" })).toBeDisabled();
