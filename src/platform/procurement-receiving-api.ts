@@ -63,6 +63,8 @@ export async function getReceipt(company: string, id: string, inspection: boolea
   if (!object(body) || body.id !== id || !integer(body.version) || !integer(body.executionVersion) || typeof body.status !== "string"
     || body.matchingAuthorityAvailable !== false || !Array.isArray(body.lines) || !body.lines.every((line) => object(line) && uuid.test(String(line.id)) && integer(line.version) && integer(line.sourceVersion)
       && [line.receivedQuantity, line.initiallyRejectedQuantity, line.rejectedQuantity, line.acceptedQuantity].every(exact) && (line.unacceptedHeldQuantity == null || exact(line.unacceptedHeldQuantity)))
+    || body.readPurpose !== (inspection ? "AssignedInspection" : "Receipt")
+    || (inspection && (Object.hasOwn(body, "notes") || Object.hasOwn(body, "deliveryNoteRef")))
     || !candidates(body.draftActionCandidates) || !Array.isArray(body.lineReadiness) || !body.lineReadiness.every((line) => object(line) && uuid.test(String(line.lineId)) && capacity(line.capacity) && candidates(line.actionCandidates))) throw invalid();
   return body as unknown as ReceiptDetail;
 }

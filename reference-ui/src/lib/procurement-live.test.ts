@@ -38,6 +38,10 @@ describe("Procurement live readiness", () => {
     expect(result.capabilities.vendorDraft).toBe(true);
     expect(result.capabilities.invoiceIntake).toBe(false);
     expect(result.capabilities.orderDraft).toBe(false);
+    expect(result.capabilities.receivingDrafts).toBe(false);
+    expect(result.capabilities.receivingGoods).toBe(false);
+    expect(result.capabilities.receivingInspection).toBe(false);
+    expect(result.capabilities.receivingServices).toBe(false);
   });
 
   it("never falls back to demo data when sign-in or schema readiness fails", async () => {

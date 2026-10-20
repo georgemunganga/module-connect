@@ -9,6 +9,8 @@ import { getReceipt, getService, listReceiving, receivingQuantity, recoverReceiv
 import { pendingReceivingCommands as pending } from "../lib/receiving-command-memory";
 const message = (cause: unknown) => cause instanceof Error ? cause.message : "The delivery could not be loaded.";
 const base = "/purchase-receives";
+const blockerMessages: Record<string, string> = { ReceivingCurrentPermissionRequired: "Your current access does not allow this action.", QualifiedInspectionRequired: "Complete the delivery inspection first.", ReceivingLegacyAcceptanceReconciliationRequired: "Earlier acceptance records need to be checked first.", ReceivingNoRemainingAcceptance: "No authorized quantity remains to accept." };
+const blockerText = (code: string) => blockerMessages[code] ?? "Review this delivery’s current access and receiving rules before continuing.";
 function target(row: ReceivingSummary, view: ReceivingView) {
   return `${base}/${row.receiptId ?? row.id}?kind=${view === "services" || view === "certification" ? "service" : "goods"}&purpose=${view}`;
 }
@@ -100,7 +102,7 @@ function ReceivingDetail({ id, kind, purpose, scopeKey }: { id: string; kind: st
     finally { if (alive.current) setBusy(false); }
   }
   const candidates = (items: ReceivingCandidate[] | undefined, create: (item: ReceivingCandidate) => Action | null) => items?.map((item) => {
-    const next = create(item); return next ? <div key={item.action}><Button disabled={!item.candidate || !!uncertain || busy} variant="secondary" onClick={() => open(next)}>{next.label}</Button>{item.blocker && <p className="mt-2 text-sm text-muted-foreground">{item.blocker}</p>}</div> : null;
+    const next = create(item); return next ? <div key={item.action}><Button disabled={!item.candidate || !!uncertain || busy} variant="secondary" onClick={() => open(next)}>{next.label}</Button>{item.blocker && <p className="mt-2 text-sm text-muted-foreground">{blockerText(item.blocker)}</p>}</div> : null;
   });
   const draftActions = receipt?.draftActionCandidates ?? record?.draftActionCandidates ?? [];
   return <div className="p-5 sm:p-8"><PageHeader title={receipt?.number ?? (service ? "Service confirmation" : "Delivery")} subtitle="Physical delivery, inspection and acceptance are separate records." />

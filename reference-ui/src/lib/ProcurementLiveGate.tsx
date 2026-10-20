@@ -36,6 +36,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const planPath = /^\/plans(?:\/|$)/.test(location.pathname);
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
+  const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
   const configurationSettingsPath = ["/settings/reference-data", "/settings/buying-rules", "/settings/modules/purchase-requests/approvals", "/settings/modules/purchase-orders/approvals"]
     .includes(location.pathname);
@@ -48,6 +49,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders))
+    || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.capabilities.configurationDraft)))
     return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
