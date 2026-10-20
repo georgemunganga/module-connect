@@ -96,3 +96,11 @@ here`, with no order API reads/actions. That test now checks the actual shared p
 message plus zero reads/writes and no order review/create controls. Application source
 and staged hashes remain unchanged; previous successful unique cases remain checkpoints.
 Root authorised only the failed case and 29 not-yet-run scenarios to continue.
+
+The next checkpoint passed five further execution cases. Draft Finance release then
+stopped on a strict test locator: successful saved feedback and a temporary loading
+status legitimately coexist during authoritative detail refresh. The selector now
+identifies the saved status explicitly; exact held amount and restored reservation
+assertions remain. This changes no application source/assets or timeout. Original
+trace and log remain in `browser-final30-a8251e6-results` and its adjacent log.
+Only that failed case and the remaining 24 cases continue.

@@ -152,6 +152,6 @@ test("buyer submit and issue use separate version-pinned keyed commands", async 
 for (const action of ["FinanceRelease", "DraftFinanceRelease"] as const) test(`${action} sends the held exact amount and restored reservation references`, async ({ page }) => {
   const evidence = await mock(page, { action }); await page.goto(`${root}/${id}`);
   await confirm(page, action === "FinanceRelease" ? "Record funds release" : "Record draft funds release", { reason: "Independently verified restored funds" });
-  await expect(page.getByRole("status")).toContainText("Saved:");
+  await expect(page.getByRole("status").filter({ hasText: /^Saved:/ })).toContainText("Saved:");
   expect(evidence.writes[0].body).toContain(`"releasedGrossAmount":${gross}`); expect(evidence.writes[0].body).toContain('"restoredReservationReferences":["RES-PR-1"]');
 });
