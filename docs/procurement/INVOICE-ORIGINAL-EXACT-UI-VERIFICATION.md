@@ -39,7 +39,7 @@ Protected logs, manifest and copied Playwright traces/results are retained at `/
 | API | `4cb6f14612afa75ccfe9f73f064bc89331b718d3436e77875e4c7034d69b7f12` |
 | Verification tool | `d55b8a275d29456640db9044203819fc9e4ff1cf60fc63d1f86d02d7c261fcf5` |
 
-Backend application source3613559 and test-only tool36c5d38 were frozen for this run. The separate full CLI denial/concurrency/readiness gate is still pending. No deployment or production enablement follows from these results; release hold#29 and base invoice review PR#34 remain applicable.
+Backend application source3613559 and test-only tool36c5d38 were frozen for this run. The separate fresh restricted HTTP/PostgreSQL CLI session27214 subsequently exited0 (`20261020_184252_matching`), including denial, concurrency and read-only readiness gates; backend evidence commitc404564 records that result. No deployment or production enablement follows from these results; release hold#29 and base invoice review PR#34 remain applicable.
 
 ## Review scope
 
