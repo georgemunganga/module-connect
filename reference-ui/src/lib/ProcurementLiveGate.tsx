@@ -47,7 +47,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
-    || (orderPath && state.readiness.capabilities.orderDraft)
+    || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.capabilities.configurationDraft)))
     return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
