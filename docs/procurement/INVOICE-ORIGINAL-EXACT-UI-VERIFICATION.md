@@ -19,9 +19,11 @@ The parent engineering agent ran the serialized verification job (session29679),
 
 Built output names: `.invoice-verification-dist/assets/index-Bj0myMuD.js` and `index-Bddc462I.css`. The ordinary Vite large-chunk advisory remains; this record does not claim warning-free output or a new bundle digest. No new frontend tests/build were run by this documentation task.
 
-## Pending at this checkpoint
+## Confirmed full mock browser gate
 
-The parent is running the full mock `live-invoice.spec.ts` gate, session73483; its terminal result was pending when this record was written. Evidence target: `/home/amizo/erp-backups/procurement-invoice-ui-20261020_1752/browser.log`. Do not infer a pass from progress output.
+Central session73483 terminated0: **16/16 passed in6.9minutes** against unchanged app source `dccbc14`. This includes the new wide4dp capture/raw-numeric-response browser case (21.3seconds) alongside the existing invoice/document/mapping/comparison/recovery/permission cases. Evidence: `/home/amizo/erp-backups/procurement-invoice-ui-20261020_1752/browser.log`. The slow-file advisory is retained; no parallel job or timeout change was used by this documentation task. This terminal result supersedes the earlier pending checkpoint only; it is mock transport proof.
+
+## Pending actual verification
 
 The existing two actual P26 backend/browser scenarios and strict one-invoice persisted owner verifier must still run against this exact new candidate. Their source/fixture counts are unchanged. Earlier mock/actual results from other candidate hashes are not proof for this one. No deployment or production enablement is authorized by this record; release hold#29 and base invoice review PR#34 remain applicable.
 
