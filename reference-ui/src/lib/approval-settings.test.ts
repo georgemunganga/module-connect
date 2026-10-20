@@ -114,7 +114,7 @@ describe("purchase order setup uses the existing backend tuple", () => {
   });
 
   it("creates an exact PO limit and edits it without injecting unsupported resource fields", async () => {
-    const row = orderLimit(); const fetch = vi.fn().mockResolvedValue(response(row)); vi.stubGlobal("fetch", fetch);
+    const row = orderLimit(); const fetch = vi.fn().mockImplementation(async () => response(row)); vi.stubGlobal("fetch", fetch);
     await saveAuthority(company, row, { authorityReference: row.authorityReference, principalId, action: "PurchaseOrder.Approve" });
     const create = JSON.parse(fetch.mock.calls[0][1].body);
     expect(create).toMatchObject({ action: "PurchaseOrder.Approve", draft: { amountBasis: "ApprovedLineBase", maximumAmount: "99999999999999.9999" } });

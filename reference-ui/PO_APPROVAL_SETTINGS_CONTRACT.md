@@ -65,6 +65,15 @@ Six new mocked browser cases cover PO grant create/edit/default route, historica
 limits, PO policy reviewer restriction/exact values, unsupported historical policies and
 module-specific PO/PR editor defaults. Existing PR and uncertainty regressions are retained.
 
-None has run in this increment. Root owns TypeScript/unit/build, focused and full browser
-regressions, actual backend contract integration and review before deployment. Mocked responses
-are not evidence of production persistence or successful PO approval/Finance execution.
+Focused unit verification (20 October 2026): the first run on host-default Node20.16 reported
+16 passed / 1 failed. The new create/edit test reused a consumed Response body; its fetch
+fixture now returns a fresh Response for each request. Rerun on Node22.23.3 with nice10 and
+NODE_OPTIONS=--max-old-space-size=512 passed all 17 cases, including existing request rules,
+exact amounts and interrupted-save behavior. No production implementation change was needed.
+
+TypeScript `tsc --noEmit` also passed (exit 0) on Node22.23.3 with the same 512MB heap
+and nice10 bound. Browser cases, staged build, actual backend integration and deployment
+remain unverified in this increment.
+Root owns those gates and integration of the independent operational-orders gate changes.
+Mocked responses are not evidence of production persistence or successful PO approval/Finance
+execution.
