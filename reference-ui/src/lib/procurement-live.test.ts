@@ -6,7 +6,7 @@ const branch = "00000000-0000-0000-0000-000000000002";
 const worker = "00000000-0000-0000-0000-000000000003";
 const capabilities = {
   vendorDraft: true, itemDraft: true, requestDraft: true, approvals: false,
-  sourcing: false, contracts: false, orders: false, receiving: false,
+  sourcing: false, contracts: false, orders: false, orderDraft: true, receiving: false,
   invoiceIntake: true, invoiceValidation: false, financeHandoff: false, supplierPortal: false, planningDraft: true, configurationDraft: true, contractDraft: true, sourcingDraft: true,
 };
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -25,9 +25,9 @@ describe("Procurement live readiness", () => {
     expect(fetcher.mock.calls[2][1].credentials).toBe("include");
   });
 
-  it("keeps existing pages ready while an older API omits the new invoice capability", async () => {
+  it("keeps existing pages ready while an older API omits new draft capabilities", async () => {
     const earlierCapabilities = Object.fromEntries(Object.entries(capabilities)
-      .filter(([key]) => key !== "invoiceIntake"));
+      .filter(([key]) => key !== "invoiceIntake" && key !== "orderDraft"));
     const fetcher = vi.fn()
       .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
       .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker,
@@ -37,6 +37,7 @@ describe("Procurement live readiness", () => {
     const result = await fetchProcurementReadiness({ entityId: entity }, undefined, fetcher);
     expect(result.capabilities.vendorDraft).toBe(true);
     expect(result.capabilities.invoiceIntake).toBe(false);
+    expect(result.capabilities.orderDraft).toBe(false);
   });
 
   it("never falls back to demo data when sign-in or schema readiness fails", async () => {

@@ -34,6 +34,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const contractPath = /^\/contracts(?:\/|$)/.test(location.pathname);
   const planPath = /^\/plans(?:\/|$)/.test(location.pathname);
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
+  const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const configurationSettingsPath = ["/settings/reference-data", "/settings/buying-rules"]
     .includes(location.pathname);
   if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
@@ -43,6 +44,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
+    || (orderPath && state.readiness.capabilities.orderDraft)
     || (configurationSettingsPath && state.readiness.capabilities.configurationDraft)))
     return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
   if (state.readiness && unavailable)
