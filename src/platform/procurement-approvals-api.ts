@@ -139,3 +139,18 @@ export async function confirmFinanceRelease(company: string, requestId: string, 
     throw new ApprovalApiError(0, "The ERP did not confirm the Finance evidence. Retry the same confirmation.");
   return body as { requestId: string; requestVersion: number; requestState: string; releaseRequestId: string; confirmationId: string; financeReleaseState: "Confirmed"; evidenceMode: "ApprovedManualEvidence" };
 }
+
+export type ApprovalOpeningRow = { requestId: string; requestNumber: string; purpose: string; currencyCode: string;
+  amount: number; requestVersion: number; submittedAt: string };
+export type ApprovalOpeningQueue = { records: ApprovalOpeningRow[]; count: number; limit: number; offset: number };
+export async function listApprovalOpeningQueue(company: string, offset = 0, signal?: AbortSignal): Promise<ApprovalOpeningQueue> {
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000) throw new ApprovalApiError(0, "The request page is invalid.");
+  const body = await request(company, `/requests/approval-opening-queue?limit=25&offset=${offset}`, { signal });
+  if (!object(body) || !Array.isArray(body.records) || !Number.isSafeInteger(body.count) || Number(body.count) < 0
+    || !version(body.limit) || Number(body.limit) > 100 || !Number.isSafeInteger(body.offset) || Number(body.offset) < 0
+    || !body.records.every((row: unknown) => object(row) && guid.test(String(row.requestId)) && typeof row.requestNumber === "string"
+      && typeof row.purpose === "string" && typeof row.currencyCode === "string" && typeof row.amount === "number"
+      && Number.isFinite(row.amount) && row.amount >= 0 && version(row.requestVersion) && typeof row.submittedAt === "string"))
+    throw new ApprovalApiError(0, "The ERP returned an invalid list of requests awaiting approvals.");
+  return body as unknown as ApprovalOpeningQueue;
+}

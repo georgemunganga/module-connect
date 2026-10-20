@@ -6,7 +6,7 @@ const stageId = "77777777-7777-4777-8777-777777777777", decisionId = "88888888-8
 const lineId = "99999999-9999-4999-8999-999999999999";
 const root = "/procurement/workspace";
 test.setTimeout(90_000);
-async function mockErp(page: Page, options: { enabled?: boolean; empty?: boolean; read?: boolean; decide?: boolean; loseResponse?: boolean; stale?: boolean; unopened?: boolean; pages?: boolean; pendingRelease?: boolean; finance?: boolean; fundingBlocked?: boolean } = {}) {
+async function mockErp(page: Page, options: { enabled?: boolean; empty?: boolean; read?: boolean; decide?: boolean; loseResponse?: boolean; stale?: boolean; unopened?: boolean; pages?: boolean; pendingRelease?: boolean; finance?: boolean; fundingBlocked?: boolean; openingQueue?: boolean } = {}) {
   let state = options.pendingRelease || options.finance ? "Returned" : "Pending", requestState = options.finance ? "ReturnPendingFinanceRelease" : "Submitted", caseVersion = 2, requestVersion = 5, opened = !options.unopened;
   let lost = false, stale = options.stale, approvalReads = 0, releaseConfirmed = false;
   const decisions: Array<Record<string, unknown>> = [];
@@ -37,6 +37,10 @@ async function mockErp(page: Page, options: { enabled?: boolean; empty?: boolean
     if (url.pathname === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: company, workerId: worker, permissions,
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities });
+    if (url.pathname === "/api/procurement/v1/requests/approval-opening-queue") return json({
+      records: options.openingQueue && !opened ? [{ requestId, requestNumber: "PR-101", purpose: "Office laptops", currencyCode: "ZMW", amount: 250,
+        requestVersion, submittedAt: "2026-10-20T10:00:00Z" }] : [], count: options.openingQueue && !opened ? 1 : 0, limit: 25, offset: 0,
+    });
     if (url.pathname === "/api/procurement/v1/approvals") {
       approvalReads++;
       expect(url.searchParams.get("limit")).toBe("25");
@@ -176,7 +180,7 @@ test("requester starts approvals with the same key after an interrupted response
 test("missing approval-read permission denies the queue without loading records", async ({ page }) => {
   const evidence = await mockErp(page, { read: false });
   await page.goto(`${root}/approvals`);
-  await expect(page.getByRole("alert")).toContainText("You do not have access to the approval queue");
+  await expect(page.getByRole("alert")).toContainText("You do not have access to the assigned approval queue");
   expect(evidence.reads()).toBe(0);
 });
 
@@ -241,4 +245,20 @@ test("a Finance blocker prevents approval while preserving permitted return acti
   await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Return for changes", exact: true })).toBeVisible();
   await expect(page.getByText("Some approval checks need attention.", { exact: false })).toBeVisible();
+});
+
+
+test("a Procurement opener starts another request without assigned-queue access and recovers a lost response", async ({ page }) => {
+  const evidence = await mockErp(page, { read: false, unopened: true, openingQueue: true, loseResponse: true });
+  await page.goto(`${root}/approvals`);
+  await page.getByRole("button", { name: "Start approvals for PR-101", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Retry starting PR-101", exact: true })).toBeVisible();
+  // Refresh removes the committed request from the opening queue; the replay action must remain.
+  await page.getByRole("button", { name: "Refresh waiting requests" }).click();
+  await expect(page.getByText("No requests are waiting to start approvals.")).toBeVisible();
+  await page.getByRole("button", { name: "Retry starting PR-101", exact: true }).click();
+  await expect(page.getByText("Approvals started for PR-101.", { exact: false })).toBeVisible();
+  expect(evidence.keys).toHaveLength(2);
+  expect(evidence.keys[0]).toEqual(evidence.keys[1]);
+  expect(evidence.reads()).toBe(0);
 });

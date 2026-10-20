@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Modal, PageHeader, Panel, Textarea } from "../components/ui";
+import { ApprovalOpeningPanel } from "./ApprovalOpeningPanel";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { ApprovalApiError, decideApproval, getApproval, getApprovalHistory, listAssignedApprovals, openApproval,
@@ -30,7 +31,7 @@ export function LiveApprovalQueue() {
     return () => abort.abort();
   }, [legalEntityId, offset, revision, canRead]);
   return <div className="p-5 sm:p-8"><PageHeader title="Approvals" subtitle="Requests waiting for your decision." actions={<Button variant="secondary" onClick={() => setRevision((n) => n + 1)}>Refresh</Button>} />
-    {!canRead ? <p role="alert">You do not have access to the approval queue.</p> : <Panel><div className="p-5">
+    {!canRead ? <p role="alert">You do not have access to the assigned approval queue.</p> : <Panel><div className="p-5">
       {error && <p role="alert" className="mb-4 text-sm text-red-700">{error}</p>}
       {loading ? <p role="status">Loading approvals…</p> : data?.records.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Request</th><th>Purpose</th><th>Amount</th><th>Step</th><th>Waiting since</th><th>Action</th></tr></thead>
@@ -38,6 +39,7 @@ export function LiveApprovalQueue() {
       </RecordTable></div> : data && <EmptyState title="You're all caught up" description="No requests are waiting for your decision." />}
       {data && data.count > data.limit && <div className="mt-4 flex items-center gap-3"><Button variant="secondary" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - data.limit))}>Previous</Button><span className="text-sm">{offset + 1}–{Math.min(offset + data.limit, data.count)} of {data.count}</span><Button variant="secondary" disabled={offset + data.limit >= data.count} onClick={() => setOffset(offset + data.limit)}>Next</Button></div>}
     </div></Panel>}
+    <ApprovalOpeningPanel />
   </div>;
 }
 
