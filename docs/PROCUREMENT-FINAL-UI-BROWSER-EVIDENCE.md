@@ -95,3 +95,19 @@ Evidence directory: `/home/amizo/erp-backups/procurement-final-ui-20261020/`. Ra
 | `live-policies.spec.ts` — PO policy setup requires procurement reviewers and preserves approved line basis | `e62a31c` | `D-b3C2fm` | `browser-final25-e62a31c.log` | 10.1s |
 | `live-policies.spec.ts` — historical PO rules with request-only reviewers stay read-only and cannot be sent for review | `3e9460b` | `D-b3C2fm` | `browser-final2-3e9460b.log` | 12.4s |
 | `live-policies.spec.ts` — PO module approval settings reuse the editor with PO defaults without changing request settings | `3e9460b` | `D-b3C2fm` | `browser-last1-3e9460b.log` | 24.7s |
+
+## Actual mapped-backend PO browser gate
+
+The same frozen `1a023ac` test source and `5896c2f` application / D-b3 assets passed one actual PO workflow against a fresh private restricted PostgreSQL-backed sandbox (`orders_browser_20261020_v2`). No Procurement context, metadata, lookup, read, command or history response was mocked; only ERP shell presentation/auth fixtures were synthetic. The loopback backend was provisioned and owned by the coordinator.
+
+The browser performed six successful independent-actor writes: approved-source conversion; Finance commitment confirmation; buyer submission; PO-only assigned reviewer approval; buyer sending authorization; and independent sending confirmation. Assertions checked exact values, retained source/reservation IDs, purpose-only permission boundaries, one related effect of each kind, exhausted source quantity, and unchanged evidence after exact delivery replay. Outcome: **1 passed (2.1 minutes)**, test case about2.0 minutes. This is one bounded PO lifecycle, not all Procurement or production readiness.
+
+Original v1 failed at Submit with `OrderApprovalAuthorityUnavailable` after successful conversion and Finance confirmation. The synthetic fixture had replaced the named procurement-manager role required by its published policy. Coordinator correction `f9fca21` retained that named role while narrowing actual permissions to PO approval only. A new v2 database/manifest was used; no UI code, business assertion or timeout was changed. Original v1 trace, screenshot and extracted private traffic are retained.
+
+Evidence directory: `/home/amizo/erp-backups/procurement-final-ui-20261020/`.
+
+- `actual-orders-first-1a023ac.log`, `actual-orders-first-1a023ac-results/`, `actual-orders-first-1a023ac-traffic.json`: original fixture failure evidence.
+- `actual-orders-v2-1a023ac.log`, `actual-orders-v2-1a023ac-results/.last-run.json`: successful final terminal evidence.
+- Passing-run limitation: the list reporter did not materialize the inline successful traffic attachment; trace policy retained traces only on failure. No passing trace/traffic file is claimed. The fixture was not reused merely to generate an artifact. Final durable database verification is owned and reported separately by the coordinator.
+
+All three frozen artifact SHA256 checks passed after the successful run. Own preview/browser processes exited and port3011 was closed before handing the private server back for coordinator-controlled graceful stop and persisted-state verification. No production publish was performed by this gate.
