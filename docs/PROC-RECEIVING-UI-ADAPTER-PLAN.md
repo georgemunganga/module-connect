@@ -1,0 +1,131 @@
+# Receiving UI adapter — bounded implementation plan
+
+Status: source increment only; no TypeScript, unit, build, browser, database or deployment gate run. Frozen PO candidate `1a023ac` and its staged artifacts remain untouched.
+
+## Reuse and contract
+
+Use the existing Purchase Receives navigation and shell, simple PageHeader, RecordTable backed by the ERP standard table, Panel, Field, Input, floating Select, Switch and Modal. No separate identity/company/permissions service or new sidebar. Backend read/command contract is `ce12e64` plus legacy visibility `530bfcc` and service-note roundtrip `2d8b35f`.
+
+The first source increment adds a typed scoped transport and five authored contract tests. It does not connect a route or enable receiving. DTOs follow actual server names; every quantity/money stays an invariant exact string. Goods physical delivery is not clipped to order availability. Input validation permits representable physical overdelivery; server rules govern inspection and acceptance.
+
+## Smallest route composition
+
+- Existing `/purchase-receives`: goods receipts and service confirmations tabs when receipt-view is granted; separate purpose-only inspection/service tasks tabs for their actual permissions. Use bounded server paging, explicit empty/denied/error/loading, no fabricated filters/import/export.
+- `/purchase-receives/new`: source-first goods/service selection from `/receiving/sources`. Retain order/issued/line/site IDs. Goods draft has received and initial rejection quantities, received timestamp, delivery note and notes. Service draft has period/deliverable/intended quantity/notes, never an editable acceptance value.
+- Existing detail: goods read, with purpose `inspection` choosing `/inspection-task`; service detail selects `/service-acceptances/{id}` or `/certification-task`. Query/purpose is a read-mode selection, not a permission grant. Named task-only users never probe the broad read endpoint first.
+- Draft editing preserves all source bindings and quantities/notes via full detail. Service notes use the explicit normal-detail field added in `2d8b35f`; task-only detail omits notes. No arbitrary source replacement or post-record editing.
+
+Use additive granular metadata `receivingDrafts`, `receivingGoods`, `receivingInspection`, `receivingServices`; absent flags resolve false. The legacy broad `receiving` flag never silently enables demonstration data in live mode. Capability alone never grants permission.
+
+## Detail and actions
+
+Show physical received, initial rejected, inspection rejected, accepted and held separately. Readiness capacity is shown only with `verified=true`; null/unknown is described as needing review, never zero. Effects remain immutable references, not a copied ledger. Source labels come from retained server evidence. The source picker currently has order number/description/UOM; do not invent a supplier label through unrelated broad lookup.
+
+Only actual server candidate objects choose offered actions. Candidates are hints and every command is validated by the server. Record arrival is a header command: every active line must permit Record, then submit once for the entire header. Inspect and Accept use line version plus source version. Certify uses service version/source version and the existing intended quantity. Evidence is a structured reference, not an uploaded file. No stock, AP, payment, return/reversal or matching claim is implied. Core document bytes remain unavailable for receiving.
+
+## Safe command lifecycle
+
+Keep original UUID, exact body, operation, target/source and company/branch/canonical worker in browser-lifetime pending memory before a write. No automatic POST/PUT retry. Known validation errors preserve text; 409 requires refreshed evidence and a reviewed new intent. Unknown response blocks fresh writes and offers GET-only command receipt reconciliation, including unknown target ID for creation. Recovery response is historical evidence (`replayAuthorized=false`), not authority for another command. Context/ID/purpose navigation clears stale details and aborts/ignores old callbacks; pending outcomes remain separated by scope and actor.
+
+## Required focused tests before activation
+
+Authored client tests cover exact maximum/four-place boundaries, separate command paths, no retry after lost response, unknown-ID receipt recovery and malformed numeric output rejection. Further mocked browser coverage must exercise physical overdelivery with blocked acceptance, independent inspector/service-owner task access without receipt-view, unknown capacity/legacy rows, protected drafts, stale/denied ID navigation, exact strings, scope headers and lost-response recovery. Then a fresh restricted real backend/browser goods/service workflow must verify actual persisted effects/counters/history and replay. All runtime gates are pending.
+
+## Second source increment — list/detail and positive actions
+
+An unmounted reusable `LiveReceiving` adapter now implements the existing table/page primitives, permission-specific goods/service/task lists, scoped detail loading, separate physical/rejection/held/accepted values, server candidate actions, record/inspect/accept/certify/cancel dialogs and GET-only uncertain-outcome reconciliation. Scope/actor/purpose remounts clear stale record state; aborted callbacks cannot restore an older record. Command errors persist across the automatic authoritative refresh. Unknown outcomes retain their original key/body in actor+company+branch+target browser-lifetime memory.
+
+Granular receiving capability parsing is additive and absent keys default false. No route imports, sidebar changes or live activation are included in this increment. Draft creation/edit forms and browser scenarios remain to be authored; all unit/TypeScript/build/browser gates remain pending. This is source backup, not a complete usable receiving UI or production claim.
+
+## Third source increment — source-first draft forms
+
+An unmounted draft editor now selects issued goods/service sources and preserves their order/issued/line/site pins. It supports multiple goods lines from one issued order, exact physical and initially rejected quantities without clipping overdelivery, one service line with period/deliverable/intended quantity, and scoped draft editing that retains current IDs and notes. Service editing requires the explicit normal-detail notes field. Site/vendor/price are not invented editable masters. The same pending-command memory supports detail actions and drafts; unknown create outcomes recover their target ID by original order/key, without another POST.
+
+Route wiring and authored browser tests remain the next source increment. These forms and prior adapter components have not been typechecked, built or browser-tested. Do not merge/activate them as verified receiving behavior.
+
+## Service contract alignment — 6b574d7 / b43e9b0
+
+Source audit confirms certification already uses `record.sourceVersion` from a fresh scoped service-detail read, alongside the service record version. Draft-save replies are not used as certification authority. After another partial certificate, the backend detail now exposes the existing ledger state's current CAS even while this pending draft has no persisted source binding. The UI preserves that returned number; it never infers a zero source version from an unbound draft.
+
+Normal service detail now separately exposes nullable `notes` and read-only `cancellationReason`; task-only detail omits both. The adapter displays those normal-detail narratives separately and edits only draft notes. Cancellation reason is never a draft input or a substitute for notes. The client checks the requested read purpose and rejects private narrative fields in a purpose-only response. Three additional authored contract tests cover current source-version changes, long-note/cancellation separation, and purpose-only endpoint/privacy behavior. These tests have not run; no Node, SDK, browser or database job was started for this alignment.
+
+## Route wiring source checkpoint
+
+The existing imported `/purchase-receives` list, detail, new and edit routes now select these adapters in live mode; reference mode retains its original screens. No new shell, sidebar or parallel service page was introduced. Service/goods and purpose-only task choices use the same existing route with explicit query context. The gate requires actual granular receiving capabilities; the broad historical receiving flag alone cannot enable the adapters. Missing granular flags resolve false, preserving older API behavior.
+
+Thirteen focused mocked browser scenarios are authored in `reference-ui/tests/e2e/live-receiving.spec.ts`: disabled capability/no demo API reads; exact physical overdelivery draft; separate arrival/held truth; named inspector purpose queue/read/versioned action; unknown and legacy acceptance history; purpose-only service owner with current partial-certification source CAS; separate retained notes/cancellation reason; lost arrival recovery/no double write; stale conflict explanation surviving refresh; denied403/404 navigation clearing old actions; and lost draft creation recovering its unknown target ID. Every fixture checks selected company/branch headers. These are synthetic adapter/UI scenarios, not real authorization or persistence proof.
+
+Canonical procurement `purchaseType` codes remain backend-owned. The UI submits no mixed-case purchase type to policy evaluation: Goods/Service are presentation/receiving-kind choices from the server; mutations retain actual source IDs. No policy guard was relaxed to match UI text.
+
+The latest final UI test/docs changes through `3622b78` were integrated with an ordinary merge. Production application changes on this receiving branch are a new unverified candidate; the previously verified D-b3 order/settings assets remain separately frozen.
+
+### Serialized verification still required
+
+When the coordinator grants resources, run focused `tests/receiving-contract.test.ts` plus `src/lib/procurement-live.test.ts` unit tests, TypeScript, one staged live build, then the13 authored receiving browser cases against those exact assets. Preserve the first failure before corrections; do not increase timeouts or remove financial/security assertions to make a gate pass. Existing PR/PO and settings route regression coverage must accompany any shared routing/readiness regression risk. Finally use a fresh coordinator-owned restricted real API/DB receiving fixture for independent goods/service actions and persisted effects/counters, current versions, privacy, replay and failure rollback. No Node/SDK/build/browser/database job was run for this source checkpoint, and no deployed flag or asset was changed.
+
+## Imported UI parity correction
+
+A concrete comparison with the generic imported receiving list/detail/editor found lost toolbar, tab, activity/document and sticky form controls. See [parity matrix](PROC-RECEIVING-UI-PARITY-AUDIT.md). The correction reuses actual ListTools, StandardDataTable, ActiveFilterChips, DetailTabs, DetailSection and ActivityTimeline, restores scoped row preview/selection/column controls, supported server status filtering, explicit unsupported search/sort/export help, related/comments/history/document sections and sticky draft/record/cancel arrangement with discard confirmation. Normal receiving document references remain read-only; secure upload/download and comments never become browser-local mutations. Source vendor/reference/coding are retained, and missing title/pricing projections are explained rather than fabricated.
+
+Purpose-only task privacy and action/version guards remain intact. Vendor return context is retained only as permitted internal navigation, without becoming data authority. Automatic deep-link source selection remains pending a bounded backend source lookup/filter contract. All parity changes and the additional three browser plus one client case are source-only and await the same serialized verification gate. Existing verified D-b3 assets remain untouched.
+
+
+## Executed adapter verification — 20 October 2026
+
+The corrected candidate passed 12 focused unit tests (nine exact receiving-client
+contracts and three capability/readiness contracts). TypeScript initially found
+four receiving callers using an unsupported `Modal.open` prop. Commit `375861d`
+uses the existing shared modal's conditional mounting contract; its TypeScript
+check passed. Later `132ab18` changes only table/fieldset containment and long-note
+wrapping, plus a synthetic fixture correction; the staged build passed with
+1,751 transformed modules. Application JavaScript is `index-DIY8nmB6.js`, CSS is
+`index-D5afYw44.css`. These assets remain frozen for browser continuation.
+
+**16 distinct mocked-API browser scenarios have passing checkpoints; this is not
+one uninterrupted green 16-case run.** Fifteen passed in
+`browser-132ab18-first.log`. The final parity case initially used exact field
+names although the shared Field includes descriptive help in its accessible name.
+Test-only `3f85e3d` retains the read-only/disabled/discard assertions and uses
+unambiguous name prefixes; that case passed separately in
+`browser-parity-locator.log`. The previously passing 15 cases and application
+assets were unchanged. First-run traces, screenshots and failures remain retained.
+The earlier `375861d` browser attempt exposed a fixture that marked every POST,
+including draft saving, as recorded arrival; its correction distinguishes drafts
+from final commands without changing the business assertions.
+
+Protected local evidence: `/home/amizo/erp-backups/procurement-receiving-ui-20261020/`.
+Asset hashes are recorded in `assets-132ab18.sha256`. These tests mock business
+responses: they prove adapter behavior, not real authorization, persistence or
+receipt accounting. The actual API browser case and fixture are authored in
+`tests/backend-browser/receiving.spec.ts` and `RECEIVING-CONTRACT.md`; execution
+awaits the backend mapping correction, generated migration and real PostgreSQL
+receiving probe. No production asset or capability was changed. Prior PR/PO and
+settings evidence remains scoped to its recorded older assets; no blanket
+whole-module release or regression claim is made from these receiving cases.
+
+
+## Actual backend browser gate completed — 20 October 2026
+
+Source-only warnings above describe earlier checkpoints. The fresh private
+`20261020_153636_browser` fixture subsequently passed both serial actual API
+Playwright cases (**2 passed, 2.8m, exit0**) on test `a563616` and the unchanged
+frozen `132ab18` app bundle (HTML/JS/CSS hashes rechecked OK). All eight UI
+commands, exact decimal/source/version assertions, purpose-role denials,
+response replay and complete command/privacy assertions passed. Procurement
+business responses were forwarded to the real API; only ERP shell presentation
+and test authentication were synthetic.
+
+Graceful server shutdown then passed the independent owner-side database
+verifier with exit0: physical2/qualified2/accepted1/held1; two service0.5/net50
+certificates; independent workers; conserved PR/PO counters; eight command/audit
+records and five outbox effects; no invoice/AP authority. The API and preview
+were stopped. Owner-private evidence includes per-response traffic and terminal
+logs; production was not deployed.
+
+The first combined180-second case timed out after partial execution; its trace,
+screenshot, logs and incomplete DB remain preserved under
+`20261020_151917_browser`. Its owner verifier correctly rejected completion.
+The successful retry used a fresh DB and split the same assertions into goods
+and service cases, retaining180 seconds per case without changing app assets
+or API request timeouts. This completes the receiving integration checkpoint,
+not all Procurement features or production release gates.

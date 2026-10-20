@@ -1,3 +1,5 @@
+import { FormSelect } from "@/components/ui/form-select";
+import { RecordTable } from "@/platform/components/RecordTable";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, Lock } from "lucide-react";
 import { useState } from "react";
@@ -11,6 +13,7 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/platform/components/States";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { StatusTimeline } from "@/platform/components/StatusTimeline";
+import { RecordTabs, RecordTabPanel } from "@/platform/components/RecordTabs";
 import { useProcurement, saveProcurement } from "@/modules/procurement/store";
 import { useCommercial } from "@/modules/procurement/commercial/store";
 import { invoiceTotal, usePayables } from "@/modules/procurement/payables/store";
@@ -30,7 +33,7 @@ function SupplierProfile() {
   const { id } = Route.useParams();
   const { role, entityId } = useApp();
   const s = useProcurement().suppliers.find((x) => x.id === id);
-  const orders = useCommercial().orders.filter((order) => order.supplier === s?.name && sameEntity(order.entity, entityId));
+  const orders = useCommercial().orders.filter((order) => order.supplierId === s?.id && sameEntity(order.entity, entityId));
   const payables = usePayables();
   const invoices = payables.invoices.filter((invoice) => invoice.supplierId === s?.id && invoice.entityId === entityId);
   const visibleInvoiceIds = new Set(invoices.map((invoice) => invoice.id));
@@ -74,14 +77,9 @@ function SupplierProfile() {
       {suspending ? <SuspendForm s={s} openOrders={openOrders.length} openInvoices={openInvoices.length} onCancel={() => setSuspending(false)} onDone={(reason, date) => { setSuspending(false); setS({ ...s, status: "Suspended", nextAction: `Review ${openOrders.length} open PO(s) and ${openInvoices.length} invoice(s)`, timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString().slice(0, 16).replace("T", " "), actor: "You (demo)", event: "Suspended", reason, before: "Active", after: `Suspended (effective ${date})` }, ...s.timeline] }); }} /> : null}
       {deactivating ? <DeactivateForm openOrders={openOrders.length} openInvoices={openInvoices.length} onCancel={() => setDeactivating(false)} onDone={(reason) => { setDeactivating(false); setS({ ...s, status: "Inactive", nextAction: "No new purchase orders", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString(), actor: `${role} (demo)`, event: "Deactivated", reason, before: s.status, after: "Inactive" }, ...s.timeline] }); }} /> : null}
 
-      <div role="tablist" aria-label="Supplier sections" className="mb-4 flex gap-1 overflow-x-auto border-b">
-        {tabs.map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === t ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground"}`}>{t}</button>
-        ))}
-      </div>
+      <RecordTabs label="Supplier sections" idPrefix="supplier-detail" tabs={tabs} value={tab} onChange={setTab} />
 
-      <div role="tabpanel" aria-label={tab}>
+      <RecordTabPanel idPrefix="supplier-detail" tab={tab}>
         {tab === "Overview" ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="rounded-lg border border-primary/30 bg-primary-soft p-5 text-sm lg:col-span-2">
@@ -138,7 +136,17 @@ function SupplierProfile() {
             </div>
           ) : <EmptyState title="Not enough data yet" body="Scores appear after at least 5 receipts or invoices in the period." />
         ) : tab === "Orders & bills" ? (
-          <div className="space-y-3 text-sm"><p>{openOrders.length} open purchase order(s) · {openInvoices.length} open invoice(s).</p>{orders.map((order) => <p key={order.id}><Link className="text-primary underline" to="/procurement/orders/$id" params={{ id: order.id }}>{order.id}</Link> · {order.status} · {order.line.description}</p>)}{invoices.map((invoice) => <p key={invoice.id}><Link className="text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.id}</Link> · {invoice.status} · {invoice.number}</p>)}</div>
+          <div className="space-y-6 text-sm">
+            <p className="text-muted-foreground">{openOrders.length} open purchase order(s) · {openInvoices.length} open bill(s). Records appear here when linked to this vendor ID.</p>
+            <section aria-labelledby="vendor-orders-title">
+              <h2 id="vendor-orders-title" className="mb-3 font-semibold">Purchase orders</h2>
+              {orders.length ? <div className="space-y-2">{orders.map((order) => <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-surface p-4"><div><Link className="font-medium text-primary underline" to="/procurement/orders/$id" params={{ id: order.id }}>{order.id}</Link><p className="mt-1 text-muted-foreground">{order.line.description} · due {order.due}</p></div><div className="flex items-center gap-4"><span>{new Intl.NumberFormat("en", { style: "currency", currency: order.currency }).format(order.line.qty * order.line.price)}</span><StatusBadge status={order.status} /></div></div>)}</div> : <EmptyState title="No linked purchase orders" body="Purchase orders linked to this vendor will appear here." />}
+            </section>
+            <section aria-labelledby="vendor-bills-title">
+              <h2 id="vendor-bills-title" className="mb-3 font-semibold">Bills</h2>
+              {invoices.length ? <div className="space-y-2">{invoices.map((invoice) => <div key={invoice.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-surface p-4"><div><Link className="font-medium text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.number}</Link><p className="mt-1 text-muted-foreground">{invoice.date} · {invoice.po}</p></div><div className="flex items-center gap-4"><span>{new Intl.NumberFormat("en", { style: "currency", currency: invoice.currency }).format(invoiceTotal(invoice))}</span><StatusBadge status={invoice.status} /></div></div>)}</div> : <EmptyState title="No linked bills" body="Bills linked to this vendor will appear here." />}
+            </section>
+          </div>
         ) : tab === "Notes" ? (
           <SupplierNotes supplier={s} onChange={setS} role={role} readOnly={readOnly} />
         ) : tab === "Messages" ? (
@@ -148,7 +156,7 @@ function SupplierProfile() {
         ) : (
           <StatusTimeline events={s.timeline} />
         )}
-      </div>
+      </RecordTabPanel>
     </AppShell>
   );
 }
@@ -182,7 +190,7 @@ function SupplierNotes({ supplier, onChange, role, readOnly }: { supplier: Suppl
   return <section className="rounded-lg border bg-surface p-5 text-sm">
     <h2 className="font-semibold">Notes about this vendor</h2>
     <p className="mt-1 text-muted-foreground">Notes stay in this browser demo. A supplier-visible label does not send a message or grant portal access.</p>
-    {!readOnly ? <div className="mt-4 space-y-3"><div><Label htmlFor="vendor-note">Note</Label><Textarea id="vendor-note" className="mt-1" value={text} onChange={(event) => setText(event.target.value)} /></div><div><Label htmlFor="vendor-note-audience">Who could see this after approval?</Label><select id="vendor-note-audience" className="mt-1 h-10 rounded-md border bg-background px-3" value={audience} onChange={(event) => setAudience(event.target.value as "Internal" | "Supplier")}><option>Internal</option><option>Supplier</option></select></div><Button onClick={add} disabled={!text.trim()}>Save note</Button></div> : null}
+    {!readOnly ? <div className="mt-4 space-y-3"><div><Label htmlFor="vendor-note">Note</Label><Textarea id="vendor-note" className="mt-1" value={text} onChange={(event) => setText(event.target.value)} /></div><div><Label htmlFor="vendor-note-audience">Who could see this after approval?</Label><FormSelect id="vendor-note-audience" className="mt-1 h-10 rounded-md border bg-background px-3" value={audience} onChange={(event) => setAudience(event.target.value as "Internal" | "Supplier")}><option>Internal</option><option>Supplier</option></FormSelect></div><Button onClick={add} disabled={!text.trim()}>Save note</Button></div> : null}
     {(supplier.comments ?? []).length ? <ol className="mt-5 space-y-3 border-t pt-4">{supplier.comments?.map((comment) => <li key={comment.id} className="rounded-md bg-surface-muted p-3"><p>{comment.text}</p><p className="mt-2 text-xs text-muted-foreground">{comment.actor} · {comment.at} · {comment.audience}</p></li>)}</ol> : <p className="mt-4 text-muted-foreground">No notes yet.</p>}
   </section>;
 }
@@ -203,7 +211,7 @@ function SupplierMessages({ supplier, onChange, role, readOnly }: { supplier: Su
   };
   return <section className="rounded-lg border bg-surface p-5 text-sm">
     <h2 className="font-semibold">Vendor messages</h2><p className="mt-1 text-muted-foreground">Prepare a draft here. This demo never sends email or a portal message.</p>
-    {!readOnly ? <div className="mt-4 grid gap-3"><div><Label htmlFor="vendor-message-to">Vendor contact</Label><select id="vendor-message-to" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={to} onChange={(event) => setTo(event.target.value)}><option value="">Choose contact</option>{supplier.contacts.map((contact) => <option key={contact.email} value={contact.email}>{contact.name} · {contact.email}</option>)}</select></div><div><Label htmlFor="vendor-message-subject">Subject</Label><Input id="vendor-message-subject" value={subject} onChange={(event) => setSubject(event.target.value)} /></div><div><Label htmlFor="vendor-message-body">Message</Label><Textarea id="vendor-message-body" value={body} onChange={(event) => setBody(event.target.value)} /></div>{error ? <p role="alert" className="text-danger">{error}</p> : null}<Button className="w-fit" onClick={save}>Save draft</Button></div> : null}
+    {!readOnly ? <div className="mt-4 grid gap-3"><div><Label htmlFor="vendor-message-to">Vendor contact</Label><FormSelect id="vendor-message-to" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={to} onChange={(event) => setTo(event.target.value)}><option value="">Choose contact</option>{supplier.contacts.map((contact) => <option key={contact.email} value={contact.email}>{contact.name} · {contact.email}</option>)}</FormSelect></div><div><Label htmlFor="vendor-message-subject">Subject</Label><Input id="vendor-message-subject" value={subject} onChange={(event) => setSubject(event.target.value)} /></div><div><Label htmlFor="vendor-message-body">Message</Label><Textarea id="vendor-message-body" value={body} onChange={(event) => setBody(event.target.value)} /></div>{error ? <p role="alert" className="text-danger">{error}</p> : null}<Button className="w-fit" onClick={save}>Save draft</Button></div> : null}
     {(supplier.mailDrafts ?? []).length ? <ol className="mt-5 space-y-3 border-t pt-4">{supplier.mailDrafts?.map((draft) => <li key={draft.id} className="rounded-md bg-surface-muted p-3"><p className="font-medium">Draft · {draft.subject}</p><p className="mt-1 whitespace-pre-wrap">{draft.body}</p><p className="mt-2 text-xs text-muted-foreground">To {draft.to} · {draft.actor} · {draft.at}</p></li>)}</ol> : <p className="mt-4 text-muted-foreground">No message drafts yet.</p>}
   </section>;
 }
@@ -217,7 +225,7 @@ function SupplierStatement({ invoices, credits, currency }: { invoices: Invoice[
   return <section className="rounded-lg border bg-surface p-5 text-sm">
     <h2 className="font-semibold">Statement preview</h2><p className="mt-1 text-muted-foreground">Purchase-side bills and credit references only. Finance owns the supplier ledger, payments and official statement.</p>
     <div className="mt-4 flex flex-wrap gap-3"><div><Label htmlFor="statement-from">From</Label><Input id="statement-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></div><div><Label htmlFor="statement-to">To</Label><Input id="statement-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></div></div>
-    <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[35rem] text-left"><thead className="border-b bg-surface-muted"><tr><th className="p-2">Date</th><th className="p-2">Record</th><th className="p-2">Status</th><th className="p-2 text-right">Amount</th></tr></thead><tbody>{visibleInvoices.map((invoice) => <tr key={invoice.id} className="border-b"><td className="p-2">{invoice.date}</td><td className="p-2"><Link className="text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.number}</Link></td><td className="p-2">{invoice.status}</td><td className="p-2 text-right">{format(invoiceTotal(invoice), invoice.currency)}</td></tr>)}{visibleCredits.map((credit) => <tr key={credit.id} className="border-b"><td className="p-2">{credit.created.slice(0, 10)}</td><td className="p-2">Credit {credit.id}</td><td className="p-2">{credit.status}</td><td className="p-2 text-right">{format(credit.amount, credit.currency || currency || "EUR")}</td></tr>)}</tbody></table></div>
+    <div className="mt-4 overflow-x-auto"><RecordTable className="w-full min-w-[35rem] text-left"><thead className="border-b bg-surface-muted"><tr><th className="p-2">Date</th><th className="p-2">Record</th><th className="p-2">Status</th><th className="p-2 text-right">Amount</th></tr></thead><tbody>{visibleInvoices.map((invoice) => <tr key={invoice.id} className="border-b"><td className="p-2">{invoice.date}</td><td className="p-2"><Link className="text-primary underline" to="/procurement/invoices/$id" params={{ id: invoice.id }}>{invoice.number}</Link></td><td className="p-2">{invoice.status}</td><td className="p-2 text-right">{format(invoiceTotal(invoice), invoice.currency)}</td></tr>)}{visibleCredits.map((credit) => <tr key={credit.id} className="border-b"><td className="p-2">{credit.created.slice(0, 10)}</td><td className="p-2">Credit {credit.id}</td><td className="p-2">{credit.status}</td><td className="p-2 text-right">{format(credit.amount, credit.currency || currency || "EUR")}</td></tr>)}</tbody></RecordTable></div>
     {!visibleInvoices.length && !visibleCredits.length ? <p className="mt-4 text-muted-foreground">No bills or credit references in this period.</p> : null}
   </section>;
 }
@@ -334,7 +342,7 @@ function QualificationReview({ s, onChange }: { s: SupplierRecord; onChange: (su
   const [reference, setReference] = useState("");
   const [validTo, setValidTo] = useState("");
   const [error, setError] = useState("");
-  return <section className="mt-4 rounded-lg border bg-surface p-4 text-sm"><h2 className="font-semibold">Record a required document</h2><p className="mt-1 text-xs text-muted-foreground">Only the document reference is saved here. No file is uploaded or checked outside this demo.</p>{error ? <p role="alert" className="mt-2 text-destructive">{error}</p> : null}<div className="mt-3 grid gap-2 sm:grid-cols-3"><div><Label htmlFor="qualification-name">Document</Label><select id="qualification-name" className="h-10 w-full rounded-md border bg-background px-3" value={name} onChange={(e) => setName(e.target.value)}>{s.qualifications.map((q) => <option key={q.name}>{q.name}</option>)}</select></div><div><Label htmlFor="qualification-ref">Document reference</Label><Input id="qualification-ref" value={reference} onChange={(e) => setReference(e.target.value)} /></div><div><Label htmlFor="qualification-valid">Valid until</Label><Input id="qualification-valid" type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} /></div></div><Button className="mt-3" size="sm" onClick={() => { if (!reference.trim() || !validTo || validTo < new Date().toISOString().slice(0, 10)) return setError("Enter a reference and a future validity date."); const qualifications = s.qualifications.map((q) => q.name === name ? { ...q, status: "Valid" as const, validTo } : q); onChange({ ...s, qualifications, documents: [...s.documents, { name: `${name}: ${reference.trim()}`, uploaded: new Date().toISOString().slice(0, 10) }], status: s.status === "More information required" ? "Under diligence" : s.status, nextAction: "Review qualification evidence and approvals", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString(), actor: "Supplier steward (demo)", event: `Qualification evidence recorded: ${name}`, reason: reference.trim() }, ...s.timeline] }); setReference(""); setValidTo(""); setError(""); }}>Save document reference</Button></section>;
+  return <section className="mt-4 rounded-lg border bg-surface p-4 text-sm"><h2 className="font-semibold">Record a required document</h2><p className="mt-1 text-xs text-muted-foreground">Only the document reference is saved here. No file is uploaded or checked outside this demo.</p>{error ? <p role="alert" className="mt-2 text-destructive">{error}</p> : null}<div className="mt-3 grid gap-2 sm:grid-cols-3"><div><Label htmlFor="qualification-name">Document</Label><FormSelect id="qualification-name" className="h-10 w-full rounded-md border bg-background px-3" value={name} onChange={(e) => setName(e.target.value)}>{s.qualifications.map((q) => <option key={q.name}>{q.name}</option>)}</FormSelect></div><div><Label htmlFor="qualification-ref">Document reference</Label><Input id="qualification-ref" value={reference} onChange={(e) => setReference(e.target.value)} /></div><div><Label htmlFor="qualification-valid">Valid until</Label><Input id="qualification-valid" type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} /></div></div><Button className="mt-3" size="sm" onClick={() => { if (!reference.trim() || !validTo || validTo < new Date().toISOString().slice(0, 10)) return setError("Enter a reference and a future validity date."); const qualifications = s.qualifications.map((q) => q.name === name ? { ...q, status: "Valid" as const, validTo } : q); onChange({ ...s, qualifications, documents: [...s.documents, { name: `${name}: ${reference.trim()}`, uploaded: new Date().toISOString().slice(0, 10) }], status: s.status === "More information required" ? "Under diligence" : s.status, nextAction: "Review qualification evidence and approvals", timeline: [{ id: crypto.randomUUID(), at: new Date().toISOString(), actor: "Supplier steward (demo)", event: `Qualification evidence recorded: ${name}`, reason: reference.trim() }, ...s.timeline] }); setReference(""); setValidTo(""); setError(""); }}>Save document reference</Button></section>;
 }
 
 function PortalUpdateReview({ s, onChange, canDecide }: { s: SupplierRecord; onChange: (supplier: SupplierRecord) => void; canDecide: boolean }) {

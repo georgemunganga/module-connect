@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { useEffect, useState } from "react";
 import { FileUp, Inbox } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -13,6 +14,8 @@ import { PageHeader } from "@/platform/components/PageHeader";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { statusLabel } from "@/platform/components/StatusBadge";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
+import { ListPage } from "@/platform/components/ListPage";
+import { downloadCsv } from "@/platform/data-transfer";
 import {
   addComment,
   addCreditRef,
@@ -91,13 +94,26 @@ function Field({
   );
 }
 
+type InboxFile = { id: string; name: string; size: number; addedAt: string };
+
 export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payments" }) {
   const state = usePayables();
   const { entityId, role } = useApp();
   const navigate = useNavigate();
   const [intakeError, setIntakeError] = useState("");
+  const [inboxState, setInboxState] = useState<{ key: string; files: InboxFile[] }>({ key: "", files: [] });
+  const [dragging, setDragging] = useState(false);
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [listStyle, setListStyle] = useState<"cards" | "table">("cards");
+  const inboxKey = `proc:bill-inbox:${entityId}`;
+  const inboxFiles = inboxState.key === inboxKey ? inboxState.files : [];
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(inboxKey) ?? "[]");
+      setInboxState({ key: inboxKey, files: Array.isArray(stored) ? stored.filter((entry): entry is InboxFile => Boolean(entry && typeof entry.id === "string" && typeof entry.name === "string" && typeof entry.size === "number" && typeof entry.addedAt === "string")) : [] });
+    } catch { setInboxState({ key: inboxKey, files: [] }); }
+  }, [inboxKey]);
   const statusInView = (status: Invoice["status"]) => view === "inbox" ? !["Posted", "Partially paid", "Paid", "Voided", "Cancelled"].includes(status) : view === "payments" ? ["Handed to AP", "AP rejected", "Posted", "Partially paid", "Paid"].includes(status) : true;
   const rows = state.invoices.filter(
     (i) =>
@@ -108,16 +124,29 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
   );
   const viewRows = state.invoices.filter((invoice) => invoice.entityId === entityId && statusInView(invoice.status));
   const summary = view === "inbox"
-    ? [{ label: "Awaiting review", value: rows.filter((i) => i.status === "Received").length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception" || i.status === "AP rejected").length }, { label: "Ready for AP", value: rows.filter((i) => i.status === "Validated").length }]
+    ? [{ label: "Awaiting review", value: viewRows.filter((i) => i.status === "Received").length }, { label: "Needs resolution", value: viewRows.filter((i) => i.status === "Exception" || i.status === "AP rejected").length }, { label: "Ready for AP", value: viewRows.filter((i) => i.status === "Validated").length }]
     : view === "payments"
-      ? [{ label: "Handed to AP", value: rows.filter((i) => i.status === "Handed to AP").length }, { label: "AP rejected", value: rows.filter((i) => i.status === "AP rejected").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }]
-      : [{ label: "Bills", value: rows.length }, { label: "Needs resolution", value: rows.filter((i) => i.status === "Exception").length }, { label: "Finance confirmed paid", value: rows.filter((i) => i.status === "Paid").length }];
-  const startFromFile = (file?: File) => {
-    if (!file) return;
-    if (file.size > 5_000_000) return setIntakeError("Choose a file smaller than 5 MB.");
-    if (!/\.(pdf|png|jpe?g)$/i.test(file.name)) return setIntakeError("Choose a PDF, PNG or JPG bill.");
-    sessionStorage.setItem("proc:bill-intake-draft", JSON.stringify({ name: file.name, entityId }));
+      ? [{ label: "Handed to AP", value: viewRows.filter((i) => i.status === "Handed to AP").length }, { label: "AP rejected", value: viewRows.filter((i) => i.status === "AP rejected").length }, { label: "Finance confirmed paid", value: viewRows.filter((i) => i.status === "Paid").length }]
+      : [{ label: "Bills", value: viewRows.length }, { label: "Needs resolution", value: viewRows.filter((i) => i.status === "Exception").length }, { label: "Finance confirmed paid", value: viewRows.filter((i) => i.status === "Paid").length }];
+  const addFiles = (files: FileList | File[]) => {
+    const chosen = Array.from(files);
+    if (!chosen.length) return;
+    if (chosen.length + inboxFiles.length > 20) return setIntakeError("Keep up to 20 bill filenames in this inbox. Remove reviewed entries before adding more.");
+    if (chosen.some((file) => file.size > 5_000_000)) return setIntakeError("Each file must be smaller than 5 MB.");
+    if (chosen.some((file) => !/\.(pdf|png|jpe?g|csv)$/i.test(file.name))) return setIntakeError("Choose PDF, PNG, JPG or CSV files.");
+    const entries = chosen.map((file) => ({ id: crypto.randomUUID(), name: file.name, size: file.size, addedAt: new Date().toISOString() }));
+    const next = [...entries, ...inboxFiles];
+    localStorage.setItem(inboxKey, JSON.stringify(next));
+    setInboxState({ key: inboxKey, files: next });
     setIntakeError("");
+  };
+  const removeFile = (id: string) => {
+    const next = inboxFiles.filter((file) => file.id !== id);
+    localStorage.setItem(inboxKey, JSON.stringify(next));
+    setInboxState({ key: inboxKey, files: next });
+  };
+  const createBillDraft = (file: InboxFile) => {
+    sessionStorage.setItem("proc:bill-intake-draft", JSON.stringify({ name: file.name, entityId }));
     void navigate({ to: "/procurement/invoices/new" });
   };
   return (
@@ -138,15 +167,52 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
           {summary.map((card) => <div key={card.label} className="rounded-lg border bg-surface p-4"><p className="text-xs text-muted-foreground">{card.label}</p><p className="text-2xl font-semibold">{card.value}</p></div>)}
         </div>
-        {view === "inbox" && role !== "auditor" ? <section
-          className="mb-4 rounded-xl border border-dashed bg-surface p-5"
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => { event.preventDefault(); startFromFile(event.dataTransfer.files[0]); }}
-        >
-          <div className="flex items-start gap-3"><FileUp className="size-6 text-primary" aria-hidden /><div><h2 className="font-medium">Start a bill from a file</h2><p className="text-sm text-muted-foreground">Drop one PDF or image here, or choose a file. Its name fills the draft reference; this demo does not upload or read the document.</p></div></div>
-          <Input aria-label="Choose bill file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" className="mt-3 max-w-sm" onChange={(event) => startFromFile(event.target.files?.[0])} />
-          {intakeError ? <p role="alert" className="mt-2 text-sm text-danger">{intakeError}</p> : null}
+        {view === "inbox" ? <section className="mb-5 space-y-3">
+          {role !== "auditor" ? <div
+            className={`rounded-xl border-2 border-dashed bg-surface p-6 text-center ${dragging ? "border-primary bg-primary-soft" : "border-border"}`}
+            onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(event.dataTransfer.files); }}
+          >
+            <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary-soft text-primary"><FileUp className="size-6" aria-hidden /></span>
+            <h2 className="mt-3 font-semibold">Add bills to the inbox</h2>
+            <p className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">Drop files here or choose them below. Review each filename before creating its bill draft. This demo stores names and sizes in this browser; it does not upload or read file contents.</p>
+            <Input aria-label="Choose bill files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.csv,application/pdf,image/png,image/jpeg,text/csv" className="mx-auto mt-4 max-w-sm" onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} />
+            <p className="mt-2 text-xs text-muted-foreground">Up to 20 entries, 5 MB each · PDF, image or CSV</p>
+            {intakeError ? <p role="alert" className="mt-2 text-sm text-danger">{intakeError}</p> : null}
+          </div> : null}
+          <div className="rounded-xl border bg-surface p-4">
+            <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Inbox files</h2><span className="text-xs text-muted-foreground">{inboxFiles.length} waiting</span></div>
+            {inboxFiles.length ? <ul className="mt-3 divide-y">{inboxFiles.map((file) => <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><p className="truncate font-medium">{file.name}</p><p className="text-xs text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB · Added {file.addedAt.slice(0, 10)} · Ready to review</p></div><div className="flex flex-wrap gap-2">{role !== "auditor" ? <><Button size="sm" onClick={() => createBillDraft(file)}>Create bill draft</Button><Button size="sm" variant="outline" onClick={() => removeFile(file.id)}>Remove</Button></> : null}</div></li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">Your inbox is clear. Added bill filenames will appear here for review.</p>}
+          </div>
         </section> : null}
+        <div className="mb-4 flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Showing bills for your company. Open one to see the matching and Finance history.</p><div role="group" aria-label="List display" className="inline-flex shrink-0 rounded-md border bg-surface p-1"><Button size="sm" variant={listStyle === "cards" ? "secondary" : "ghost"} aria-pressed={listStyle === "cards"} onClick={() => setListStyle("cards")}>Cards</Button><Button size="sm" variant={listStyle === "table" ? "secondary" : "ghost"} aria-pressed={listStyle === "table"} onClick={() => setListStyle("table")}>Table</Button></div></div>
+        {listStyle === "table" ? <ListPage<Invoice>
+          rows={viewRows}
+          searchPlaceholder="Search bill, vendor or purchase order"
+          searchFields={(invoice) => `${invoice.id} ${invoice.number} ${invoice.supplier} ${invoice.po}`}
+          filters={[
+            { id: "status", label: "Status", options: [...new Set(viewRows.map((invoice) => invoice.status))], match: (invoice, value) => invoice.status === value },
+            { id: "source", label: "Source", options: [...new Set(viewRows.map((invoice) => invoice.source))], match: (invoice, value) => invoice.source === value },
+          ]}
+          sortOptions={[
+            { id: "number", label: "Bill number", value: (invoice) => invoice.number },
+            { id: "supplier", label: "Vendor", value: (invoice) => invoice.supplier },
+            { id: "due", label: "Due date", value: (invoice) => invoice.due },
+          ]}
+          columns={[
+            { id: "number", header: "Bill", cell: (invoice) => <Link to="/procurement/invoices/$id" params={{ id: invoice.id }} className="font-medium text-primary hover:underline">{invoice.number}</Link> },
+            { id: "supplier", header: "Vendor", cell: (invoice) => invoice.supplier },
+            { id: "po", header: "Order", cell: (invoice) => invoice.po },
+            { id: "total", header: "Total", cell: (invoice) => money(invoiceTotal(invoice), invoice.currency) },
+            { id: "currency", header: "Currency", cell: (invoice) => invoice.currency },
+            { id: "status", header: "Status", cell: (invoice) => <StatusBadge status={invoice.status} /> },
+            { id: "due", header: "Due", cell: (invoice) => invoice.due },
+            { id: "owner", header: "Next owner", defaultVisible: false, cell: (invoice) => invoice.exception?.owner ?? invoice.owner },
+          ]}
+          onExport={["ap_processor", "proc_admin"].includes(role) ? (scope, exportRows, columns) => downloadCsv(`bills-${scope}.csv`, columns.map((column) => ({ key: column.id, label: column.header })), exportRows.map((invoice) => Object.fromEntries(columns.map((column) => [column.id, column.id === "number" ? invoice.number : column.id === "supplier" ? invoice.supplier : column.id === "po" ? invoice.po : column.id === "total" ? String(invoiceTotal(invoice)) : column.id === "currency" ? invoice.currency : column.id === "status" ? invoice.status : column.id === "due" ? invoice.due : invoice.exception?.owner ?? invoice.owner])))) : undefined}
+          emptyState={{ title: view === "payments" ? "No payment updates yet" : view === "inbox" ? "No bills to check" : "No bills yet", body: view === "payments" ? "Finance updates will appear after a bill is sent there." : "Add a vendor bill to compare it with the order and delivery.", icon: <Inbox className="size-10" aria-hidden />, action: view !== "payments" && role !== "auditor" ? <Button asChild><Link to="/procurement/invoices/new">Add bill</Link></Button> : undefined }}
+        /> : <>
         <div className="mb-4 flex flex-wrap gap-2">
           <Input
             aria-label="Search invoices"
@@ -155,7 +221,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select
+          <FormSelect
             aria-label="Filter by invoice status"
             className="rounded-md border bg-surface px-3 text-sm"
             value={filter}
@@ -175,7 +241,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
             ].filter((status) => status === "All" || statusInView(status as Invoice["status"])).map((s) => (
               <option key={s}>{s}</option>
             ))}
-          </select>
+          </FormSelect>
         </div>
         {rows.length ? (
           <div className="grid gap-3">
@@ -216,6 +282,7 @@ export function InvoiceQueue({ view = "all" }: { view?: "all" | "inbox" | "payme
         ) : (
           <NoResultsState title="No matching invoices" body="Try a different search or status." action={<Button variant="outline" onClick={() => { setSearch(""); setFilter("All"); }}>Clear search and filter</Button>} />
         )}
+        </>}
         <p className="mt-5 text-xs text-muted-foreground">
           Payment and posting statuses appear only when confirmed by the Finance demo adapter.
           Procurement cannot execute payment.
@@ -313,7 +380,7 @@ export function InvoiceCreate() {
           <div className="grid gap-4 rounded-xl border bg-surface p-5 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="source">How did the bill arrive?</Label>
-              <select
+              <FormSelect
                 id="source"
                 className="h-10 w-full rounded-md border bg-background px-3"
                 value={source}
@@ -322,11 +389,11 @@ export function InvoiceCreate() {
                 {["Manual", "Supplier portal", "Email placeholder", "API placeholder"].map((s) => (
                   <option key={s}>{s}</option>
                 ))}
-              </select>
+              </FormSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="supplier">Vendor</Label>
-              <select
+              <FormSelect
                 id="supplier"
                 className="h-10 w-full rounded-md border bg-background px-3"
                 value={supplierId}
@@ -336,7 +403,7 @@ export function InvoiceCreate() {
                 <option value="sup-003" disabled>
                   Studio Zit · Suspended
                 </option>
-              </select>
+              </FormSelect>
             </div>
             <Field label="Invoice number" value={number} onChange={setNumber} required />
             <Field label="Purchase order number" value={po} onChange={setPo} required />
@@ -769,7 +836,7 @@ export function InvoiceDetail({ id }: { id: string }) {
                   onChange={(e) => setComment(e.target.value)}
                 />
                 <Label htmlFor="audience">Audience</Label>
-                <select
+                <FormSelect
                   id="audience"
                   className="block rounded-md border p-2"
                   value={audience}
@@ -777,7 +844,7 @@ export function InvoiceDetail({ id }: { id: string }) {
                 >
                   <option>Internal</option>
                   <option>Supplier</option>
-                </select>
+                </FormSelect>
                 <Button type="submit">Add demo message</Button>
               </form>
             )}

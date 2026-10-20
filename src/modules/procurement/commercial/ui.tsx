@@ -1,3 +1,5 @@
+import { FormSelect } from "@/components/ui/form-select";
+import { RecordTable } from "@/platform/components/RecordTable";
 import { Link } from "@tanstack/react-router";
 import { FileText, PackageCheck, ScrollText, Trophy } from "lucide-react";
 import { useState } from "react";
@@ -7,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
-import { ListPage } from "@/platform/components/ListPage";
 import { statusLabel } from "@/platform/components/StatusBadge";
 import { EmptyState, NoResultsState } from "@/platform/components/States";
 import { downloadCsv } from "@/platform/data-transfer";
@@ -21,6 +22,20 @@ import type { Evaluation, Contract, Order, Receipt } from "./store";
 
 type Area = "evaluations" | "contracts" | "orders" | "receiving";
 type CommercialRow = { id: string; name: string; detail: string; status: string; entity: string };
+export type CommercialSearch = { q?: string; status?: string; view?: "cards" | "table"; sort?: "reference" | "name" | "status"; descending?: boolean; columns?: string };
+export function commercialSearch(input: Record<string, unknown>): CommercialSearch {
+  const selectedColumns = typeof input.columns === "string"
+    ? [...new Set(input.columns.split(",").filter((column) => ["reference", "name", "detail", "status", "entity"].includes(column)))]
+    : [];
+  return {
+    q: typeof input.q === "string" ? input.q.slice(0, 200) : undefined,
+    status: typeof input.status === "string" ? input.status.slice(0, 100) : undefined,
+    view: input.view === "table" ? "table" : undefined,
+    sort: ["reference", "name", "status"].includes(String(input.sort)) ? input.sort as CommercialSearch["sort"] : undefined,
+    descending: input.descending === true ? true : undefined,
+    columns: selectedColumns.includes("reference") ? selectedColumns.join(",") : undefined,
+  };
+}
 const titles: Record<Area, string> = {
   evaluations: "Compare quotes & choose a vendor",
   contracts: "Contracts",
@@ -140,12 +155,11 @@ function entityAllowed(entity: string, entityId: string, _role: string) {
   return sameEntity(entity, entityId);
 }
 
-export function CommercialList({ area }: { area: Area }) {
+export function CommercialList({ area, search, setSearch }: { area: Area; search: CommercialSearch; setSearch: (change: Partial<CommercialSearch>) => void }) {
   const data = useCommercial();
   const sourcingEvents = useProcurement().sourcing;
   const { role, entityId } = useApp();
-  const [q, setQ] = useState("");
-  const [listStyle, setListStyle] = useState<"cards" | "table">("cards");
+  const listStyle = search.view ?? "cards";
   const records: CommercialRow[] =
     area === "evaluations"
       ? data.evaluations.map((x) => ({
@@ -180,12 +194,29 @@ export function CommercialList({ area }: { area: Area }) {
                 status: `${x.line.received} / ${x.line.qty} accepted`,
                 entity: x.entity,
               }));
-  const visible = records.filter(
-    (x) =>
-      entityAllowed(x.entity, entityId, role) &&
-      `${x.id} ${x.name} ${x.detail}`.toLowerCase().includes(q.toLowerCase()),
-  );
   const entityRecords = records.filter((x) => entityAllowed(x.entity, entityId, role));
+  const visible = entityRecords.filter(
+    (x) =>
+      (!search.status || x.status === search.status) &&
+      `${x.id} ${x.name} ${x.detail}`.toLowerCase().includes((search.q ?? "").toLowerCase()),
+  );
+  const sorted = [...visible].sort((a, b) => {
+    const key = search.sort === "name" ? "name" : search.sort === "status" ? "status" : "id";
+    const result = a[key].localeCompare(b[key], undefined, { numeric: true, sensitivity: "base" });
+    return search.descending ? -result : result;
+  });
+  const allowedColumns = ["reference", "name", "detail", "status", "entity"];
+  const columns = search.columns?.split(",").filter((column) => allowedColumns.includes(column)) ?? ["reference", "name", "detail", "status"];
+  const toggleColumn = (column: string) => {
+    if (column === "reference") return;
+    const next = columns.includes(column) ? columns.filter((value) => value !== column) : [...columns, column];
+    if (next.length) setSearch({ columns: next.join(",") });
+  };
+  const exportRows = () => downloadCsv(
+    `${area}-view.csv`,
+    columns.map((column) => ({ key: column, label: column === "reference" ? "Reference" : column === "name" ? area === "receiving" ? "Item or service" : "Vendor or event" : column[0].toUpperCase() + column.slice(1) })),
+    sorted.map((row) => ({ reference: row.id, name: row.name, detail: row.detail, status: row.status, entity: row.entity })),
+  );
   const empty = {
     evaluations: { title: "No quotes to compare yet", body: "Close a quote request and open the vendor replies to begin comparing them.", to: "/procurement/sourcing" as const, action: "Open quote requests", icon: <Trophy className="size-10" aria-hidden /> },
     contracts: { title: "No contracts yet", body: "Add a standalone agreement or start one from an approved award.", to: "/procurement/contracts/new" as const, action: "Add contract", icon: <ScrollText className="size-10" aria-hidden /> },
@@ -200,46 +231,30 @@ export function CommercialList({ area }: { area: Area }) {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">Showing records for your company. Open one to see details or take action.</p>
           <div className="inline-flex rounded-md border bg-surface p-1" role="group" aria-label="List display">
-            <Button size="sm" variant={listStyle === "cards" ? "secondary" : "ghost"} aria-pressed={listStyle === "cards"} onClick={() => setListStyle("cards")}>Cards</Button>
-            <Button size="sm" variant={listStyle === "table" ? "secondary" : "ghost"} aria-pressed={listStyle === "table"} onClick={() => setListStyle("table")}>Table</Button>
+            <Button size="sm" variant={listStyle === "cards" ? "secondary" : "ghost"} aria-pressed={listStyle === "cards"} onClick={() => setSearch({ view: undefined })}>Cards</Button>
+            <Button size="sm" variant={listStyle === "table" ? "secondary" : "ghost"} aria-pressed={listStyle === "table"} onClick={() => setSearch({ view: "table" })}>Table</Button>
           </div>
         </div>
-        {listStyle === "table" ? (
-          <ListPage<CommercialRow>
-            rows={entityRecords}
-            searchPlaceholder="Search number, vendor or item"
-            searchFields={(row) => `${row.id} ${row.name} ${row.detail}`}
-            filters={[{ id: "status", label: "Status", options: [...new Set(entityRecords.map((row) => row.status))], match: (row, value) => row.status === value }]}
-            sortOptions={[
-              { id: "reference", label: "Reference", value: (row) => row.id },
-              { id: "name", label: "Vendor or item", value: (row) => row.name },
-              { id: "status", label: "Status", value: (row) => row.status },
-            ]}
-            columns={[
-              { id: "reference", header: "Reference", cell: (row) => <Link className="font-mono text-primary underline" to={detailPaths[area]} params={{ id: row.id }}>{row.id}</Link> },
-              { id: "name", header: area === "receiving" ? "Item or service" : "Vendor or event", cell: (row) => row.name },
-              { id: "detail", header: "Details", cell: (row) => row.detail },
-              { id: "status", header: "Status", cell: (row) => <Tag>{statusLabel(row.status)}</Tag> },
-              { id: "entity", header: "Company", defaultVisible: false, cell: (row) => row.entity },
-            ]}
-            onExport={(scope, exportRows, shown) => downloadCsv(
-              `${area}-${scope}.csv`,
-              shown.map((column) => ({ key: column.id, label: column.header })),
-              exportRows.map((row) => Object.fromEntries(shown.map((column) => [column.id, column.id === "reference" ? row.id : column.id === "name" ? row.name : column.id === "detail" ? row.detail : column.id === "status" ? row.status : row.entity]))),
-            )}
-            emptyState={{ title: empty.title, body: empty.body, icon: empty.icon, action: <Button variant="outline" asChild><Link to={empty.to}>{empty.action}</Link></Button> }}
-          />
-        ) : <>
-        <div className={section}>
-          <Label htmlFor="find-commercial">Search</Label>
-          <Input id="find-commercial" className="mt-2 max-w-md" placeholder="Number, vendor or item" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className={`${section} mb-4 flex flex-wrap items-end gap-3`}>
+          <div className="min-w-52 flex-1"><Label htmlFor="find-commercial">Search</Label><Input id="find-commercial" className="mt-1" placeholder="Number, vendor or item" value={search.q ?? ""} onChange={(event) => setSearch({ q: event.target.value || undefined })} /></div>
+          <div><Label htmlFor="commercial-status">Status</Label><FormSelect id="commercial-status" className="mt-1 h-9 min-w-36 rounded-md border bg-background px-3 text-sm" value={search.status ?? ""} onChange={(event) => setSearch({ status: event.target.value || undefined })}><option value="">All statuses</option>{[...new Set(entityRecords.map((row) => row.status))].map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</FormSelect></div>
+          {listStyle === "table" ? <>
+            <div><Label htmlFor="commercial-sort">Sort by</Label><FormSelect id="commercial-sort" className="mt-1 h-9 min-w-36 rounded-md border bg-background px-3 text-sm" value={search.sort ?? "reference"} onChange={(event) => setSearch({ sort: event.target.value as CommercialSearch["sort"] })}><option value="reference">Reference</option><option value="name">Vendor or item</option><option value="status">Status</option></FormSelect></div>
+            <Button variant="outline" size="sm" onClick={() => setSearch({ descending: search.descending ? undefined : true })} aria-pressed={!!search.descending}>Descending</Button>
+            <details className="relative"><summary className="cursor-pointer rounded-md border px-3 py-2 text-sm">Columns</summary><div className="absolute right-0 z-10 mt-1 min-w-36 space-y-2 rounded-md border bg-surface p-3 shadow-lg">{allowedColumns.map((column) => <label key={column} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={columns.includes(column)} disabled={column === "reference"} onChange={() => toggleColumn(column)} />{column === "reference" ? "Reference" : column[0].toUpperCase() + column.slice(1)}</label>)}</div></details>
+            <Button variant="outline" size="sm" onClick={exportRows} disabled={!sorted.length}>Export view</Button>
+          </> : null}
         </div>
+        {listStyle === "table" ? (
+          sorted.length ? <div className="overflow-x-auto rounded-xl border bg-surface"><RecordTable className="w-full text-left text-sm"><thead className="border-b bg-muted/40"><tr>{columns.map((column) => <th key={column} scope="col" className="px-4 py-3 font-medium">{column === "reference" ? "Reference" : column === "name" ? area === "receiving" ? "Item or service" : "Vendor or event" : column[0].toUpperCase() + column.slice(1)}</th>)}</tr></thead><tbody>{sorted.map((row) => <tr key={row.id} className="border-b last:border-0 hover:bg-muted/30">{columns.map((column) => <td key={column} className="px-4 py-3">{column === "reference" ? <Link className="font-mono text-primary underline" to={detailPaths[area]} params={{ id: row.id }} search={search}>{row.id}</Link> : column === "status" ? <Tag>{statusLabel(row.status)}</Tag> : column === "name" ? row.name : column === "detail" ? row.detail : row.entity}</td>)}</tr>)}</tbody></RecordTable></div> : !entityRecords.length ? <EmptyState title={empty.title} body={empty.body} icon={empty.icon} action={<Button variant="outline" asChild><Link to={empty.to}>{empty.action}</Link></Button>} /> : <NoResultsState title="No matches" body="Try a different search or status." action={<Button variant="outline" onClick={() => setSearch({ q: undefined, status: undefined })}>Clear filters</Button>} />
+        ) : <>
         <div className="grid gap-3">
-          {visible.map((x) => (
+          {sorted.map((x) => (
             <Link
               key={x.id}
               to={detailPaths[area]}
               params={{ id: x.id }}
+              search={search}
               className={`${section} block transition-colors hover:border-primary`}
             >
               <div className="flex flex-wrap justify-between gap-3">
@@ -254,8 +269,8 @@ export function CommercialList({ area }: { area: Area }) {
               </div>
             </Link>
           ))}
-          {!visible.length && !entityRecords.length ? <EmptyState title={empty.title} body={empty.body} icon={empty.icon} action={<Button variant="outline" asChild><Link to={empty.to}>{empty.action}</Link></Button>} /> : null}
-          {!visible.length && entityRecords.length ? <NoResultsState title="No matches" body="Try a different number or vendor name." action={<Button variant="outline" onClick={() => setQ("")}>Clear search</Button>} /> : null}
+          {!sorted.length && !entityRecords.length ? <EmptyState title={empty.title} body={empty.body} icon={empty.icon} action={<Button variant="outline" asChild><Link to={empty.to}>{empty.action}</Link></Button>} /> : null}
+          {!sorted.length && entityRecords.length ? <NoResultsState title="No matches" body="Try a different number, vendor name or status." action={<Button variant="outline" onClick={() => setSearch({ q: undefined, status: undefined })}>Clear filters</Button>} /> : null}
         </div>
         </>}
       </AppShell>
@@ -263,7 +278,7 @@ export function CommercialList({ area }: { area: Area }) {
   );
 }
 
-export function CommercialDetail({ area, id }: { area: Area; id: string }) {
+export function CommercialDetail({ area, id, search }: { area: Area; id: string; search: CommercialSearch }) {
   const data = useCommercial();
   const sourcingEvents = useProcurement().sourcing;
   const { role, entityId } = useApp();
@@ -283,8 +298,8 @@ export function CommercialDetail({ area, id }: { area: Area; id: string }) {
   return (
     <Guard area={area}>
       <AppShell>
-        <Link className="text-sm text-primary underline" to={paths[area]}>
-          ← {titles[area]}
+        <Link className="text-sm text-primary underline" to={paths[area]} search={search}>
+          ← Back to {titles[area]}
         </Link>
         <Header area={area} detail={id} />
         {area === "evaluations" ? (
@@ -336,10 +351,10 @@ export function ContractNew() {
   return <AppShell><PageHeader eyebrow="Contracts" title="Add contract" description="Record proposed terms for review. Nothing is active or available for ordering until signed." />
     {created ? <div className={section}><h2 className="font-semibold">Draft saved</h2><p className="mt-1 text-sm">{created} is ready for review.</p><Button className="mt-3" asChild><Link to="/procurement/contracts/$id" params={{ id: created }}>Open contract</Link></Button></div> : <div className={section}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div><Label htmlFor="contract-supplier">Vendor</Label><select id="contract-supplier" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={supplier} onChange={(event) => setSupplier(event.target.value)}><option value="">Choose an active vendor</option>{suppliers.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></div>
-        <div><Label htmlFor="contract-kind">Contract type</Label><select id="contract-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={kind} onChange={(event) => setKind(event.target.value as Contract["kind"])}><option>Standard</option><option>Framework</option><option>Recurring</option></select></div>
+        <div><Label htmlFor="contract-supplier">Vendor</Label><FormSelect id="contract-supplier" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={supplier} onChange={(event) => setSupplier(event.target.value)}><option value="">Choose an active vendor</option>{suppliers.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</FormSelect></div>
+        <div><Label htmlFor="contract-kind">Contract type</Label><FormSelect id="contract-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={kind} onChange={(event) => setKind(event.target.value as Contract["kind"])}><option>Standard</option><option>Framework</option><option>Recurring</option></FormSelect></div>
         <div><Label htmlFor="contract-category">Category</Label><Input id="contract-category" value={category} onChange={(event) => setCategory(event.target.value)} /></div>
-        <div><Label htmlFor="contract-currency">Currency</Label><select id="contract-currency" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={currency} onChange={(event) => setCurrency(event.target.value)}>{["EUR", "KES", "USD", "ZMW", "GBP"].map((value) => <option key={value}>{value}</option>)}</select></div>
+        <div><Label htmlFor="contract-currency">Currency</Label><FormSelect id="contract-currency" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={currency} onChange={(event) => setCurrency(event.target.value)}>{["EUR", "KES", "USD", "ZMW", "GBP"].map((value) => <option key={value}>{value}</option>)}</FormSelect></div>
         <div><Label htmlFor="contract-start">Starts</Label><Input id="contract-start" type="date" value={start} onChange={(event) => setStart(event.target.value)} /></div>
         <div><Label htmlFor="contract-end">Ends</Label><Input id="contract-end" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></div>
         <div><Label htmlFor="contract-notice">Renewal decision by</Label><Input id="contract-notice" type="date" value={notice} onChange={(event) => setNotice(event.target.value)} /></div>
@@ -458,6 +473,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
         const order: Order = {
           id,
           supplier: awardBid.supplier,
+          supplierId: getProcurement().suppliers.find((supplier) => supplier.name === awardBid.supplier && event.entity.includes(supplier.country))?.id,
           entity: event.entity,
           source: item.id,
           originRequest: sourceLines.length === 1 ? `${sourceLines[0].requestId} / ${sourceLines[0].lineId}` : undefined,
@@ -471,6 +487,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
           terms: event.terms,
           due: sourceRequest?.neededBy ?? event.closesAt.slice(0, 10),
           line: {
+            catalogItemId: sourceLines.length === 1 ? sourceLines[0].line.catalogItemId : undefined,
             description: event.items[0]?.description || event.title,
             qty,
             price: item.awardValue! / qty,
@@ -590,7 +607,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div>
                     <Label>Required checks</Label>
-                    <select
+                    <FormSelect
                       aria-label={`${b.supplier} compliance`}
                       disabled={!editable || item.state !== "In evaluation" || offer.late}
                       value={b.compliant === null ? "" : String(b.compliant)}
@@ -600,7 +617,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
                       <option value="">Not checked</option>
                       <option value="true">Pass</option>
                       <option value="false">Fail</option>
-                    </select>
+                    </FormSelect>
                   </div>
                   <div>
                     <Label htmlFor={`score-${b.id}`}>Score out of 100</Label>
@@ -697,7 +714,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
           <Label htmlFor="winner" className="mt-3 block">
             Recommended supplier
           </Label>
-          <select
+          <FormSelect
             id="winner"
             className="mt-1 h-9 w-full rounded-md border bg-background px-3"
             value={selected}
@@ -711,7 +728,7 @@ function EvaluationView({ item, role, event }: { item: Evaluation; role: string;
                   {x.supplier}
                 </option>
               ))}
-          </select>
+          </FormSelect>
           <Label htmlFor="rationale" className="mt-3 block">
             Rationale and risks
           </Label>
@@ -906,6 +923,7 @@ function ContractView({ item, role }: { item: Contract; role: string }) {
         {
           id,
           supplier: item.supplier,
+          supplierId: getProcurement().suppliers.find((supplier) => supplier.name === item.supplier && item.entity.includes(supplier.country))?.id,
           entity: item.entity,
           source: item.id,
           sourceApprovedValue: release,

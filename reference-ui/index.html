@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A responsive Procurement frontend prototype. Shared workflows, RFQs, purchasing, payables, and settings using fictional local data." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="icon" href="/procurement/workspace/favicon.svg" type="image/svg+xml" />
+    <title>Procurement · ERP</title>
+    <style>
+      .erp-global-preloader{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#fff;opacity:1;transition:opacity 260ms ease}
+      .erp-global-preloader.is-leaving{opacity:0;pointer-events:none}
+      .erp-preloader-orbit{display:grid;place-items:center}
+      .erp-preloader-logo{display:block;width:min(240px,65vw);height:auto;max-height:120px;object-fit:contain;animation:erp-preloader-breathe 2.4s ease-in-out infinite}
+      .erp-preloader-logo[hidden]{display:none}
+      @keyframes erp-preloader-breathe{50%{opacity:.65;transform:scale(.97)}}
+      @media (prefers-reduced-motion:reduce){.erp-preloader-logo{animation:none}}
+    </style>
+  </head>
+  <body>
+    <div id="erp-global-preloader" class="erp-global-preloader" role="status" aria-label="Loading ERP">
+      <div class="erp-preloader-orbit" aria-hidden="true">
+        <img id="erp-preloader-logo" class="erp-preloader-logo" alt="" hidden />
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

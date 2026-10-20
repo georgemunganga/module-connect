@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.verification-dist/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+.vite/
+test-results/
+playwright-report/
+__pycache__/
+*.py[cod]
+.invoice-verification-dist/
+.invoice-test-results/
