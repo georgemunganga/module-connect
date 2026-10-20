@@ -120,3 +120,26 @@ test("unconfirmed goods draft creation recovers unknown target ID by original ke
   await expect(page.getByRole("button", { name: "Save delivery draft", exact: true })).toBeDisabled(); await page.getByRole("button", { name: "Check saved draft", exact: true }).click();
   await expect(page.getByRole("heading", { name: "GRN-LIVE", exact: true })).toBeVisible(); expect(evidence.writes).toHaveLength(1);
 });
+
+test("receiving list reuses column tools and selection while export remains an explained unavailable action", async ({ page }) => {
+  const evidence = await mock(page); await page.goto(root);
+  await expect(page.getByTestId("erp-record-table")).toBeVisible(); await page.getByRole("checkbox", { name: "Select GRN-LIVE", exact: true }).check();
+  await expect(page.getByText("1 selected", { exact: true })).toBeVisible(); await page.getByRole("button", { name: "Export selected", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Secure receiving exports are not connected yet" })).toBeVisible();
+  await page.getByRole("button", { name: "Customize columns", exact: true }).click(); await expect(page.getByRole("dialog")).toBeVisible(); expect(evidence.writes).toHaveLength(0);
+});
+test("detail keeps related comments documents and history sections without local demo mutations", async ({ page }) => {
+  const evidence = await mock(page); await page.goto(`${root}/${id}`);
+  for (const name of ["Overview", "Items (1)", "Related", "Comments", "Documents", "History"]) await expect(page.getByRole("tab", { name, exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Comments", exact: true }).click(); await page.getByRole("button", { name: "Add Comment", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("Delivery comments are not connected yet"); await page.getByRole("button", { name: "Close explanation", exact: true }).click();
+  await page.getByRole("tab", { name: "Documents", exact: true }).click(); await page.getByRole("button", { name: "Attach files", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("Secure document upload is not connected"); expect(evidence.writes).toHaveLength(0);
+});
+test("draft preserves attachment help sticky actions and discard confirmation", async ({ page }) => {
+  const evidence = await mock(page); await page.goto(root + "/new"); await page.getByRole("switch", { name: "Select PO-ISSUED Issued delivery line", exact: true }).click();
+  await page.getByRole("textbox", { name: "Received quantity 1", exact: true }).fill("3.1250");
+  await expect(page.getByRole("textbox", { name: "Vendor", exact: true })).toHaveAttribute("readonly", ""); await expect(page.getByRole("textbox", { name: "Transaction title", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click(); await expect(page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing", exact: true }).click(); await expect(page.getByRole("textbox", { name: "Received quantity 1", exact: true })).toHaveValue("3.1250"); expect(evidence.writes).toHaveLength(0);
+});

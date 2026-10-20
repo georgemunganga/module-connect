@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getService, getReceipt, receivingCommandPath, receivingQuantity, recoverReceiving, sendReceiving, type ReceivingCommand } from "../../src/platform/procurement-receiving-api";
+import { listReceiving, getService, getReceipt, receivingCommandPath, receivingQuantity, recoverReceiving, sendReceiving, type ReceivingCommand } from "../../src/platform/procurement-receiving-api";
 const company = "11111111-1111-4111-8111-111111111111", order = "22222222-2222-4222-8222-222222222222", target = "33333333-3333-4333-8333-333333333333", line = "44444444-4444-4444-8444-444444444444", key = "55555555-5555-4555-8555-555555555555";
 const command = (operation: ReceivingCommand["operation"] = "ReceivingAccept"): ReceivingCommand => ({ operation, orderId: order, targetId: target, lineId: line, key, method: "POST", body: '{"quantity":"99999999999999.9999","version":2,"sourceVersion":4,"evidenceReference":"EVIDENCE"}' });
 afterEach(() => vi.unstubAllGlobals());
@@ -36,7 +36,7 @@ describe("receiving exact values and command contracts", () => {
   });
   it("refuses numeric financial data instead of certifying a rounded receipt read", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: target, version: 1, executionVersion: 1, status: "Held", matchingAuthorityAvailable: false,
-      draftActionCandidates: [], lineReadiness: [], lines: [{ id: line, version: 1, sourceVersion: 1, receivedQuantity: 99999999999999.9999, initiallyRejectedQuantity: "0", rejectedQuantity: "0", acceptedQuantity: "0", unacceptedHeldQuantity: "1" }] }))));
+      readPurpose: "Receipt", draftActionCandidates: [], lineReadiness: [], lines: [{ id: line, version: 1, sourceVersion: 1, receivedQuantity: 99999999999999.9999, initiallyRejectedQuantity: "0", rejectedQuantity: "0", acceptedQuantity: "0", unacceptedHeldQuantity: "1" }] }))));
     await expect(getReceipt(company, target, false)).rejects.toThrow("incomplete");
   });
 });
@@ -71,5 +71,16 @@ describe("service detail contract after partial certification", () => {
     expect(current.sourceVersion).toBe(5); expect(Object.hasOwn(current, "notes")).toBe(false); expect(Object.hasOwn(current, "cancellationReason")).toBe(false);
     await expect(getService(company, target, true)).rejects.toThrow("incomplete");
     expect(fetch.mock.calls.every(([path]) => path === `/api/procurement/v1/service-acceptances/${target}/certification-task`)).toBe(true);
+  });
+});
+
+
+describe("receiving server-owned list filtering", () => {
+  it("sends only a supported worklist state and does not invent filtering on assigned task queues", async () => {
+    const fetch = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 25 }))); vi.stubGlobal("fetch", fetch);
+    await listReceiving(company, "receipts", 1, undefined, "Partially Accepted");
+    await listReceiving(company, "inspection", 1, undefined, "Partially Accepted");
+    expect(fetch.mock.calls[0][0]).toContain("&state=Partially%20Accepted");
+    expect(fetch.mock.calls[1][0]).not.toContain("state=");
   });
 });

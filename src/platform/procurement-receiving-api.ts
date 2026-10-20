@@ -10,8 +10,9 @@ export type ReceivingSummary = { id?: string; receiptId?: string; number?: strin
 export type ReceivingPage<T> = { items: T[]; total: number; page: number; pageSize: number };
 export type ReceiptLine = { id: string; version: number; purchaseOrderLineId: string; sourceVersion: number; receivedQuantity: string; initiallyRejectedQuantity: string; rejectedQuantity: string; acceptedQuantity: string; unacceptedHeldQuantity: string | null; status: string; inspection: null | { qualifiedQuantity: string; inspectionRejectedQuantity: string; checklistReference: string } };
 export type ReceiptReadiness = { lineId: string; sourceVersion: number; labels: ReceivingLabels | null; capacity: ReceivingCapacity; actionCandidates: ReceivingCandidate[]; effects?: ReceivingEffect[]; blocker?: string };
-export type ReceiptDetail = { id: string; number: string; version: number; status: string; executionVersion: number; purchaseOrderId: string; issuedVersionId: string | null; siteRef: string | null; receivedAt: string; recordedAt: string | null; deliveryNoteRef?: string | null; notes?: string | null; physicalEvidenceRecorded: boolean; matchingAuthorityAvailable: false; lines: ReceiptLine[]; lineReadiness: ReceiptReadiness[]; draftActionCandidates: ReceivingCandidate[]; readPurpose: string };
-export type ServiceDetail = { id: string; version: number; status: string; executionVersion: number; purchaseOrderLineId: string; sourcePurchaseOrderId: string | null; issuedBindingId: string; sourceVersion: number; periodFrom: string; periodTo: string; deliverableRef: string; notes?: string | null; cancellationReason?: string | null; intendedQuantity: string | null; acceptedQuantity: string; acceptedNetAmount: string; currentAcceptedQuantity: string; currentAcceptedNetAmount: string; isCertifiedRecord: boolean; matchingAuthorityAvailable: false; labels?: ReceivingLabels; capacity: ReceivingCapacity; actionCandidates: ReceivingCandidate[]; draftActionCandidates?: ReceivingCandidate[]; effects?: ReceivingEffect[]; readPurpose: string; blocker?: string };
+export type ReceivingDocuments = { references: { id: string; fileName: string; documentVersion: number; classification: string | null }[]; contentAccessAvailable: false; uploadAvailable: false };
+export type ReceiptDetail = { id: string; number: string; version: number; status: string; executionVersion: number; purchaseOrderId: string; issuedVersionId: string | null; siteRef: string | null; receivedAt: string; recordedAt: string | null; deliveryNoteRef?: string | null; notes?: string | null; physicalEvidenceRecorded: boolean; matchingAuthorityAvailable: false; lines: ReceiptLine[]; lineReadiness: ReceiptReadiness[]; draftActionCandidates: ReceivingCandidate[]; readPurpose: string; documents?: ReceivingDocuments };
+export type ServiceDetail = { id: string; version: number; status: string; executionVersion: number; purchaseOrderLineId: string; sourcePurchaseOrderId: string | null; issuedBindingId: string; sourceVersion: number; periodFrom: string; periodTo: string; deliverableRef: string; notes?: string | null; cancellationReason?: string | null; intendedQuantity: string | null; acceptedQuantity: string; acceptedNetAmount: string; currentAcceptedQuantity: string; currentAcceptedNetAmount: string; isCertifiedRecord: boolean; matchingAuthorityAvailable: false; labels?: ReceivingLabels; capacity: ReceivingCapacity; actionCandidates: ReceivingCandidate[]; draftActionCandidates?: ReceivingCandidate[]; effects?: ReceivingEffect[]; readPurpose: string; blocker?: string; documents?: ReceivingDocuments };
 export type ReceiptDraft = { purchaseOrderId: string; issuedVersionId: string; siteId: string; receivedAt: string; deliveryNoteRef: string | null; notes: string | null; lines: { id?: string; purchaseOrderLineId: string; receivedQuantity: string; rejectedQuantity: string }[] };
 export type ServiceDraft = { purchaseOrderId: string; issuedVersionId: string; purchaseOrderLineId: string; deliverableReference: string; periodFrom: string; periodTo: string; quantity: string; notes: string | null };
 export type ReceivingOperation = "ReceivingDraft" | "ServiceDraft" | "ReceivingRecord" | "ReceivingInspect" | "ReceivingAccept" | "ServiceCertify" | "ReceivingCancel" | "ServiceCancel";
@@ -45,9 +46,9 @@ function page<T>(body: unknown, row: (value: unknown) => boolean): ReceivingPage
   if (!object(body) || !Array.isArray(body.items) || !body.items.every(row) || !integer(body.total) || !integer(body.page) || !integer(body.pageSize)) throw invalid();
   return body as unknown as ReceivingPage<T>;
 }
-export async function listReceiving(company: string, view: ReceivingView, currentPage: number, signal?: AbortSignal) {
+export async function listReceiving(company: string, view: ReceivingView, currentPage: number, signal?: AbortSignal, state = "") {
   const path = view === "inspection" ? "/receiving/inspection-tasks" : view === "certification" ? "/receiving/service-tasks" : `/receiving/worklist?view=${view}`;
-  return page<ReceivingSummary>(await call(company, `${path}${path.includes("?") ? "&" : "?"}page=${currentPage}&pageSize=25`, { signal }),
+  return page<ReceivingSummary>(await call(company, `${path}${path.includes("?") ? "&" : "?"}page=${currentPage}&pageSize=25${state && (view === "receipts" || view === "services") ? `&state=${encodeURIComponent(state)}` : ""}`, { signal }),
     (row) => object(row) && uuid.test(String(row.id ?? row.receiptId)) && typeof row.status === "string" && integer(row.version) && uuid.test(String(row.orderId)) && typeof row.orderNumber === "string");
 }
 export async function listReceivingSources(company: string, currentPage: number, signal?: AbortSignal) {
@@ -57,6 +58,8 @@ export async function listReceivingSources(company: string, currentPage: number,
     && (row.blocker != null || typeof row.description === "string" && typeof row.unitCode === "string" && exact(row.orderedQuantity) && exact(row.netUnitPrice)));
 }
 function candidates(value: unknown): boolean { return Array.isArray(value) && value.every((row) => object(row) && typeof row.action === "string" && typeof row.candidate === "boolean" && (row.blocker == null || typeof row.blocker === "string")); }
+function effects(value: unknown): boolean { return value === undefined || Array.isArray(value) && value.every((row) => object(row) && uuid.test(String(row.id)) && exact(row.quantity) && exact(row.netAmount) && integer(row.ledgerSequence) && typeof row.kind === "string" && typeof row.evidenceReference === "string" && typeof row.occurredAt === "string"); }
+function documents(value: unknown): boolean { return value === undefined || object(value) && value.contentAccessAvailable === false && value.uploadAvailable === false && Array.isArray(value.references) && value.references.every((row) => object(row) && uuid.test(String(row.id)) && typeof row.fileName === "string" && integer(row.documentVersion) && (row.classification == null || typeof row.classification === "string")); }
 function capacity(value: unknown): boolean { return object(value) && typeof value.verified === "boolean" && [value.orderRemainingQuantity, value.physicalRemainingQuantity, value.acceptableQuantity].every((amount) => amount == null || exact(amount)); }
 export async function getReceipt(company: string, id: string, inspection: boolean, signal?: AbortSignal): Promise<ReceiptDetail> {
   if (!uuid.test(id)) throw invalid(); const body = await call(company, `/receipts/${id}${inspection ? "/inspection-task" : ""}`, { signal });
@@ -64,8 +67,8 @@ export async function getReceipt(company: string, id: string, inspection: boolea
     || body.matchingAuthorityAvailable !== false || !Array.isArray(body.lines) || !body.lines.every((line) => object(line) && uuid.test(String(line.id)) && integer(line.version) && integer(line.sourceVersion)
       && [line.receivedQuantity, line.initiallyRejectedQuantity, line.rejectedQuantity, line.acceptedQuantity].every(exact) && (line.unacceptedHeldQuantity == null || exact(line.unacceptedHeldQuantity)))
     || body.readPurpose !== (inspection ? "AssignedInspection" : "Receipt")
-    || (inspection && (Object.hasOwn(body, "notes") || Object.hasOwn(body, "deliveryNoteRef")))
-    || !candidates(body.draftActionCandidates) || !Array.isArray(body.lineReadiness) || !body.lineReadiness.every((line) => object(line) && uuid.test(String(line.lineId)) && capacity(line.capacity) && candidates(line.actionCandidates))) throw invalid();
+    || (inspection && (Object.hasOwn(body, "notes") || Object.hasOwn(body, "deliveryNoteRef") || Object.hasOwn(body, "documents")))
+    || !documents(body.documents) || !candidates(body.draftActionCandidates) || !Array.isArray(body.lineReadiness) || !body.lineReadiness.every((line) => object(line) && uuid.test(String(line.lineId)) && capacity(line.capacity) && candidates(line.actionCandidates) && effects(line.effects))) throw invalid();
   return body as unknown as ReceiptDetail;
 }
 export async function getService(company: string, id: string, certification: boolean, signal?: AbortSignal): Promise<ServiceDetail> {
@@ -73,9 +76,9 @@ export async function getService(company: string, id: string, certification: boo
   if (!object(body) || body.id !== id || !integer(body.version) || !integer(body.sourceVersion) || !integer(body.executionVersion) || typeof body.status !== "string" || body.matchingAuthorityAvailable !== false
     || ![body.acceptedQuantity, body.acceptedNetAmount, body.currentAcceptedQuantity, body.currentAcceptedNetAmount].every(exact) || (body.intendedQuantity != null && !exact(body.intendedQuantity))
     || body.readPurpose !== (certification ? "AssignedServiceCertification" : "Receipt")
-    || (certification && (Object.hasOwn(body, "notes") || Object.hasOwn(body, "cancellationReason")))
+    || (certification && (Object.hasOwn(body, "notes") || Object.hasOwn(body, "cancellationReason") || Object.hasOwn(body, "documents")))
     || (!certification && [body.notes, body.cancellationReason].some((value) => value !== undefined && value !== null && typeof value !== "string"))
-    || !capacity(body.capacity) || !candidates(body.actionCandidates) || (body.draftActionCandidates != null && !candidates(body.draftActionCandidates))) throw invalid();
+    || !documents(body.documents) || !effects(body.effects) || !capacity(body.capacity) || !candidates(body.actionCandidates) || (body.draftActionCandidates != null && !candidates(body.draftActionCandidates))) throw invalid();
   return body as unknown as ServiceDetail;
 }
 export function receivingCommandPath(command: ReceivingCommand): string {
