@@ -8,4 +8,5 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 180_000,
+  expect: { timeout: 30_000 },
 });

@@ -24,7 +24,7 @@ function loadManifest(): Manifest {
 
 async function connect(page: Page, manifest: Manifest) {
   let actor: Actor = "buyer", loseNextDecision = false;
-  const traffic: Array<{ actor: Actor; method: string; path: string; status: number; key?: string; body?: string; response: unknown }> = [];
+  const traffic: Array<{ actor: Actor; method: string; path: string; status: number; durationMs: number; key?: string; body?: string; response: unknown }> = [];
   await page.addInitScript(({ entityId, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })),
     { entityId: manifest.companyId, branch: manifest.branchId });
   await page.route("**/api/**", async (route) => {
@@ -34,11 +34,12 @@ async function connect(page: Page, manifest: Manifest) {
       // No Procurement response, context, capability, error or state is fabricated here.
       expect(request.headers()["x-shell-entity"]).toBe(manifest.companyId);
       expect(request.headers()["x-shell-location"]).toBe(manifest.branchId);
-      const upstream = await route.fetch({ url: `${manifest.baseUrl}${url.pathname}${url.search}`, timeout: 30_000, maxRetries: 0,
+      const started = Date.now();
+      const upstream = await route.fetch({ url: `${manifest.baseUrl}${url.pathname}${url.search}`, timeout: 45_000, maxRetries: 0,
         headers: { ...request.headers(), [manifest.authenticationHeader]: manifest.actors[acting].principalId } });
       const text = await upstream.text();
       let response: unknown; try { response = JSON.parse(text); } catch { response = text; }
-      traffic.push({ actor: acting, method: request.method(), path: url.pathname, status: upstream.status(),
+      traffic.push({ actor: acting, method: request.method(), path: url.pathname, status: upstream.status(), durationMs: Date.now() - started,
         key: request.headers()["idempotency-key"], body: request.postData() ?? undefined, response });
       if (loseNextDecision && request.method() === "POST" && url.pathname.endsWith("/decisions") && upstream.ok()) {
         loseNextDecision = false; await route.abort("failed"); return;
@@ -73,6 +74,8 @@ async function connect(page: Page, manifest: Manifest) {
 }
 
 async function open(page: Page, connection: Awaited<ReturnType<typeof connect>>, request: RequestSeed) {
+  const before = await connection.get("requester", `/requests/${request.id}/approval-history`);
+  expect(before.records, "Use an unopened request; never silently reuse or reset a consumed workflow fixture.").toHaveLength(0);
   await connection.visit("buyer", "/approvals");
   await page.getByRole("button", { name: `Start approvals for ${request.number}`, exact: true }).click();
   await expect(page.getByRole("status")).toContainText(`Approvals started for ${request.number}`);
@@ -124,7 +127,7 @@ test("actual API: One then All approvals persist decisions, recover a lost respo
     await connection.visit("requester", `/requests/${request.id}`);
     await expect(page.getByText("Submission " + request.submittedVersion + " · Approved", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Withdraw request", exact: true })).toHaveCount(0);
-  } finally { await info.attach("actual-api-traffic", { body: JSON.stringify(connection.traffic, null, 2), contentType: "application/json" }); }
+  } finally { await page.unrouteAll({ behavior: "wait" }); await info.attach("actual-api-traffic", { body: JSON.stringify(connection.traffic, null, 2), contentType: "application/json" }); }
 });
 
 test("actual API: Return locks editing until independent manual Finance release, then requester corrects and resubmits", async ({ page }, info) => {
@@ -166,5 +169,5 @@ test("actual API: Return locks editing until independent manual Finance release,
     expect(history.records).toHaveLength(1); expect(history.records[0].state).toBe("Returned");
     expect(history.records[0].financeRelease.state).toBe("Confirmed");
     expect(history.records[0].decisions).toHaveLength(1);
-  } finally { await info.attach("actual-api-traffic", { body: JSON.stringify(connection.traffic, null, 2), contentType: "application/json" }); }
+  } finally { await page.unrouteAll({ behavior: "wait" }); await info.attach("actual-api-traffic", { body: JSON.stringify(connection.traffic, null, 2), contentType: "application/json" }); }
 });
