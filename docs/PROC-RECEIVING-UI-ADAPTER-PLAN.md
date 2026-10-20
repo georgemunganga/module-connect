@@ -30,3 +30,9 @@ Keep original UUID, exact body, operation, target/source and company/branch/cano
 ## Required focused tests before activation
 
 Authored client tests cover exact maximum/four-place boundaries, separate command paths, no retry after lost response, unknown-ID receipt recovery and malformed numeric output rejection. Further mocked browser coverage must exercise physical overdelivery with blocked acceptance, independent inspector/service-owner task access without receipt-view, unknown capacity/legacy rows, protected drafts, stale/denied ID navigation, exact strings, scope headers and lost-response recovery. Then a fresh restricted real backend/browser goods/service workflow must verify actual persisted effects/counters/history and replay. All runtime gates are pending.
+
+## Second source increment — list/detail and positive actions
+
+An unmounted reusable `LiveReceiving` adapter now implements the existing table/page primitives, permission-specific goods/service/task lists, scoped detail loading, separate physical/rejection/held/accepted values, server candidate actions, record/inspect/accept/certify/cancel dialogs and GET-only uncertain-outcome reconciliation. Scope/actor/purpose remounts clear stale record state; aborted callbacks cannot restore an older record. Command errors persist across the automatic authoritative refresh. Unknown outcomes retain their original key/body in actor+company+branch+target browser-lifetime memory.
+
+Granular receiving capability parsing is additive and absent keys default false. No route imports, sidebar changes or live activation are included in this increment. Draft creation/edit forms and browser scenarios remain to be authored; all unit/TypeScript/build/browser gates remain pending. This is source backup, not a complete usable receiving UI or production claim.
