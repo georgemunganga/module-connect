@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } from "../components/ui";
+import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
@@ -9,6 +9,12 @@ import {
 
 const blank = (): ReferenceDraft => ({ code: "", name: "", parentCode: null,
   expenseAccountRef: null, description: null, policyVersionId: null });
+const routes = [
+  ["Unconfigured", "Not configured"], ["DirectPurchase", "Direct purchase"],
+  ["CompetitiveSourcing", "Quotes or tender"], ["ContractRelease", "Existing contract"],
+] as const;
+const routeLabel = (value?: string) => routes.find(([code]) => code === (value ?? "Unconfigured"))?.[1] ?? "Unsupported purchase route";
+const supportedRoute = (value?: string) => routes.some(([code]) => code === (value ?? "Unconfigured"));
 const errorText = (error: unknown) => error instanceof Error ? error.message : "The setting action failed. Try again.";
 const labels: Record<ReferenceKind, { singular: string; plural: string; description: string }> = {
   categories: { singular: "category", plural: "Categories", description: "Group spending for buying rules and reports." },
@@ -48,15 +54,17 @@ export function LiveConfiguration() {
     setEditing(record ?? "new"); setError("");
     setDraft(record ? { code: record.code, name: record.name, parentCode: record.parentCode || null,
       expenseAccountRef: record.expenseAccountRef || null, description: record.description || null,
-      policyVersionId: record.policyVersionId || null } : blank());
+      policyVersionId: record.policyVersionId || null, executionRoute: record.executionRoute } : blank());
   };
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!editing) return;
     setSaving(true); setError("");
     try {
-      if (editing === "new") await createReference(companyId, kind, draft);
-      else await updateReference(companyId, kind, editing.id, editing.version, draft);
+      const payload = kind === "methods" ? { ...draft, executionRoute: draft.executionRoute ?? "Unconfigured" } : draft;
+      if (kind === "methods" && !supportedRoute(payload.executionRoute)) throw new Error("This purchase route cannot be edited here. Your existing setting has been kept.");
+      if (editing === "new") await createReference(companyId, kind, payload);
+      else await updateReference(companyId, kind, editing.id, editing.version, payload);
       setEditing(null); setRefresh((value) => value + 1);
     } catch (cause) { setError(errorText(cause)); }
     finally { setSaving(false); }
@@ -79,7 +87,7 @@ export function LiveConfiguration() {
     <Panel><div className="p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{labels[kind].plural}</h2><p className="text-sm text-muted-foreground">{labels[kind].description}</p></div><Button onClick={() => begin()}>Add {labels[kind].singular}</Button></div>
       {listError && <p role="alert" className="mb-4 text-sm text-red-600">{listError}</p>}
-      {loading ? <p role="status">Loading {labels[kind].plural.toLowerCase()}…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Code</th><th>Name</th><th>{kind === "categories" ? "Parent" : "Description"}</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td>{item.code}</td><td>{item.name}</td><td>{kind === "categories" ? item.parentCode || "—" : item.description || "—"}</td><td><Badge>{item.status}</Badge></td><td>{item.status === "Draft" ? <div className="flex gap-2"><Button variant="secondary" onClick={() => begin(item)}>Edit</Button>{readiness.permissions.includes("procurement-configuration-approve") && <Button variant="secondary" onClick={() => { setActivating(item); setEditing(null); setReviewReason(""); setError(""); }}>Review</Button>}</div> : "—"}</td></tr>)}</tbody></RecordTable></div> : <EmptyState title={`No ${labels[kind].plural.toLowerCase()} yet`} description={`Add a draft ${labels[kind].singular} for this company.`} action={<Button onClick={() => begin()}>Add {labels[kind].singular}</Button>} />}
+      {loading ? <p role="status">Loading {labels[kind].plural.toLowerCase()}…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Code</th><th>Name</th><th>{kind === "categories" ? "Parent" : "Description"}</th>{kind === "methods" && <th>Purchase route</th>}<th>Status</th><th>Action</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td>{item.code}</td><td>{item.name}</td><td>{kind === "categories" ? item.parentCode || "—" : item.description || "—"}</td>{kind === "methods" && <td>{routeLabel(item.executionRoute)}</td>}<td><Badge>{item.status}</Badge></td><td>{item.status === "Draft" ? <div className="flex gap-2"><Button variant="secondary" onClick={() => begin(item)}>Edit</Button>{readiness.permissions.includes("procurement-configuration-approve") && <Button variant="secondary" onClick={() => { setActivating(item); setEditing(null); setReviewReason(""); setError(""); }}>Review</Button>}</div> : "—"}</td></tr>)}</tbody></RecordTable></div> : <EmptyState title={`No ${labels[kind].plural.toLowerCase()} yet`} description={`Add a draft ${labels[kind].singular} for this company.`} action={<Button onClick={() => begin()}>Add {labels[kind].singular}</Button>} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
     {activating && <form onSubmit={activate}><Panel title={`Review ${activating.name}`}><div className="space-y-3 p-5">
@@ -96,7 +104,15 @@ export function LiveConfiguration() {
         <Field label="Parent category code"><Input maxLength={50} value={draft.parentCode || ""} onChange={(event) => field("parentCode", event.target.value.toUpperCase() || null)} /></Field>
         <Field label="Expense account reference"><Input maxLength={100} value={draft.expenseAccountRef || ""} onChange={(event) => field("expenseAccountRef", event.target.value || null)} /></Field>
       </> : <Field label="Description" className="sm:col-span-2"><Textarea maxLength={2000} value={draft.description || ""} onChange={(event) => field("description", event.target.value || null)} /></Field>}
-      <div className="sm:col-span-2 flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save draft"}</Button><Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button></div>
+      {kind === "methods" && <Field label="Purchase route" className="sm:col-span-2">
+        <Select value={draft.executionRoute ?? "Unconfigured"} disabled={!supportedRoute(draft.executionRoute)} onChange={(event) => field("executionRoute", event.target.value)}>
+          {!supportedRoute(draft.executionRoute) && <option value={draft.executionRoute}>Unsupported purchase route</option>}
+          {routes.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+        </Select>
+        <p className="mt-2 text-sm text-muted-foreground">Choose the next step after request approval. Saving a route does not approve spending or enable an unavailable workflow.</p>
+        {!supportedRoute(draft.executionRoute) && <p role="alert" className="mt-2 text-sm text-red-700">This purchase route cannot be edited here. Your existing setting has been kept.</p>}
+      </Field>}
+      <div className="sm:col-span-2 flex gap-3"><Button type="submit" disabled={saving || kind === "methods" && !supportedRoute(draft.executionRoute)}>{saving ? "Saving…" : "Save draft"}</Button><Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button></div>
     </div></Panel></form>}
   </div>;
 }

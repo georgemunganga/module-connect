@@ -4,7 +4,7 @@ import { procurementScopeHeaders } from "../../shared/shell-scope";
 export type ReferenceKind = "categories" | "methods";
 export type ReferenceDraft = {
   code: string; name: string; parentCode?: string | null; expenseAccountRef?: string | null;
-  description?: string | null; policyVersionId?: string | null;
+  description?: string | null; policyVersionId?: string | null; executionRoute?: string;
 };
 export type ReferenceRecord = ReferenceDraft & {
   id: string; status: string; version: number; createdAt: string;
@@ -45,7 +45,8 @@ async function call(companyId: string, kind: ReferenceKind, path: string,
 function valid(value: unknown): value is ReferenceRecord {
   return object(value) && guid.test(String(value.id)) && typeof value.code === "string"
     && typeof value.name === "string" && typeof value.status === "string"
-    && typeof value.version === "number";
+    && typeof value.version === "number"
+    && (value.executionRoute === undefined || typeof value.executionRoute === "string");
 }
 export async function listReferences(companyId: string, kind: ReferenceKind, page = 1,
   signal?: AbortSignal): Promise<ReferencePage> {
@@ -63,10 +64,16 @@ export async function getReference(companyId: string, kind: ReferenceKind,
   if (!valid(body)) throw new ConfigurationApiError(0, "The ERP returned invalid setting details.");
   return body;
 }
+function confirmRoute(kind: ReferenceKind, draft: ReferenceDraft, saved: ReferenceRecord) {
+  if (kind === "methods" && draft.executionRoute !== undefined
+    && (saved.executionRoute ?? "Unconfigured") !== draft.executionRoute)
+    throw new ConfigurationApiError(0, "The buying method was saved, but ERP did not confirm its purchase route. Refresh the list before trying again.");
+}
 export async function createReference(companyId: string, kind: ReferenceKind,
   draft: ReferenceDraft): Promise<ReferenceRecord> {
   const body = await call(companyId, kind, "", { method: "POST", body: JSON.stringify(draft) });
   if (!valid(body)) throw new ConfigurationApiError(0, "The ERP did not confirm the saved setting. Refresh before retrying.");
+  confirmRoute(kind, draft, body);
   return body;
 }
 export async function updateReference(companyId: string, kind: ReferenceKind,
@@ -75,6 +82,7 @@ export async function updateReference(companyId: string, kind: ReferenceKind,
   const body = await call(companyId, kind, `/${id}`,
     { method: "PUT", body: JSON.stringify({ version, draft }) });
   if (!valid(body)) throw new ConfigurationApiError(0, "The ERP did not confirm the setting update. Refresh before retrying.");
+  confirmRoute(kind, draft, body);
   return body;
 }
 export async function activateReference(companyId: string, kind: ReferenceKind, id: string, version: number,

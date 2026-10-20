@@ -11,9 +11,9 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "configurationDraft"]));
 type Reference = Record<string, unknown> & { id: string; code: string; name: string; version: number; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; canApprove?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; canApprove?: boolean; initialMethod?: Reference; omitMethodRoute?: boolean } = {}) {
   let category: Reference | null = null;
-  let method: Reference | null = null;
+  let method: Reference | null = options.initialMethod ?? null;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -38,6 +38,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
         if (request.method() === "POST") {
           const input = request.postDataJSON();
           const saved = { ...input, id, status: "Draft", version: 1, createdAt: "2026-10-18T00:00:00Z" };
+          if (options.omitMethodRoute && kind === "methods") delete saved.executionRoute;
           if (kind === "categories") category = saved; else method = saved;
           return json(saved, 201);
         }
@@ -137,4 +138,43 @@ test("stale configuration edit keeps entered fields", async ({ page }) => {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("alert")).toContainText("Refresh");
   await expect(page.getByLabel("Name")).toHaveValue("Revised technology");
+});
+
+
+test("buying method preserves its explicit purchase route when only its name changes", async ({ page }) => {
+  await mockErp(page, { initialMethod: { id: methodId, code: "DIRECT", name: "Direct buying", status: "Draft", version: 4, executionRoute: "DirectPurchase" } });
+  await page.goto("/procurement/workspace/settings/reference-data");
+  await page.getByRole("tab", { name: "Buying methods" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Approved direct buying");
+  const update = page.waitForRequest((request) => request.method() === "PUT" && new URL(request.url()).pathname.endsWith("/configuration/methods/" + methodId));
+  await page.getByRole("button", { name: "Save draft" }).click();
+  expect((await update).postDataJSON()).toMatchObject({ version: 4, draft: { executionRoute: "DirectPurchase", name: "Approved direct buying" } });
+  await expect(page.getByRole("cell", { name: "Direct purchase", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Purchase route", exact: true })).toContainText("Direct purchase");
+});
+
+test("unknown purchase route stays read only instead of being reset on edit", async ({ page }) => {
+  await mockErp(page, { initialMethod: { id: methodId, code: "FUTURE", name: "Future method", status: "Draft", version: 2, executionRoute: "FutureRouteV2" } });
+  await page.goto("/procurement/workspace/settings/reference-data");
+  await page.getByRole("tab", { name: "Buying methods" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Purchase route", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save draft" })).toBeDisabled();
+  await expect(page.getByRole("alert")).toContainText("existing setting has been kept");
+});
+
+test("legacy API cannot falsely confirm a chosen purchase route", async ({ page }) => {
+  await mockErp(page, { omitMethodRoute: true });
+  await page.goto("/procurement/workspace/settings/reference-data");
+  await page.getByRole("tab", { name: "Buying methods" }).click();
+  await page.getByRole("button", { name: "Add buying method" }).first().click();
+  await page.getByRole("textbox", { name: "Code", exact: true }).fill("DIRECT");
+  await page.getByLabel("Name", { exact: true }).fill("Direct buying");
+  await page.getByRole("combobox", { name: "Purchase route", exact: true }).click();
+  await page.getByRole("option", { name: "Direct purchase", exact: true }).click();
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("alert")).toContainText("ERP did not confirm its purchase route");
+  await expect(page.getByRole("combobox", { name: "Purchase route", exact: true })).toContainText("Direct purchase");
 });
