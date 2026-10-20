@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 type Actor = "buyer" | "finance" | "reader";
@@ -128,6 +128,10 @@ test("actual API: exact scoped approval limit is independently activated and rem
     expect(await unchanged.json()).toEqual(saved);
   } finally {
     await page.unrouteAll({ behavior: "wait" });
-    await info.attach("actual-settings-api-traffic", { body: JSON.stringify(connection.traffic, null, 2), contentType: "application/json" });
+    // Materialize evidence before attaching: the list reporter does not persist inline
+    // successful attachments. This synthetic fixture contains no credentials.
+    const trafficPath = info.outputPath("actual-settings-api-traffic.json");
+    writeFileSync(trafficPath, JSON.stringify(connection.traffic, null, 2) + "\n", { mode: 0o600 });
+    await info.attach("actual-settings-api-traffic", { path: trafficPath, contentType: "application/json" });
   }
 });
