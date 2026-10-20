@@ -87,3 +87,12 @@ control behavior, timeout and all application source/assets remain unchanged. Or
 trace/screenshot/context are retained. Root authorised retaining the exact staged build
 and the 14 PR plus 15 authority/method checkpoints while rerunning the PO and remaining
 policy suites. Aggregate coverage must not be described as one uninterrupted green run.
+
+The subsequent unchanged-application run passed all eight assigned-order scenarios and
+eight order execution scenarios before the new both-capabilities-disabled test expected
+the wrong fallback copy. The real application supplies `PendingLiveWorkflow` through
+its shared unavailable route and correctly showed `no sample transactions are shown
+here`, with no order API reads/actions. That test now checks the actual shared pending
+message plus zero reads/writes and no order review/create controls. Application source
+and staged hashes remain unchanged; previous successful unique cases remain checkpoints.
+Root authorised only the failed case and 29 not-yet-run scenarios to continue.

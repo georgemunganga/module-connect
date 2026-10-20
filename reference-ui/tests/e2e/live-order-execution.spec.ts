@@ -124,7 +124,11 @@ test("execution capability false preserves legacy draft buying without probing e
 });
 test("unready order capabilities do not expose demo or live execution records", async ({ page }) => {
   const evidence = await mock(page, { enabled: false, draftEnabled: false }); await page.goto(root);
-  await expect(page.getByText("No demo transactions are shown in live mode.", { exact: false })).toBeVisible(); expect(evidence.reads).toEqual([]);
+  await expect(page.getByText("This workflow is being connected to your ERP.", { exact: false })).toBeVisible();
+  await expect(page.getByText("no sample transactions are shown here.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review order", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "New order draft", exact: true })).toHaveCount(0);
+  expect(evidence.reads).toEqual([]); expect(evidence.writes).toHaveLength(0);
 });
 test("execution enabled blocks standalone legacy draft creation and edits", async ({ page }) => {
   const evidence = await mock(page, { buyerBoth: true }); await page.goto(`${root}/new`);
