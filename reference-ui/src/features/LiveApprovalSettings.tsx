@@ -15,10 +15,10 @@ export function LiveApprovalSettings({ initialAction = "PurchaseRequest.Approve"
   const context = useLiveReadiness();
   if (!context) throw new Error("Approval settings require ERP context.");
   const [tab, setTab] = useState<"steps" | "limits">("steps");
-  return <div className="space-y-5"><div role="tablist" aria-label="Purchase approval settings" className="flex gap-2 border-b border-border pb-3">
-    <Button role="tab" aria-selected={tab === "steps"} variant={tab === "steps" ? "primary" : "secondary"} onClick={() => setTab("steps")}>Approval steps</Button>
+  return <div className="space-y-5"><div role="tablist" aria-label={initialAction === "SourcingEvent.Publish" ? "Quote request publication settings" : "Purchase approval settings"} className="flex gap-2 border-b border-border pb-3">
+    <Button role="tab" aria-selected={tab === "steps"} variant={tab === "steps" ? "primary" : "secondary"} onClick={() => setTab("steps")}>{initialAction === "SourcingEvent.Publish" ? "Publication steps" : "Approval steps"}</Button>
     <Button role="tab" aria-selected={tab === "limits"} variant={tab === "limits" ? "primary" : "secondary"} onClick={() => setTab("limits")}>Approval limits</Button>
-  </div>{tab === "steps" ? context.permissions.includes("procurement-configuration-read") ? <LivePolicies key={`${context.legalEntityId}:${initialAction}`} onlyPolicyKey={initialAction === "PurchaseOrder.Approve" ? "PURCHASE_ORDER" : "PURCHASE_REQUEST"} />
+  </div>{tab === "steps" ? context.permissions.includes("procurement-configuration-read") ? <LivePolicies key={`${context.legalEntityId}:${initialAction}`} onlyPolicyKey={initialAction === "SourcingEvent.Publish" ? "SOURCING" : initialAction === "PurchaseOrder.Approve" ? "PURCHASE_ORDER" : "PURCHASE_REQUEST"} />
     : <p role="alert">You do not have access to approval step settings.</p>
     : <ApprovalLimits key={`${context.legalEntityId}:${initialAction}`} initialAction={initialAction} />}</div>;
 }

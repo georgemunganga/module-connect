@@ -5,13 +5,13 @@ const worker = "55555555-5555-4555-8555-555555555555", actor = "66666666-6666-46
 const base = "/api/procurement/v1/configuration/spending-authorities", path = "/procurement/workspace/settings/modules/purchase-requests/approvals";
 test.setTimeout(90_000);
 
-async function mockSettings(page: Page, options: { readonly?: boolean; lost?: boolean; pending?: boolean; stale?: boolean; order?: boolean; sourcing?: boolean; oldSourcingApi?: boolean; unknown?: boolean } = {}) {
+async function mockSettings(page: Page, options: { readonly?: boolean; lost?: boolean; pending?: boolean; stale?: boolean; order?: boolean; sourcing?: boolean; sourceRoute?: boolean; oldSourcingApi?: boolean; unknown?: boolean } = {}) {
   const records: Array<Record<string, unknown>> = options.readonly || options.pending || options.order || options.sourcing || options.unknown ? [{ id: grant, authorityReference: "MANAGER-LIMIT", authorityVersion: 1,
     principalId: person, principalDisplayName: "Named manager", configurationOwnerPrincipalId: actor, state: options.pending ? "PendingReview" : options.order || options.sourcing ? "Draft" : "Active", version: 1,
     action: options.sourcing ? "SourcingEvent.Publish" : options.order ? "PurchaseOrder.Approve" : "PurchaseRequest.Approve", permission: options.sourcing ? "procurement-sourcing-publish" : options.order ? "procurement-po-approve" : "procurement-approval-decide", currencyCode: "ZMW", amountBasis: options.unknown ? "Gross" : options.order || options.sourcing ? "ApprovedLineBase" : "EstimatedLineBase", maximumAmount: "99999999999999.9999", effectiveFrom: "2026-10-01T00:00:00.000Z", effectiveUntil: null,
     allBranches: false, branchRef: branch, allDepartments: true, departmentRef: null, allCategories: true, categoryCodes: [],
     allowedActions: options.readonly ? [] : options.order || options.sourcing || options.unknown ? ["Edit"] : ["Return", "Activate"], previousGrantId: null, previousVersion: null }] : [];
-  const writes: Array<{ body: Record<string, unknown>; path: string }> = [], unexpected: string[] = [], lookupActions: string[] = [];
+  const writes: Array<{ body: Record<string, unknown>; path: string }> = [], unexpected: string[] = [], lookupActions: string[] = [], policyReads: string[] = [];
   let stale = options.stale;
   await page.addInitScript(({ entityId, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })), { entityId: company, branch });
   await page.route("**/api/**", async (route) => {
@@ -27,9 +27,19 @@ async function mockSettings(page: Page, options: { readonly?: boolean; lost?: bo
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (url.pathname === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: company, workerId: worker,
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" },
-      permissions: ["procurement-access", "procurement-authority-read", ...(!options.readonly ? ["procurement-authority-configure", "procurement-authority-review"] : [])] });
+      permissions: ["procurement-access", "procurement-authority-read", ...(options.sourceRoute ? ["procurement-configuration-read", "procurement-configuration-edit"] : []), ...(!options.readonly ? ["procurement-authority-configure", "procurement-authority-review"] : [])] });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
       capabilities: Object.fromEntries(["vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft"].map((key) => [key, key === "configurationDraft"])) });
+    if (options.sourceRoute && url.pathname === "/api/procurement/v1/configuration/policies" && request.method() === "GET") {
+      policyReads.push(url.pathname + url.search);
+      // Contract fixture includes another policy type: the existing shared list must
+      // render only the exact SOURCING type on this module route, never reinterpret PR.
+      return json({ items: ["SOURCING", "PURCHASE_REQUEST"].map((policyKey, index) => ({ id: index ? actor : grant, policyKey,
+        policyVersionNumber: 1, version: 1, state: "Draft", effectiveFrom: "2026-11-01T00:00:00Z", effectiveTo: null })), total: 2, page: 1, pageSize: 100 });
+    }
+    if (options.sourceRoute && url.pathname === "/api/procurement/v1/configuration/policies/lookups/sourcing-reviewers")
+      return json({ items: [{ principalId: person, displayName: "Named manager", workerId: worker }], total: 1, offset: 0, limit: 25,
+        nextOffset: null, isAuthority: false, configurationVersion: 1 });
     if (url.pathname.startsWith(base + "/lookups/")) {
       const kind = url.pathname.split("/").at(-1); lookupActions.push(url.searchParams.get("action") ?? "");
       return json({ items: kind === "people" ? [{ principalId: person, workerId: worker, displayName: "Named manager" }]
@@ -64,7 +74,7 @@ async function mockSettings(page: Page, options: { readonly?: boolean; lost?: bo
     }
     unexpected.push(url.pathname); return json({ message: "No fixture for this endpoint" }, 404);
   });
-  return { writes, lookupActions, unexpected };
+  return { writes, lookupActions, unexpected, policyReads };
 }
 
 async function newDraft(page: Page) {
@@ -217,4 +227,27 @@ test("unknown sourcing basis remains visible with no edit or activation actions"
   await expect(page.getByRole("button", { name: "Edit draft", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Activate limit", exact: true })).toHaveCount(0);
   expect(evidence.writes).toHaveLength(0);
+});
+
+test("direct RFQ approvals settings reuse live sourcing steps and exact sourcing limits without PR fallback", async ({ page }) => {
+  const evidence = await mockSettings(page, { sourceRoute: true });
+  await page.goto("/procurement/workspace/settings/modules/request-for-quotes/approvals");
+  await expect(page.getByRole("tablist", { name: "Quote request publication settings", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Publication steps", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("cell", { name: "Sourcing publication rules", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Purchase requests", exact: true })).toHaveCount(0);
+  expect(evidence.policyReads.length).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Add buying rule draft", exact: true }).first().click();
+  await expect(page.getByRole("combobox", { name: "Use these rules for", exact: true })).toHaveText("Sourcing publication rules");
+  await expect(page.getByRole("combobox", { name: "Use these rules for", exact: true })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Requirements pack", exact: true })).toHaveText("Choose a requirement");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("tab", { name: "Approval limits", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Approval type", exact: true })).toHaveText("Request for quotes");
+  await page.getByRole("button", { name: "Add approval limit", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Person", exact: true })).toBeEnabled();
+  expect(evidence.lookupActions).toContain("SourcingEvent.Publish");
+  expect(evidence.writes).toHaveLength(0); expect(evidence.unexpected).toEqual([]);
+  await expect(page.getByRole("button", { name: "Save preview", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Save preferences|Save approval settings/i })).toHaveCount(0);
 });
