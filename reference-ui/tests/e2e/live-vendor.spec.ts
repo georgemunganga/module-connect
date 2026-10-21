@@ -11,11 +11,11 @@ const capabilities = Object.fromEntries([
 
 type Vendor = Record<string, unknown> & { id: string; version: number; displayName: string; legalName: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean; approveOnly?: boolean; qualification?: boolean } = {}) {
-  let vendor: Vendor | null = options.reviewer || options.approveOnly ? {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean; approveOnly?: boolean; qualification?: boolean; adminViewOnly?: boolean } = {}) {
+  let vendor: Vendor | null = options.reviewer || options.approveOnly || options.adminViewOnly ? {
     id: vendorId, number: "VEN-001", legalName: "Acme Zambia Ltd", displayName: "Acme",
     countryCode: "ZM", categoryCode: "OFFICE", status: "Submitted", version: 3,
-    isOrderable: false, canReturnForInformation: !options.approveOnly, canApprove: true, canReject: true,
+    isOrderable: false, canReturnForInformation: !options.approveOnly && !options.adminViewOnly, canApprove: !options.adminViewOnly, canReject: !options.adminViewOnly,
     contacts: [{ id: "44444444-4444-4444-8444-444444444444", name: "Pat Supplier" }], sites: [],
     qualifications: options.qualification ? [{ id: "66666666-6666-4666-8666-666666666666",
       qualificationType: "Tax clearance", expiresOn: "2027-12-31", reviewStatus: "Pending" }] : [],
@@ -27,13 +27,13 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: options.reviewer ? "Reviewer" : "Buyer", email: "buyer@example.test", roles: [options.reviewer ? "procurement_manager" : "procurement_buyer"] } });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: options.reviewer ? "Reviewer" : "Buyer", email: "buyer@example.test", roles: [options.adminViewOnly ? "erp_admin" : options.reviewer ? "procurement_manager" : "procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
-      permissions: options.approveOnly
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId: options.adminViewOnly ? null : workerId, adminViewOnly: options.adminViewOnly || undefined,
+      permissions: options.adminViewOnly ? ["procurement-access", "procurement-vendor-read"] : options.approveOnly
         ? ["procurement-access", "procurement-vendor-read", "procurement-vendor-approve"]
         : ["procurement-access", "procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit", "procurement-vendor-manage", "procurement-vendor-approve"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
@@ -419,4 +419,23 @@ test("reviewer can verify a submitted vendor qualification with a reason", async
   await page.getByRole("button", { name: "Verify", exact: true }).click();
   await expect(page.getByText("Verified", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Verify", exact: true })).toHaveCount(0);
+});
+
+
+test("worker-less ERP administrator can review vendors without purchasing commands", async ({ page }) => {
+  const writes: string[] = [];
+  page.on("request", request => { if (new URL(request.url()).pathname.startsWith("/api/procurement/") && request.method() !== "GET") writes.push(request.url()); });
+  await mockErp(page, { adminViewOnly: true });
+  await page.goto("/procurement/workspace/vendors");
+  await expect(page.getByRole("status").filter({ hasText: "Administrator view" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Acme", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Add vendor|New vendor/i })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Add vendor|New vendor/i })).toHaveCount(0);
+  await page.getByRole("link", { name: "Acme", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Review vendor", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Approve vendor|Reject vendor|Save vendor/i })).toHaveCount(0);
+  await page.goto("/procurement/workspace/vendors/new");
+  await expect(page.getByRole("heading", { name: "View only", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Save/i })).toHaveCount(0);
+  expect(writes).toEqual([]);
 });

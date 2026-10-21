@@ -12,6 +12,40 @@ const capabilities = {
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 
 describe("Procurement live readiness", () => {
+  it("accepts explicit ERP administrator review without inventing a worker or mutation permissions", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["erp_admin"] } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: null, adminViewOnly: true,
+        company: { id: entity, currencyCode: "ZMW" }, permissions: ["procurement-access", "procurement-vendor-read", "procurement-receipt-view", "procurement-vendor-create", "procurement-approval-decide"] }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities }));
+    const result = await fetchProcurementReadiness({ entityId: entity, branch }, undefined, fetcher);
+    expect(result.workerId).toBeNull();
+    expect(result.adminViewOnly).toBe(true);
+    expect(result.permissions).toEqual(["procurement-access", "procurement-vendor-read", "procurement-receipt-view"]);
+    expect(fetcher.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity, "X-Shell-Location": branch });
+  });
+
+  it.each([
+    { roles: ["employee"], workerId: null, adminViewOnly: true },
+    { roles: ["erp_admin"], workerId: null, adminViewOnly: false },
+    { roles: ["erp_admin"], workerId: null },
+    { roles: ["erp_admin"], workerId: worker, adminViewOnly: true },
+  ])("rejects contradictory or unconfirmed administrator context %j", async ({ roles, ...context }) => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, company: { id: entity, currencyCode: "ZMW" }, ...context }));
+    await expect(fetchProcurementReadiness({}, undefined, fetcher)).rejects.toMatchObject({ code: "invalid-response" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reinterpret a server access denial as administrator review", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["erp_admin"] } }))
+      .mockResolvedValueOnce(new Response("", { status: 403 }));
+    await expect(fetchProcurementReadiness({}, undefined, fetcher)).rejects.toMatchObject({ code: "access" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it("uses Core's selected IDs and accepts only a matching ready API scope", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))

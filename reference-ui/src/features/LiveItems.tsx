@@ -26,6 +26,7 @@ function companyId() {
 
 export function LiveItemList() {
   const company = companyId();
+  const canManage = useLiveReadiness()?.permissions.includes("procurement-item-manage") === true;
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -41,14 +42,14 @@ export function LiveItemList() {
     return () => controller.abort();
   }, [company, search, page]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Items" subtitle="Manage goods and services your company may buy." actions={<Link to="/items/new"><Button><Plus size={16} className="mr-2 inline" />Add item</Button></Link>} />
+    <PageHeader title="Items" subtitle="Manage goods and services your company may buy." actions={canManage ? <Link to="/items/new"><Button><Plus size={16} className="mr-2 inline" />Add item</Button></Link> : undefined} />
     <Panel><div className="p-5">
       <form className="mb-4 flex max-w-md gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(query.trim()); }}><Input aria-label="Search items" placeholder="Search item name or code" value={query} onChange={(event) => setQuery(event.target.value)} /><Button type="submit" variant="secondary">Search</Button></form>
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading items…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Item</th><th>Code</th><th>Type</th><th>Unit</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>{data.items.map((item) => <tr key={item.id}><td><Link className="font-medium text-primary hover:underline" to={`/items/${item.id}`}>{item.name}</Link></td><td>{item.code}</td><td>{item.kind}</td><td>{item.unitCode}</td><td><Badge>{item.status}</Badge></td><td><Link className="text-sm text-primary hover:underline" to={`/items/${item.id}`}>Open</Link></td></tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="Add your first item" description="Create a draft item before making it available for buying." action={<Link to="/items/new"><Button>Add item</Button></Link>} />}
+      </RecordTable></div> : <EmptyState title={canManage ? "Add your first item" : "No items yet"} description={canManage ? "Create a draft item before making it available for buying." : "Your company's items will appear here."} action={canManage ? <Link to="/items/new"><Button>Add item</Button></Link> : undefined} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
   </div>;

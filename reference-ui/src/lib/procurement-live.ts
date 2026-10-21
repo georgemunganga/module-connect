@@ -8,7 +8,8 @@ export type ProcurementCapability =
 export type ProcurementReadiness = {
   tenantId: string;
   legalEntityId: string;
-  workerId: string;
+  workerId: string | null;
+  adminViewOnly?: boolean;
   defaultCurrencyCode: string;
   schemaReady: boolean;
   permissions: string[];
@@ -68,7 +69,11 @@ export async function fetchProcurementReadiness(
   let context: unknown;
   try { context = await contextResponse.json(); }
   catch { throw new ProcurementLiveError("invalid-response"); }
-  if (!object(context) || !guid.test(String(context.legalEntityId)) || !guid.test(String(context.workerId))
+  const adminViewOnly = object(context) && context.adminViewOnly === true && context.workerId === null
+    && Array.isArray(authBody.user.roles) && authBody.user.roles.includes("erp_admin");
+  if (!object(context) || !guid.test(String(context.legalEntityId))
+    || (!guid.test(String(context.workerId)) && !adminViewOnly)
+    || (context.adminViewOnly === true && !adminViewOnly)
     || typeof context.tenantId !== "string" || !object(context.company)
     || context.company.id !== context.legalEntityId
     || typeof context.company.currencyCode !== "string"
@@ -92,11 +97,14 @@ export async function fetchProcurementReadiness(
   return {
     tenantId: context.tenantId,
     legalEntityId: context.legalEntityId as string,
-    workerId: context.workerId as string,
+    workerId: context.workerId as string | null,
+    adminViewOnly,
     defaultCurrencyCode: (context.company.currencyCode as string).toUpperCase(),
     schemaReady: true,
     permissions: Array.isArray(context.permissions)
-      ? context.permissions.filter((permission): permission is string => typeof permission === "string") : [],
+      ? context.permissions.filter((permission): permission is string => typeof permission === "string"
+        && (!adminViewOnly || permission === "procurement-access" || permission.endsWith("-read")
+          || permission === "procurement-receipt-view")) : [],
     capabilities: Object.fromEntries(capabilityKeys.map((key) =>
       [key, key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments"
         ? resolvedCapabilities[key] === true : resolvedCapabilities[key]])) as Record<ProcurementCapability, boolean>,

@@ -7,7 +7,7 @@ import {
 } from "react-router-dom";
 import { AppProvider } from "../lib/store";
 import { ErpShellProvider } from "../lib/erpShell";
-import { ProcurementLiveGate, isProcurementLiveMode } from "../lib/ProcurementLiveGate";
+import { ProcurementLiveGate, isProcurementLiveMode, useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/LiveVendors";
 import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
 import { LiveApprovalQueue, LiveApprovalDetail } from "../features/LiveApprovals";
@@ -59,6 +59,9 @@ function CatalogRoute({ kind }: { kind: "items" | "vendors" }) {
 }
 function PendingLiveWorkflow() {
   const location = useLocation();
+  const readiness = useLiveReadiness();
+  if (readiness?.adminViewOnly && /\/(?:new|edit)\/?$/.test(location.pathname))
+    return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">View only</h1><p className="mt-3 text-sm text-muted-foreground">You can review Procurement as an ERP administrator. Creating or changing purchasing records requires an active employee account.</p><Link className="mt-5 inline-block text-primary hover:underline" to={location.pathname.replace(/\/(?:new|edit)\/?$/, "") || "/vendors"}>Back to records</Link></div>;
   const pageName = location.pathname.split("/").filter(Boolean)[0]?.replaceAll("-", " ") || "Home";
   return <div className="p-5 sm:p-8">
     <h1 className="text-2xl font-semibold capitalize">{pageName}</h1>

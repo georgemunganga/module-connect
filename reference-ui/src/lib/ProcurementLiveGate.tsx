@@ -27,6 +27,8 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   }, [selection.entityId, selection.branch]);
 
   if (!liveMode) return <>{children}</>;
+  if (state.readiness?.adminViewOnly && /\/(?:new|edit)\/?$/.test(location.pathname) && unavailable)
+    return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{unavailable}</LiveReadiness.Provider>;
   const vendorPath = /^\/vendors(?:\/|$)/.test(location.pathname);
   const itemPath = /^\/items(?:\/|$)/.test(location.pathname);
   const approvalPath = /^\/approvals(?:\/|$)/.test(location.pathname);
@@ -50,9 +52,9 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (orderPath && state.readiness.capabilities.orderDraft)
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.capabilities.configurationDraft)))
-    return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
+    return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{children}</LiveReadiness.Provider>;
   if (state.readiness && unavailable)
-    return <LiveReadiness.Provider value={state.readiness}>{unavailable}</LiveReadiness.Provider>;
+    return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{unavailable}</LiveReadiness.Provider>;
   return <main className="flex min-h-dvh items-center justify-center bg-background px-5 text-foreground">
     <div className="w-full max-w-lg">
       <h1 className="text-2xl font-semibold">Procurement</h1>
@@ -61,4 +63,8 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
       {state.readiness ? <p className="mt-3 text-sm text-muted-foreground" role="status">Your ERP account and company are connected. Procurement transaction screens will open as their live workflows are verified. No demo transactions are shown in live mode.</p> : null}
     </div>
   </main>;
+}
+
+function AdminViewNotice({ readiness }: { readiness: ProcurementReadiness }) {
+  return readiness.adminViewOnly ? <p role="status" className="border-b border-border bg-background px-5 py-3 text-sm text-muted-foreground">Administrator view. Purchasing and approval actions require an active employee account.</p> : null;
 }
