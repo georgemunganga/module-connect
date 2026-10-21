@@ -6,7 +6,8 @@ type Context = { roles?: string[]; permissions: string[]; company: { name: strin
 type Manifest = { baseUrl: string; tenantId: string; companyId: string; branchId: string; currencyCode: string; authenticationHeader: string;
   actors: Record<Actor, { principalId: string; workerId: string; context: Context }>;
   sourcingAuthority: { authorityReference: string; principalId: string; principalDisplayName: string; maximumAmount: string;
-    currencyCode: string; branchId: string; expectedAction: string; amountBasis: string; activationReason: string } };
+    currencyCode: string; branchId: string; expectedAction: string; amountBasis: string; activationReason: string;
+    effectiveFrom: string; effectiveUntil: null } };
 type Traffic = { actor: Actor; method: string; path: string; query: string; status: number; body: string | null; rawResponse: string };
 const base = "/api/procurement/v1/configuration/spending-authorities";
 const settings = "/procurement/workspace/settings/modules/request-for-quotes/approvals";
@@ -23,6 +24,7 @@ function manifest(): Manifest {
     || seed.authorityReference !== "BROWSER-SOURCING-LIMIT" || seed.principalDisplayName !== "manager2" || seed.maximumAmount !== "1.2345"
     || seed.currencyCode !== "ZMW" || seed.branchId !== value.branchId || seed.expectedAction !== "SourcingEvent.Publish" || seed.amountBasis !== "ApprovedLineBase"
     || seed.activationReason !== "Browser independent sourcing limit approved"
+    || !Number.isFinite(Date.parse(seed.effectiveFrom)) || Date.parse(seed.effectiveFrom) >= Date.now() || seed.effectiveUntil !== null
     || ![value.companyId, value.branchId, seed.principalId, value.actors.maker?.principalId, value.actors.reviewer?.principalId,
       value.actors.maker?.workerId, value.actors.reviewer?.workerId].every(id => typeof id === "string" && guid.test(id)))
     throw new Error("Refusing non-synthetic or incomplete sourcing authority fixture.");
@@ -81,6 +83,9 @@ test("actual RFQ settings create a finite branch limit and independently activat
     await expect(page.getByLabel("Company currency", { exact: true })).toHaveValue("ZMW");
     await expect(page.getByLabel("Approval use", { exact: true })).toHaveValue("Request for quotes");
     await page.getByLabel("Maximum amount", { exact: true }).fill(seed.maximumAmount);
+    const starts = new Date(seed.effectiveFrom);
+    await page.getByLabel("Starts", { exact: true }).fill(new Date(starts.getTime() - starts.getTimezoneOffset() * 60_000).toISOString().slice(0, 23));
+    await expect(page.getByLabel("Ends (optional)", { exact: true })).toHaveValue("");
     for (const name of ["All departments", "All categories"]) {
       await page.getByRole("switch", { name, exact: true }).click();
       await expect(page.getByRole("switch", { name, exact: true })).toHaveAttribute("aria-checked", "true");
@@ -106,10 +111,12 @@ test("actual RFQ settings create a finite branch limit and independently activat
     const activatedReply = page.waitForResponse(response => new URL(response.url()).pathname === `${base}/${saved.id}/activate`);
     await dialog.getByRole("button", { name: "Activate limit", exact: true }).click();
     const activated = await activatedReply; expect(activated.status(), await activated.text()).toBe(200);
-    expect(await activated.json()).toMatchObject({ id: saved.id, version: 3, state: "Active", maximumAmount: seed.maximumAmount,
+    const active = await activated.json() as { effectiveFrom: string; effectiveUntil: null };
+    expect(active).toMatchObject({ id: saved.id, version: 3, state: "Active", maximumAmount: seed.maximumAmount,
       principalId: seed.principalId, principalDisplayName: seed.principalDisplayName, action: seed.expectedAction,
       permission: "procurement-sourcing-publish", amountBasis: seed.amountBasis, currencyCode: "ZMW", branchRef: fixture.branchId,
       allBranches: false, allDepartments: true, allCategories: true });
+    expect(Date.parse(active.effectiveFrom)).toBe(Date.parse(seed.effectiveFrom)); expect(active.effectiveUntil).toBeNull();
     await connection.visit("reviewer"); await expect(row().getByText("Active", { exact: true })).toBeVisible();
     await expect(row().getByRole("cell", { name: "manager2", exact: true })).toBeVisible();
     await expect(row().getByRole("cell", { name: "ZMW 1.2345", exact: true })).toBeVisible();

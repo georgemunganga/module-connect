@@ -15,6 +15,7 @@ Existing `baseUrl` is loopback HTTP 127.0.0.1 with a port; `tenantId: probe`, `c
 - `maximumAmount: "1.2345"`, `currencyCode: ZMW`, `branchId`: selected fixture branch
 - `expectedAction: SourcingEvent.Publish`, `amountBasis: ApprovedLineBase`
 - `activationReason: Browser independent sourcing limit approved`
+- `effectiveFrom`: yesterday UTC midnight, `effectiveUntil: null`; the test explicitly fills the existing local datetime control with that same instant and checks its round-trip.
 
 The fixture starts without an authority, policy, request or operational RFQ effect for this workflow. Its backend owner verifier must check exactly one grant at version3/Active, original named identity, amount/currency/branch scope, independent activation and retained audit, plus unchanged other Procurement/Core approval tables. Browser assertions do not replace owner verification.
 
