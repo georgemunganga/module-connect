@@ -32,12 +32,18 @@ export type PolicyPreview = {
     budgetReservation: string | null; sourcingMethodCode: string | null;
     minimumQuoteCount: number | null;
     approvalStages: Array<{ code: string; assignee: string; mode: string }>;
-    issues: PolicyIssue[] };
+    issues: PolicyIssue[];
+    controls?: { minimumQuoteCount: number; minimumInvitedSuppliers: number; requirementsPackRequired: boolean; evaluationCriteriaRequired: boolean; closingDateRequired: boolean };
+    stages?: Array<{ stage: { code: string; assignee: string; mode: string }; principalIds: string[] }>; canPublish?: false };
 };
 
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
+
+export class PolicyApiError extends Error {
+  constructor(message: string, readonly status: number, readonly unconfirmed = false) { super(message); this.name = "PolicyApiError"; }
+}
 
 async function call(companyId: string, path: string, init: RequestInit = {}): Promise<unknown> {
   if (!guid.test(companyId)) throw new Error("Choose an ERP company before editing buying rules.");
@@ -48,19 +54,19 @@ async function call(companyId: string, path: string, init: RequestInit = {}): Pr
   try {
     response = await fetch(`/api/procurement/v1/configuration/policies${path}`,
       { ...init, headers, credentials: "include", cache: "no-store" });
-  } catch { throw new Error("Buying rules are unavailable. Your changes were not confirmed."); }
+  } catch { throw new PolicyApiError("Buying rules are unavailable. Your changes were not confirmed.", 0, init.method != null && init.method !== "GET"); }
   if (!response.ok) {
     let message = "";
     try {
       const body: unknown = await response.json();
       if (object(body)) message = String(body.message ?? body.detail ?? "");
     } catch { /* Fall back to a safe status message. */ }
-    throw new Error(response.status === 401 ? "Sign in to ERP to manage buying rules."
+    throw new PolicyApiError(response.status === 401 ? "Sign in to ERP to manage buying rules."
       : response.status === 403 ? "You do not have access to buying rules for this company."
-        : message || (response.status === 409 ? "This draft changed. Refresh it before saving." : "The buying rule action failed."));
+        : message || (response.status === 409 ? "This draft changed. Refresh it before saving." : "The buying rule action failed."), response.status, response.status >= 500 && init.method != null && init.method !== "GET");
   }
   try { return await response.json() as unknown; }
-  catch { throw new Error("ERP returned an invalid buying rule response."); }
+  catch { throw new PolicyApiError("ERP returned an invalid buying rule response.", response.status, init.method != null && init.method !== "GET"); }
 }
 
 function validRecord(value: unknown): value is PolicyRecord {
@@ -135,11 +141,27 @@ export async function decidePolicy(companyId: string, id: string, version: numbe
     throw new Error("ERP did not confirm the policy decision. Refresh before retrying.");
   return body;
 }
-export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER"):
+export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING"):
   Promise<{ status: string; isAuthority: false; policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null }> {
   const body = await call(companyId, `/effective?key=${key}`);
   if (!object(body) || typeof body.status !== "string" || body.isAuthority !== false)
     throw new Error("ERP returned an invalid current-policy status.");
   return body as { status: string; isAuthority: false;
     policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null };
+}
+
+
+export type SourcingReviewerPage = { items: Array<{ principalId: string; displayName: string; workerId: string }>;
+  total: number; offset: number; limit: number; nextOffset: number | null; isAuthority: false; configurationVersion: 1 };
+export async function lookupSourcingReviewers(companyId: string, search: string, offset: number, signal?: AbortSignal): Promise<SourcingReviewerPage> {
+  if (search.trim().length > 100 || !Number.isInteger(offset) || offset < 0) throw new Error("Use a shorter name search and a valid page.");
+  const body = await call(companyId, `/lookups/sourcing-reviewers?${new URLSearchParams({ search: search.trim(), offset: String(offset), limit: "25" })}`, { signal });
+  if (!object(body) || !Array.isArray(body.items) || body.items.length > 50 || body.isAuthority !== false || body.configurationVersion !== 1
+    || body.items.some(item => !object(item) || !guid.test(String(item.principalId)) || !guid.test(String(item.workerId)) || typeof item.displayName !== "string")
+    || !Number.isInteger(body.total) || !Number.isInteger(body.offset) || !Number.isInteger(body.limit)
+    || Number(body.total) < 0 || Number(body.offset) < 0 || Number(body.limit) < 1 || Number(body.limit) > 50
+    || body.nextOffset !== null && (!Number.isInteger(body.nextOffset) || Number(body.nextOffset) <= Number(body.offset))
+    || new Set(body.items.map(item => object(item) ? item.principalId : "")).size !== body.items.length)
+    throw new Error("ERP returned an invalid sourcing reviewer list.");
+  return body as SourcingReviewerPage;
 }

@@ -1,11 +1,19 @@
+import { boundedNonnegativeDecimal } from "../../../src/platform/procurement-invoice-exact";
+import { parseFinancialJson } from "../../../src/platform/procurement-invoice-json";
+
 export type RuleRow = {
   code: string; priority: number; minimum: string; maximum: string;
   categoryCodes: string; purchaseType: string; budget: "Required" | "ExceptionReview";
-  method: string; quotes: string; stages: Array<{ code: string; assignee: string; mode: "One" | "All" }>;
+  method: string; quotes: string; stages: Array<{ code: string; assignee: string; mode: "" | "One" | "All"; principalIds?: string[] }>;
+  sourcing?: { quotes: string; invited: string; pack: boolean | null; criteria: boolean | null; deadline: boolean | null; companyWide: boolean | null };
 };
 export const approvalAssigneesForPolicy = (key: string): readonly string[] => key === "PURCHASE_REQUEST"
   ? ["LineManager", "ProcurementManager"] : key === "PURCHASE_ORDER" ? ["ProcurementManager"] : [];
-export const emptyRule = (key = "PURCHASE_REQUEST"): RuleRow => ({ code: "DEFAULT", priority: 0, minimum: "", maximum: "",
+export const emptyRule = (key = "PURCHASE_REQUEST"): RuleRow => key === "SOURCING" ? {
+  code: "DEFAULT", priority: 0, minimum: "", maximum: "", categoryCodes: "", purchaseType: "", budget: "Required", method: "", quotes: "",
+  stages: [{ code: "PUBLICATION", assignee: "ProcurementManager", mode: "", principalIds: [] }],
+  sourcing: { quotes: "", invited: "", pack: null, criteria: null, deadline: null, companyWide: null },
+} : ({ code: "DEFAULT", priority: 0, minimum: "", maximum: "",
   categoryCodes: "", purchaseType: "", budget: "Required", method: "", quotes: "",
   stages: [{ code: key === "PURCHASE_ORDER" ? "COMMERCIAL" : "NEED", assignee: key === "PURCHASE_ORDER" ? "ProcurementManager" : "LineManager", mode: "One" }] });
 const codes = (value: string) => value.split(",").map((part) => part.trim().toUpperCase()).filter(Boolean);
@@ -13,6 +21,7 @@ const onlyKeys = (value: Record<string, unknown>, allowed: string[]) =>
   Object.keys(value).every((name) => allowed.includes(name));
 
 export function toRuleJson(key: string, currency: string, rows: RuleRow[]): string {
+  if (key === "SOURCING") return toSourcingJson(currency, rows);
   const assignees = approvalAssigneesForPolicy(key);
   if (!assignees.length) throw new Error("This purchase type is not supported by the editor. Keep its rules read-only.");
   const header = JSON.stringify({ schemaVersion: 1,
@@ -73,6 +82,7 @@ function parseExactThresholds(json: string): Record<string, unknown> {
 }
 
 export function fromRuleJson(json: string, key: string, currency: string): RuleRow[] | null {
+  if (key === "SOURCING") return fromSourcingJson(json, currency);
   try {
     const assignees = approvalAssigneesForPolicy(key);
     if (!assignees.length) return null;
@@ -115,3 +125,100 @@ export function fromRuleJson(json: string, key: string, currency: string): RuleR
   } catch { return null; }
 }
 
+
+
+const canonicalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const policyCode = /^[A-Z0-9_]{1,100}$/;
+const keysExactly = (row: Record<string, unknown>, keys: string[]) => Object.keys(row).sort().join("|") === [...keys].sort().join("|");
+const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+const boundedInteger = (value: string, max: number) => {
+  if (!/^\d+$/.test(value) || Number(value) > max) throw new Error(`Choose a whole number from 0 to ${max}.`);
+  return Number(value);
+};
+
+function toSourcingJson(currency: string, rows: RuleRow[]): string {
+  if (!/^[A-Z]{3}$/.test(currency) || !rows.length || rows.length > 100) throw new Error("Choose a company currency and one to 100 rules.");
+  if (new Set(rows.flatMap(row => row.stages.flatMap(stage => stage.principalIds ?? []))).size > 100) throw new Error("Use at most 100 distinct named reviewers in a policy version.");
+  const rules = rows.map(row => {
+    const controls = row.sourcing;
+    if (!controls || controls.companyWide !== true || controls.pack == null || controls.criteria == null || controls.deadline == null)
+      throw new Error("Choose every sourcing control and the company-wide branch scope explicitly.");
+    if (!policyCode.test(row.code) || !Number.isInteger(row.priority) || row.priority < 0 || row.priority > 100000
+      || !row.stages.length || row.stages.length > 20 || new Set(row.stages.map(s => s.code)).size !== row.stages.length)
+      throw new Error("Check the rule code, priority and ordered review steps.");
+    const stages = row.stages.map(stage => {
+      const ids = stage.principalIds ?? [];
+      if (stage.assignee !== "ProcurementManager" || !["One", "All"].includes(stage.mode) || !policyCode.test(stage.code)
+        || !ids.length || ids.length > 100 || ids.some(id => !canonicalId.test(id)) || new Set(ids).size !== ids.length)
+        throw new Error("Choose named reviewers and an explicit One or All decision rule for each step.");
+      return { code: stage.code, assignee: stage.assignee, mode: stage.mode, principalIds: ids };
+    });
+    const categoryCodes = codes(row.categoryCodes);
+    if (categoryCodes.some(code => !policyCode.test(code))) throw new Error("Use valid category codes.");
+    const conditions = JSON.stringify({ categoryCodes, purchaseTypes: row.purchaseType ? [row.purchaseType] : [], branchIds: [] });
+    const result = JSON.stringify({ publication: { minimumQuoteCount: boundedInteger(controls.quotes, 20),
+      minimumInvitedSuppliers: boundedInteger(controls.invited, 100), requirementsPackRequired: controls.pack,
+      evaluationCriteriaRequired: controls.criteria, closingDateRequired: controls.deadline }, approvalStages: stages });
+    return `${JSON.stringify({ code: row.code, priority: row.priority }).slice(0,-1)},"when":{"minimumAmountInclusive":${row.minimum ? exactPolicyAmount(row.minimum) : "null"},"maximumAmountExclusive":${row.maximum ? exactPolicyAmount(row.maximum) : "null"},${conditions.slice(1)},"result":${result}}`;
+  });
+  if (new Set(rows.map(row => row.code)).size !== rows.length) throw new Error("Use a different code for each rule.");
+  const header = JSON.stringify({ schemaVersion: 1, policyKey: "SOURCING", transactionType: "SourcingPublication",
+    action: "SourcingEvent.Publish", permission: "procurement-sourcing-publish", currencyCode: currency, amountBasis: "ApprovedLineBase" });
+  const json = `${header.slice(0,-1)},"rules":[${rules.join(",")}]}`;
+  if (new TextEncoder().encode(json).byteLength > 65536) throw new Error("Keep the policy definition within 64 KB.");
+  return json;
+}
+
+function fromSourcingJson(json: string, currency: string): RuleRow[] | null {
+  try {
+    if (new TextEncoder().encode(json).byteLength > 65536) return null;
+    // Reuse the existing bounded lexer for duplicate-property rejection, then the existing exact threshold decoder.
+    parseFinancialJson(json, new Map());
+    const doc = parseExactThresholds(json);
+    if (!keysExactly(doc, ["schemaVersion","policyKey","transactionType","action","permission","currencyCode","amountBasis","rules"])
+      || doc.schemaVersion !== 1 || doc.policyKey !== "SOURCING" || doc.transactionType !== "SourcingPublication"
+      || doc.action !== "SourcingEvent.Publish" || doc.permission !== "procurement-sourcing-publish"
+      || doc.amountBasis !== "ApprovedLineBase" || doc.currencyCode !== currency || !Array.isArray(doc.rules)) return null;
+    const result = doc.rules.map((value): RuleRow => {
+      if (!record(value) || !keysExactly(value,["code","priority","when","result"]) || !record(value.when) || !record(value.result)) throw new Error("Unknown rule");
+      const when = value.when, output = value.result;
+      if (!keysExactly(when,["minimumAmountInclusive","maximumAmountExclusive","categoryCodes","purchaseTypes","branchIds"])
+        || !keysExactly(output,["publication","approvalStages"]) || !record(output.publication)
+        || !Array.isArray(output.approvalStages) || !Array.isArray(when.branchIds) || when.branchIds.length
+        || !Array.isArray(when.categoryCodes) || when.categoryCodes.some(c => typeof c !== "string" || !policyCode.test(c))
+        || !Array.isArray(when.purchaseTypes) || when.purchaseTypes.length > 1
+        || when.purchaseTypes.some(p => !["GOODS","SERVICES","ASSETS","SUBSCRIPTIONS"].includes(String(p)))) throw new Error("Unsupported conditions");
+      const controls = output.publication;
+      if (!keysExactly(controls,["minimumQuoteCount","minimumInvitedSuppliers","requirementsPackRequired","evaluationCriteriaRequired","closingDateRequired"])
+        || typeof controls.minimumQuoteCount !== "number" || !Number.isInteger(controls.minimumQuoteCount)
+        || typeof controls.minimumInvitedSuppliers !== "number" || !Number.isInteger(controls.minimumInvitedSuppliers)
+        || typeof controls.requirementsPackRequired !== "boolean" || typeof controls.evaluationCriteriaRequired !== "boolean"
+        || typeof controls.closingDateRequired !== "boolean" || typeof value.code !== "string" || typeof value.priority !== "number") throw new Error("Unknown controls");
+      const stages = output.approvalStages.map(stage => {
+        if (!record(stage) || !keysExactly(stage,["code","assignee","mode","principalIds"]) || typeof stage.code !== "string"
+          || stage.assignee !== "ProcurementManager" || !["One","All"].includes(String(stage.mode))
+          || !Array.isArray(stage.principalIds) || stage.principalIds.some(id => typeof id !== "string")) throw new Error("Unknown reviewers");
+        return { code: stage.code, assignee: stage.assignee, mode: stage.mode as "One"|"All", principalIds: stage.principalIds as string[] };
+      });
+      return { ...emptyRule("SOURCING"), code: value.code, priority: value.priority,
+        minimum: when.minimumAmountInclusive == null ? "" : String(when.minimumAmountInclusive),
+        maximum: when.maximumAmountExclusive == null ? "" : String(when.maximumAmountExclusive),
+        categoryCodes: when.categoryCodes.join(", "), purchaseType: String(when.purchaseTypes[0] ?? ""), stages,
+        sourcing: { quotes: String(controls.minimumQuoteCount), invited: String(controls.minimumInvitedSuppliers),
+          pack: controls.requirementsPackRequired, criteria: controls.evaluationCriteriaRequired, deadline: controls.closingDateRequired, companyWide: true } };
+    });
+    toSourcingJson(currency, result); // Reject out-of-bounds/unknown semantics rather than rewriting them on Save.
+    return result;
+  } catch { return null; }
+}
+
+
+/** Sample transport is legacy numeric JSON: reject values that would change through Number, never round saved rules. */
+export function exactPolicySample(raw: string, sourcing: boolean): number {
+  const normalize = (value: string) => sourcing ? boundedNonnegativeDecimal(value, 38, 8) : exactPolicyAmount(value);
+  try {
+    const exact = normalize(raw), numeric = Number(exact);
+    if (normalize(JSON.stringify(numeric)) !== exact) throw new Error("Rounded sample");
+    return numeric;
+  } catch { throw new Error("This sample amount cannot be sent without changing its value. Your saved rules remain unchanged."); }
+}
