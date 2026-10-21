@@ -5,12 +5,12 @@ const worker = "55555555-5555-4555-8555-555555555555", actor = "66666666-6666-46
 const base = "/api/procurement/v1/configuration/spending-authorities", path = "/procurement/workspace/settings/modules/purchase-requests/approvals";
 test.setTimeout(90_000);
 
-async function mockSettings(page: Page, options: { readonly?: boolean; lost?: boolean; pending?: boolean; stale?: boolean; order?: boolean; unknown?: boolean } = {}) {
-  const records: Array<Record<string, unknown>> = options.readonly || options.pending || options.order || options.unknown ? [{ id: grant, authorityReference: "MANAGER-LIMIT", authorityVersion: 1,
-    principalId: person, principalDisplayName: "Named manager", configurationOwnerPrincipalId: actor, state: options.pending ? "PendingReview" : options.order ? "Draft" : "Active", version: 1,
-    action: options.order ? "PurchaseOrder.Approve" : "PurchaseRequest.Approve", permission: options.order ? "procurement-po-approve" : "procurement-approval-decide", currencyCode: "ZMW", amountBasis: options.unknown ? "Gross" : options.order ? "ApprovedLineBase" : "EstimatedLineBase", maximumAmount: "99999999999999.9999", effectiveFrom: "2026-10-01T00:00:00.000Z", effectiveUntil: null,
+async function mockSettings(page: Page, options: { readonly?: boolean; lost?: boolean; pending?: boolean; stale?: boolean; order?: boolean; sourcing?: boolean; oldSourcingApi?: boolean; unknown?: boolean } = {}) {
+  const records: Array<Record<string, unknown>> = options.readonly || options.pending || options.order || options.sourcing || options.unknown ? [{ id: grant, authorityReference: "MANAGER-LIMIT", authorityVersion: 1,
+    principalId: person, principalDisplayName: "Named manager", configurationOwnerPrincipalId: actor, state: options.pending ? "PendingReview" : options.order || options.sourcing ? "Draft" : "Active", version: 1,
+    action: options.sourcing ? "SourcingEvent.Publish" : options.order ? "PurchaseOrder.Approve" : "PurchaseRequest.Approve", permission: options.sourcing ? "procurement-sourcing-publish" : options.order ? "procurement-po-approve" : "procurement-approval-decide", currencyCode: "ZMW", amountBasis: options.unknown ? "Gross" : options.order || options.sourcing ? "ApprovedLineBase" : "EstimatedLineBase", maximumAmount: "99999999999999.9999", effectiveFrom: "2026-10-01T00:00:00.000Z", effectiveUntil: null,
     allBranches: false, branchRef: branch, allDepartments: true, departmentRef: null, allCategories: true, categoryCodes: [],
-    allowedActions: options.readonly ? [] : options.order || options.unknown ? ["Edit"] : ["Return", "Activate"], previousGrantId: null, previousVersion: null }] : [];
+    allowedActions: options.readonly ? [] : options.order || options.sourcing || options.unknown ? ["Edit"] : ["Return", "Activate"], previousGrantId: null, previousVersion: null }] : [];
   const writes: Array<{ body: Record<string, unknown>; path: string }> = [], unexpected: string[] = [], lookupActions: string[] = [];
   let stale = options.stale;
   await page.addInitScript(({ entityId, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })), { entityId: company, branch });
@@ -36,17 +36,17 @@ async function mockSettings(page: Page, options: { readonly?: boolean; lost?: bo
         : kind === "branches" ? [{ id: branch, name: "Main branch", code: "MAIN" }] : [], offset: 0, limit: 25, nextOffset: null });
     }
     if (url.pathname === base && request.method() === "GET") {
-      const action = url.searchParams.get("action") ?? "PurchaseRequest.Approve";
+      const action = options.oldSourcingApi ? "PurchaseRequest.Approve" : url.searchParams.get("action") ?? "PurchaseRequest.Approve";
       const filtered = records.filter((record) => record.action === action);
       return json({ items: filtered, total: filtered.length, page: 1, pageSize: 25,
         currentActorPrincipalId: actor, canCreate: !options.readonly, createAction: action,
-        createAmountBasis: action === "PurchaseOrder.Approve" ? "ApprovedLineBase" : "EstimatedLineBase",
+        createAmountBasis: action === "PurchaseOrder.Approve" || action === "SourcingEvent.Publish" ? "ApprovedLineBase" : "EstimatedLineBase",
         scope: { branchId: branch, departmentId: null, confined: false } });
     }
     if (url.pathname === base && request.method() === "POST") {
       const body = request.postDataJSON(); writes.push({ body, path: url.pathname });
       records.push({ ...body.draft, action: body.action, id: grant, authorityReference: body.authorityReference, principalId: body.principalId,
-        authorityVersion: 1, permission: body.action === "PurchaseOrder.Approve" ? "procurement-po-approve" : "procurement-approval-decide", principalDisplayName: "Named manager", configurationOwnerPrincipalId: actor,
+        authorityVersion: 1, permission: body.action === "SourcingEvent.Publish" ? "procurement-sourcing-publish" : body.action === "PurchaseOrder.Approve" ? "procurement-po-approve" : "procurement-approval-decide", principalDisplayName: "Named manager", configurationOwnerPrincipalId: actor,
         state: "Draft", version: 1, allowedActions: ["Edit"], previousGrantId: null, previousVersion: null });
       if (options.lost) return route.abort("failed");
       return json(records[0], 201);
@@ -164,5 +164,57 @@ test("an unknown historical authority basis remains visible and read-only", asyn
   await expect(page.getByRole("cell", { name: "Unsupported type — read-only", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit draft", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Create new version", exact: true })).toHaveCount(0);
+  expect(evidence.writes).toHaveLength(0);
+});
+
+async function sourcingLimits(page: Page) {
+  await page.goto(path);
+  await page.getByRole("tab", { name: "Approval limits", exact: true }).click();
+  await page.getByRole("combobox", { name: "Approval type", exact: true }).click();
+  await page.getByRole("option", { name: "Request for quotes", exact: true }).click();
+}
+
+test("sourcing limit reuses the existing named-person form with exact money and no publication command", async ({ page }) => {
+  const evidence = await mockSettings(page); await sourcingLimits(page);
+  await expect(page.getByText("Setting a limit does not publish a request for quotes", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Add approval limit", exact: true }).click();
+  await expect(page.getByLabel("Approval use", { exact: true })).toHaveValue("Request for quotes");
+  await page.getByLabel("Limit reference", { exact: true }).fill("RFQ-LIMIT");
+  await page.getByRole("combobox", { name: "Person", exact: true }).click();
+  await page.getByRole("option", { name: "Named manager", exact: true }).click();
+  await page.getByLabel("Maximum amount").fill("99999999999999.9999");
+  await page.getByRole("button", { name: "Save limit draft", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Draft saved" })).toBeVisible();
+  expect(evidence.writes).toHaveLength(1);
+  expect(evidence.writes[0]).toMatchObject({ path: base, body: { action: "SourcingEvent.Publish", draft: { amountBasis: "ApprovedLineBase", maximumAmount: "99999999999999.9999", currencyCode: "ZMW", branchRef: branch } } });
+  expect(evidence.lookupActions).toContain("SourcingEvent.Publish"); expect(evidence.unexpected).toEqual([]);
+  await expect(page.getByRole("button", { name: "Publish", exact: true })).toHaveCount(0);
+});
+
+test("sourcing edit keeps the original action and basis without replacing identity", async ({ page }) => {
+  const evidence = await mockSettings(page, { sourcing: true }); await sourcingLimits(page);
+  await page.getByRole("button", { name: "Edit draft", exact: true }).click();
+  await expect(page.getByLabel("Person", { exact: true })).toHaveAttribute("readonly", "");
+  await page.getByLabel("Maximum amount").fill("123.4567");
+  await page.getByRole("button", { name: "Save limit draft", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Draft saved" })).toBeVisible();
+  expect(evidence.writes).toHaveLength(1);
+  expect(evidence.writes[0].body).toMatchObject({ version: 1, draft: { amountBasis: "ApprovedLineBase", maximumAmount: "123.4567" } });
+  expect(evidence.writes[0].body).not.toHaveProperty("action");
+  expect(evidence.writes[0].body).not.toHaveProperty("principalId");
+});
+
+test("an older authority API cannot enable sourcing mutations by ignoring its filter", async ({ page }) => {
+  const evidence = await mockSettings(page, { oldSourcingApi: true }); await sourcingLimits(page);
+  await expect(page.getByRole("alert")).toContainText("current API contract");
+  await expect(page.getByRole("button", { name: "Add approval limit", exact: true })).toHaveCount(0);
+  expect(evidence.writes).toHaveLength(0);
+});
+
+test("unknown sourcing basis remains visible with no edit or activation actions", async ({ page }) => {
+  const evidence = await mockSettings(page, { sourcing: true, unknown: true }); await sourcingLimits(page);
+  await expect(page.getByRole("cell", { name: "Unsupported type — read-only", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit draft", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Activate limit", exact: true })).toHaveCount(0);
   expect(evidence.writes).toHaveLength(0);
 });
