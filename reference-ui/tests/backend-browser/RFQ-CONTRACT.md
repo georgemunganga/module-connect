@@ -100,3 +100,8 @@ active holds, conserved original source counters/quantity, unchanged immutable P
 Finance and Core evidence, and no PO/receipt/invoice/Finance/stock effects. Browser
 traffic alone is not independent persisted owner proof. No production deployment,
 production capability enablement or award-to-PO readiness is implied.
+
+
+## First actual run — retained synchronization failure
+
+Private20261021_072223 on unchanged applicationda00853 reached actual creation/detail/list and cancellation. The test asserted the completed traffic count as soon as the recovery panel appeared, while the real cancellation response was still pending. It failed1/1. Final retained traffic independently shows exactly Create201 and Cancel200 (response dropped), and graceful shutdown/fresh owner verification passed with exact conserved state. This does not make the failed browser test PASS: GET recovery was not completed. The test now waits for its real forwarded Cancel200/drop marker before checking exact traffic; no sleep, response fabrication, repeated POST or application change. Retained trace/screenshots/logs/traffic and both process codes remain; corrected proof requires a fresh private fixture using the same frozen application assets.

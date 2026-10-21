@@ -103,6 +103,10 @@ test("actual RFQ API preserves exact G29 partial hold and cancels through GET-on
     await page.getByRole("textbox", { name: "Reason", exact: true }).fill(reason);
     await page.getByRole("button", { name: "Cancel draft and release its quantities", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+    // The recovery panel is visible while transport is pending too. Wait for the
+    // real owner's completed200 before asserting that its response was dropped.
+    await expect.poll(() => traffic.filter(row => row.method === "POST" && row.path === `${root}/sourcing/${saved.eventId}/source-cancel`
+      && row.status === 200 && row.droppedAfterOwnerResponse)).toHaveLength(1);
     const posts = traffic.filter(row => row.method !== "GET"); expect(posts).toHaveLength(2);
     expect(posts[0]).toMatchObject({ method: "POST", path: `${root}/sourcing/from-approved-sources`, status: 201 });
     expect(posts[1]).toMatchObject({ method: "POST", path: `${root}/sourcing/${saved.eventId}/source-cancel`, status: 200, droppedAfterOwnerResponse: true });
