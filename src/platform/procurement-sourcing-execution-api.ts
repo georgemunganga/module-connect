@@ -1,5 +1,5 @@
 import { procurementScopeHeaders } from "../../shared/shell-scope";
-import { invoiceDecimal } from "./procurement-invoice-exact";
+import { boundedNonnegativeDecimal, invoiceDecimal } from "./procurement-invoice-exact";
 
 /** Governed internal RFQ holds only; publication/award/payment are not implied. */
 export type RfqSource = { purchaseRequestId: string; purchaseRequestLineId: string; requestNumber: string; state: "Available" | "FullyAllocated" | "Unavailable";
@@ -24,8 +24,13 @@ const positive = (v: unknown): v is number => int(v) && v > 0;
 const text = (v: unknown): v is string => typeof v === "string";
 const sha = (v: unknown): v is string => text(v) && /^[a-f0-9]{64}$/.test(v);
 const nullableId = (v: unknown): v is string | null => v === null || id(v);
-const exact = (v: unknown): v is string => text(v) && /^(?:0|[1-9]\d{0,37})(?:\.\d{1,8})?$/.test(v);
 const invalid = () => new RfqExecutionError(0, "ERP did not confirm the quote information. Refresh or check the saved result before continuing.");
+/** Server G29 strings may use exponents. Normalize through existing bounded exact
+ * decimal helpers before DTO/UI use; never coerce JSON financial numbers. */
+function projectionDecimal(value: unknown, calculated = false): string {
+  try { return calculated ? boundedNonnegativeDecimal(value, 38, 8) : invoiceDecimal(value); }
+  catch { throw invalid(); }
+}
 export function rfqQuantity(value: string): string {
   try { const result = invoiceDecimal(value); if (result === "0") throw invalid(); return result; }
   catch { throw new RfqExecutionError(0, "Enter a quantity greater than zero, with up to four decimal places."); }
@@ -62,15 +67,15 @@ function sourceRow(row: unknown): RfqSource {
   if (!(row.state === "Available" || row.state === "FullyAllocated") || row.canSelect !== (row.state === "Available")
     || !Object.prototype.hasOwnProperty.call(row, "branchRef") || !nullableId(row.branchRef)
     || !text(row.description) || !text(row.unitCode) || !(row.categoryCode === null || text(row.categoryCode))
-    || !positive(row.expectedRequestVersion) || !positive(row.sourceLineVersion) || !exact(row.availableQuantity) || !exact(row.approvedUnitEstimate)
+    || !positive(row.expectedRequestVersion) || !positive(row.sourceLineVersion)
     || !text(row.currencyCode) || !/^[A-Z]{3}$/.test(row.currencyCode) || !int(row.minimumQuoteCount) || row.minimumQuoteCount > 20
     || !id(row.sourceSubmissionId) || !id(row.sourceCaseId) || !id(row.methodId) || !positive(row.methodRevision)) throw invalid();
   // Four-decimal source originals are validated before use; no financial Number coercion.
-  try { invoiceDecimal(row.availableQuantity); invoiceDecimal(row.approvedUnitEstimate); } catch { throw invalid(); }
-  if ((row.availableQuantity === "0") !== (row.state === "FullyAllocated")) throw invalid();
+  const availableQuantity = projectionDecimal(row.availableQuantity), approvedUnitEstimate = projectionDecimal(row.approvedUnitEstimate);
+  if ((availableQuantity === "0") !== (row.state === "FullyAllocated")) throw invalid();
   return { ...base, state: row.state, canSelect: row.state === "Available", branchRef: row.branchRef, description: row.description, unitCode: row.unitCode,
     categoryCode: row.categoryCode, expectedRequestVersion: row.expectedRequestVersion, sourceLineVersion: row.sourceLineVersion,
-    availableQuantity: row.availableQuantity, approvedUnitEstimate: row.approvedUnitEstimate, currencyCode: row.currencyCode,
+    availableQuantity, approvedUnitEstimate, currencyCode: row.currencyCode,
     minimumQuoteCount: row.minimumQuoteCount, sourceSubmissionId: row.sourceSubmissionId, sourceCaseId: row.sourceCaseId, methodId: row.methodId, methodRevision: row.methodRevision };
 }
 export async function listRfqSources(company: string, page = 1, q = "", signal?: AbortSignal): Promise<RfqSourcePage> {
@@ -101,11 +106,14 @@ export async function getGovernedRfq(company: string, eventId: string, signal?: 
     || body.supplierDeliveryState !== "NotStarted" || body.financeReservationChanged !== false || !Array.isArray(body.lines) || body.lines.length < 1 || body.lines.length > 200) throw invalid();
   const lines = body.lines.map((line): RfqDetail["lines"][number] => {
     if (!object(line) || !id(line.id) || !id(line.purchaseRequestId) || !id(line.purchaseRequestLineId) || !text(line.description) || !text(line.unitCode)
-      || !(line.categoryCode === null || text(line.categoryCode)) || ![line.quantity, line.approvedUnitEstimate, line.estimatedValue].every(exact)
+      || !(line.categoryCode === null || text(line.categoryCode))
       || line.allocationState !== (body.status === "Draft" ? "Reserved" : "Released")) throw invalid();
+    const quantity = projectionDecimal(line.quantity), approvedUnitEstimate = projectionDecimal(line.approvedUnitEstimate),
+      estimatedValue = projectionDecimal(line.estimatedValue, true);
+    if (quantity === "0") throw invalid();
     return { id: line.id, purchaseRequestId: line.purchaseRequestId, purchaseRequestLineId: line.purchaseRequestLineId,
-      description: line.description, unitCode: line.unitCode, categoryCode: line.categoryCode, quantity: line.quantity as string,
-      approvedUnitEstimate: line.approvedUnitEstimate as string, estimatedValue: line.estimatedValue as string, allocationState: line.allocationState as RfqDetail["lines"][number]["allocationState"] };
+      description: line.description, unitCode: line.unitCode, categoryCode: line.categoryCode, quantity,
+      approvedUnitEstimate, estimatedValue, allocationState: line.allocationState as RfqDetail["lines"][number]["allocationState"] };
   });
   if (new Set(lines.map(x => x.id)).size !== lines.length || new Set(lines.map(x => x.purchaseRequestLineId)).size !== lines.length) throw invalid();
   return { id: eventId, number: body.number, title: body.title, method: body.method, currencyCode: body.currencyCode, status: body.status,

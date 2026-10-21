@@ -7,12 +7,12 @@ const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
 type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
-async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean } = {}) {
+async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; g29Small?: boolean; sourceAmount?: unknown; sourceEstimate?: unknown; detailValue?: unknown } = {}) {
   const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
   let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false, status = "Draft", version = 1, selected: Selection[] = [], exists = Boolean(options.seed);
   const sources = [lineA, lineB].map((id, at) => ({ purchaseRequestId: at ? prB : prA, purchaseRequestLineId: id, requestNumber: `PR-${at + 1}`,
     state: "Available", canSelect: true, branchRef: branch, description: at ? "Printer paper" : "Office notebooks", unitCode: "EACH", categoryCode: "OFFICE",
-    expectedRequestVersion: 4, sourceLineVersion: 1, availableQuantity: "99999999999999.9999", approvedUnitEstimate: "0.0001", currencyCode: "ZMW",
+    expectedRequestVersion: 4, sourceLineVersion: 1, availableQuantity: options.sourceAmount === undefined ? options.g29Small ? "0.0001" : "99999999999999.9999" : options.sourceAmount, approvedUnitEstimate: options.sourceEstimate === undefined ? "0.0001" : options.sourceEstimate, currencyCode: "ZMW",
     minimumQuoteCount: 3, sourceSubmissionId: id, sourceCaseId: id, methodId: id, methodRevision: 1, canPublish: false }));
   const record = () => ({ id: event, number: "RF-1", title: "Office supplies", method: "RFQ", currencyCode: "ZMW", status, version,
     originalDraftFingerprint: "a".repeat(64), cancellationReason: status === "Cancelled" ? "No longer required" : null,
@@ -20,7 +20,7 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
     lines: (selected.length ? selected : [{ purchaseRequestId: prA, purchaseRequestLineId: lineA, quantity: "1" }]).map((value, index) => ({
       id: index ? lineB : lineA, purchaseRequestId: value.purchaseRequestId, purchaseRequestLineId: value.purchaseRequestLineId,
       description: index ? "Printer paper" : "Office notebooks", unitCode: "EACH", categoryCode: "OFFICE", quantity: value.quantity,
-      approvedUnitEstimate: "0.0001", estimatedValue: "0.0001", allocationState: status === "Draft" ? "Reserved" : "Released" })) });
+      approvedUnitEstimate: "0.0001", estimatedValue: options.detailValue === undefined ? options.g29Small ? "1E-08" : "0.0001" : options.detailValue, allocationState: status === "Draft" ? "Reserved" : "Released" })) });
   await page.addInitScript(({ company, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: company, branch })), { company, branch });
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method();
@@ -134,4 +134,40 @@ test("cancel validation permits correction while interrupted cancellation and re
   const checks = calls.filter(x => x.path.includes("/command-receipts/"));
   expect(checks).toHaveLength(2); expect(checks.every(x => x.method === "GET" && x.path.endsWith(`/Cancel/${originalKey}`))).toBe(true);
   expect(calls.filter(x => x.method === "POST")).toHaveLength(2);
+});
+
+test("genuine G29 eight-place detail loads exact terms and retains controlled cancel GET recovery", async ({ page }) => {
+  const calls = await mock(page, { g29Small: true, loseCancel: true }); await page.goto("/procurement/workspace/rfqs/new?source=approved");
+  await page.getByRole("textbox", { name: "What are you buying?", exact: true }).fill("Office supplies");
+  await page.getByRole("button", { name: "Add line", exact: true }).first().click();
+  await expect(page.getByRole("textbox", { name: "Quantity for PR-1", exact: true })).toHaveValue("0.0001");
+  expect(calls.filter(row => row.method === "POST")).toHaveLength(0);
+  const detailReply = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/${event}/source-draft`));
+  await page.getByRole("button", { name: "Create internal draft", exact: true }).click();
+  expect((await (await detailReply).json()).lines[0].estimatedValue).toBe("1E-08");
+  await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "0.0001", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "ZMW 0.0001", exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Reason", exact: true }).fill("No longer required");
+  await page.getByRole("button", { name: "Cancel draft and release its quantities", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Check saved result", exact: true }).click();
+  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
+  const posts = calls.filter(row => row.method === "POST"); expect(posts).toHaveLength(2);
+  expect((posts[0].body as { sources: Selection[] }).sources[0].quantity).toBe("0.0001");
+  const checks = calls.filter(row => row.path.includes("/command-receipts/")); expect(checks).toHaveLength(1);
+  expect(checks[0].method).toBe("GET"); expect(checks[0].path).toContain(`/Cancel/${posts[1].key}`);
+});
+for (const scenario of [
+  { name: "zero available source", options: { sourceAmount: "0E-08" }, detail: false },
+  { name: "negative source estimate", options: { sourceEstimate: "-1E-04" }, detail: false },
+  { name: "overprecision calculated detail", options: { detailValue: "1E-09", seed: true }, detail: true },
+  { name: "unsafe numeric source estimate", options: { sourceEstimate: 12345678901234.568 }, detail: false },
+]) test(`invalid RFQ financial projection blocks ${scenario.name} with zero POSTs`, async ({ page }) => {
+  const calls = await mock(page, scenario.options);
+  await page.goto(scenario.detail ? `/procurement/workspace/rfqs/${event}?source=approved` : "/procurement/workspace/rfqs/new?source=approved");
+  await expect(page.getByRole("alert")).toContainText("did not confirm");
+  await expect(page.getByRole("button", { name: "Add line", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cancel draft and release its quantities", exact: true })).toHaveCount(0);
+  expect(calls.filter(row => row.method === "POST")).toHaveLength(0);
 });

@@ -80,3 +80,37 @@ describe("governed quote draft adapter", () => {
     await expect(getGovernedRfq(company, event)).rejects.toThrow("confirm");
   });
 });
+
+describe("server G29 exact RFQ projections", () => {
+  const detail = (changes: Record<string, unknown> = {}) => ({ id: event, number: "RF-EXP-1", title: "Exact small purchase", method: "RFQ", currencyCode: "ZMW",
+    status: "Draft", version: 1, originalDraftFingerprint: "a".repeat(64), cancellationReason: null, canPublish: false, supplierDeliveryState: "NotStarted", financeReservationChanged: false,
+    lines: [{ id: pin, purchaseRequestId: request, purchaseRequestLineId: line, description: "Small exact line", unitCode: "EACH", categoryCode: null,
+      quantity: "1E-04", approvedUnitEstimate: "1E-04", estimatedValue: "1E-08", allocationState: "Reserved", ...changes }] });
+  it("normalizes genuine G29 calculated8dp and exact18,4 exponent strings before DTO use", async () => {
+    const fetch = respond(detail()); const result = await getGovernedRfq(company, event);
+    expect(result.lines[0]).toMatchObject({ quantity: "0.0001", approvedUnitEstimate: "0.0001", estimatedValue: "0.00000001" });
+    expect(fetch.mock.calls[0][1].method).toBe("GET");
+    const command = cancelRfqCommand(result, "Original exact terms retained", key);
+    expect(JSON.parse(command.body)).toMatchObject({ expectedEventVersion: 1, originalDraftFingerprint: "a".repeat(64) });
+  });
+  it("normalizes source originals and distinguishes zero balance from an invalid available row", async () => {
+    respond(page({ ...source(), canPublish: false, availableQuantity: "1E-04", approvedUnitEstimate: "1E-04" }));
+    expect((await listRfqSources(company)).items[0]).toMatchObject({ availableQuantity: "0.0001", approvedUnitEstimate: "0.0001" });
+    respond(page({ ...source(), canPublish: false, availableQuantity: "0E-08", approvedUnitEstimate: "0E-08", state: "FullyAllocated", canSelect: false }));
+    expect((await listRfqSources(company)).items[0]).toMatchObject({ availableQuantity: "0", approvedUnitEstimate: "0", canSelect: false });
+    respond(page({ ...source(), canPublish: false, availableQuantity: "0E-08" })); await expect(listRfqSources(company)).rejects.toThrow("confirm");
+  });
+  it("allows legitimate zero estimates/values but never zero quantities", async () => {
+    respond(detail({ approvedUnitEstimate: "0E-08", estimatedValue: "0E-08" }));
+    expect((await getGovernedRfq(company, event)).lines[0]).toMatchObject({ approvedUnitEstimate: "0", estimatedValue: "0" });
+    respond(detail({ quantity: "0E-08" })); await expect(getGovernedRfq(company, event)).rejects.toThrow("confirm");
+  });
+  it.each([
+    { estimatedValue: "-1E-08" }, { estimatedValue: "1E-09" }, { estimatedValue: "1E+30" },
+    { estimatedValue: 1e-8 }, { estimatedValue: 12345678901234.568 }, { estimatedValue: "1E+999" },
+    { quantity: "1E-05" }, { quantity: "-1E-04" }, { approvedUnitEstimate: "1E-05" }, { approvedUnitEstimate: 12345678901234.568 },
+  ])("rejects invalid calculated/original financial projections without any POST %j", async changes => {
+    const fetch = respond(detail(changes)); await expect(getGovernedRfq(company, event)).rejects.toThrow("confirm");
+    expect(fetch.mock.calls.every(call => call[1].method === "GET")).toBe(true);
+  });
+});
