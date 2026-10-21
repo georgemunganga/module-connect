@@ -115,14 +115,17 @@ test("actual sourcing policy settings retain explicit zero/false choices through
     const publishedReply = page.waitForResponse(response => new URL(response.url()).pathname === `${root}/${saved.id}/publish`);
     await page.getByRole("button", { name: "Publish rules", exact: true }).click();
     const published = await publishedReply; expect(published.status(), await published.text()).toBe(200);
-    expect(await published.json()).toMatchObject({ id: saved.id, state: "Published", rulesJson: saved.rulesJson });
+    const publishedBody = await published.json();
+    expect(publishedBody).toMatchObject({ id: saved.id, state: "Published" });
+    expect(JSON.parse(publishedBody.rulesJson)).toEqual(rules);
     await connection.visit("reviewer"); await expect(row().getByText("Published", { exact: true })).toBeVisible();
     const final = await page.evaluate(async ({ url, entity, branch }) => {
       const response = await fetch(url, { headers: { "X-Shell-Entity": entity, "X-Shell-Location": branch } });
       return { status: response.status, body: await response.json() };
     }, { url: `${root}/${saved.id}`, entity: fixture.companyId, branch: fixture.branchId });
     expect(final.status).toBe(200);
-    expect(final.body).toMatchObject({ id: saved.id, state: "Published", rulesJson: saved.rulesJson, publishedBy: seed.reviewerPrincipalId });
+    expect(final.body).toMatchObject({ id: saved.id, state: "Published", publishedBy: seed.reviewerPrincipalId });
+    expect(JSON.parse(final.body.rulesJson)).toEqual(rules);
     const commands = connection.traffic.filter(entry => entry.method !== "GET" && entry.path !== `${root}/validate`);
     expect(commands.map(entry => [entry.actor, entry.method, entry.path, entry.status])).toEqual([
       ["maker", "POST", root, 201], ["maker", "POST", `${root}/${saved.id}/submit-review`, 200], ["reviewer", "POST", `${root}/${saved.id}/publish`, 200],

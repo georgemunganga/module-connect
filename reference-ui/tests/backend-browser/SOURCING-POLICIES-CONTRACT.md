@@ -18,7 +18,7 @@ Existing loopback transport fields: `baseUrl` (HTTP 127.0.0.1 with port), `tenan
 2. Rule `BROWSER_POLICY`, priority zero, minimum and maximum amount inputs left blank (both canonical null). This explicitly declares the engine’s unrestricted fallback coverage; no invented finite business threshold. Step code `BROWSER_REVIEW`, assignee ProcurementManager.
 3. UI validates and creates exactly one policy (201); actual response retains all zero/false values, Core ZMW and selected identity. Reload and reopen the same ID without editing or an extra save.
 4. Maker submits with `Browser independent review requested`; independent reviewer publishes with `Browser independent sourcing settings approved`.
-5. Reload and real scoped detail GET prove the same ID, unchanged original rules and Published state/actor.
+5. Reload and real scoped detail GET prove the same ID, unchanged parsed original rules and Published state/actor. PostgreSQL jsonb may reorder keys and whitespace, so semantic content is compared rather than raw JSON string formatting.
 
 Exactly three policy mutation POSTs are permitted: create, submit, publish. The validation POST is read-only and separately excluded from that count. There are no retry loops, response-loss simulation or invented idempotency guarantees: policy CRUD currently has no durable command receipt contract. The backend fixture must retain original source state, exactly three identity stages and expected policy/audit changes, with no RFQ, Finance, Core approval-case or outbox effects; browser assertions complement, rather than replace, stop-time owner verification.
 
