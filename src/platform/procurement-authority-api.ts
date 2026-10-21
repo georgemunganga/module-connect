@@ -6,6 +6,8 @@ export const authorityUses = [
     label: "Purchase requests", reviewers: "Assigned line manager or procurement reviewer", basisLabel: "Estimated request line amount" },
   { action: "PurchaseOrder.Approve", permission: "procurement-po-approve", amountBasis: "ApprovedLineBase",
     label: "Purchase orders", reviewers: "Assigned procurement reviewers", basisLabel: "Approved order line amount" },
+  { action: "SourcingEvent.Publish", permission: "procurement-sourcing-publish", amountBasis: "ApprovedLineBase",
+    label: "Request for quotes", reviewers: "Assigned sourcing reviewers", basisLabel: "Full selected approved source line amount" },
 ] as const;
 export type AuthoritySpendAction = typeof authorityUses[number]["action"];
 export const authorityUseForAction = (action: string) => authorityUses.find((use) => use.action === action) ?? null;

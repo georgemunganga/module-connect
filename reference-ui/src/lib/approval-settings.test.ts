@@ -77,6 +77,52 @@ const orderLimit = (): Authority => ({ id: grantId, authorityReference: "PO-LIMI
   configurationOwnerPrincipalId: principalId, allowedActions: ["Edit"], previousGrantId: null, previousVersion: null });
 const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 
+describe("sourcing limits use explicit backend configuration support", () => {
+  const sourcingLimit = (): Authority => ({ ...orderLimit(), authorityReference: "RFQ-LIMIT", action: "SourcingEvent.Publish", permission: "procurement-sourcing-publish" });
+  it("filters lists and named people by exact sourcing action without granting publication", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(response({ items: [sourcingLimit()], total: 1, page: 1, pageSize: 25,
+      currentActorPrincipalId: principalId, canCreate: true, createAction: "SourcingEvent.Publish", createAmountBasis: "ApprovedLineBase",
+      scope: { branchId: null, departmentId: null, confined: false } }))
+      .mockResolvedValueOnce(response({ items: [{ principalId, displayName: "Sourcing reviewer" }], offset: 0, limit: 25, nextOffset: null }));
+    vi.stubGlobal("fetch", fetch);
+    const list = await listAuthorities(company, 1, "", undefined, "SourcingEvent.Publish");
+    expect(supportedAuthorityUse(list.items[0])?.label).toBe("Request for quotes");
+    await lookupAuthorities(company, "people", "reviewer", 0, undefined, "SourcingEvent.Publish");
+    for (const [url, init] of fetch.mock.calls) {
+      expect(new URL(url, "https://fixture.test").searchParams.get("action")).toBe("SourcingEvent.Publish");
+      expect(new Headers(init.headers).get("X-Shell-Entity")).toBe(company);
+    }
+  });
+  it("requires new exact list metadata rather than treating an old PR response as sourcing support", async () => {
+    const fetch = vi.fn().mockResolvedValue(response({ items: [], total: 0, page: 1, pageSize: 25, currentActorPrincipalId: principalId,
+      canCreate: true, createAction: "PurchaseRequest.Approve", createAmountBasis: "EstimatedLineBase",
+      scope: { branchId: null, departmentId: null, confined: false } }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(listAuthorities(company, 1, "", undefined, "SourcingEvent.Publish")).rejects.toThrow("current API contract");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("preserves exact sourcing maximum and edit tuple without duplicate or extra authority fields", async () => {
+    const row = sourcingLimit(); const fetch = vi.fn().mockImplementation(() => Promise.resolve(response(row))); vi.stubGlobal("fetch", fetch);
+    await saveAuthority(company, row, { authorityReference: row.authorityReference, principalId, action: "SourcingEvent.Publish" });
+    const create = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(create).toMatchObject({ action: "SourcingEvent.Publish", draft: { amountBasis: "ApprovedLineBase", maximumAmount: "99999999999999.9999" } });
+    expect(create).not.toHaveProperty("permission");
+    await saveAuthority(company, row, { id: row.id, version: row.version, action: "SourcingEvent.Publish" });
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({ version: 1, draft: { amountBasis: "ApprovedLineBase" } });
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).not.toHaveProperty("action");
+  });
+  it("rejects mismatched source permissions/bases and never retries an unconfirmed create", async () => {
+    const row = sourcingLimit(); const fetch = vi.fn().mockRejectedValue(new TypeError("lost")); vi.stubGlobal("fetch", fetch);
+    for (const changed of [{ ...row, permission: "procurement-po-approve" }, { ...row, amountBasis: "EstimatedLineBase" }]) {
+      expect(supportedAuthorityUse(changed)).toBeNull();
+      await expect(actOnAuthority(company, changed, "Submit", "Do not reinterpret")).rejects.toThrow("read-only");
+    }
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(saveAuthority(company, row, { authorityReference: row.authorityReference, principalId, action: "SourcingEvent.Publish" })).rejects.toMatchObject({ status: 0 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("purchase order setup uses the existing backend tuple", () => {
   it("roundtrips PO policy stages and exact thresholds but refuses a request-only reviewer", () => {
     const row = { ...emptyRule("PURCHASE_ORDER"), maximum: "99999999999999.9999",

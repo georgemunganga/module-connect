@@ -62,3 +62,32 @@ Exact staged artifact SHA-256 values (same application candidate for both browse
 | `assets/index-Bddc462I.css` | `7f163297e91fa0e3fc3cde778b88996063082e96fb088d9866bfac750639d888` |
 
 **Boundary:** all Procurement HTTP responses in this browser specification are contract fixtures. They demonstrate frontend rendering, serialization, guard/recovery behavior and stale-response handling against those fixtures, not real persistence, current canonical identity, historical maker-worker protection, PostgreSQL schema/readiness or policy publication. The positive `configurationVersion:1` response is explicitly synthetic; older/unversioned fixture responses remain read-only. Actual identity-aware backend lifecycle/readiness plus finite-role API/PostgreSQL and real browser integration remain required before enabling sourcing configuration. Operational RFQ publication, document pins, invitations and delivery remain unavailable and unclaimed. No live assets or backend were published by this checkpoint.
+# Finite sourcing publication limits — source-only additive UI contract
+
+This increment reuses the existing **Approval limits** tab and its Approval type dropdown. Select **Request for quotes** from the same page; there is no new settings page, navigation, approval engine or user master. PR/PO approval step settings stay unchanged.
+
+The existing 28-section feature contract above applies, with these explicit additions:
+
+| Sections | Additive contract |
+| --- | --- |
+| 1–4 Identification, purpose, scope, relationships | Configure named finite sourcing publication limits; this is not operational RFQ publication. Reuses shared spending-authority CRUD and lifecycle. |
+| 5–7 Actors, entry, prerequisites | Existing current Core identity, selected company/branch and authority read/configure/review permissions; backend remains authoritative. No bootstrap permissions or inferred policy-configuration grants. |
+| 8–11 Workflow, states, permission/scope, rules | Existing Draft/Submit/independent Activate/Return/Revoke/Supersede lifecycle and server `allowedActions`. Exact tuple is `SourcingEvent.Publish` / `procurement-sourcing-publish` / `ApprovedLineBase`. Mismatched tuples remain read-only. |
+| 12 Data ownership | Existing Procurement-owned finite authority row and immutable history; exact maximumAmount string preserves numeric(18,4), Core owns people/currency/scope. |
+| 13–14 Screens and behaviour | Existing shared controls, action-filtered list, named-person lookup and form. Plain copy states full selected approved source line amount and that configuring a limit does not turn on publication. |
+| 15–17 Notifications, documents, exceptions | No new notification/document feature. Older API rejection or missing/wrong `createAction` and `createAmountBasis` disables create; no policy version marker is accepted as authority support. Unknown permission/basis is read-only. |
+| 18 Integrations | Existing spending-authorities list and lookups send `action=SourcingEvent.Publish`; create explicitly sends action, update preserves original row action and identity. No publication command or financial posting is added. |
+| 19–22 Audit, reports, configuration, nonfunctional | Existing scoped server audit/read projections and accessibility/reusable ERP controls. No new report, schema or runtime flag. API capability remains separate from UI knowledge of the tuple. |
+| 23–24 Postconditions and recovery | Draft alone grants no authority. Exact returned action/permission/basis must match; unconfirmed results keep existing reconciliation UI and never automatically retry create/update. |
+| 25–26 Acceptance and tests | Authored four focused client tests for exact query/metadata/money/tuple/replay boundaries and four browser contract cases for create/edit/older API/unknown basis. Existing PR/PO cases retained. These new tests have **not been executed** in this increment. |
+| 27–28 Dependencies and open decisions | Backend author confirmed exact existing DTO contract. Server lifecycle and independent identity controls remain its responsibility. Operational publication, assigned review and execution readiness are outside this UI increment and remain disabled. |
+
+Source validation: `git diff --check` only. No Node/TypeScript/build/browser/API/database jobs, generated assets or deployment were performed for this increment. The earlier executed checkpoint belongs to the prior application candidate and must not be presented as verification of these changes.
+
+Route completion: the existing `/settings/modules/request-for-quotes/approvals` page now mounts this same live adapter behind the configuration capability. Its **Publication steps** tab fixes the policy type to SOURCING, filters the existing shared policy list without interpreting PR policies, and preserves the required owning-schema marker. Its Approval limits tab initially selects `SourcingEvent.Publish`. Existing PR/PO tab labels and initial policy types are unchanged. One additional authored browser contract test loads that direct module route, verifies source-only steps/defaults and the exact source authority picker query, and asserts no preview save or mutation. This follow-up remains unexecuted; previous TypeScript/21-unit results on `8ed77a5` do not cover the route change.
+
+## Sourcing limit and RFQ settings UI verification —21October2026
+
+Application `e366f78` (including `8ed77a5`) passed30focused unit tests, TypeScript, staged live production build and22/22 Chromium contract cases with one worker and zero retries. The direct existing RFQ approvals route now selects SOURCING policies and sourcing limits without purchase-request fallback or preview mutation. Exact source/asset/dependency provenance, commands and browser results are protected at `/home/amizo/erp-backups/procurement-sourcing-authority-ui-20261021_0936/`. Frozen application JS `index-BO-H977h.js`, CSS `index-Bddc462I.css`.
+
+These22cases mock Procurement HTTP. Separately backend `17a0a5e` passed actual finite-role settings HTTP/PostgreSQL source draft/submission/independent activation and PR/PO isolation, recorded in the ERP repository. An actual UI→API→persisted-owner authority gate remains next and is not included in this result. No deployment or operational RFQ publication follows.
