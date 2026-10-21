@@ -63,7 +63,7 @@ test("live vendor uses the imported directory, compact header, split overview an
   const desktopScreenshot = info.outputPath("synthetic-vendor-desktop.png");
   await page.screenshot({ path: desktopScreenshot, fullPage: true });
   await page.evaluate(() => window.scrollTo(0, 240));
-  const recordHeader = page.getByRole("region", { name: "Vendor record", exact: true }).locator("header");
+  const recordHeader = page.getByRole("region", { name: "Vendor record", exact: true }).locator(":scope > header");
   await expect.poll(async () => (await recordHeader.boundingBox())?.y ?? -1).toBeGreaterThanOrEqual(55);
   await page.evaluate(() => window.scrollTo(0, 0));
   await info.attach("synthetic-live-vendor-overview-desktop", { path: desktopScreenshot, contentType: "image/png" });
