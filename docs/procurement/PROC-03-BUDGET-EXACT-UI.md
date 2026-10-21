@@ -144,3 +144,10 @@ Applicatione73b308 passed48/48 focused tests (10Budgetexact,20invoiceexact regre
 Protected evidence `/home/amizo/erp-backups/procurement-budget-exact-ui-20261021_063022/` retains source, exact runner/log, exit0, asset hashes and browser results. BundleJS `index-JuvMCZhV.js`; CSS `index-Bddc462I.css`. Browser checks include wide4dp/CAS distinction,8dp explicit amount/no underfunding, uncertain-save read-only history/no repeatPOST, absent businessVersion denial and retained ordinary-save/permission-denial cases.
 
 Backend business-version sourceba5b380 is integrated separately asc86d653. Its API test and actual restricted P27 HTTP gate remain separate; these browser mocks do not establish Finance authority or release readiness. No production deployment.
+
+
+## Actual API browser +independent owner verification — PASS
+
+Frozen applicatione73b308 remained unchanged and all three asset hashes were reverified. Added actual-test source9678723 passed TypeScript and one Chromium case (14.4s, zero retries) against fresh private P27 API/runtime identities; no Procurement responses were mocked. The real8dp request total required explicit4dp Finance review, local underfunding made0POST, valid capture made exactly1POST201 and returned worker-bound history.
+
+Fresh bootstrap-owned contexts after graceful API shutdown verified complete original request digest/counters/versions/unapproved state unchanged, one canonical bound checker snapshot, one explicit BudgetChecked plus existing snapshot-create audit, no extra approval/allocation/order/policy/outbox effects; server exit0. Protected evidence: `/home/amizo/erp-backups/procurement-p27-http-budgetbrowser-20261021_065336/`. Backend toolfb03a7d is a privatefixture-only change; actual application funding source has the separately recorded mapped/HTTP gates. Shell auth/branding presentation is synthetic; Finance references are controlled synthetic manual evidence, not externally verified funds or production/SSO acceptance.
