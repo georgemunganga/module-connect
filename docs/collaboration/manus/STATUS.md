@@ -1,4 +1,6 @@
-# Manus milestone log
+# Historical Manus UI handoff log
+
+**Superseded on 21 October 2026:** current task instructions and progress are maintained in [the ERP repository](https://github.com/georgemunganga/erp/blob/main/MANUS_HANDOFF.md). Entries below are historical; do not claim an independent task from this old log.
 
 Use issue [#40](https://github.com/georgemunganga/module-connect/issues/40) for live coordination. Update this file on your own work branch and include it in your PR. The coordinator records acceptance/merge after independent checks. Do not overwrite prior entries or claim deployment without evidence.
 
