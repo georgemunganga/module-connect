@@ -107,7 +107,7 @@ function LivePolicyEditor({ onlyPolicyKey }: { onlyPolicyKey?: PolicyKey }) {
     const ticket = sequence.current; let mutationStarted = false;
     setSaving(true); setError(""); setIssues([]);
     try {
-      if (key === "SOURCING" && !sourcingReady) throw new Error("Sourcing rule setup is unavailable until ERP supports this configuration version.");
+      if (key === "SOURCING" && !sourcingReady) throw new Error("Sourcing rule setup is not available for this company yet.");
       const rulesJson = toRuleJson(key, currency, rows);
       const check = await validatePolicy(companyId, rulesJson);
       if (!current(ticket)) return;
@@ -207,7 +207,7 @@ function LivePolicyEditor({ onlyPolicyKey }: { onlyPolicyKey?: PolicyKey }) {
       {page && page.total > page.items.length && <p className="mt-3 text-xs text-muted-foreground">Showing the first {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-    {!sourcingReady && <p className="text-sm text-muted-foreground">Sourcing rule setup is unavailable until ERP supports its controlled configuration version. Purchase request and order settings remain available.</p>}
+    {!sourcingReady && <p className="text-sm text-muted-foreground">Sourcing rule setup is not available for this company yet. Purchase request and order settings remain available.</p>}
     {uncertain && <Panel title="Check the saved result"><div className="space-y-3 p-5"><p>The response was interrupted. This page will not repeat the change. Refresh and check the saved rules before starting another action.</p><Button onClick={reconcile}>Refresh and check saved rules</Button></div></Panel>}
     {unsupported && <Panel title="Saved rules — read-only"><div className="space-y-3 p-5"><Field label="Saved rule definition"><Textarea readOnly rows={12} value={unsupported.rulesJson} /></Field><Button variant="secondary" onClick={() => setUnsupported(null)}>Close saved rules</Button></div></Panel>}
     {deciding && <form onSubmit={makeDecision}><Panel title={decisionAction === "publish" ? "Publish buying rules" : "Return buying rules for changes"}><div className="space-y-4 p-5">

@@ -9,7 +9,7 @@ const definition = () => ({ schemaVersion: 1, policyKey: "SOURCING", transaction
     when: { minimumAmountInclusive: null, maximumAmountExclusive: null, categoryCodes: [], purchaseTypes: [], branchIds: [] },
     result: { publication: { minimumQuoteCount: 0, minimumInvitedSuppliers: 0, requirementsPackRequired: false, evaluationCriteriaRequired: false, closingDateRequired: false },
       approvalStages: [{ code: "PUBLICATION", assignee: "ProcurementManager", mode: "All", principalIds: [person] }] } }] });
-async function setup(page: Page, options: { saved?: boolean; unknown?: boolean; version?: boolean; loseCreate?: boolean } = {}) {
+async function setup(page: Page, options: { saved?: boolean; unknown?: boolean; version?: boolean; loseCreate?: boolean; offPage?: boolean; unavailableSelected?: boolean } = {}) {
   const source = definition(); if (options.unknown) Object.assign(source.rules[0].result.publication, { extraControl: true });
   let record: Record<string, unknown> | null = options.saved ? { id: policyId, policyKey: "SOURCING", policyVersionNumber: 1,
     version: 1, state: "Draft", effectiveFrom: "2026-11-01T00:00:00Z", effectiveTo: null, createdAt: "2026-10-21T00:00:00Z", rulesJson: JSON.stringify(source) } : null;
@@ -31,7 +31,9 @@ async function setup(page: Page, options: { saved?: boolean; unknown?: boolean; 
     const base = "/api/procurement/v1/configuration/policies";
     if (path === `${base}/lookups/sourcing-reviewers`) {
       if (url.searchParams.get("search") === "offline") return json({ message: "Names unavailable" }, 503);
-      const items = url.searchParams.get("search") ? [] : [{ principalId: person, displayName: "Named reviewer", workerId: person }];
+      const requested = url.searchParams.get("principalIds");
+      const items = requested ? options.unavailableSelected ? [] : [{ principalId: person, displayName: options.offPage ? "Off-page named reviewer" : "Named reviewer", workerId: person }]
+        : url.searchParams.get("search") || options.offPage ? [] : [{ principalId: person, displayName: "Named reviewer", workerId: person }];
       return json({ items, total: items.length, offset: 0, limit: 25, nextOffset: null, isAuthority: false, ...(options.version === false ? {} : { configurationVersion: 1 }) });
     }
     if (path === base && req.method() === "GET") return json({ items: selected === company && record ? [record] : [], total: selected === company && record ? 1 : 0, page: 1, pageSize: 100 });
@@ -165,4 +167,57 @@ test("a late company detail cannot reopen its editor after company context chang
   await expect(page.getByRole("heading", { name: "Edit sourcing draft", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Check and save draft", exact: true })).toHaveCount(0);
   expect(state.writes()).toBe(0);
+});
+
+
+test("saved off-page reviewer names resolve without enumerating all people", async ({ page }) => {
+  const state = await setup(page, { saved: true, offPage: true });
+  const peopleQueries: URL[] = [];
+  page.on("request", request => { if (request.url().includes("/lookups/sourcing-reviewers")) peopleQueries.push(new URL(request.url())); });
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Edit draft", exact: true }).click();
+  await expect(page.getByText("Off-page named reviewer", { exact: true })).toBeVisible();
+  expect(peopleQueries.some(url => url.searchParams.get("principalIds") === person)).toBe(true);
+  expect(peopleQueries.every(url => url.searchParams.get("offset") === "0")).toBe(true);
+  await page.getByRole("button", { name: "Check and save draft", exact: true }).click();
+  await expect.poll(state.writes).toBe(1);
+  expect(JSON.parse(state.validated()).rules[0].result.approvalStages[0].principalIds).toEqual([person]);
+});
+
+test("unavailable saved reviewer labels stay read-only and do not silently remove the original selection", async ({ page }) => {
+  const state = await setup(page, { saved: true, unavailableSelected: true });
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  const names = page.waitForResponse(response => new URL(response.url()).searchParams.has("principalIds"));
+  await page.getByRole("button", { name: "Edit draft", exact: true }).click(); await names;
+  await expect(page.getByText("Loading saved reviewer name…", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Reviewer name unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /principal|worker id|reviewer id/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Check and save draft", exact: true }).click();
+  await expect.poll(state.writes).toBe(1);
+  expect(JSON.parse(state.validated()).rules[0].result.approvalStages[0].principalIds).toEqual([person]);
+  // The fixture accepts the original selection only to inspect the unchanged payload; real ERP revalidates eligibility.
+});
+
+test("late saved reviewer labels cannot appear in another company", async ({ page }) => {
+  await setup(page, { saved: true });
+  let release = () => {}, seen = () => {}, completed = () => {};
+  const pending = new Promise<void>(resolve => { seen = () => resolve(); });
+  const barrier = new Promise<void>(resolve => { release = () => resolve(); });
+  const finished = new Promise<void>(resolve => { completed = () => resolve(); });
+  await page.route("**/configuration/policies/lookups/sourcing-reviewers?**", async route => {
+    if (!new URL(route.request().url()).searchParams.has("principalIds")) return route.fallback();
+    seen(); await barrier;
+    try { await route.fulfill({ contentType: "application/json", body: JSON.stringify({ items: [{ principalId: person, displayName: "Previous company person", workerId: person }], total: 1, offset: 0, limit: 25, nextOffset: null, isAuthority: false, configurationVersion: 1 }) }); }
+    finally { completed(); }
+  });
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Edit draft", exact: true }).click(); await pending;
+  await page.evaluate(entityId => {
+    const key = "erp.shell.state.v1", value = JSON.stringify({ entityId });
+    localStorage.setItem(key, value); window.dispatchEvent(new StorageEvent("storage", { key, newValue: value }));
+  }, otherCompany);
+  await expect(page.getByText("No buying rules yet", { exact: true })).toBeVisible();
+  release(); await finished;
+  await expect(page.getByText("Previous company person", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Check and save draft", exact: true })).toHaveCount(0);
 });

@@ -153,15 +153,27 @@ export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUE
 
 export type SourcingReviewerPage = { items: Array<{ principalId: string; displayName: string; workerId: string }>;
   total: number; offset: number; limit: number; nextOffset: number | null; isAuthority: false; configurationVersion: 1 };
-export async function lookupSourcingReviewers(companyId: string, search: string, offset: number, signal?: AbortSignal): Promise<SourcingReviewerPage> {
-  if (search.trim().length > 100 || !Number.isInteger(offset) || offset < 0) throw new Error("Use a shorter name search and a valid page.");
-  const body = await call(companyId, `/lookups/sourcing-reviewers?${new URLSearchParams({ search: search.trim(), offset: String(offset), limit: "25" })}`, { signal });
-  if (!object(body) || !Array.isArray(body.items) || body.items.length > 50 || body.isAuthority !== false || body.configurationVersion !== 1
-    || body.items.some(item => !object(item) || !guid.test(String(item.principalId)) || !guid.test(String(item.workerId)) || typeof item.displayName !== "string")
-    || !Number.isInteger(body.total) || !Number.isInteger(body.offset) || !Number.isInteger(body.limit)
-    || Number(body.total) < 0 || Number(body.offset) < 0 || Number(body.limit) < 1 || Number(body.limit) > 50
-    || body.nextOffset !== null && (!Number.isInteger(body.nextOffset) || Number(body.nextOffset) <= Number(body.offset))
+const canonicalPersonId = (value: unknown): value is string => typeof value === "string" && guid.test(value)
+  && value === value.toLowerCase() && value !== "00000000-0000-0000-0000-000000000000";
+function reviewerPage(body: unknown, offset: number): SourcingReviewerPage {
+  if (!object(body) || !Array.isArray(body.items) || body.items.length > 25 || body.isAuthority !== false || body.configurationVersion !== 1
+    || body.items.some(item => !object(item) || !canonicalPersonId(item.principalId) || !canonicalPersonId(item.workerId) || typeof item.displayName !== "string")
+    || !Number.isInteger(body.total) || body.offset !== offset || body.limit !== 25 || Number(body.total) < 0
+    || body.nextOffset !== null && (!Number.isInteger(body.nextOffset) || body.nextOffset !== offset + 25 || Number(body.nextOffset) >= Number(body.total))
     || new Set(body.items.map(item => object(item) ? item.principalId : "")).size !== body.items.length)
-    throw new Error("ERP returned an invalid sourcing reviewer list.");
+    throw new Error("Reviewer names are unavailable. Your selected reviewers have not changed.");
   return body as SourcingReviewerPage;
+}
+export async function lookupSourcingReviewers(companyId: string, search: string, offset: number, signal?: AbortSignal): Promise<SourcingReviewerPage> {
+  if (search.trim().length > 100 || !Number.isInteger(offset) || offset < 0 || offset > 100000) throw new Error("Use a shorter name search and a valid page.");
+  return reviewerPage(await call(companyId, `/lookups/sourcing-reviewers?${new URLSearchParams({ search: search.trim(), offset: String(offset), limit: "25" })}`, { signal }), offset);
+}
+/** Purpose-limited label lookup; never enumerate all people to resolve retained off-page selections. */
+export async function lookupSelectedSourcingReviewers(companyId: string, principalIds: readonly string[], signal?: AbortSignal): Promise<SourcingReviewerPage> {
+  if (!principalIds.length || principalIds.length > 25 || principalIds.some(id => !canonicalPersonId(id)) || new Set(principalIds).size !== principalIds.length)
+    throw new Error("Choose a bounded set of saved reviewers.");
+  const page = reviewerPage(await call(companyId, `/lookups/sourcing-reviewers?${new URLSearchParams({ principalIds: principalIds.join(","), search: "", offset: "0", limit: "25" })}`, { signal }), 0);
+  if (page.nextOffset !== null || page.total !== page.items.length || page.items.some(item => !principalIds.includes(item.principalId)))
+    throw new Error("Reviewer names are unavailable. Your selected reviewers have not changed.");
+  return page;
 }

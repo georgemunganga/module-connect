@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyRule, exactPolicySample, fromRuleJson, toRuleJson, type RuleRow } from "./buying-rules-editor";
-import { createPolicy, lookupSourcingReviewers, PolicyApiError } from "../../../src/platform/procurement-policy-api";
+import { createPolicy, lookupSelectedSourcingReviewers, lookupSourcingReviewers, PolicyApiError } from "../../../src/platform/procurement-policy-api";
 
 const company = "11111111-1111-4111-8111-111111111111", person = "22222222-2222-4222-8222-222222222222";
 function chosen(): RuleRow {
@@ -65,6 +65,25 @@ describe("sourcing configuration transport", () => {
     await expect(lookupSourcingReviewers(company, "Name", 0)).resolves.toMatchObject({ configurationVersion: 1 });
     const [url, init] = fetch.mock.calls[2];
     expect(String(url)).toContain("search=Name"); expect(new Headers(init.headers).get("X-Shell-Entity")).toBe(company);
+  });
+  it("resolves only requested off-page labels and rejects unrelated echoes or invented paging", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(response(page()))
+      .mockResolvedValueOnce(response({ ...page(), items: [{ principalId: company, workerId: company, displayName: "Unrequested person" }] }))
+      .mockResolvedValueOnce(response({ ...page(), nextOffset: 25, total: 30 }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(lookupSelectedSourcingReviewers(company, [person])).resolves.toMatchObject({ items: [{ principalId: person }] });
+    const [url, init] = fetch.mock.calls[0];
+    const query = new URL(String(url), "https://fixture.test").searchParams;
+    expect(query.get("principalIds")).toBe(person); expect(query.get("search")).toBe(""); expect(query.get("offset")).toBe("0");
+    expect(new Headers(init.headers).get("X-Shell-Entity")).toBe(company);
+    await expect(lookupSelectedSourcingReviewers(company, [person])).rejects.toThrow();
+    await expect(lookupSelectedSourcingReviewers(company, [person])).rejects.toThrow();
+    await expect(lookupSelectedSourcingReviewers(company, [person, person])).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+  it("retains missing/revoked labels as an empty scoped result rather than echoing private names", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ ...page(), items: [], total: 0 })));
+    await expect(lookupSelectedSourcingReviewers(company, [person])).resolves.toMatchObject({ items: [], total: 0 });
   });
   it("does not automatically retry an uncertain policy create and distinguishes known denial", async () => {
     const fetch = vi.fn().mockRejectedValueOnce(new TypeError("response lost"))
