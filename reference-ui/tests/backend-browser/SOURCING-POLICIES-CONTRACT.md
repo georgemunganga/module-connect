@@ -15,7 +15,7 @@ Existing loopback transport fields: `baseUrl` (HTTP 127.0.0.1 with port), `tenan
 ## Single actual workflow
 
 1. Maker explicitly selects SOURCING, company-wide coverage, zero minimum quotes and invitees, all three requirements false, one All step with named manager2.
-2. Rule `BROWSER_POLICY`, priority zero, minimum amount input `0.0000` (canonical exact zero), upper amount null. This intentionally provides full amount coverage; no invented finite business threshold. Step code `BROWSER_REVIEW`, assignee ProcurementManager.
+2. Rule `BROWSER_POLICY`, priority zero, minimum and maximum amount inputs left blank (both canonical null). This explicitly declares the engine’s unrestricted fallback coverage; no invented finite business threshold. Step code `BROWSER_REVIEW`, assignee ProcurementManager.
 3. UI validates and creates exactly one policy (201); actual response retains all zero/false values, Core ZMW and selected identity. Reload and reopen the same ID without editing or an extra save.
 4. Maker submits with `Browser independent review requested`; independent reviewer publishes with `Browser independent sourcing settings approved`.
 5. Reload and real scoped detail GET prove the same ID, unchanged original rules and Published state/actor.

@@ -77,7 +77,7 @@ test("actual sourcing policy settings retain explicit zero/false choices through
     await page.getByLabel("Start date", { exact: true }).fill(seed.effectiveFrom.slice(0, 10));
     await page.getByLabel("End date (optional)", { exact: true }).fill(seed.effectiveTo.slice(0, 10));
     await page.getByLabel("Rule code", { exact: true }).fill("BROWSER_POLICY");
-    await page.getByLabel("Amount from (ZMW)", { exact: true }).fill("0.0000");
+    await page.getByLabel("Amount from (ZMW)", { exact: true }).fill("");
     await expect(page.getByLabel("Amount below (ZMW)", { exact: true })).toHaveValue("");
     await choose(page, "Branch coverage", "All company branches");
     await page.getByLabel("Minimum quotes", { exact: true }).fill("0");
@@ -93,7 +93,7 @@ test("actual sourcing policy settings retain explicit zero/false choices through
     expect(guid.test(saved.id)).toBe(true); expect(saved.state).toBe("Draft");
     const rules = JSON.parse(saved.rulesJson);
     expect(rules.currencyCode).toBe("ZMW"); expect(rules.rules).toHaveLength(1);
-    expect(rules.rules[0]).toMatchObject({ code: "BROWSER_POLICY", priority: 0, when: { minimumAmountInclusive: 0, maximumAmountExclusive: null,
+    expect(rules.rules[0]).toMatchObject({ code: "BROWSER_POLICY", priority: 0, when: { minimumAmountInclusive: null, maximumAmountExclusive: null,
       categoryCodes: [], purchaseTypes: [], branchIds: [] }, result: { publication: { minimumQuoteCount: 0, minimumInvitedSuppliers: 0,
         requirementsPackRequired: false, evaluationCriteriaRequired: false, closingDateRequired: false },
       approvalStages: [{ code: "BROWSER_REVIEW", assignee: "ProcurementManager", mode: "All", principalIds: [seed.namedApproverPrincipalId] }] } });
@@ -101,7 +101,7 @@ test("actual sourcing policy settings retain explicit zero/false choices through
     await row().getByRole("button", { name: "Edit draft", exact: true }).click();
     await expect(page.getByLabel("Minimum quotes", { exact: true })).toHaveValue("0");
     for (const label of ["Requirements pack", "Evaluation criteria", "Closing date"]) await expect(page.getByRole("combobox", { name: label, exact: true })).toHaveText("Not required");
-    await expect(page.getByLabel("Amount from (ZMW)", { exact: true })).toHaveValue("0");
+    await expect(page.getByLabel("Amount from (ZMW)", { exact: true })).toHaveValue("");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await row().getByRole("button", { name: "Send for review", exact: true }).click();
     await page.getByLabel("What should the reviewer check?", { exact: true }).fill(reviewReason);
