@@ -25,3 +25,7 @@ Exactly three policy mutation POSTs are permitted: create, submit, publish. The 
 Every `/api/procurement/` call is forwarded unchanged to the actual private API with its finite actor and actual selected company/branch headers. Only outer HRM authentication, branding and shell presentation are synthetic. Traffic is written as a concrete owner-private test artifact even on failure; failure traces are retained. No passing runtime claim is made until parent records the actual browser and persisted-owner results.
 
 Run only in the assigned resource slot with the existing backend browser configuration and test filename `sourcing-policies.spec.ts`; no source or application rebuild is required solely to add this test when staged application inputs remain identical.
+
+## Executed result — 21 October 2026
+
+Test `3b8526f`, backend `fddda32`, unchanged application `8226f82`: Chromium1/1 passed in39.4seconds, one worker, no retries. The normal-host private API used actual finite-role PostgreSQL readiness; graceful stop independent owner proof passed exactly one published policy, three identity facts, nine audits and no unrelated Procurement/Core approval effects. Protected provenance and actual API traffic: `/home/amizo/erp-backups/procurement-p29-http-policies-20261021_093536/`. Earlier setup/fallback/JSONB assertion failures remain retained and documented in the ERP repository’s PROC-06-P29-ACTUAL-BROWSER-FIXTURE record. No production deployment or operational RFQ publication is claimed.
