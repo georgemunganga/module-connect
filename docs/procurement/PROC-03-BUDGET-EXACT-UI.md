@@ -135,3 +135,12 @@ node node_modules/@playwright/test/cli.js test --config playwright.budget.config
 ```
 
 Dedicated browser config selects exactly four new precision/uncertainty cases and the two retained Budget regressions. Retain source/bundle SHA256, logs and first failing trace/screenshot. Source author ran none of these gates. Actual backend finite-role testing including ba5b380/P27 is separate; transport mock success cannot certify Finance ownership or migration readiness.
+
+
+## Coordinator verification — PASS, 21 October 2026
+
+Applicatione73b308 passed48/48 focused tests (10Budgetexact,20invoiceexact regression,14scope,4livemetadata), zero failed/skipped,3.75seconds; TypeScript noEmit;112canonical-route generation; production build; and **6/6 Chromium transport-fixture browser scenarios**, one worker/zero retries,23.3seconds. Build has the existing large-chunk advisory. No application source changed during the run.
+
+Protected evidence `/home/amizo/erp-backups/procurement-budget-exact-ui-20261021_063022/` retains source, exact runner/log, exit0, asset hashes and browser results. BundleJS `index-JuvMCZhV.js`; CSS `index-Bddc462I.css`. Browser checks include wide4dp/CAS distinction,8dp explicit amount/no underfunding, uncertain-save read-only history/no repeatPOST, absent businessVersion denial and retained ordinary-save/permission-denial cases.
+
+Backend business-version sourceba5b380 is integrated separately asc86d653. Its API test and actual restricted P27 HTTP gate remain separate; these browser mocks do not establish Finance authority or release readiness. No production deployment.
