@@ -114,6 +114,7 @@ export function LiveItemEditor() {
 export function LiveItemDetail() {
   const { id } = useParams();
   const readiness = useLiveReadiness();
+  const viewOnly = readiness?.adminViewOnly === true;
   const company = companyId();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState("");
@@ -151,6 +152,7 @@ export function LiveItemDetail() {
     return () => controller.abort();
   }, [company, id]);
   async function retire() {
+    if (viewOnly) return;
     if (!item || !window.confirm("Make this item inactive for future buying?")) return;
     setBusy(true); setError("");
     try { setItem(await deactivateItem(company, item.id, item.version) as ItemDetail); }
@@ -158,6 +160,7 @@ export function LiveItemDetail() {
     finally { setBusy(false); }
   }
   async function activate() {
+    if (viewOnly) return;
     if (!item || !reviewReason.trim()) return;
     setBusy(true); setError("");
     try {
@@ -168,6 +171,7 @@ export function LiveItemDetail() {
   }
   async function addPrice(event: FormEvent) {
     event.preventDefault();
+    if (viewOnly) return;
     if (!item || !priceDraft.supplierId) return;
     setBusy(true); setPriceError("");
     try {
@@ -181,6 +185,7 @@ export function LiveItemDetail() {
     finally { setBusy(false); }
   }
   async function publishPrice() {
+    if (viewOnly) return;
     if (!item || !publishId || !publishReason.trim()) return;
     const price = prices.find((value) => value.id === publishId);
     if (!price) return;
@@ -193,6 +198,7 @@ export function LiveItemDetail() {
     finally { setBusy(false); }
   }
   async function withdrawPrice() {
+    if (viewOnly) return;
     if (!item || !withdrawId || !withdrawReason.trim()) return;
     const price = prices.find((value) => value.id === withdrawId);
     if (!price) return;
@@ -207,10 +213,10 @@ export function LiveItemDetail() {
   if (loading) return <div role="status" className="p-5 sm:p-8">Loading item…</div>;
   if (!item) return <div role="alert" className="p-5 sm:p-8">{error || "Item not found."}</div>;
   return <div className="p-5 sm:p-8">
-    <PageHeader title={item.name} subtitle={`${item.code} · ${item.kind}`} actions={<><Badge>{item.status}</Badge>{item.status === "Inactive" && <Link to={`/items/${item.id}/edit`}><Button variant="secondary">Edit item</Button></Link>}</>} />
+    <PageHeader title={item.name} subtitle={`${item.code} · ${item.kind}`} actions={<><Badge>{item.status}</Badge>{!viewOnly && item.status === "Inactive" && <Link to={`/items/${item.id}/edit`}><Button variant="secondary">Edit item</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     <div className="grid gap-5 lg:grid-cols-2"><Panel title="Item overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Category</dt><dd>{item.categoryCode}</dd><dt>Unit</dt><dd>{item.unitCode}</dd><dt>Brand</dt><dd>{item.brand || "—"}</dd><dt>Available for buying</dt><dd>{item.isPurchasable ? "Yes" : "No — approval required"}</dd></dl></Panel><Panel title="Description"><p className="p-5 text-sm">{item.description || "No description."}</p></Panel></div>
-    {item.status === "Inactive" && readiness?.permissions.includes("procurement-item-approve") && <Panel title="Review item" className="mt-5"><div className="space-y-3 p-5">
+    {!viewOnly && item.status === "Inactive" && readiness?.permissions.includes("procurement-item-approve") && <Panel title="Review item" className="mt-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Check its category and buying details. Another person must review an item you created.</p>
       <Field label="Review reason"><Textarea required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
       <Button disabled={busy || !reviewReason.trim()} onClick={() => void activate()}>{busy ? "Saving…" : "Activate item"}</Button>
@@ -230,12 +236,12 @@ export function LiveItemDetail() {
           {price.status === "Withdrawn" && "—"}
         </div></td>
       </tr>)}</tbody></RecordTable></div> : <p className="text-sm">No vendor prices added yet.</p>}
-      {publishId && <div className="space-y-3 rounded-lg border border-border p-4">
+      {!viewOnly && publishId && <div className="space-y-3 rounded-lg border border-border p-4">
         <p className="text-sm">Review the vendor, amount, unit and dates. A different person must approve a price they entered.</p>
         <Field label="Price review reason"><Textarea required maxLength={1000} value={publishReason} onChange={(event) => setPublishReason(event.target.value)} /></Field>
         <div className="flex gap-2"><Button disabled={busy || !publishReason.trim()} onClick={() => void publishPrice()}>{busy ? "Saving…" : "Publish price"}</Button><Button variant="secondary" onClick={() => setPublishId(null)}>Cancel</Button></div>
       </div>}
-      {withdrawId && <div className="space-y-3 rounded-lg border border-border p-4">
+      {!viewOnly && withdrawId && <div className="space-y-3 rounded-lg border border-border p-4">
         <p className="text-sm">Withdraw this price from future buying. Existing requests keep their history.</p>
         <Field label="Withdrawal reason"><Textarea required maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field>
         <div className="flex gap-2"><Button variant="danger" disabled={busy || !withdrawReason.trim()} onClick={() => void withdrawPrice()}>{busy ? "Saving…" : "Confirm withdrawal"}</Button><Button variant="secondary" onClick={() => setWithdrawId(null)}>Cancel</Button></div>
@@ -247,7 +253,7 @@ export function LiveItemDetail() {
         <div className="sm:col-span-4 flex items-center gap-3"><Button type="submit" disabled={busy || !vendors.length || !priceDraft.supplierId}>{busy ? "Saving…" : "Add draft price"}</Button>{!vendors.length && <Link to="/vendors" className="text-sm text-primary hover:underline">Add an approved vendor first</Link>}</div>
       </form>}
     </div></Panel>}
-    {item.status !== "Inactive" && <div className="mt-6"><Button variant="danger" disabled={busy} onClick={() => void retire()}>Make inactive</Button></div>}
+    {!viewOnly && item.status !== "Inactive" && <div className="mt-6"><Button variant="danger" disabled={busy} onClick={() => void retire()}>Make inactive</Button></div>}
     <Link to="/items" className="mt-5 inline-block text-sm text-primary hover:underline">Back to items</Link>
   </div>;
 }

@@ -143,6 +143,7 @@ export function LiveVendorEditor() {
 }
 
 export function LiveVendorDetail() {
+  const adminViewOnly = useLiveReadiness()?.adminViewOnly === true;
   const { id } = useParams();
   const { legalEntityId } = useCompany();
   const navigate = useNavigate();
@@ -194,7 +195,7 @@ export function LiveVendorDetail() {
   }
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading vendor…</div>;
   if (!vendor) return <div className="p-5 sm:p-8" role="alert">{error || "Vendor not found."}</div>;
-  const editable = vendor.status === "Draft" || vendor.status === "More Information Required";
+  const editable = !adminViewOnly && (vendor.status === "Draft" || vendor.status === "More Information Required");
   const qualificationDatesInvalid = Boolean(qualification.issuedOn && qualification.expiresOn
     && qualification.expiresOn < qualification.issuedOn);
   return <div className="p-5 sm:p-8">

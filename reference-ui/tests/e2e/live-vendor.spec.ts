@@ -11,10 +11,10 @@ const capabilities = Object.fromEntries([
 
 type Vendor = Record<string, unknown> & { id: string; version: number; displayName: string; legalName: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean; approveOnly?: boolean; qualification?: boolean; adminViewOnly?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; reviewer?: boolean; approveOnly?: boolean; qualification?: boolean; adminViewOnly?: boolean; adminDraft?: boolean } = {}) {
   let vendor: Vendor | null = options.reviewer || options.approveOnly || options.adminViewOnly ? {
     id: vendorId, number: "VEN-001", legalName: "Acme Zambia Ltd", displayName: "Acme",
-    countryCode: "ZM", categoryCode: "OFFICE", status: "Submitted", version: 3,
+    countryCode: "ZM", categoryCode: "OFFICE", status: options.adminDraft ? "Draft" : "Submitted", version: 3,
     isOrderable: false, canReturnForInformation: !options.approveOnly && !options.adminViewOnly, canApprove: !options.adminViewOnly, canReject: !options.adminViewOnly,
     contacts: [{ id: "44444444-4444-4444-8444-444444444444", name: "Pat Supplier" }], sites: [],
     qualifications: options.qualification ? [{ id: "66666666-6666-4666-8666-666666666666",
@@ -437,5 +437,17 @@ test("worker-less ERP administrator can review vendors without purchasing comman
   await page.goto("/procurement/workspace/vendors/new");
   await expect(page.getByRole("heading", { name: "View only", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Save/i })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("administrator's historic vendor draft has no inline editing or submission actions", async ({ page }) => {
+  const writes: string[] = [];
+  page.on("request", request => { if (new URL(request.url()).pathname.startsWith("/api/procurement/") && request.method() !== "GET") writes.push(request.url()); });
+  await mockErp(page, { adminViewOnly: true, adminDraft: true });
+  await page.goto(`/procurement/workspace/vendors/${vendorId}`);
+  await expect(page.getByRole("heading", { name: "Acme", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit vendor" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Add contact|Add address|Add qualification|Submit for review|Withdraw draft|Remove/i })).toHaveCount(0);
+  await expect(page.locator("form")).toHaveCount(0);
   expect(writes).toEqual([]);
 });

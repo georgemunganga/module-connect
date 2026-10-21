@@ -26,7 +26,7 @@ function localDateTime(value: string | null | undefined) {
 function iso(value: string) { return value ? new Date(value).toISOString() : null; }
 
 export function LiveSourcingList() {
-  const { legalEntityId } = useCompany();
+  const { legalEntityId, adminViewOnly } = useCompany();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<SourcingPage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,13 +40,13 @@ export function LiveSourcingList() {
     return () => controller.abort();
   }, [legalEntityId, page]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Request for Quotes" subtitle="Prepare a draft for your company. Sending it to vendors opens after approvals and supplier access are ready." actions={<Link to="/rfqs/new"><Button><Plus size={16} className="mr-2 inline" />New quote request</Button></Link>} />
+    <PageHeader title="Request for Quotes" subtitle="Prepare a draft for your company. Sending it to vendors opens after approvals and supplier access are ready." actions={!adminViewOnly ? <Link to="/rfqs/new"><Button><Plus size={16} className="mr-2 inline" />New quote request</Button></Link> : undefined} />
     <Panel><div className="p-5">
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading quote requests…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Reference</th><th>Title</th><th>Method</th><th>Lines</th><th>Closes</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>{data.items.map((item) => <tr key={item.id}><td>{item.number}</td><td><Link to={`/rfqs/${item.id}`} className="font-medium text-primary hover:underline">{item.title}</Link></td><td>{item.method}</td><td>{item.lineCount}</td><td>{item.closesAt ? new Date(item.closesAt).toLocaleString() : "—"}</td><td><Badge>{item.status}</Badge></td><td><Link to={`/rfqs/${item.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="No quote requests yet" description="Start a draft to prepare what you need from suppliers." action={<Link to="/rfqs/new"><Button>New quote request</Button></Link>} />}
+      </RecordTable></div> : <EmptyState title="No quote requests yet" description="Start a draft to prepare what you need from suppliers." action={!adminViewOnly ? <Link to="/rfqs/new"><Button>New quote request</Button></Link> : undefined} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
   </div>;
@@ -124,7 +124,7 @@ export function LiveSourcingEditor() {
 export function LiveSourcingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId } = useCompany();
+  const { legalEntityId, adminViewOnly } = useCompany();
   const [record, setRecord] = useState<SourcingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -140,6 +140,7 @@ export function LiveSourcingDetail() {
     return () => controller.abort();
   }, [id, legalEntityId]);
   async function cancel() {
+    if (adminViewOnly) return;
     if (!record || !reason.trim()) { setError("Give a reason for cancelling this draft."); return; }
     setBusy(true); setError("");
     try { await cancelOwnSourcingDraft(legalEntityId, record.id, record.version, reason.trim()); navigate("/rfqs"); }
@@ -149,11 +150,11 @@ export function LiveSourcingDetail() {
   if (loading) return <div role="status" className="p-5 sm:p-8">Loading quote request…</div>;
   if (!record) return <div role="alert" className="p-5 sm:p-8">{error || "Quote request not found."}</div>;
   return <div className="p-5 sm:p-8">
-    <PageHeader title={record.title} subtitle={`${record.number} · ${record.method} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{record.status === "Draft" && <Link to={`/rfqs/${record.id}/edit`}><Button variant="secondary">Edit draft</Button></Link>}</>} />
+    <PageHeader title={record.title} subtitle={`${record.number} · ${record.method} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{!adminViewOnly && record.status === "Draft" && <Link to={`/rfqs/${record.id}/edit`}><Button variant="secondary">Edit draft</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     <Panel title="Items and services"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Category</th><th>Status</th></tr></thead><tbody>{record.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitCode}</td><td>{line.categoryCode || "—"}</td><td>{line.status}</td></tr>)}</tbody></RecordTable></div></Panel>
     <div className="mt-5 grid gap-5 lg:grid-cols-2"><Panel title="Schedule"><div className="space-y-2 p-5 text-sm"><p>Opens: {record.opensAt ? new Date(record.opensAt).toLocaleString() : "Not set"}</p><p>Closes: {record.closesAt ? new Date(record.closesAt).toLocaleString() : "Not set"}</p></div></Panel><Panel title="Next step"><p className="p-5 text-sm text-muted-foreground">Publication and vendor invitations will open after approval rules and supplier access are connected.</p></Panel></div>
-    {record.status === "Draft" && <Panel title="Cancel this draft" className="mt-5"><div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-end"><Field label="Reason" className="flex-1"><Textarea rows={2} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
+    {!adminViewOnly && record.status === "Draft" && <Panel title="Cancel this draft" className="mt-5"><div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-end"><Field label="Reason" className="flex-1"><Textarea rows={2} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
     <Link to="/rfqs" className="mt-5 inline-block text-sm text-primary hover:underline">Back to quote requests</Link>
   </div>;
 }
