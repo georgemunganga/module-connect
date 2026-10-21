@@ -97,7 +97,7 @@ test("existing zero/false controls and reviewer IDs survive empty or failed name
 test("unknown controls and old backend markers preserve sourcing as read-only", async ({ page }) => {
   const state = await setup(page, { saved: true, version: false }); await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "View saved rules", exact: true }).click();
-  await expect(page.getByLabel("Saved rule definition", { exact: true })).toHaveAttribute("readonly", "");
+  await expect(page.getByRole("textbox", { name: "Saved rule definition", exact: true })).toHaveAttribute("readonly", "");
   await expect(page.getByRole("button", { name: "Send for review", exact: true })).toHaveCount(0);
   expect(state.writes()).toBe(0);
 });
@@ -105,7 +105,7 @@ test("unknown controls and old backend markers preserve sourcing as read-only", 
 test("unsupported saved sourcing fields remain read-only despite a supported backend marker", async ({ page }) => {
   const state = await setup(page, { saved: true, unknown: true }); await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Edit draft", exact: true }).click();
-  await expect(page.getByLabel("Saved rule definition", { exact: true })).toHaveValue(/extraControl/);
+  await expect(page.getByRole("textbox", { name: "Saved rule definition", exact: true })).toHaveValue(/extraControl/);
   await expect(page.getByRole("button", { name: "Check and save draft", exact: true })).toHaveCount(0); expect(state.writes()).toBe(0);
 });
 
