@@ -205,7 +205,7 @@ test("vendor draft persists through the ERP API across refresh, edit and withdra
   await expect(page.getByRole("heading", { name: "Amizo Supplies" })).toBeVisible();
   await page.getByLabel("Contact name").fill("Jane Buyer");
   await page.getByRole("button", { name: "Add contact" }).click();
-  await expect(page.getByText("Jane Buyer")).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "Jane Buyer" })).toBeVisible();
   await page.getByLabel("Address line 1").fill("Plot 10, Cairo Road");
   await page.getByRole("button", { name: "Add address" }).click();
   await expect(page.getByText(/Plot 10, Cairo Road/)).toBeVisible();
@@ -248,18 +248,18 @@ test("vendor draft contact and address can be corrected and removed with a reaso
   await page.getByRole("button", { name: "Save draft" }).click();
   await page.getByLabel("Contact name").fill("Old person");
   await page.getByRole("button", { name: "Add contact" }).click();
-  await expect(page.getByText("Old person", { exact: false })).toBeVisible();
-  await page.getByText("Old person", { exact: false }).locator("..").getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: "Old person" })).toBeVisible();
+  await page.getByRole("listitem").filter({ hasText: "Old person" }).getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Contact name").fill("New person");
   await page.getByRole("button", { name: "Save contact" }).click();
-  await expect(page.getByText("New person", { exact: false })).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "New person" })).toBeVisible();
   await page.getByLabel("Address line 1").fill("Old road");
   await page.getByRole("button", { name: "Add address" }).click();
   await page.getByText(/Billing: Old road/).locator("..").getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Address line 1").fill("New road");
   await page.getByRole("button", { name: "Save address" }).click();
   await expect(page.getByText(/Billing: New road/)).toBeVisible();
-  await page.getByText("New person", { exact: false }).locator("..").getByRole("button", { name: "Remove" }).click();
+  await page.getByRole("listitem").filter({ hasText: "New person" }).getByRole("button", { name: "Remove" }).click();
   await expect(page.getByRole("button", { name: "Remove detail" })).toBeDisabled();
   await page.getByLabel("Why remove this detail?").fill("Wrong person");
   await page.getByRole("button", { name: "Remove detail" }).click();
@@ -320,10 +320,10 @@ test("vendor can be submitted for review after category and contact are saved", 
   await page.getByRole("button", { name: "Add contact" }).click();
   await page.getByLabel("Why do you need this vendor?").fill("Office equipment sourcing");
   await page.getByRole("button", { name: "Submit for review" }).click();
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Vendor record", exact: true }).locator("header").getByText("Submitted", { exact: true })).toBeVisible();
   await expect(page.getByText("No — approval required")).toBeVisible();
   await page.reload();
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Vendor record", exact: true }).locator("header").getByText("Submitted", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Edit vendor" })).toHaveCount(0);
   await page.evaluate(async (id) => {
     const response = await fetch(`/api/procurement/v1/vendors/${id}/return`, {
@@ -337,7 +337,7 @@ test("vendor can be submitted for review after category and contact are saved", 
   await expect(page.getByRole("link", { name: "Edit vendor" })).toBeVisible();
   await page.getByLabel("Why do you need this vendor?").fill("Legal address confirmed");
   await page.getByRole("button", { name: "Resubmit for review" }).click();
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Vendor record", exact: true }).locator("header").getByText("Submitted", { exact: true })).toBeVisible();
   await expect(page.getByText("No — approval required")).toBeVisible();
 });
 
@@ -346,8 +346,8 @@ test("reviewer can return a submitted vendor with a visible reason", async ({ pa
   await page.goto("/procurement/workspace/vendors");
   await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
   await page.getByRole("option", { name: "Submitted for review" }).click();
-  await expect(page.getByText("Acme", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Acme" }).click();
+  await expect(page.getByRole("link", { name: "Acme", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Acme", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review vendor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send back for changes" })).toBeDisabled();
   await page.getByLabel("Reason for your decision").fill("Confirm the legal address");
@@ -379,7 +379,7 @@ test("reviewer must check duplicates before approving a vendor", async ({ page }
   await expect(page.getByRole("button", { name: "Approve vendor" })).toBeDisabled();
   await page.getByLabel("I checked for duplicate vendors").check();
   await page.getByRole("button", { name: "Approve vendor" }).click();
-  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Vendor record", exact: true }).locator("header").getByText("Active", { exact: true })).toBeVisible();
   await expect(page.getByText("Yes", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Review vendor" })).toHaveCount(0);
 });
@@ -398,7 +398,7 @@ test("reviewer can place an active vendor on hold after checking existing orders
   await page.getByLabel("I checked existing orders and will follow up on any open commitments").check();
   await page.getByRole("button", { name: "Place on hold" }).click();
   await expect(page.getByText("This vendor is on hold and cannot receive new orders.", { exact: false })).toBeVisible();
-  await expect(page.getByText("Suspended", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Vendor record", exact: true }).locator("header").getByText("Suspended", { exact: true })).toBeVisible();
   await expect(page.getByText("No — on hold")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Place vendor on hold" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Return vendor to active" })).toBeVisible();
@@ -406,7 +406,7 @@ test("reviewer can place an active vendor on hold after checking existing orders
   await page.getByLabel("How was the issue resolved?").fill("Insurance renewed and verified");
   await page.getByLabel("I checked the current vendor details and qualifications").check();
   await page.getByRole("button", { name: "Return to active" }).click();
-  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Vendor record", exact: true }).locator("header").getByText("Active", { exact: true })).toBeVisible();
   await expect(page.getByText("Yes", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Return vendor to active" })).toHaveCount(0);
 });
@@ -448,6 +448,6 @@ test("administrator's historic vendor draft has no inline editing or submission 
   await expect(page.getByRole("heading", { name: "Acme", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Edit vendor" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Add contact|Add address|Add qualification|Submit for review|Withdraw draft|Remove/i })).toHaveCount(0);
-  await expect(page.locator("form")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Vendor record", exact: true }).locator("form")).toHaveCount(0);
   expect(writes).toEqual([]);
 });

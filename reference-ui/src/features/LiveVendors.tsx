@@ -1,7 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Switch, Textarea } from "../components/ui";
+import { VendorDetailFrame, vendorDetailTabs } from "../components/vendors/VendorDetailFrame";
+import { DetailSection, DetailValue } from "../components/data/DetailPrimitives";
+import { useErpShell } from "../lib/erpShell";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
@@ -142,11 +145,57 @@ export function LiveVendorEditor() {
   </div>;
 }
 
+/** Reset the complete live record on company/branch/employee-mapping/record changes. URL
+ * tabs keep the same record; no browser-local catalog data is used as a fallback. */
 export function LiveVendorDetail() {
-  const adminViewOnly = useLiveReadiness()?.adminViewOnly === true;
   const { id } = useParams();
-  const { legalEntityId } = useCompany();
+  const readiness = useCompany();
+  const { selection } = useErpShell();
+  if (selection.entityId && selection.entityId !== readiness.legalEntityId)
+    return <p role="status">Checking the selected company…</p>;
+  return <LiveVendorRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${id}`} />;
+}
+
+function VendorDirectory({ companyId, selectedId, canCreate }: { companyId: string; selectedId: string; canCreate: boolean }) {
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<VendorPage | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const abort = new AbortController(); setLoading(true); setData(null); setError("");
+    listVendorDrafts(companyId, { search, page, pageSize: 25, signal: abort.signal })
+      .then(value => { if (!abort.signal.aborted) setData(value); })
+      .catch(cause => { if (!abort.signal.aborted) setError(message(cause)); })
+      .finally(() => { if (!abort.signal.aborted) setLoading(false); });
+    return () => abort.abort();
+  }, [companyId, search, page]);
+  return <>
+    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-4"><div><p className="text-sm text-muted-foreground">Directory</p><Link className="font-semibold hover:text-primary" to="/vendors">Vendors</Link></div>
+      {canCreate && <Link to="/vendors/new" aria-label="Add vendor"><Button variant="secondary"><Plus size={16} /></Button></Link>}
+    </div>
+    <form className="space-y-2 border-b border-border p-3" onSubmit={event => { event.preventDefault(); setPage(1); setSearch(query.trim()); }}>
+      <Input aria-label="Search vendor directory" placeholder="Find a vendor" value={query} onChange={event => setQuery(event.target.value)} />
+      <Button type="submit" variant="secondary">Search directory</Button>
+    </form>
+    <div className="max-h-52 overflow-y-auto xl:max-h-[calc(100dvh-22rem)]">
+      {loading ? <p role="status" className="p-4 text-sm text-muted-foreground">Loading directory…</p> : error ? <p role="alert" className="p-4 text-sm text-destructive">{error}</p> : data?.items.length ? data.items.map(row =>
+        <Link key={row.id} to={`/vendors/${row.id}`} aria-current={row.id === selectedId ? "page" : undefined} className={`block border-b border-border px-4 py-3 hover:bg-muted ${row.id === selectedId ? "bg-muted" : ""}`}>
+          <span className="block truncate text-sm font-medium">{row.displayName}</span><span className="mt-1 block text-sm text-muted-foreground">{row.number} · {row.status}</span>
+        </Link>) : <p className="p-4 text-sm text-muted-foreground">No vendors found.</p>}
+    </div>
+    {data && data.total > data.pageSize && <div className="flex flex-wrap items-center gap-2 p-3"><Button variant="secondary" disabled={page===1 || loading} onClick={()=>setPage(page-1)}>Previous vendors</Button><span className="text-sm">Page {page}</span><Button variant="secondary" disabled={page*data.pageSize>=data.total || loading} onClick={()=>setPage(page+1)}>Next vendors</Button></div>}
+  </>;
+}
+
+function LiveVendorRecord() {
+  const adminViewOnly = useLiveReadiness()?.adminViewOnly === true;
+  const { id, tab } = useParams();
+  const { legalEntityId, permissions } = useCompany();
   const navigate = useNavigate();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [vendor, setVendor] = useState<VendorDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -168,53 +217,67 @@ export function LiveVendorDetail() {
   const [removingDetail, setRemovingDetail] = useState<{ kind: "contact" | "site" | "qualification"; id: string; label: string } | null>(null);
   const [removalReason, setRemovalReason] = useState("");
   const [qualification, setQualification] = useState({ qualificationType: "", issuer: "", referenceNumber: "", issuedOn: "", expiresOn: "" });
-  const reload = () => { if (!id) return; setLoading(true); getVendorDraft(legalEntityId, id).then(setVendor).catch((cause: unknown) => setError(message(cause))).finally(() => setLoading(false)); };
+  const reload = () => { if (!id || !mounted.current) return; setLoading(true); getVendorDraft(legalEntityId, id).then(value => { if (mounted.current) setVendor(value); }).catch((cause: unknown) => { if (mounted.current) setError(message(cause)); }).finally(() => { if (mounted.current) setLoading(false); }); };
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
-    setLoading(true); setError("");
-    getVendorDraft(legalEntityId, id, controller.signal).then(setVendor)
+    setLoading(true); setError(""); setVendor(null);
+    getVendorDraft(legalEntityId, id, controller.signal).then(value => { if (!controller.signal.aborted) setVendor(value); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId]);
   useEffect(() => {
-    if (!vendor?.canSuspend) return;
+    if (adminViewOnly || !vendor?.canSuspend) return;
     const controller = new AbortController();
     setOpenOrders(null); setOrdersError(""); setOrdersReviewed(false);
     getVendorOpenOrders(legalEntityId, vendor.id, controller.signal)
-      .then(setOpenOrders)
+      .then(value => { if (!controller.signal.aborted) setOpenOrders(value); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setOrdersError(message(cause)); });
     return () => controller.abort();
-  }, [vendor?.canSuspend, vendor?.id, vendor?.version, legalEntityId]);
+  }, [vendor?.canSuspend, vendor?.id, vendor?.version, legalEntityId, adminViewOnly]);
   async function act(operation: () => Promise<unknown>): Promise<boolean> {
+    if (adminViewOnly || !mounted.current) return false;
     setBusy(true); setError("");
-    try { await operation(); reload(); return true; }
-    catch (cause) { setError(message(cause)); return false; }
-    finally { setBusy(false); }
+    try { await operation(); if (!mounted.current) return false; reload(); return true; }
+    catch (cause) { if (mounted.current) setError(message(cause)); return false; }
+    finally { if (mounted.current) setBusy(false); }
   }
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading vendor…</div>;
   if (!vendor) return <div className="p-5 sm:p-8" role="alert">{error || "Vendor not found."}</div>;
   const editable = !adminViewOnly && (vendor.status === "Draft" || vendor.status === "More Information Required");
   const qualificationDatesInvalid = Boolean(qualification.issuedOn && qualification.expiresOn
     && qualification.expiresOn < qualification.issuedOn);
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={vendor.displayName} subtitle={[vendor.number, vendor.legalName].filter(Boolean).join(" · ")} actions={<><Badge>{vendor.status}</Badge>{editable && <Link to={`/vendors/${vendor.id}/edit`}><Button variant="secondary">Edit vendor</Button></Link>}</>} />
+  const activeTab = vendorDetailTabs.some(value => value.key === tab) ? tab! : "overview";
+  const contactPerson = vendor.contacts?.find(row => row.isPrimary) ?? vendor.contacts?.[0];
+  return <VendorDetailFrame title={vendor.displayName} status={vendor.status}
+    subtitle={[vendor.number, vendor.legalName].filter(Boolean).join(" · ")}
+    directory={<VendorDirectory companyId={legalEntityId} selectedId={vendor.id} canCreate={!adminViewOnly && permissions.includes("procurement-vendor-create")} />}
+    actions={editable ? <Link to={`/vendors/${vendor.id}/edit`}><Button variant="secondary">Edit vendor</Button></Link> : undefined}
+    activeTab={activeTab} onTabChange={value => navigate(value === "overview" ? `/vendors/${vendor.id}` : `/vendors/${vendor.id}/${value}`)}>
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    {activeTab !== "overview" ? <DetailSection title={vendorDetailTabs.find(value => value.key === activeTab)!.label}>
+      <p className="text-sm text-muted-foreground">{activeTab === "comments" ? "Vendor comments are not connected yet." : activeTab === "transactions" ? "Linked purchase transactions are not connected to this vendor view yet." : activeTab === "mails" ? "Vendor email history and sending are not connected yet." : "Vendor statements and payable balances are not connected to Finance yet."}</p>
+      <p className="mt-2 text-sm text-muted-foreground">No records or balances are inferred from this unavailable information.</p>
+    </DetailSection> : <>
+    <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.6fr)]">
+      <DetailSection title="Vendor contact"><div className="flex items-start gap-3"><span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-primary">{vendor.displayName.trim().split(/\s+/).slice(0,2).map(value => value[0]).join("")}</span><div className="min-w-0"><p className="font-semibold">{contactPerson?.name || vendor.displayName}</p><p className="mt-1 text-sm text-muted-foreground">{vendor.legalName || "Company details unavailable"}</p><p className="mt-2 break-all text-sm">{contactPerson?.email || (vendor.contacts === undefined ? "Contact details unavailable" : "Email not provided")}</p><p className="mt-1 text-sm">{contactPerson?.workPhone || contactPerson?.phone || "Work phone not provided"}</p>{contactPerson?.mobilePhone && <p className="mt-1 text-sm">{contactPerson.mobilePhone}</p>}</div></div></DetailSection>
+      <DetailSection title="Payables"><dl className="grid gap-4 sm:grid-cols-3"><DetailValue label="Currency" value={vendor.defaultCurrencyCode || "Not provided"} /><DetailValue label="Outstanding payables" value="Unavailable" /><DetailValue label="Unused credits" value="Unavailable" /></dl><p className="mt-4 text-sm text-muted-foreground">Finance balances are not connected to this vendor view.</p></DetailSection>
+    </div>
     {vendor.status === "Submitted" && <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">Submitted for review{vendor.statusDecidedAt ? ` on ${new Date(vendor.statusDecidedAt).toLocaleDateString()}` : ""}. This vendor cannot receive new purchase orders yet.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""}</p>}
     {vendor.status === "More Information Required" && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">More information is needed before this vendor can be approved.{vendor.statusReason ? ` Reviewer note: ${vendor.statusReason}` : ""} Update the details below, then send the vendor for review again.</p>}
     {vendor.status === "Suspended" && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">This vendor is on hold and cannot receive new orders.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""} Existing orders remain available for review.</p>}
-    {(vendor.canReturnForInformation || vendor.canApprove || vendor.canReject) && <Panel title="Review vendor" className="mb-5"><div className="space-y-3 p-5">
+    {!adminViewOnly && (vendor.canReturnForInformation || vendor.canApprove || vendor.canReject) && <Panel title="Review vendor" className="mb-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Check the company details and documents, then record your decision. Finance verifies payment details separately.</p>
       <Field label="Reason for your decision"><Textarea rows={3} maxLength={1000} required value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
-      {vendor.canApprove && <label className="flex items-center gap-3 text-sm"><Switch checked={duplicatesReviewed} onChange={(event) => setDuplicatesReviewed(event.target.checked)} />I checked for duplicate vendors</label>}
+      {!adminViewOnly && vendor.canApprove && <label className="flex items-center gap-3 text-sm"><Switch checked={duplicatesReviewed} onChange={(event) => setDuplicatesReviewed(event.target.checked)} />I checked for duplicate vendors</label>}
       <div className="flex flex-wrap gap-2">
-        {vendor.canApprove && <Button disabled={busy || !reviewReason.trim() || !duplicatesReviewed} onClick={() => { void act(() => approveVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim(), duplicatesReviewed)); }}>Approve vendor</Button>}
-        {vendor.canReturnForInformation && <Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => returnVendorForInformation(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Send back for changes</Button>}
-        {vendor.canReject && <Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => rejectVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Reject vendor</Button>}
+        {!adminViewOnly && vendor.canApprove && <Button disabled={busy || !reviewReason.trim() || !duplicatesReviewed} onClick={() => { void act(() => approveVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim(), duplicatesReviewed)); }}>Approve vendor</Button>}
+        {!adminViewOnly && vendor.canReturnForInformation && <Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => returnVendorForInformation(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Send back for changes</Button>}
+        {!adminViewOnly && vendor.canReject && <Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => rejectVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Reject vendor</Button>}
       </div>
     </div></Panel>}
-    {vendor.canSuspend && <Panel title="Place vendor on hold" className="mb-5"><div className="space-y-3 p-5">
+    {!adminViewOnly && vendor.canSuspend && <Panel title="Place vendor on hold" className="mb-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Stop new orders while the vendor issue is reviewed. Existing orders stay in the system.</p>
       {ordersError && <p role="alert" className="text-sm text-red-700">{ordersError}</p>}
       {!openOrders && !ordersError && <p role="status" className="text-sm text-muted-foreground">Checking existing orders…</p>}
@@ -229,7 +292,7 @@ export function LiveVendorDetail() {
         Place on hold
       </Button>
     </div></Panel>}
-    {vendor.canReactivate && <Panel title="Return vendor to active" className="mb-5"><div className="space-y-3 p-5">
+    {!adminViewOnly && vendor.canReactivate && <Panel title="Return vendor to active" className="mb-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Confirm the issue is resolved and check current vendor details, qualifications and payment verification before allowing new orders.</p>
       <Field label="How was the issue resolved?"><Textarea rows={3} maxLength={1000} value={reactivateReason} onChange={(event) => setReactivateReason(event.target.value)} /></Field>
       <label className="flex items-center gap-3 text-sm"><Switch checked={diligenceReviewed} onChange={(event) => setDiligenceReviewed(event.target.checked)} />I checked the current vendor details and qualifications</label>
@@ -239,15 +302,16 @@ export function LiveVendorDetail() {
       </Button>
     </div></Panel>}
     <div className="grid gap-5 lg:grid-cols-2">
-      <Panel title="Vendor overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Company ID</dt><dd>{vendor.registrationNumber || "—"}</dd><dt>Category</dt><dd>{vendor.categoryCode || "—"}</dd><dt>Country</dt><dd>{vendor.countryCode}</dd><dt>Currency</dt><dd>{vendor.defaultCurrencyCode || "—"}</dd><dt>Payment terms</dt><dd>{vendor.paymentTermRef || "—"}</dd><dt>Can receive new orders?</dt><dd>{vendor.isOrderable ? "Yes" : vendor.status === "Suspended" ? "No — on hold" : "No — approval required"}</dd></dl></Panel>
-      <Panel title="Contact persons"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.contacts?.map((row) => <li key={row.id} className="flex flex-wrap items-center gap-2"><span>{row.name}{row.email ? ` · ${row.email}` : ""}{row.isPrimary ? " · Main" : ""}</span>{editable && <><Button variant="secondary" disabled={busy} onClick={() => { setEditingContactId(row.id); setContact({ ...row }); }}>Edit</Button><Button variant="secondary" disabled={busy} onClick={() => { setRemovingDetail({ kind: "contact", id: row.id, label: row.name }); setRemovalReason(""); }}>Remove</Button></>}</li>)}</ul>{!vendor.contacts?.length && <p className="text-sm text-muted-foreground">No contacts yet.</p>}
-        {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); const value = { ...contact, isPrimary: editingContactId ? contact.isPrimary : !vendor.contacts?.length || contact.isPrimary }; void act(() => editingContactId ? updateVendorContact(legalEntityId, vendor.id, editingContactId, vendor.version, value) : addVendorContact(legalEntityId, vendor.id, vendor.version, value)).then((saved) => { if (saved) { setContact({ name: "", email: "", phone: "", isPrimary: false }); setEditingContactId(null); } }); }}>
-          {editingContactId && <p className="font-medium">Edit contact</p>}<Field label="Contact name"><Input required value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} /></Field><Field label="Email"><Input type="email" value={contact.email || ""} onChange={(event) => setContact({ ...contact, email: event.target.value })} /></Field><Field label="Phone"><Input value={contact.phone || ""} onChange={(event) => setContact({ ...contact, phone: event.target.value })} /></Field><div className="flex gap-2"><Button type="submit" disabled={busy}>{editingContactId ? "Save contact" : "Add contact"}</Button>{editingContactId && <Button variant="secondary" type="button" onClick={() => { setEditingContactId(null); setContact({ name: "", email: "", phone: "", isPrimary: false }); }}>Cancel</Button>}</div>
-        </form>}</div></Panel>
-      <Panel title="Addresses"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.sites?.map((row) => <li key={row.id} className="flex flex-wrap items-center gap-2"><span>{row.kind}: {row.addressLine1}{row.city ? `, ${row.city}` : ""}{row.isPrimary ? " · Main" : ""}</span>{editable && <><Button variant="secondary" disabled={busy} onClick={() => { setEditingSiteId(row.id); setSite({ ...row }); }}>Edit</Button><Button variant="secondary" disabled={busy} onClick={() => { setRemovingDetail({ kind: "site", id: row.id, label: row.addressLine1 }); setRemovalReason(""); }}>Remove</Button></>}</li>)}</ul>{!vendor.sites?.length && <p className="text-sm text-muted-foreground">No addresses yet.</p>}
+      <Panel title="Addresses"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.sites?.map((row) => <li key={row.id} className="flex flex-wrap items-center gap-2"><span>{row.kind}: {row.addressLine1}{row.city ? `, ${row.city}` : ""}{row.isPrimary ? " · Main" : ""}</span>{editable && <><Button variant="secondary" disabled={busy} onClick={() => { setEditingSiteId(row.id); setSite({ ...row }); }}>Edit</Button><Button variant="secondary" disabled={busy} onClick={() => { setRemovingDetail({ kind: "site", id: row.id, label: row.addressLine1 }); setRemovalReason(""); }}>Remove</Button></>}</li>)}</ul>{!vendor.sites?.length && <p className="text-sm text-muted-foreground">{vendor.sites === undefined ? "Address details are unavailable for this account." : "No addresses yet."}</p>}
         {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); const value = { ...site, isPrimary: editingSiteId ? site.isPrimary : !vendor.sites?.some((row) => row.kind === site.kind && row.isPrimary) || site.isPrimary }; void act(() => editingSiteId ? updateVendorSite(legalEntityId, vendor.id, editingSiteId, vendor.version, value) : addVendorSite(legalEntityId, vendor.id, vendor.version, value)).then((saved) => { if (saved) { setSite({ kind: "Billing", addressLine1: "", city: "", countryCode: "ZM", isPrimary: false, isServiceSite: false }); setEditingSiteId(null); } }); }}>
           {editingSiteId && <p className="font-medium">Edit address</p>}<Field label="Address type"><Select value={site.kind} onChange={(event) => setSite({ ...site, kind: event.target.value })}><option>Billing</option><option>Shipping</option><option>Physical</option></Select></Field><Field label="Address line 1"><Input required value={site.addressLine1} onChange={(event) => setSite({ ...site, addressLine1: event.target.value })} /></Field><Field label="City"><Input value={site.city || ""} onChange={(event) => setSite({ ...site, city: event.target.value })} /></Field><Field label="Country code"><Input required maxLength={2} value={site.countryCode} onChange={(event) => setSite({ ...site, countryCode: event.target.value.toUpperCase() })} /></Field><div className="flex gap-2"><Button type="submit" disabled={busy}>{editingSiteId ? "Save address" : "Add address"}</Button>{editingSiteId && <Button variant="secondary" type="button" onClick={() => { setEditingSiteId(null); setSite({ kind: "Billing", addressLine1: "", city: "", countryCode: "ZM", isPrimary: false, isServiceSite: false }); }}>Cancel</Button>}</div>
         </form>}</div></Panel>
+      <Panel title="Other details"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Company ID</dt><dd>{vendor.registrationNumber || "—"}</dd><dt>Category</dt><dd>{vendor.categoryCode || "—"}</dd><dt>Country</dt><dd>{vendor.countryCode}</dd><dt>Currency</dt><dd>{vendor.defaultCurrencyCode || "—"}</dd><dt>Payment terms</dt><dd>{vendor.paymentTermRef || "—"}</dd><dt>Can receive new orders?</dt><dd>{vendor.isOrderable ? "Yes" : vendor.status === "Suspended" ? "No — on hold" : "No — approval required"}</dd></dl></Panel>
+      <Panel title="Contact persons"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.contacts?.map((row) => <li key={row.id} className="flex flex-wrap items-center gap-2"><span>{row.name}{row.email ? ` · ${row.email}` : ""}{row.isPrimary ? " · Main" : ""}</span>{editable && <><Button variant="secondary" disabled={busy} onClick={() => { setEditingContactId(row.id); setContact({ ...row }); }}>Edit</Button><Button variant="secondary" disabled={busy} onClick={() => { setRemovingDetail({ kind: "contact", id: row.id, label: row.name }); setRemovalReason(""); }}>Remove</Button></>}</li>)}</ul>{!vendor.contacts?.length && <p className="text-sm text-muted-foreground">{vendor.contacts === undefined ? "Contact details are unavailable for this account." : "No contacts yet."}</p>}
+        {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); const value = { ...contact, isPrimary: editingContactId ? contact.isPrimary : !vendor.contacts?.length || contact.isPrimary }; void act(() => editingContactId ? updateVendorContact(legalEntityId, vendor.id, editingContactId, vendor.version, value) : addVendorContact(legalEntityId, vendor.id, vendor.version, value)).then((saved) => { if (saved) { setContact({ name: "", email: "", phone: "", isPrimary: false }); setEditingContactId(null); } }); }}>
+          {editingContactId && <p className="font-medium">Edit contact</p>}<Field label="Contact name"><Input required value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} /></Field><Field label="Email"><Input type="email" value={contact.email || ""} onChange={(event) => setContact({ ...contact, email: event.target.value })} /></Field><Field label="Phone"><Input value={contact.phone || ""} onChange={(event) => setContact({ ...contact, phone: event.target.value })} /></Field><div className="flex gap-2"><Button type="submit" disabled={busy}>{editingContactId ? "Save contact" : "Add contact"}</Button>{editingContactId && <Button variant="secondary" type="button" onClick={() => { setEditingContactId(null); setContact({ name: "", email: "", phone: "", isPrimary: false }); }}>Cancel</Button>}</div>
+        </form>}</div></Panel>
+      <DetailSection title="Bank Account Details"><p className="text-sm text-muted-foreground">Bank details and verification are managed by Finance. They are not connected to this view.</p></DetailSection>
       <Panel title="Qualifications"><div className="p-5"><ul className="space-y-2 text-sm">{vendor.qualifications?.map((row) => <li key={row.id} className="flex flex-wrap items-center gap-2">
         <span>{row.qualificationType}{row.issuer ? ` · ${row.issuer}` : ""}{row.expiresOn ? ` · Expires ${row.expiresOn}` : ""}</span>
         <span className="text-muted-foreground">{row.reviewStatus}</span>
@@ -255,8 +319,8 @@ export function LiveVendorDetail() {
           <Button variant="secondary" disabled={busy} onClick={() => { setEditingQualificationId(row.id); setQualification({ qualificationType: row.qualificationType, issuer: row.issuer || "", referenceNumber: row.referenceNumber || "", issuedOn: row.issuedOn || "", expiresOn: row.expiresOn || "" }); }}>Edit</Button>
           <Button variant="secondary" disabled={busy} onClick={() => { setRemovingDetail({ kind: "qualification", id: row.id, label: row.qualificationType }); setRemovalReason(""); }}>Remove</Button>
         </>}
-        {vendor.canReturnForInformation && row.reviewStatus === "Pending" && <span className="inline-flex gap-2"><Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => reviewVendorQualification(legalEntityId, vendor.id, row.id, vendor.version, "Verified", reviewReason.trim())); }}>Verify</Button><Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => reviewVendorQualification(legalEntityId, vendor.id, row.id, vendor.version, "Rejected", reviewReason.trim())); }}>Mark invalid</Button></span>}
-      </li>)}</ul>{!vendor.qualifications?.length && <p className="text-sm text-muted-foreground">No qualifications added yet.</p>}
+        {!adminViewOnly && vendor.canReturnForInformation && row.reviewStatus === "Pending" && <span className="inline-flex gap-2"><Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => reviewVendorQualification(legalEntityId, vendor.id, row.id, vendor.version, "Verified", reviewReason.trim())); }}>Verify</Button><Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => reviewVendorQualification(legalEntityId, vendor.id, row.id, vendor.version, "Rejected", reviewReason.trim())); }}>Mark invalid</Button></span>}
+      </li>)}</ul>{!vendor.qualifications?.length && <p className="text-sm text-muted-foreground">{vendor.qualifications === undefined ? "Qualification details are unavailable for this account." : "No qualifications added yet."}</p>}
         {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); if (qualificationDatesInvalid) return; const value = { ...qualification, issuedOn: qualification.issuedOn || null, expiresOn: qualification.expiresOn || null } as VendorQualificationDraft; void act(() => editingQualificationId ? updateVendorQualification(legalEntityId, vendor.id, editingQualificationId, vendor.version, value) : addVendorQualification(legalEntityId, vendor.id, vendor.version, value)).then((saved) => { if (saved) { setQualification({ qualificationType: "", issuer: "", referenceNumber: "", issuedOn: "", expiresOn: "" }); setEditingQualificationId(null); } }); }}>
           {editingQualificationId && <p className="font-medium">Edit qualification</p>}
           <Field label="Qualification type"><Input required maxLength={80} value={qualification.qualificationType} onChange={(event) => setQualification({ ...qualification, qualificationType: event.target.value })} /></Field>
@@ -275,7 +339,9 @@ export function LiveVendorDetail() {
       <Button disabled={busy || !businessReason.trim() || !vendor.categoryCode || !vendor.contacts?.length}
         onClick={() => { void act(() => submitVendorForReview(legalEntityId, vendor.id, vendor.version, businessReason.trim())); }}>{vendor.status === "Draft" ? "Submit for review" : "Resubmit for review"}</Button>
     </div></Panel>}
-    {editable && <div className="mt-6"><Button variant="danger" disabled={busy} onClick={() => { const reason = window.prompt("Why are you withdrawing this vendor draft?"); if (reason?.trim()) void act(async () => { await withdrawVendorDraft(legalEntityId, vendor.id, vendor.version, reason.trim()); navigate("/vendors"); }); }}>Withdraw draft</Button></div>}
-    <Link to="/vendors" className="mt-5 inline-block text-sm text-primary hover:underline">Back to vendors</Link>
-  </div>;
+    {editable && <div className="mt-6"><Button variant="danger" disabled={busy} onClick={() => { const reason = window.prompt("Why are you withdrawing this vendor draft?"); if (reason?.trim()) void act(async () => { await withdrawVendorDraft(legalEntityId, vendor.id, vendor.version, reason.trim()); if (mounted.current) navigate("/vendors"); }); }}>Withdraw draft</Button></div>}
+    <div className="grid gap-4 xl:grid-cols-2"><DetailSection title="Record info"><dl className="grid gap-4 sm:grid-cols-2"><DetailValue label="Record ID" value={vendor.id} /><DetailValue label="Created" value={vendor.createdAt ? new Date(vendor.createdAt).toLocaleString() : "Not provided"} /><DetailValue label="Status" value={vendor.status} /><DetailValue label="Revision" value={vendor.version} /></dl></DetailSection>
+    <DetailSection title="Recent Activity"><p className="text-sm text-muted-foreground">Vendor activity history is not connected to this view. Current details above come from the saved vendor record.</p></DetailSection></div>
+    </>}
+  </VendorDetailFrame>;
 }
