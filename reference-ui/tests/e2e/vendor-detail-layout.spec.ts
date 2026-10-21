@@ -61,7 +61,11 @@ test("live vendor uses the imported directory, compact header, split overview an
   await expect(page.getByText("alice@example.test", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Edit vendor", exact: true })).toHaveCount(0);
   const desktopScreenshot = info.outputPath("synthetic-vendor-desktop.png");
-  await page.getByTestId("vendor-detail-frame").screenshot({ path: desktopScreenshot });
+  await page.screenshot({ path: desktopScreenshot, fullPage: true });
+  await page.evaluate(() => window.scrollTo(0, 240));
+  const recordHeader = page.getByRole("region", { name: "Vendor record", exact: true }).locator("header");
+  await expect.poll(async () => (await recordHeader.boundingBox())?.y ?? -1).toBeGreaterThanOrEqual(55);
+  await page.evaluate(() => window.scrollTo(0, 0));
   await info.attach("synthetic-live-vendor-overview-desktop", { path: desktopScreenshot, contentType: "image/png" });
   for (const [label, tab, text] of [
     ["Comments", "comments", "Vendor comments are not connected yet."],
@@ -79,7 +83,8 @@ test("live vendor uses the imported directory, compact header, split overview an
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("heading", { name: "Vendor contact", exact: true })).toBeVisible();
   const mobileScreenshot = info.outputPath("synthetic-vendor-mobile.png");
-  await page.getByTestId("vendor-detail-frame").screenshot({ path: mobileScreenshot });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: mobileScreenshot, fullPage: true });
   await info.attach("synthetic-live-vendor-overview-mobile", { path: mobileScreenshot, contentType: "image/png" });
   expect(setup.writes).toEqual([]);
   expect(setup.reads.every(row => row.company === companyId)).toBe(true);

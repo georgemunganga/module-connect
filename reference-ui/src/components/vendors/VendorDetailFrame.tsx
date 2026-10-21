@@ -20,7 +20,7 @@ export function VendorDetailFrame({ title, status, subtitle, directory, actions,
     <div className="flex min-h-[calc(100dvh-5rem)] flex-col xl:flex-row">
       <aside aria-label="Vendor directory" className="w-full shrink-0 border-b border-border bg-card xl:w-64 xl:border-b-0 xl:border-r">{directory}</aside>
       <section aria-label="Vendor record" className="min-w-0 flex-1">
-        <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-4 sm:px-6">
+        <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-4 sm:px-6">
           <div className="min-w-0"><Link to="/vendors" className="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"><ArrowLeft size={14} />Back to vendors</Link>
             <div className="flex flex-wrap items-center gap-2"><h1 className="break-words text-2xl font-semibold">{title}</h1><Badge>{status}</Badge></div>
             {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
