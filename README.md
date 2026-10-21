@@ -1,5 +1,12 @@
 # Module Connect
 
+## Manus collaboration
+
+Read [MANUS_HANDOFF.md](MANUS_HANDOFF.md) for the current assigned milestone,
+implementation branch, file ownership, verification requirements and PR process.
+Record progress in [the Manus milestone log](docs/collaboration/manus/STATUS.md)
+and [issue #40](https://github.com/georgemunganga/module-connect/issues/40).
+
 ## Procurement live identity bridge
 
 The [Procurement UI and API contract register](docs/procurement-ui-contract-register.md)
