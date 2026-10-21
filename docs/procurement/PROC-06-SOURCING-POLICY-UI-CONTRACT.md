@@ -1,6 +1,6 @@
 # PROC-06 — Existing sourcing policy editor adapter
 
-Status: source authored, unbuilt/unrun, not deployed. Extends existing Buying rules page, not a new settings app or operational RFQ publication workflow. Backend source contract: `SourcingPublicationPolicyRules` and owned policy lifecycle; original-worker identity correction and owning schema readiness remain prerequisites.
+Status: TypeScript, focused unit, staged build and mocked browser checkpoint passed; not deployed or actual-API verified. Extends existing Buying rules page, not a new settings app or operational RFQ publication workflow. Backend source contract: `SourcingPublicationPolicyRules` and owned policy lifecycle; original-worker identity correction and owning schema readiness remain prerequisites.
 
 ## Feature framework addendum
 
@@ -29,7 +29,7 @@ Status: source authored, unbuilt/unrun, not deployed. Extends existing Buying ru
 23. **Postconditions:** confirmed saved policy/configuration state only. No publication capability, invitation or dispatch.
 24. **Recovery:** uncertain mutating response locks repeated actions until explicit saved-list refresh/reconciliation; no automatic POST retry or invented idempotency receipt. Current policy API lacks a durable command-key recovery contract. Known 403/409 is shown without claiming saved success.
 25. **Acceptance:** explicit controls serialize exact backend tuple; zero/false/order/names preserved; older backend remains read-only; PR/PO remain compatible.
-26. **Tests:** authored serialization/exact precision/unknown/duplicate/control boundaries/transport and mocked browser explicit defaults, retained names on failures, unknown version/read-only, uncertain-create reconciliation, stale search/company detail cases. None run yet; contract fixtures are not actual backend evidence.
+26. **Tests:** authored serialization/exact precision/unknown/duplicate/control boundaries/transport and mocked browser explicit defaults, retained names on failures, unknown version/read-only, uncertain-create reconciliation, stale search/company detail cases. Executed checkpoint below records the subsequent focused gates; contract fixtures are not actual backend evidence.
 27. **Ownership:** UI adapter consumes existing Core/Procurement services. Backend must complete historical original-worker pins + schema readiness marker before activation; later serial TSC/unit/staged/mock+actual API browser gates required.
 28. **Open decisions:** real corrected backend marker availability; module-specific SOURCING settings link if needed later; scoped branch editor/lookups; full exact numeric sample transport for otherwise unrepresentable JS numbers. Saved thresholds are exact; sample previews refuse unsafe conversion rather than change value.
 
@@ -39,3 +39,26 @@ Status: source authored, unbuilt/unrun, not deployed. Extends existing Buying ru
 Visible setup messages now say sourcing rule setup is not available for the company; readiness/schema version markers remain internal. The picker uses the confirmed targeted `principalIds` contract from backend source `43aa3f7`, independently of current search/page. At most four requests resolve up to100 retained IDs. Missing/redacted/failed names never clear selected IDs or echo another person's identifier/name: labels stay generic and read-only, with explicit author removal allowed for correction. Name results are bounded to requested IDs and aborted/stale company/selection results cannot populate a new context. Current backend responses still lack the future owner-readiness marker and therefore keep sourcing mutations unavailable.
 
 Additional authored source tests cover off-page label resolution without staff enumeration, unrequested response/paging rejection, missing/revoked scoped results, unchanged original selections, and a late targeted label response after company switching. No unit, TypeScript, build or browser job was run for this follow-up.
+
+
+## Executed UI checkpoint — 21 October 2026
+
+The parent executed the serialized verification against application source **8226f82**. TypeScript completed successfully, all **40/40** focused tests passed (`approval-settings`17, `sourcing-policy-editor`9, `procurement-scope`14), and the staged production build succeeded. These tests cover this adapter and the selected shared contracts; they are not a full ERP regression suite. The build retained the existing large-chunk advisory and introduced no deployment.
+
+The first mocked Chromium run stopped at scenario3 after two passes: its exact `getByLabel` locator did not locate the shared textarea. The retained error context showed the expected read-only panel and accessible textbox already present. Test-only **9230507** replaced two locators with the same exact accessible textbox role, keeping readonly/value/no-action/no-write assertions. Application source and staged assets were unchanged from8226f82. The parent reran the full sourcing policy browser specification: **10/10 passed in31.8seconds, one worker, zero retries**. The initial failure/trace remains retained; it is not described as a clean first attempt.
+
+Protected evidence directory: `/home/amizo/erp-backups/procurement-sourcing-policy-ui-20261021_083230/`.
+
+- `verification.log`: initial type/unit/build checkpoint and first stopped browser run.
+- `browser-results/`: original failure screenshot, error context and trace.
+- `browser-9230507.log` and `browser-results-9230507/`: complete ten-case passing rerun.
+
+Exact staged artifact SHA-256 values (same application candidate for both browser runs):
+
+| Artifact | SHA-256 |
+|---|---|
+| `.verification-dist/index.html` | `9ec57e3fddb43661d49aad5394d77100ef71d6cb31df229605a2a4c421eb5bce` |
+| `assets/index-YX6pNvLM.js` | `ba8ce95742a8c115febd4cbd9b133be2955d34f2b52c818f64cc9b55efc8d155` |
+| `assets/index-Bddc462I.css` | `7f163297e91fa0e3fc3cde778b88996063082e96fb088d9866bfac750639d888` |
+
+**Boundary:** all Procurement HTTP responses in this browser specification are contract fixtures. They demonstrate frontend rendering, serialization, guard/recovery behavior and stale-response handling against those fixtures, not real persistence, current canonical identity, historical maker-worker protection, PostgreSQL schema/readiness or policy publication. The positive `configurationVersion:1` response is explicitly synthetic; older/unversioned fixture responses remain read-only. Actual identity-aware backend lifecycle/readiness plus finite-role API/PostgreSQL and real browser integration remain required before enabling sourcing configuration. Operational RFQ publication, document pins, invitations and delivery remain unavailable and unclaimed. No live assets or backend were published by this checkpoint.
