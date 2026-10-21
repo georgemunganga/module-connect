@@ -20,6 +20,6 @@ The browser chooses the named source from a queue that may contain other fixture
    ```
 
 5. Preserve source SHA/asset hashes/terminal log and fresh .budget-backend-results including first failure trace/screenshot. No timeout increase, automatic POST retry or fixture reuse after a partial run.
-6. Notify root after all calls stop; root gracefully stops server. Independent owner verifier must pass: exact original full source digest/counters/Submitted state unchanged, one0.0002 bound schema1 Finance snapshot/audit with actual canonical independent checker/hash, no Core case/pin/outcome/allocation, all other tracked effect counts unchanged.
+6. Notify root after all calls stop; root gracefully stops server. Independent owner verifier must pass: exact original full source digest/counters/Submitted state unchanged, one0.0002 bound schema1 Finance snapshot with actual canonical independent checker/hash, one business BudgetChecked audit plus existing snapshot-create audit, no Core case/pin/outcome/allocation, all other tracked effect counts unchanged.
 
 Browser success alone is insufficient. External Finance funding authority and production authentication are not supplied by this synthetic fixture; no AP/payment ledger, ready provider or PR approval is invented. Existing restricted P27 CLI verification stays a separate gate. Author executed no jobs.
