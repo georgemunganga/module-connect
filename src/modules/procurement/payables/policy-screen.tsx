@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -366,7 +367,7 @@ export function ProcurementPolicyScreen() {
                 />
                 <div className="space-y-1">
                   <Label htmlFor="approval-strategy">Approval strategy</Label>
-                  <select
+                  <FormSelect
                     id="approval-strategy"
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                     value={draft.approvalStrategy ?? "Hierarchical"}
@@ -380,7 +381,7 @@ export function ProcurementPolicyScreen() {
                     <option>Hierarchical</option>
                     <option>Sequential</option>
                     <option>Parallel</option>
-                  </select>
+                  </FormSelect>
                 </div>
               </div>
             )}
@@ -560,7 +561,7 @@ export function ProcurementPolicyScreen() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="reviewer">Acting reviewer</Label>
-                  <select
+                  <FormSelect
                     id="reviewer"
                     className="h-10 w-full rounded-md border bg-background px-3"
                     value={reviewActor}
@@ -570,7 +571,7 @@ export function ProcurementPolicyScreen() {
                     {reviewActors.map((actor) => (
                       <option key={actor}>{actor}</option>
                     ))}
-                  </select>
+                  </FormSelect>
                 </div>
                 <div>
                   <Label htmlFor="finance-ref">Finance sign-off reference</Label>
@@ -655,7 +656,7 @@ export function ProcurementPolicyScreen() {
               </div>
               <div>
                 <Label htmlFor="sim-risk">Supplier risk</Label>
-                <select
+                <FormSelect
                   id="sim-risk"
                   className="h-10 w-full rounded-md border bg-background px-3"
                   value={simRisk}
@@ -664,11 +665,11 @@ export function ProcurementPolicyScreen() {
                   <option>Standard</option>
                   <option>High</option>
                   <option>Suspended</option>
-                </select>
+                </FormSelect>
               </div>
               <div>
                 <Label htmlFor="sim-route">Buying route</Label>
-                <select
+                <FormSelect
                   id="sim-route"
                   className="h-10 w-full rounded-md border bg-background px-3"
                   value={simRoute}
@@ -677,7 +678,7 @@ export function ProcurementPolicyScreen() {
                   {AVAILABLE_METHODS.map((method) => (
                     <option key={method}>{method}</option>
                   ))}
-                </select>
+                </FormSelect>
               </div>
             </div>
             <div role="status" className="mt-4 rounded-lg border bg-muted p-3 text-sm">

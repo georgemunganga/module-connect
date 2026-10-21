@@ -6,14 +6,35 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useRouterState,
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppProvider } from "../platform/app-context";
-import { ProcurementSessionProvider } from "../platform/procurement-session";
+import { ProcurementSessionProvider, useProcurementSession } from "../platform/procurement-session";
+import { applyBranding, readBrandingCache, saveBrandingCache, type ErpBranding } from "../../shared/branding";
+
+function PreloaderController({ brandingReady }: { brandingReady: boolean }) {
+  const session = useProcurementSession();
+  const startedAt = useRef(Date.now());
+  useEffect(() => {
+    if (!brandingReady || session.mode === "loading") return;
+    const overlay = document.getElementById("erp-global-preloader");
+    if (!overlay) return;
+    const image = document.getElementById("erp-preloader-logo") as HTMLImageElement | null;
+    const visibleAt = Number(image?.dataset.readyAt) || startedAt.current;
+    const delay = Math.max(0, 550 - (Date.now() - visibleAt));
+    const timer = window.setTimeout(() => {
+      overlay.classList.add("is-leaving");
+      window.setTimeout(() => overlay.classList.add("is-gone"), 280);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [brandingReady, session.mode]);
+  return null;
+}
 
 function NotFoundComponent() {
   return (
@@ -80,10 +101,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Meridian ERP — HRM workspace" },
+      { title: "ERP workspace" },
       { name: "description", content: "HR operations workspace for leave, attendance, requests and pay." },
-      { name: "author", content: "Meridian ERP" },
-      { property: "og:title", content: "Meridian ERP — HRM workspace" },
+      { name: "author", content: "ERP" },
+      { property: "og:title", content: "ERP workspace" },
       { property: "og:description", content: "HR operations workspace for leave, attendance, requests and pay." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -97,7 +118,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
@@ -115,6 +136,11 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <div id="erp-global-preloader" className="erp-global-preloader" role="status" aria-label="Loading ERP">
+          <div className="erp-preloader-orbit" aria-hidden="true">
+            <img id="erp-preloader-logo" className="erp-preloader-logo" alt="" hidden />
+          </div>
+        </div>
         {children}
         <Scripts />
       </body>
@@ -124,11 +150,56 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [brandingReady, setBrandingReady] = useState(false);
+  const [branding, setBranding] = useState<ErpBranding | null>(null);
+
+  useLayoutEffect(() => {
+    const cached = readBrandingCache();
+    if (cached) {
+      applyBranding(cached);
+      setBranding(cached);
+      setBrandingReady(true);
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "erp.company-branding.v1") {
+        const next = readBrandingCache();
+        if (next) { applyBranding(next); setBranding(next); }
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 3000);
+    fetch("/api/hrm/branding", { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<ErpBranding> : Promise.reject())
+      .then((branding) => {
+        if (!active) return;
+        applyBranding(branding);
+        saveBrandingCache(branding);
+        setBranding(branding);
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setBrandingReady(true); window.clearTimeout(timeout); });
+    return () => { active = false; controller.abort(); window.clearTimeout(timeout); };
+  }, []);
+
+  useEffect(() => {
+    if (!branding?.displayName) return;
+    const area = pathname.startsWith("/supplier") ? "Supplier portal"
+      : pathname.startsWith("/procurement") ? "Procurement" : "ERP workspace";
+    document.title = `${area} · ${branding.displayName}`;
+  }, [branding, pathname]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <AppProvider>
         <ProcurementSessionProvider>
+          <PreloaderController brandingReady={brandingReady} />
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />
         </ProcurementSessionProvider>

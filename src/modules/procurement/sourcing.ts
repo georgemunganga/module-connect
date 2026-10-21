@@ -25,9 +25,13 @@ export interface BidReceipt {
 export interface SourcingEvent {
   id: string;
   title: string;
+  /** Plain-language requirement summary shown to invited suppliers. */
+  description?: string;
   method: SourcingMethod;
   state: EventState;
   buyer: string;
+  /** HRMS worker references for planning only; access and approval still come from ERP roles. */
+  collaboratorIds?: string[];
   entity: string;
   sourceLines: string[];
   items: { description: string; qty: number; unit: string }[];
