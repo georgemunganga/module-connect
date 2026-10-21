@@ -143,3 +143,10 @@ The9-case transport browser gate stopped at its configured first failure: **5 pa
 
 
 Distinct trace/source diagnosis confirmed the cancellation value/action was retained. The implicit label's textContent includes the controlled textarea child text after rerender, while its computed accessible name remains Reason. Test-only correction uses getByRole(textbox,name:Reason,exact:true) for the four Reason queries. It preserves exact-value, new-explicit-key, lost-response, recovery404, same-key GET and exact POST-count assertions; no UI behavior, timeout or retry changes. Rerun the full9 mock browser cases against the same frozen7196a41 assets after the backend job clears the host slot. Previous failure and3 unrun cases remain recorded; no rerun result is inferred.
+
+
+## Corrected complete browser gate — 21 October 2026
+
+Source5409546 passed **9/9 Chromium browser cases**, one worker, zero retries,45.6seconds. The first failure remains retained separately; only accessible-role locators changed in5409546. Before this run, all three frozen7196a41 application-asset hashes were reverified and the complete application/package diff from7196a41 was empty. No rebuild or product fix was substituted. The prior28 focused tests, TypeScript and build passes apply to the unchanged application source.
+
+Protected evidence: `/home/amizo/erp-backups/procurement-rfq-browser-corrected-20261021_062825/` (source commit, runner script/log, exit0 and original asset hashes). Cases cover exact partial/consolidated draft creation, cancellation, lost-create GET-only recovery, capability/action denial, branch context clearing, explicit correction after cancellation validation, unknown cancellation/recovery404 retention, and legacy draft edit/denial/stale handling. These are transport-fixture browser tests; actual restricted PostgreSQL RFQ execution and production deployment remain pending.
