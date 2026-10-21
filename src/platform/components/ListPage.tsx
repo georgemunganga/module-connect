@@ -1,5 +1,6 @@
+import { RecordTable } from "./RecordTable";
 import { ArrowDownAZ, Columns3, Download, Filter, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -85,6 +86,9 @@ export function ListPage<T extends { id: string }>({
 }) {
   const [query, setQuery] = useState("");
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterFieldId, setFilterFieldId] = useState("");
+  const filterPanelId = useId();
   const [selected, setSelected] = useState<string[]>([]);
   const [sortId, setSortId] = useState("");
   const [sortDescending, setSortDescending] = useState(false);
@@ -139,21 +143,22 @@ export function ListPage<T extends { id: string }>({
       return current.filter((id) => !shownIds.has(id));
     });
   const activeFilters = Object.entries(filterValues).filter(([, v]) => v && v !== "all");
+  const chosenFilter = filters.find((filter) => filter.id === filterFieldId);
 
   return (
-    <div className="space-y-4">
+    <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm" data-testid="erp-record-list">
       {savedViews.length ? (
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Saved views">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border px-4 pt-2" role="tablist" aria-label="Saved views">
           {savedViews.map((v) => (
             <button
               key={v.id}
               role="tab"
               aria-selected={activeView === v.id}
               onClick={() => onViewChange?.(v.id)}
-              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+              className={`border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
                 activeView === v.id
-                  ? "border-primary bg-primary-soft font-medium text-primary"
-                  : "bg-surface text-muted-foreground hover:border-border-strong"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {v.label}
@@ -162,10 +167,10 @@ export function ListPage<T extends { id: string }>({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 flex-1 sm:max-w-xs">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+        <div className="relative min-w-44 flex-1 sm:max-w-sm">
           <Search
-            className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden
           />
           <Input
@@ -173,33 +178,17 @@ export function ListPage<T extends { id: string }>({
             onChange={(e) => setQuery(e.target.value)}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder}
-            className="pl-8"
+            className="h-9 rounded-lg pl-9"
           />
         </div>
-        {filters.map((f) => (
-          <Select
-            key={f.id}
-            value={filterValues[f.id] ?? "all"}
-            onValueChange={(v) => setFilterValues((s) => ({ ...s, [f.id]: v }))}
-          >
-            <SelectTrigger className="w-auto min-w-36" aria-label={f.label}>
-              <Filter className="size-3.5 text-muted-foreground" aria-hidden />
-              <SelectValue placeholder={f.label} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{f.label}: all</SelectItem>
-              {f.options.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ))}
+        {filters.length ? <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg" aria-expanded={filterOpen} aria-controls={filterPanelId} onClick={() => setFilterOpen((open) => !open)}>
+          <Filter className="size-4" aria-hidden />
+          Filter by{activeFilters.length ? ` (${activeFilters.length})` : ""}
+        </Button> : null}
         {sortOptions.length ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="h-9 rounded-lg">
                 <ArrowDownAZ className="size-4" aria-hidden />
                 Sort: {sortOptions.find((option) => option.id === sortId)?.label ?? "Default"}
               </Button>
@@ -225,7 +214,7 @@ export function ListPage<T extends { id: string }>({
         ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="h-9 rounded-lg">
               <Columns3 className="size-4" aria-hidden />
               Columns
             </Button>
@@ -273,7 +262,7 @@ export function ListPage<T extends { id: string }>({
         {onExport ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="h-9 rounded-lg">
                 <Download className="size-4" aria-hidden />
                 Export
               </Button>
@@ -296,13 +285,37 @@ export function ListPage<T extends { id: string }>({
         ) : null}
       </div>
 
+      {filterOpen && filters.length ? (
+        <div id={filterPanelId} className="flex flex-wrap items-end gap-3 border-b border-border bg-surface-muted/40 px-4 py-3">
+          <div className="min-w-48 flex-1 sm:flex-none">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Filter by</label>
+            <Select value={filterFieldId} onValueChange={setFilterFieldId}>
+              <SelectTrigger className="h-9 w-full rounded-lg sm:w-52" aria-label="Choose field to filter by"><SelectValue placeholder="Choose a field" /></SelectTrigger>
+              <SelectContent>{filters.map((filter) => <SelectItem key={filter.id} value={filter.id}>{filter.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          {chosenFilter ? <div className="min-w-48 flex-1 sm:flex-none">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">{chosenFilter.label}</label>
+            <Select value={filterValues[chosenFilter.id] ?? "all"} onValueChange={(value) => setFilterValues((current) => ({ ...current, [chosenFilter.id]: value }))}>
+              <SelectTrigger className="h-9 w-full rounded-lg sm:w-56" aria-label={`Filter by ${chosenFilter.label}`}><SelectValue placeholder={`All ${chosenFilter.label.toLowerCase()}`} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All {chosenFilter.label.toLowerCase()}</SelectItem>
+                {chosenFilter.options.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div> : <p className="pb-2 text-xs text-muted-foreground">Choose a field to see its values.</p>}
+          {activeFilters.length ? <Button type="button" variant="ghost" size="sm" onClick={() => setFilterValues({})}>Clear all</Button> : null}
+        </div>
+      ) : null}
+
       {activeFilters.length ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-xs">
+          <span className="font-medium text-muted-foreground">Filtered by</span>
           {activeFilters.map(([k, v]) => (
             <button
               key={k}
               onClick={() => setFilterValues((s) => ({ ...s, [k]: "all" }))}
-              className="inline-flex items-center gap-1 rounded-full border bg-surface px-2 py-0.5"
+              className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1 text-muted-foreground hover:text-foreground"
             >
               {filters.find((f) => f.id === k)?.label}: {v}
               <X className="size-3" aria-hidden />
@@ -312,12 +325,8 @@ export function ListPage<T extends { id: string }>({
         </div>
       ) : null}
 
-      <p aria-live="polite" className="text-xs text-muted-foreground">
-        {filtered.length} of {rows.length} records
-      </p>
-
       {selectedRows.length > 0 && bulkActions.length ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary-soft p-2">
+        <div className="flex flex-wrap items-center gap-2 border-b border-primary/20 bg-primary-soft px-4 py-2">
           <span className="text-sm font-medium text-primary">{selectedRows.length} selected</span>
           {bulkActions.map((a) => (
             <Button
@@ -336,13 +345,16 @@ export function ListPage<T extends { id: string }>({
       ) : null}
 
       {rows.length === 0 ? (
+        <div className="p-5">
         <EmptyState
           title={emptyState?.title ?? "No records yet"}
           body={emptyState?.body ?? emptyBody}
           icon={emptyState?.icon}
           action={emptyState?.action}
         />
+        </div>
       ) : filtered.length === 0 ? (
+        <div className="p-5">
         <NoResultsState
           title="No matching records"
           body="Try a different search or clear the filters to see the available records."
@@ -358,12 +370,13 @@ export function ListPage<T extends { id: string }>({
             </Button>
           }
         />
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-surface" style={{ contain: "paint" }}>
-          <table className="w-full min-w-[42rem] text-left text-sm">
-            <thead className="border-b bg-surface-muted">
+        <div className="overflow-x-auto" style={{ contain: "paint" }}>
+          <RecordTable className="w-full min-w-[42rem] border-collapse text-left text-sm">
+            <thead className="border-b border-border bg-surface-muted/60">
               <tr>
-                <th scope="col" className="w-10 px-3 py-2">
+                <th scope="col" className="w-11 px-4 py-3">
                   <Checkbox
                     aria-label="Select all rows"
                     checked={allSelected ? true : someSelected ? "indeterminate" : false}
@@ -375,18 +388,18 @@ export function ListPage<T extends { id: string }>({
                     key={c.id}
                     scope="col"
                     style={{ minWidth: widths[c.id] ?? c.width }}
-                    className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    className="whitespace-nowrap px-4 py-3 text-xs font-semibold text-muted-foreground"
                   >
                     {c.header}
                   </th>
                 ))}
-                {rowHref ? <th scope="col" className="px-3 py-2" /> : null}
+                {rowHref ? <th scope="col" className="w-20 px-4 py-3 text-right text-xs font-semibold text-muted-foreground">View</th> : null}
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border">
               {sorted.map((r) => (
-                <tr key={r.id} className="hover:bg-surface-muted">
-                  <td className="px-3 py-2">
+                <tr key={r.id} className="transition-colors hover:bg-primary-soft/45">
+                  <td className="px-4 py-3 align-middle">
                     <Checkbox
                       aria-label={`Select ${r.id}`}
                       checked={selectedSet.has(r.id)}
@@ -403,7 +416,7 @@ export function ListPage<T extends { id: string }>({
                       <td
                         key={c.id}
                         style={{ minWidth: widths[c.id] ?? c.width }}
-                        className="px-3 py-2 align-top"
+                        className="px-4 py-3 align-middle text-foreground"
                       >
                         <div
                           className={clipText ? "max-w-[280px] truncate" : undefined}
@@ -414,13 +427,16 @@ export function ListPage<T extends { id: string }>({
                       </td>
                     );
                   })}
-                  {rowHref ? <td className="px-3 py-2 text-right">{rowHref(r)}</td> : null}
+                  {rowHref ? <td className="px-4 py-3 text-right text-sm font-medium text-primary">{rowHref(r)}</td> : null}
                 </tr>
               ))}
             </tbody>
-          </table>
+          </RecordTable>
         </div>
       )}
-    </div>
+      <footer className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
+        <span aria-live="polite">{filtered.length === rows.length ? `${rows.length} records` : `${filtered.length} of ${rows.length} records`}</span>
+      </footer>
+    </section>
   );
 }

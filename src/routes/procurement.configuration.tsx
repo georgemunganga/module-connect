@@ -20,7 +20,7 @@ function SettingCard({ item }: { item: SettingsItem }) {
     <span className="min-w-0"><span className="block font-medium">{item.name}</span><span className="mt-0.5 block text-xs text-muted-foreground">{item.detail}</span></span>
     <span className="flex shrink-0 flex-col items-end gap-1 text-xs"><span className="rounded-full border px-2 py-0.5 text-muted-foreground">{item.owner}</span><span className={item.to ? "text-primary" : "text-muted-foreground"}>{item.to ? "Open" : "Coming later"}</span></span>
   </>;
-  return item.to ? <Link to={item.to} className="flex min-h-20 items-start justify-between gap-4 rounded-lg border bg-surface p-3 text-sm hover:border-primary focus-visible:outline-2 focus-visible:outline-primary">{content}</Link>
+  return item.to ? <Link to={item.to} params={item.section ? { section: item.section } : undefined as never} className="flex min-h-20 items-start justify-between gap-4 rounded-lg border bg-surface p-3 text-sm hover:border-primary focus-visible:outline-2 focus-visible:outline-primary">{content}</Link>
     : <div className="flex min-h-20 items-start justify-between gap-4 rounded-lg border bg-surface p-3 text-sm">{content}</div>;
 }
 

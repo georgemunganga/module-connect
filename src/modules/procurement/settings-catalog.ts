@@ -1,11 +1,12 @@
 export type SettingsOwner = "ERP Core" | "Procurement" | "Finance" | "Platform" | "Projects / Inventory";
-export type SettingsRoute = "/procurement/configuration/policy" | "/procurement/configuration/bills" | "/procurement/configuration/orders";
+export type SettingsRoute = "/procurement/configuration/policy" | "/procurement/configuration/bills" | "/procurement/configuration/orders" | "/procurement/configuration/$section";
 
 export interface SettingsItem {
   name: string;
   owner: SettingsOwner;
   detail: string;
   to?: SettingsRoute;
+  section?: "vendors" | "items" | "purchases" | "requests" | "quotes" | "receives" | "credits";
 }
 
 export interface SettingsGroup {
@@ -75,15 +76,15 @@ export const settingsGroups: SettingsGroup[] = [
     sections: [
       { name: "Procurement-owned records", items: [
         { name: "General", owner: "Procurement", detail: "Buying methods, thresholds and tolerances.", to: "/procurement/configuration/policy" },
-        { name: "Vendors", owner: "Procurement", detail: "Supplier onboarding and orderability; Finance owns payable account." },
-        { name: "Items", owner: "Procurement", detail: "Buying catalog and preferred offers; Inventory owns stock." },
-        { name: "Purchases", owner: "Procurement", detail: "Commercial purchasing preferences and exceptions." },
-        { name: "Purchase Requests", owner: "Procurement", detail: "Required fields, budget gate and request approval route.", to: "/procurement/configuration/policy" },
-        { name: "Request for Quotes", owner: "Procurement", detail: "Supplier invitation, deadline and evaluation rules.", to: "/procurement/configuration/policy" },
+        { name: "Vendors", owner: "Procurement", detail: "Supplier onboarding and orderability; Finance owns payable account.", to: "/procurement/configuration/$section", section: "vendors" },
+        { name: "Items", owner: "Procurement", detail: "Buying catalog and preferred offers; Inventory owns stock.", to: "/procurement/configuration/$section", section: "items" },
+        { name: "Purchases", owner: "Procurement", detail: "Commercial purchasing preferences and exceptions.", to: "/procurement/configuration/$section", section: "purchases" },
+        { name: "Purchase Requests", owner: "Procurement", detail: "Required fields, budget gate and request approval route.", to: "/procurement/configuration/$section", section: "requests" },
+        { name: "Request for Quotes", owner: "Procurement", detail: "Supplier invitation, deadline and evaluation rules.", to: "/procurement/configuration/$section", section: "quotes" },
         { name: "Purchase Orders", owner: "Procurement", detail: "Approval, issue, revision and supplier acknowledgment.", to: "/procurement/configuration/orders" },
-        { name: "Purchase Receives", owner: "Procurement", detail: "Inspection, acceptance and receipt tolerances.", to: "/procurement/configuration/policy" },
+        { name: "Purchase Receives", owner: "Procurement", detail: "Inspection, acceptance and receipt tolerances.", to: "/procurement/configuration/$section", section: "receives" },
         { name: "Bills", owner: "Procurement", detail: "Invoice validation settings and approval design; Finance owns AP posting.", to: "/procurement/configuration/bills" },
-        { name: "Vendor Credits", owner: "Procurement", detail: "Commercial credit reason and source link; Finance owns ledger application." },
+        { name: "Vendor Credits", owner: "Procurement", detail: "Commercial credit reason and source link; Finance owns ledger application.", to: "/procurement/configuration/$section", section: "credits" },
       ] },
       { name: "Other ERP owners", items: [
         { name: "Projects", owner: "Projects / Inventory", detail: "Project coding and budget source, consumed by Procurement." },

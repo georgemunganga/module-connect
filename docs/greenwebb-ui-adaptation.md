@@ -4,19 +4,21 @@
 
 | Reference behavior | ERP destination | Adaptation rule | Status |
 | --- | --- | --- | --- |
-| Shared shell, search, navigation | `src/platform/components/AppShell.tsx` | Keep ERP brand, company scope, role-aware menu and HRMS-compatible components. | Existing ERP behavior |
-| Saved views, filters, sort, columns, selection, export scopes | `src/platform/components/ListPage.tsx` | Reuse generic controls in configured lists; preserve current routes and company filtering. Supplier list uses sort and current/selected export. | Shared controls adapted; rollout to other lists pending |
+| Shared shell, search, navigation | `src/platform/components/AppShell.tsx` | Keep ERP brand, company scope, role-aware menu and HRMS-compatible components. Add role-aware quick create, scoped record search, procurement alerts and a role-filtered workflow guide through the existing shell. | Adapted in ERP shell |
+| First-use journey and buyer home | Procurement home and Getting Started routes | Keep three plain-language steps, company-scoped readiness, and clear demo labels. Show buyer metrics and company/currency-aware PO trends. | Adapted for demo |
+| Saved views, filters, sort, columns, selection, export scopes | `src/platform/components/ListPage.tsx` | Reuse generic controls in configured lists; preserve current routes and company filtering. Supplier, bill, credit and commercial lists use scoped controls. | Shared controls adapted; rollout to other lists pending |
 | Choose → Match → Review import; CSV/TSV, sample, skip invalid/duplicate rows | `src/platform/components/DataTransfer.tsx`, record import routes | Keep imported vendors Proposed and items Inactive. No unsupported file format claim. | Adapted for vendor and item imports |
 | Vendor Overview, Comments, Transactions, Mails, Statement | `src/routes/procurement.suppliers_.$id.tsx` | Keep diligence/Finance checks; notes and message drafts stay local, statement is a procurement-side preview limited by linked invoice entity. | Adapted; browser acceptance pending |
 | Vendor seven-tab create/edit | `src/routes/procurement.suppliers_.new.tsx` | Keep legal identity, contacts, sites, masked bank reference, custom fields, tags and remarks; edited profiles retain ID/history and return to review. | Create and guarded edit adapted |
-| Item list/detail/edit | Catalog routes and `CatalogItemEditor` | Preserve item type, entity eligibility and unpublished offers. Manage list uses shared list controls; new requests retain catalog item IDs and detail links related requests by ID. | Item list and linked requests adapted; wider transactions pending |
-| One resumable six-stage RFQ wizard, nested approved-item picker | Sourcing new/detail routes | Save draft, select partial approved quantities, set terms/documents, return to source request, and recheck eligibility before submission. Team assignment still needs the shared identity directory. | Approved-item flow adapted; team picker pending |
-| Canonical list → detail → edit and return to origin | Procurement record routes | Carry source queue/tab and draft context; keep stable IDs. | Partial |
+| Item list/detail/edit | Catalog routes and `CatalogItemEditor` | Preserve item type, entity eligibility and unpublished offers. Item detail has overview, ID-linked requests, orders, deliveries, authorized bills and history tabs. New direct and single-line award orders carry the catalog item ID. | Adapted for demo; older orders without an item ID remain unlinked |
+| One resumable six-stage RFQ wizard, nested approved-item picker | Sourcing new/detail routes | Save draft, select partial approved quantities, name and describe the request, set a future deadline, preview supplier-facing information, return to source request, and recheck eligibility before submission. A nested colleague picker uses active same-company HRMS demo worker IDs for planning without granting access. | Adapted for demo; live identity directory pending |
+| Canonical list → detail → edit and return to origin | Procurement record routes | Commercial orders, receiving, contracts and evaluations preserve validated list search, status, display, sort and column choices through detail/back navigation; keep stable IDs. | Commercial routes adapted; other flows partial |
 | Purchase Request list controls | `src/routes/procurement.requests.tsx` | Sort and export the current or selected company-scoped view; keep existing saved views, filters and detail links. | Adapted |
-| PO, receive, bill, recurring bill, credit and batch editors | Commercial and payables areas | Commercial lists retain cards and add shared table controls; recurring purchases and vendor credit references have scoped views. Finance owns recurring payables, batch payments and payment execution. | List and reference views adapted; editors partial |
-| Inbox filename → bill draft | Payables inbox and invoice new | Drop/select a PDF or image to prefill the local bill document name; no file content is uploaded, read or extracted. | Adapted for demo |
-| Vendor transaction linking | Vendor profile + orders/invoices | Use stable supplier IDs at API boundary; current demo names remain display only. | Partial |
-| Settings preferences/tabs/builders | Procurement Configuration and shared ERP settings | Purchase Order and Bill settings share accessible six-tab navigation and preview rules without changing published policy or executing automation. | PO and Bill previews adapted; other settings partial |
+| PO, receive, bill, recurring bill, credit and batch editors | Commercial and payables areas | Commercial and bill lists retain cards and add shared table controls; bill CSV export is scoped to AP and Procurement administrators. Vendor credits can be added against bills by AP/Procurement administrators with duplicate and amount checks, then searched, filtered and exported in scope. Finance owns recurring payables, batch payments and payment execution. | List and credit reference views adapted; editors partial |
+| Inbox filename → bill draft | Payables inbox and invoice new | Queue up to 20 PDF/image/CSV filenames by company, remove or open each as a bill draft. No file content is uploaded, read or extracted. | Adapted for demo |
+| Vendor transaction linking | Vendor profile + orders/invoices | Supplier profile uses stable supplier IDs for linked orders and bills. Seed orders and new award/contract-release orders carry the ID where the supplier is resolved in entity scope; unmatched older orders remain unlinked. | Adapted for linked demo records; live API contract pending |
+| Record detail tabs | `src/platform/components/RecordTabs.tsx` | Reuse the reference's tab layout in vendor and item detail with ERP colors, shared semantics, and keyboard arrow/Home/End navigation. | Shared component adapted |
+| Settings preferences/tabs/builders | Procurement Configuration and shared ERP settings | Purchase Order and Bill settings plus Vendors, Items, Purchases, Purchase Requests, Quote Requests, Receives and Vendor Credits share six-tab navigation. The extra transaction pages explain fields, validation, actions, approval choices and related records without changing published policy. | Transaction guidance adapted; ERP-owned settings and executable builders remain pending |
 | Analytics/export | Procurement reports | Define metric and currency basis; authorize exports and keep Finance ledger separate. | Partial |
 
 ## Preservation checks
@@ -25,12 +27,16 @@ For each adapted area, verify: the reference action still has a reachable equiva
 
 The reference's generic `AppRecord`/string metadata, direct React Router tree and local approval/payment actions are not API contracts. The ERP [UI/API contract register](procurement-ui-contract-register.md) and [workflow gap register](procurement-ui-workflow-gap-register.md) remain the source for live integration and unresolved workflows. No reference screenshots will be copied into `public/` or product screens.
 
+## Source component mapping
+
+The separate UI is the baseline for Procurement screen structure and interactions. Its `AppShell`, buttons, inputs and modal map to the ERP shell and existing design system; `ListTools` maps to the shared ERP `ListPage`; `DetailPrimitives` maps to `RecordTabs`, `PageHeader`, `StatusTimeline` and record sections; `ListImportWizard` maps to the shared transfer component. Transaction editors map onto the ERP's typed request, order, receipt, bill and credit records so linked records keep their IDs and scope. Settings screens map to Procurement configuration and shared platform settings. This mapping preserves the reference workflow while avoiding a second browser-local record store inside the ERP.
+
 ## Next integration slices
 
 1. Apply the shared list controls to remaining transaction management lists while preserving each record's existing actions and state rules.
-2. Add a team selector to RFQ using the shared identity directory; keep the current approved-item picker and pre-submit validation.
-3. Carry queue/tab return context through all detail/edit/new routes, including supplier creation from a transaction.
-4. Extend stable IDs through orders and receipts before presenting them as item or vendor transactions.
+2. Replace the demo worker projection in the RFQ colleague selector with the shared identity directory and enforce live role checks when collaborators are assigned.
+3. Carry queue/tab return context through the remaining detail/edit/new routes, including supplier creation from a transaction.
+4. Extend stable supplier IDs and line-level item IDs through all multi-line orders before presenting every vendor or item transaction as linked.
 5. Connect approval, policy, documents, audit and Finance/AP status through the ERP APIs. The reference project has no backend to salvage for these flows.
 
 The source project's route count is not an ERP completion measure: many routes are settings previews or browser-only actions. This register marks adapted behavior explicitly and leaves incomplete behavior visible.

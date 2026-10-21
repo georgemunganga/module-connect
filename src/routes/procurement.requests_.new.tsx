@@ -1,3 +1,5 @@
+import { FormToggle } from "@/components/ui/form-toggle";
+import { FormSelect } from "@/components/ui/form-select";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Copy, Info, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -131,7 +133,7 @@ function NewRequest() {
           <div>
             <Label htmlFor="cat-q">Search catalog and contract offers</Label>
             <Input id="cat-q" className="mt-1" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. chair, laptop, freight" />
-            <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={allKinds} onChange={(event) => setAllKinds(event.target.checked)} />Include other item types in this request</label>
+            <label className="mt-2 flex items-center gap-2 text-sm"><FormToggle type="checkbox" checked={allKinds} onChange={(event) => setAllKinds(event.target.checked)} />Include other item types in this request</label>
           </div>
           {results.length ? (
             <ul className="space-y-2">
@@ -159,7 +161,7 @@ function NewRequest() {
           <details className="rounded-lg border p-3">
             <summary className="cursor-pointer text-sm font-medium">Can't find it? Add something new</summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2"><Label htmlFor="nc-kind">Line type</Label><select id="nc-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={ncKind} onChange={(event) => setNcKind(event.target.value as Kind)}>{(["Goods", "Service", "Asset", "Subscription"] as Kind[]).map((kind) => <option key={kind}>{kind}</option>)}</select></div>
+              <div className="sm:col-span-2"><Label htmlFor="nc-kind">Line type</Label><FormSelect id="nc-kind" className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={ncKind} onChange={(event) => setNcKind(event.target.value as Kind)}>{(["Goods", "Service", "Asset", "Subscription"] as Kind[]).map((kind) => <option key={kind}>{kind}</option>)}</FormSelect></div>
               <div className="sm:col-span-2"><Label htmlFor="nc-d">Description</Label><Input id="nc-d" className="mt-1" value={nc.description} onChange={(e) => setNc({ ...nc, description: e.target.value })} /></div>
               <div><Label htmlFor="nc-q">Quantity</Label><Input id="nc-q" type="number" min={1} className="mt-1" value={nc.qty} onChange={(e) => setNc({ ...nc, qty: Number(e.target.value) })} /></div>
               <div><Label htmlFor="nc-p">Estimated unit price ({CCY})</Label><Input id="nc-p" type="number" min={0} className="mt-1" value={nc.unitPrice} onChange={(e) => setNc({ ...nc, unitPrice: Number(e.target.value) })} /></div>
@@ -194,10 +196,10 @@ function NewRequest() {
         <div className="grid max-w-lg gap-4">
           <div>
             <Label htmlFor="cc">Cost centre</Label>
-            <select id="cc" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={d.costCentre} onChange={(e) => set({ costCentre: e.target.value })}>
+            <FormSelect id="cc" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={d.costCentre} onChange={(e) => set({ costCentre: e.target.value })}>
               <option value="">Choose…</option>
               {costCentres.map((costCentre) => <option key={costCentre}>{costCentre}</option>)}
-            </select>
+            </FormSelect>
           </div>
           <div><Label htmlFor="pj">Project (optional)</Label><Input id="pj" className="mt-1" value={d.project} onChange={(e) => set({ project: e.target.value })} /></div>
         </div>

@@ -1,15 +1,19 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
+import { RecordTabs, RecordTabPanel } from "@/platform/components/RecordTabs";
 import { useState } from "react";
 import { useApp } from "@/platform/app-context";
-import { internalRole, requesterRole, sameEntity } from "@/modules/procurement/access";
+import { internalRole, requesterRole, requestVisible, sameEntity } from "@/modules/procurement/access";
 import { RestrictedState } from "@/platform/components/States";
 import { isExpired, money, useCatalog } from "@/modules/procurement/catalog";
 import { CatalogItemEditor } from "@/modules/procurement/CatalogItemEditor";
 import { useProcurement } from "@/modules/procurement/store";
+import { useCommercial } from "@/modules/procurement/commercial/store";
+import { usePayables } from "@/modules/procurement/payables/store";
 
 export const Route = createFileRoute("/procurement/catalog_/$id")({
   head: () => ({ meta: [{ title: "Catalog item — Meridian ERP" }, { name: "description", content: "Procurement catalog item" }] }),
@@ -21,7 +25,11 @@ function ItemDetail() {
   const { role, entityId } = useApp();
   const catalogItems = useCatalog();
   const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState<"Overview" | "Transactions" | "History">("Overview");
+  const [requestStatus, setRequestStatus] = useState("All");
   const procurement = useProcurement();
+  const commercial = useCommercial();
+  const payables = usePayables();
   const suppliers = procurement.suppliers;
   const i = catalogItems.find((x) => x.id === id);
   if (!i || !internalRole(role) || !i.entities.some((entity) => sameEntity(entity, entityId))) return <AppShell><RestrictedState /></AppShell>;
@@ -29,8 +37,15 @@ function ItemDetail() {
   const canRequest = i.status === "Active" && !i.block && !!offer;
   const relatedRequests = procurement.requests.filter((request) =>
     procurement.metadata[request.id]?.lines.some((line) => line.catalogItemId === i.id) &&
-    sameEntity(procurement.metadata[request.id]?.entity, entityId),
+    requestVisible(role, entityId, procurement.metadata[request.id]?.entity, request.requester, request.department),
   );
+  const visibleRequests = relatedRequests.filter((request) => requestStatus === "All" || request.status === requestStatus);
+  const relatedOrders = commercial.orders.filter((order) => sameEntity(order.entity, entityId) && order.line.catalogItemId === i.id && (!requesterRole(role) || relatedRequests.some((request) => order.originRequest?.startsWith(`${request.id} /`) || order.source.startsWith(`${request.id} /`))));
+  const relatedOrderIds = new Set(relatedOrders.map((order) => order.id));
+  const relatedReceipts = commercial.receipts.filter((receipt) => relatedOrderIds.has(receipt.poId));
+  const relatedBills = ["buyer", "proc_admin", "ap_processor", "auditor"].includes(role) ? payables.invoices.filter((invoice) => invoice.entityId === entityId && relatedOrderIds.has(invoice.po)) : [];
+  const canOpenOrders = ["manager", "buyer", "proc_admin", "auditor"].includes(role);
+  const canOpenReceipts = ["manager", "receiver", "buyer", "proc_admin", "auditor"].includes(role);
 
   return (
     <AppShell>
@@ -42,23 +57,27 @@ function ItemDetail() {
           requesterRole(role) ? canRequest ? <Button asChild><Link to="/procurement/requests/new" search={{ item: i.id }}>Request this item</Link></Button> : <Button disabled>Can't be requested</Button> : undefined
         }
       />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      {(["buyer", "proc_admin"].includes(role)) ? <div className="mb-4 flex gap-2"><Button variant="outline" onClick={() => setEditing((value) => !value)}>{editing ? "Close form" : "Edit item"}</Button><Button variant="ghost" asChild><Link to="/procurement/catalog">Back to catalog</Link></Button></div> : null}
+      {editing ? <div className="mb-5"><CatalogItemEditor key={`${i.id}-${i.versions[0]?.version}`} item={i} onSaved={() => setEditing(false)} onCancel={() => setEditing(false)} /></div> : null}
+      <RecordTabs label="Item sections" idPrefix="item-detail" tabs={["Overview", "Transactions", "History"] as const} value={tab} onChange={setTab} />
+      <RecordTabPanel idPrefix="item-detail" tab={tab}>
+      <div className={`grid gap-6 ${tab === "Overview" ? "lg:grid-cols-[minmax(0,1fr)_20rem]" : ""}`}>
         <div className="space-y-6">
+          {tab === "Overview" ? <>
           {i.status === "Inactive" ? <Notice tone="warning">This item is no longer available. Choose another item or make a new request.</Notice> : null}
           {i.block ? <Notice tone="warning">{i.block}</Notice> : null}
           {!i.block && i.status === "Active" && !offer ? <Notice tone="warning">There is no current price from an approved vendor. Ask the buying team to update it.</Notice> : null}
-
-          {(["buyer", "proc_admin"].includes(role)) ? <div className="flex gap-2"><Button variant="outline" onClick={() => setEditing((value) => !value)}>{editing ? "Close form" : "Edit item"}</Button><Button variant="ghost" asChild><Link to="/procurement/catalog">Back to catalog</Link></Button></div> : null}
-          {editing ? <CatalogItemEditor key={`${i.id}-${i.versions[0]?.version}`} item={i} onSaved={() => setEditing(false)} onCancel={() => setEditing(false)} /> : null}
 
           <section className="rounded-lg border bg-surface p-4">
             <h2 className="text-sm font-semibold">Vendor prices</h2>
             {i.offers.length ? (
               <ul className="mt-3 divide-y text-sm">
-                {i.offers.map((o) => (
+                {i.offers.map((o) => {
+                  const supplier = suppliers.find((candidate) => candidate.name === o.supplier && sameEntity(candidate.country, entityId));
+                  return (
                   <li key={o.supplier} className="flex flex-wrap justify-between gap-2 py-2">
                     <span>
-                      <span className="font-medium">{o.supplier}</span>{o.preferred ? <span className="ml-2 rounded-full bg-primary-soft px-2 text-xs text-primary">Preferred</span> : null}
+                      {supplier ? <Link to="/procurement/suppliers/$id" params={{ id: supplier.id }} className="font-medium text-primary hover:underline">{o.supplier}</Link> : <span className="font-medium">{o.supplier}</span>}{o.preferred ? <span className="ml-2 rounded-full bg-primary-soft px-2 text-xs text-primary">Preferred</span> : null}
                       <span className="block text-xs text-muted-foreground">{o.source} · delivery in {o.leadTimeDays} days · price valid until {o.validTo}</span>
                     </span>
                     <span className="text-right tabular-nums">
@@ -66,31 +85,36 @@ function ItemDetail() {
                       {isExpired(o) ? <span className="block text-xs text-warning">Expired — buyer must confirm price</span> : null}
                     </span>
                   </li>
-                ))}
+                ); })}
               </ul>
             ) : <p className="mt-2 text-sm text-muted-foreground">No prices yet.</p>}
           </section>
 
-          <section className="rounded-lg border bg-surface p-4">
+          </> : null}
+          {tab === "History" ? <section className="rounded-lg border bg-surface p-4">
             <h2 className="text-sm font-semibold">Change history</h2>
             <ul className="mt-3 space-y-2 text-sm">
               {i.versions.map((v) => <li key={v.version}><span className="font-medium">v{v.version}</span> · {v.change}<span className="block text-xs text-muted-foreground">{v.by} · {v.date}</span></li>)}
             </ul>
-          </section>
+          </section> : null}
 
-          <section className="rounded-lg border bg-surface p-4">
+          {tab === "Transactions" ? <section className="rounded-lg border bg-surface p-4">
             <h2 className="text-sm font-semibold">Purchase requests for this item</h2>
             <p className="mt-1 text-xs text-muted-foreground">Only requests linked by item ID appear here. Older requests without that link remain on the requests page.</p>
-            {relatedRequests.length ? <ul className="mt-3 divide-y text-sm">{relatedRequests.map((request) => (
+            <div className="mt-3 max-w-xs"><label htmlFor="item-request-status" className="text-xs font-medium">Status</label><FormSelect id="item-request-status" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={requestStatus} onChange={(event) => setRequestStatus(event.target.value)}><option>All</option>{[...new Set(relatedRequests.map((request) => request.status))].map((status) => <option key={status}>{status}</option>)}</FormSelect></div>
+            {visibleRequests.length ? <ul className="mt-3 divide-y text-sm">{visibleRequests.map((request) => (
               <li key={request.id} className="flex flex-wrap justify-between gap-2 py-2">
                 <Link className="font-medium text-primary underline-offset-2 hover:underline" to="/procurement/requests/$id" params={{ id: request.id }}>{request.id} · {request.title}</Link>
                 <span className="text-muted-foreground">{request.status}</span>
               </li>
-            ))}</ul> : <p className="mt-3 text-sm text-muted-foreground">No linked requests yet.</p>}
-          </section>
+            ))}</ul> : <p className="mt-3 text-sm text-muted-foreground">{relatedRequests.length ? "No requests have that status." : "No linked requests yet."}</p>}
+          </section> : null}
+          {tab === "Transactions" && relatedOrders.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Purchase orders</h2><p className="mt-1 text-xs text-muted-foreground">Only orders linked by this item's ID appear here.</p><ul className="mt-3 divide-y text-sm">{relatedOrders.map((order) => <li key={order.id} className="flex flex-wrap items-center justify-between gap-2 py-2">{canOpenOrders ? <Link to="/procurement/orders/$id" params={{ id: order.id }} className="font-medium text-primary hover:underline">{order.id} · {order.supplier}</Link> : <span className="font-medium">{order.id} · {order.supplier}</span>}<span className="text-muted-foreground">{order.status} · {order.line.received} of {order.line.qty} received</span></li>)}</ul></section> : null}
+          {tab === "Transactions" && relatedReceipts.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Deliveries</h2><ul className="mt-3 divide-y text-sm">{relatedReceipts.map((receipt) => <li key={receipt.id} className="flex flex-wrap items-center justify-between gap-2 py-2">{canOpenReceipts ? <Link to="/procurement/receiving/$id" params={{ id: receipt.poId }} className="font-medium text-primary hover:underline">{receipt.id} · {receipt.poId}</Link> : <span className="font-medium">{receipt.id} · {receipt.poId}</span>}<span className="text-muted-foreground">{receipt.status} · {receipt.qty} accepted</span></li>)}</ul></section> : null}
+          {tab === "Transactions" && relatedBills.length ? <section className="rounded-lg border bg-surface p-4"><h2 className="text-sm font-semibold">Bills</h2><ul className="mt-3 divide-y text-sm">{relatedBills.map((invoice) => <li key={invoice.id} className="flex flex-wrap items-center justify-between gap-2 py-2"><Link to="/procurement/invoices/$id" params={{ id: invoice.id }} className="font-medium text-primary hover:underline">{invoice.number} · {invoice.supplier}</Link><span className="text-muted-foreground">{invoice.status}</span></li>)}</ul></section> : null}
         </div>
 
-        <aside className="h-fit rounded-lg border bg-surface p-4 text-sm">
+        {tab === "Overview" ? <aside className="h-fit rounded-lg border bg-surface p-4 text-sm">
           <h2 className="font-semibold">Details</h2>
           <dl className="mt-3 space-y-2">
             <Row k="Description" v={i.spec} />
@@ -101,8 +125,9 @@ function ItemDetail() {
           {i.authoritativeOwner ? (
             <p className="mt-3 flex gap-2 rounded-md bg-info-soft p-2 text-xs"><Info className="size-4 shrink-0" aria-hidden />{i.authoritativeOwner} manages this item type. Stock levels are shown in Inventory.</p>
           ) : null}
-        </aside>
+        </aside> : null}
       </div>
+      </RecordTabPanel>
     </AppShell>
   );
 }

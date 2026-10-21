@@ -1,3 +1,4 @@
+import { FormSelect } from "@/components/ui/form-select";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/platform/components/AppShell";
 import { PageHeader } from "@/platform/components/PageHeader";
@@ -47,7 +48,7 @@ function ApprovalsPage() {
   return (
     <AppShell>
       <PageHeader eyebrow="Approvals" title="Your approvals" description="Start with the earliest due date. If an approval is late, someone will be reminded; it will never approve itself." />
-      {role === "manager" ? <div className="mb-4 rounded-lg border bg-surface p-3 text-sm"><label htmlFor="approval-persona" className="font-medium">View tasks for</label><select id="approval-persona" className="ml-3 h-9 max-w-full rounded-md border bg-background px-2" value={approvalActor} onChange={(event) => setApprovalActor(event.target.value)}>{demoApprovalActors(entityId).map((name) => <option key={name}>{name}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Choose a sample person to see their tasks. This does not change real access.</p></div> : null}
+      {role === "manager" ? <div className="mb-4 rounded-lg border bg-surface p-3 text-sm"><label htmlFor="approval-persona" className="font-medium">View tasks for</label><FormSelect id="approval-persona" className="ml-3 h-9 max-w-full rounded-md border bg-background px-2" value={approvalActor} onChange={(event) => setApprovalActor(event.target.value)}>{demoApprovalActors(entityId).map((name) => <option key={name}>{name}</option>)}</FormSelect><p className="mt-1 text-xs text-muted-foreground">Choose a sample person to see their tasks. This does not change real access.</p></div> : null}
       <nav aria-label="Task views" className="mb-4 flex gap-1 overflow-x-auto border-b">
         {TABS.map((t) => {
           const n = approvals.filter((x) => inTab(x, t)).length;
