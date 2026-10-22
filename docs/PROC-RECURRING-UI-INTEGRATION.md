@@ -62,3 +62,34 @@ remain. All checks are SOURCE ONLY and unexecuted while the backend SDK owns the
 
 P24 generation/provider verification and the genuine scoped CRUD/browser fixture remain separate
 release prerequisites. These source changes do not inherit the deployed hotfix's runtime proof.
+
+## Published P23 prerequisite integration — 22 October 2026
+
+Fresh isolated branch `codex/procurement-p24-recurring-ui` starts from published UI main
+`0adb132fe721de5e74551f1fa5758c30b11fb013` (P23 PR53), then normally merges prepared recurring
+source `1e8f07fc7f7c58a16906494fc14dec86f33dc818` in checkpoint `fb3aca98`. The merge is clean;
+all P23 policy/review routes, verified branch-name/company-only recovery and shared controls remain
+on their published ancestry. No backend or UI runtime has been replaced with a browser-local store.
+
+The matching backend integration starts from published ERP
+`2af2eaf4915de5bea1329e2484de16b0ed0ee9de`, merging `dd1b719` in
+`codex/procurement-p24-recurring-integration` checkpoint `9b8b7e2`. Source inspection confirms
+unchanged `/api/procurement/v1/recurring-purchases` list/detail/create/update/close paths, required
+Core owner principal, optional worker, actual own-subject/current-principal+company/branch filters,
+exact decimal projection, dates, versioned update payload and close reason. Earlier notes about
+uncorrected no-op parent revisions describe historical author source; the current prepared backend
+explicitly requires +1 for every accepted PUT and close. Genuine P24 generation/provider and runtime
+proof remain pending, so this is a source correspondence statement rather than deployment readiness.
+
+Integration differences versus published UI main are restricted to the recurring adapter, existing
+recurring route slots/navigation labels, shared readiness's optional recurring capability, receipt/
+write-lock tests and this documentation. No new import, scheduler, recurring payable, tax line, bank
+or payment action is exposed. A missing/false server capability stays unavailable.
+
+CPU/resource constraints prohibit Node/SDK/browser/build execution at this checkpoint.
+`git diff --check` passed. Existing authored unit and mocked browser cases must pass on this merged
+source, followed by genuine private PostgreSQL+mapped-API browser acceptance. The ERP plan
+`docs/procurement/release/PROC-07A-ACTUAL-ACCEPTANCE-INTEGRATION-PLAN.md` defines fixed Core-only
+fixture actor, existing Unix bridge, supplier/contract conflict and serialization proof, exact values,
+owner completion and deliberate lost browser acknowledgement with no second POST. No synthetic
+Procurement API success or production activation is authorized by this merge.
