@@ -79,7 +79,7 @@ test("system user without an employee can create, edit and close recurring purch
   await page.getByRole("button", { name: "Save recurring purchase" }).click();
   await expect(page.getByRole("heading", { name: "Monthly cleaning" })).toBeVisible();
   await expect(page.getByText("ZMW 12345678901234.5678")).toBeVisible();
-  await page.getByRole("link", { name: "Edit" }).click();
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
   await page.getByLabel("Expected each time").fill("5.1234");
   await page.getByRole("button", { name: "Save recurring purchase" }).click();
   await expect(page.getByText("ZMW 5.1234")).toBeVisible();

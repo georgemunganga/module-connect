@@ -138,19 +138,19 @@
     },
     {
       "path": "/recurring-bills",
-      "title": "Recurring Bills"
+      "title": "Recurring Purchases"
     },
     {
       "path": "/recurring-bills/new",
-      "title": "New Recurring Bill"
+      "title": "New Recurring Purchase"
     },
     {
       "path": "/recurring-bills/:id",
-      "title": "Recurring Bill detail"
+      "title": "Recurring Purchase detail"
     },
     {
       "path": "/recurring-bills/:id/edit",
-      "title": "Edit Recurring Bill"
+      "title": "Edit Recurring Purchase"
     },
     {
       "path": "/payments",
