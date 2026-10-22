@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select } from "../components/ui";
+import { formatInvoiceDecimal, invoiceTotals } from "../../../src/platform/procurement-invoice-exact";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
 import { useErpShell } from "../lib/erpShell";
@@ -13,8 +14,8 @@ import {
 } from "../../../src/platform/procurement-invoices-api";
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Try again. The invoice was not confirmed.";
-const money = (amount: number, currency: string) => `${currency} ${amount.toFixed(2)}`;
-const blankLine = (): InvoiceLineInput => ({ description: "", quantity: 1, unitPrice: 0, taxAmount: 0 });
+const money = (amount: string, currency: string) => `${currency} ${formatInvoiceDecimal(amount)}`;
+const blankLine = (): InvoiceLineInput => ({ description: "", quantity: "1", unitPrice: "0", taxAmount: "0" });
 
 function useCompany() {
   const readiness = useLiveReadiness();
@@ -84,8 +85,8 @@ export function LiveInvoiceEditor() {
   const setLine = (index: number, changes: Partial<InvoiceLineInput>) => setInput((current) => ({
     ...current, lines: current.lines.map((line, at) => at === index ? { ...line, ...changes } : line),
   }));
-  const net = input.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
-  const tax = input.lines.reduce((sum, line) => sum + line.taxAmount, 0);
+  let totals: ReturnType<typeof invoiceTotals> | null = null;
+  try { totals = invoiceTotals(input.lines); } catch { /* Partial/invalid input has no invented zero total. */ }
   async function save(event: FormEvent) {
     event.preventDefault(); setError(""); setSaving(true);
     try {
@@ -119,18 +120,18 @@ export function LiveInvoiceEditor() {
         {input.lines.map((line, index) => <div key={index} className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-4">
           <Field label={`Description ${index + 1}`}><Input required maxLength={500} value={line.description}
             onChange={(event) => setLine(index, { description: event.target.value })} /></Field>
-          <Field label="Quantity"><Input required type="number" min="0.0001" step="any" value={line.quantity}
-            onChange={(event) => setLine(index, { quantity: Number(event.target.value) })} /></Field>
-          <Field label="Unit price"><Input required type="number" min="0" step="any" value={line.unitPrice}
-            onChange={(event) => setLine(index, { unitPrice: Number(event.target.value) })} /></Field>
-          <Field label="Tax amount"><Input required type="number" min="0" step="any" value={line.taxAmount}
-            onChange={(event) => setLine(index, { taxAmount: Number(event.target.value) })} /></Field>
+          <Field label="Quantity"><Input required type="text" inputMode="decimal" maxLength={40} value={line.quantity}
+            onChange={(event) => setLine(index, { quantity: event.target.value })} /></Field>
+          <Field label="Unit price"><Input required type="text" inputMode="decimal" maxLength={40} value={line.unitPrice}
+            onChange={(event) => setLine(index, { unitPrice: event.target.value })} /></Field>
+          <Field label="Tax amount"><Input required type="text" inputMode="decimal" maxLength={40} value={line.taxAmount}
+            onChange={(event) => setLine(index, { taxAmount: event.target.value })} /></Field>
           {input.lines.length > 1 && <Button type="button" variant="secondary" onClick={() =>
             setInput({ ...input, lines: input.lines.filter((_, at) => at !== index) })}>Remove line</Button>}
         </div>)}
         <Button type="button" variant="secondary" disabled={input.lines.length >= 200} onClick={() =>
           setInput({ ...input, lines: [...input.lines, blankLine()] })}>Add line</Button>
-        <div className="text-right text-sm">Net {money(net, input.currencyCode)} · Tax {money(tax, input.currencyCode)}<strong className="ml-3">Total {money(net + tax, input.currencyCode)}</strong></div>
+        <div className="text-right text-sm">Net {totals ? money(totals.netAmount, input.currencyCode) : "—"} · Tax {totals ? money(totals.taxAmount, input.currencyCode) : "—"}<strong className="ml-3">Total {totals ? money(totals.grossAmount, input.currencyCode) : "—"}</strong></div>
       </div></Panel>
       <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Recording…" : "Record as received"}</Button>
         <Button type="button" variant="secondary" onClick={() => navigate("/bills")}>Cancel</Button></div>

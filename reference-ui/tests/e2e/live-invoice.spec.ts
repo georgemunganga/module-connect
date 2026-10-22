@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { invoiceTotals } from "../../../src/platform/procurement-invoice-exact";
 
 test.setTimeout(90_000);
 
@@ -67,13 +68,11 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
       const input = request.postDataJSON();
       if (invoice && String(invoice.invoiceNumber).toUpperCase() === String(input.invoiceNumber).trim().toUpperCase())
         return json({ code: "duplicate-invoice", message: "This vendor invoice number is already recorded in this currency." }, 409);
-      const netAmount = input.lines.reduce((sum: number, line: { quantity: number; unitPrice: number }) =>
-        sum + line.quantity * line.unitPrice, 0);
-      const taxAmount = input.lines.reduce((sum: number, line: { taxAmount: number }) => sum + line.taxAmount, 0);
+      const { netAmount, taxAmount, grossAmount } = invoiceTotals(input.lines);
       invoice = { ...input, id: invoiceId, branchRef: branchId, supplierName: "Office Supplier", status: "Received",
         intakeChannel: "Manual", invoiceNumber: input.invoiceNumber.trim(),
         currencyCode: input.currencyCode.toUpperCase(), netAmount, taxAmount,
-        grossAmount: netAmount + taxAmount, version: 1, createdAt: "2026-10-20T00:00:00Z",
+        grossAmount, version: 1, createdAt: "2026-10-20T00:00:00Z",
         lines: input.lines.map((line: unknown, at: number) => ({ ...line as object, id: `${at + 1}`, lineNumber: at + 1 })) };
       return json({ id: invoiceId, invoiceNumber: invoice.invoiceNumber, status: "Received",
         grossAmount: invoice.grossAmount, currencyCode: invoice.currencyCode, version: 1 }, 201);
@@ -370,4 +369,38 @@ test("Unknown acceptance history is unavailable and cannot be saved as zero capa
   await expect(page.getByText("No accepted receipt evidence is recorded for this line.", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Save line links", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "every invoice line" })).toBeVisible(); expect(writes).toBe(0);
+});
+
+test("invoice capture and numeric original response preserve wide4dp digits without changing the page layout", async ({ page }) => {
+  await mockErp(page);
+  const description = 'Original "quantity":99999999999999.9999 \\ document';
+  let captures = 0;
+  await page.route("**/api/procurement/v1/invoices**", async (route) => {
+    const request = route.request(), url = new URL(request.url());
+    const json = (body: string, status = 200) => route.fulfill({ status, contentType: "application/json", body });
+    if (url.pathname === "/api/procurement/v1/invoices" && request.method() === "POST") {
+      captures++;
+      expect(request.postDataJSON().lines).toEqual([{ description, quantity: "1", unitPrice: "12345678901234.5678", taxAmount: "0" }]);
+      expect(request.postData()).toContain('"unitPrice":"12345678901234.5678"');
+      return json(`{"id":"${invoiceId}","status":"Received","grossAmount":12345678901234.5678}`, 201);
+    }
+    if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}`)
+      return json(`{"id":"${invoiceId}","supplierId":"${vendorId}","supplierName":"Office Supplier","invoiceNumber":"INV-EXACT-4DP","invoiceDate":"2026-10-20","currencyCode":"ZMW","status":"Received","intakeChannel":"Manual","version":1,"nextStep":"Review the original invoice.","netAmount":12345678901234.5678,"taxAmount":0,"grossAmount":12345678901234.5678,"lines":[{"id":"${lineId}","lineNumber":1,"description":${JSON.stringify(description)},"quantity":1,"unitPrice":12345678901234.5678,"taxAmount":0}]}`);
+    return route.fallback();
+  });
+  await page.goto("/procurement/workspace/bills/new");
+  await page.getByRole("combobox", { name: "Vendor" }).click();
+  await page.getByRole("option", { name: "Office Supplier" }).click();
+  await page.getByLabel("Invoice number").fill("INV-EXACT-4DP");
+  await page.getByLabel("Description 1").fill(description);
+  await page.getByLabel("Quantity", { exact: true }).fill("1");
+  await page.getByLabel("Unit price", { exact: true }).fill("12345678901234.5678");
+  await page.getByLabel("Tax amount", { exact: true }).fill("0");
+  await expect(page.getByLabel("Unit price", { exact: true })).toHaveValue("12345678901234.5678");
+  await expect(page.getByText("Total ZMW 12,345,678,901,234.5678", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Record as received" }).click();
+  await expect(page.getByRole("heading", { name: "Invoice INV-EXACT-4DP" })).toBeVisible();
+  await expect(page.getByText("ZMW 12,345,678,901,234.5678", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(description, { exact: true })).toBeVisible();
+  expect(captures).toBe(1);
 });
