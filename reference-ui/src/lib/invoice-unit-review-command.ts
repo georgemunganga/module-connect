@@ -9,7 +9,8 @@ const valid = (v: unknown): v is UnitReviewPending => {
   const x = v as Partial<UnitReviewPending>;
   return (x.operation === "Open" || x.operation === "Decision") && typeof x.invoiceId === "string" && uuid.test(x.invoiceId)
     && typeof x.key === "string" && uuid.test(x.key) && (x.reviewId === null || typeof x.reviewId === "string" && uuid.test(x.reviewId))
-    && (x.operation !== "Decision" || x.reviewId !== null);
+    && (x.operation !== "Decision" || x.reviewId !== null)
+    && Object.keys(x).every((key) => ["operation", "invoiceId", "reviewId", "key"].includes(key));
 };
 export function readUnitReviewPending(scope: string): UnitReviewPendingState {
   try {

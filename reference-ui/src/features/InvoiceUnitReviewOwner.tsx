@@ -20,7 +20,7 @@ export function InvoiceUnitReviewOwner({ invoiceId, invoiceVersion }: { invoiceI
   const [pending, setPending] = useState(() => readUnitReviewPending(scope));
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [reason, setReason] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
-  const alive = useRef(true);
+  const alive = useRef(true), operationInFlight = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     if (!canOpen) return;
@@ -33,9 +33,10 @@ export function InvoiceUnitReviewOwner({ invoiceId, invoiceVersion }: { invoiceI
   }, [canOpen, context.legalEntityId, invoiceId]);
   if (!canOpen) return null;
   async function request() {
-    if (busy || pending.blocked || !readiness || !readiness.canRequestReview || readiness.invoiceVersion !== invoiceVersion) return;
+    if (operationInFlight.current || busy || pending.blocked || !readiness || !readiness.canRequestReview || readiness.invoiceVersion !== invoiceVersion) return;
+    operationInFlight.current = true;
     const marker: UnitReviewPending = { operation: "Open", invoiceId, reviewId: null, key: crypto.randomUUID() };
-    if (!claimUnitReviewPending(scope, marker)) { setPending(readUnitReviewPending(scope)); setError("Check the previous review action before opening another one."); return; }
+    if (!claimUnitReviewPending(scope, marker)) { operationInFlight.current = false; setPending(readUnitReviewPending(scope)); setError("Check the previous review action before opening another one."); return; }
     setPending(readUnitReviewPending(scope)); setBusy(true); setError("");
     try {
       const receipt = await openUnitReview(context.legalEntityId, invoiceId, readiness.invoiceVersion, readiness.mappingRevision, reason.trim() || null, marker.key);
@@ -45,11 +46,12 @@ export function InvoiceUnitReviewOwner({ invoiceId, invoiceVersion }: { invoiceI
     } catch (cause) {
       if (cause instanceof UnitReviewError && [400, 422].includes(cause.status)) clearUnitReviewPending(scope, marker);
       if (alive.current) { setPending(readUnitReviewPending(scope)); setError(message(cause)); }
-    } finally { if (alive.current) setBusy(false); }
+    } finally { operationInFlight.current = false; if (alive.current) setBusy(false); }
   }
   async function recover() {
     const marker = pending.pending;
-    if (!marker || busy || marker.operation !== "Open") return;
+    if (!marker || busy || operationInFlight.current || marker.operation !== "Open") return;
+    operationInFlight.current = true;
     setBusy(true); setError("");
     try {
       const latest = await getUnitReviewReadiness(context.legalEntityId, invoiceId);
@@ -60,7 +62,7 @@ export function InvoiceUnitReviewOwner({ invoiceId, invoiceVersion }: { invoiceI
       clearUnitReviewPending(scope, marker);
       if (alive.current) { setPending(readUnitReviewPending(scope)); setReadiness(latest); setNotice(`Saved review action found. ${receipt.reviewState}.`); }
     } catch (cause) { if (alive.current) setError(message(cause)); }
-    finally { if (alive.current) setBusy(false); }
+    finally { operationInFlight.current = false; if (alive.current) setBusy(false); }
   }
   return <Panel title="Check original invoice units" className="mt-5"><div className="space-y-3 p-5 text-sm">
     <p>This asks an independent person to check the units on the original invoice document. It does not approve the invoice or send it to Finance.</p>

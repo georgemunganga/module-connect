@@ -65,7 +65,7 @@ function Detail({ reviewId }: { reviewId: string }) {
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [pending, setPending] = useState(() => readUnitReviewPending(scope));
-  const [decision, setDecision] = useState<DecisionDraft | null>(null), alive = useRef(true);
+  const [decision, setDecision] = useState<DecisionDraft | null>(null), alive = useRef(true), operationInFlight = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     if (!eligible) return;
@@ -99,11 +99,12 @@ function Detail({ reviewId }: { reviewId: string }) {
     finally { if (alive.current) setBusy(false); }
   }
   async function decide() {
-    if (!data || !decision || busy || pending.blocked || !documents || !data.currentMapping || !data.originalDigestCurrent
+    if (!data || !decision || busy || operationInFlight.current || pending.blocked || !documents || !data.currentMapping || !data.originalDigestCurrent
       || !context.permissions.includes("procurement-invoice-unit-review") || !data.actionCandidates.includes(decision.action)) return;
     if (decision.action === "Approve" && !decision.attested || decision.action !== "Approve" && !decision.reason.trim()) return;
+    operationInFlight.current = true;
     const marker: UnitReviewPending = { operation: "Decision", invoiceId: data.invoiceId, reviewId, key: crypto.randomUUID() };
-    if (!claimUnitReviewPending(scope, marker)) { setPending(readUnitReviewPending(scope)); setError("Check the previous decision before making another one."); return; }
+    if (!claimUnitReviewPending(scope, marker)) { operationInFlight.current = false; setPending(readUnitReviewPending(scope)); setError("Check the previous decision before making another one."); return; }
     setPending(readUnitReviewPending(scope)); setBusy(true); setError("");
     try {
       const result = await decideUnitReview(context.legalEntityId, data, decision.assignmentId, decision.assignmentVersion,
@@ -115,11 +116,12 @@ function Detail({ reviewId }: { reviewId: string }) {
     } catch (cause) {
       if (cause instanceof UnitReviewError && [400, 422].includes(cause.status)) clearUnitReviewPending(scope, marker);
       if (alive.current) { setPending(readUnitReviewPending(scope)); setError(message(cause)); setDecision(null); }
-    } finally { if (alive.current) setBusy(false); }
+    } finally { operationInFlight.current = false; if (alive.current) setBusy(false); }
   }
   async function recover() {
     const marker = pending.pending;
-    if (!marker || busy || marker.operation !== "Decision" || marker.reviewId !== reviewId) return;
+    if (!marker || busy || operationInFlight.current || marker.operation !== "Decision" || marker.reviewId !== reviewId) return;
+    operationInFlight.current = true;
     setBusy(true); setError("");
     try {
       const result = await recoverUnitReview(context.legalEntityId, reviewId, marker.key, "Decision", marker.invoiceId);
@@ -128,7 +130,7 @@ function Detail({ reviewId }: { reviewId: string }) {
         setNotice(`Saved decision found: ${result.reviewState}. This does not approve the invoice.`);
         setRevision((value) => value + 1); }
     } catch (cause) { if (alive.current) setError(message(cause)); }
-    finally { if (alive.current) setBusy(false); }
+    finally { operationInFlight.current = false; if (alive.current) setBusy(false); }
   }
   const canDecide = !!data && !!documents && !pending.blocked && !busy && data.currentMapping && data.originalDigestCurrent
     && context.permissions.includes("procurement-invoice-unit-review") && data.assignments.length > 0;

@@ -69,6 +69,10 @@ describe("reload-safe unit review marker", () => {
     expect([...map.values()][0]).not.toMatch(/reason|attestation|amount/i);
     expect(readUnitReviewPending("own-scope")).toEqual({ pending: marker, blocked: true });
     expect(claimUnitReviewPending("own-scope", { ...marker, key: doc })).toBe(false);
+    const storageKey = [...map.keys()][0]!;
+    map.set(storageKey, JSON.stringify({ ...marker, body: '{"reason":"private"}' }));
+    expect(readUnitReviewPending("own-scope")).toEqual({ pending: null, blocked: true });
+    map.set(storageKey, JSON.stringify(marker));
     expect(clearUnitReviewPending("own-scope", marker)).toBe(true);
   });
   it("fails closed if browser storage is unavailable or malformed", () => {
