@@ -1,10 +1,11 @@
+import { invoiceDecimal } from "../../shared/procurement-decimal";
 import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 /** Published catalog prices available to an employee in the selected ERP company. */
 export type PublishedCatalogPrice = {
   entryId: string; itemId: string; code: string; name: string; kind: string;
   description?: string | null; categoryCode: string; unitCode: string;
-  estimatedUnitPrice: number; currencyCode: string; supplierId: string;
+  estimatedUnitPrice: number; exactEstimatedUnitPrice?: string; currencyCode: string; supplierId: string;
   supplierName: string; priceValidUntil?: string | null; publishedVersion: number;
 };
 export type PublishedCatalogPage = { items: PublishedCatalogPrice[]; total: number; page: number; pageSize: number };
@@ -12,6 +13,13 @@ export type PublishedCatalogPage = { items: PublishedCatalogPrice[]; total: numb
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
+
+/** Only an explicit exact owner companion may be labelled as a price. Legacy numeric
+ * wire stays compatible for old callers; this helper never derives exactness from it. */
+export function catalogExactUnitPrice(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try { return invoiceDecimal(value); } catch { return undefined; }
+}
 
 function validPrice(value: unknown): value is PublishedCatalogPrice {
   return object(value) && guid.test(String(value.entryId)) && guid.test(String(value.itemId))
@@ -22,9 +30,10 @@ function validPrice(value: unknown): value is PublishedCatalogPrice {
     && typeof value.publishedVersion === "number" && value.publishedVersion > 0;
 }
 
-export async function listPublishedCatalog(companyId: string, search = "", signal?: AbortSignal): Promise<PublishedCatalogPage> {
+export async function listPublishedCatalog(companyId: string, search = "", signal?: AbortSignal, page = 1): Promise<PublishedCatalogPage> {
   if (!guid.test(companyId)) throw new Error("Choose an ERP company before searching the catalog.");
-  const query = new URLSearchParams({ page: "1", pageSize: "25" });
+  if (!Number.isSafeInteger(page) || page < 1) throw new Error("Choose a valid catalog page.");
+  const query = new URLSearchParams({ page: String(page), pageSize: "25" });
   if (search.trim()) query.set("search", search.trim());
   let response: Response;
   try {
@@ -43,5 +52,7 @@ export async function listPublishedCatalog(companyId: string, search = "", signa
   if (!object(body) || !Array.isArray(body.items) || !body.items.every(validPrice)
     || typeof body.total !== "number" || typeof body.page !== "number" || typeof body.pageSize !== "number")
     throw new Error("The ERP returned an invalid buying catalog.");
-  return body as PublishedCatalogPage;
+  return { ...body, items: body.items.map(item => ({ ...item,
+    exactEstimatedUnitPrice: catalogExactUnitPrice(item.exactEstimatedUnitPrice),
+  })) } as PublishedCatalogPage;
 }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { useErpShell } from "./erpShell";
 import { fetchProcurementReadiness, ProcurementLiveError, type ProcurementReadiness } from "./procurement-live";
@@ -10,21 +10,26 @@ export const isProcurementLiveMode = liveMode;
 
 /** Live transactions stay closed until their individual API adapters pass acceptance. */
 export function ProcurementLiveGate({ children, unavailable }: { children: ReactNode; unavailable?: ReactNode }) {
-  const { selection } = useErpShell();
+  const { selection,authEpoch } = useErpShell();
   const location = useLocation();
-  const [state, setState] = useState<{ readiness?: ProcurementReadiness; error?: string }>({});
+  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? ""]);
+  const currentKey=useRef(readinessKey);currentKey.current=readinessKey;
+  const [storedState, setState] = useState<{ key:string; readiness?: ProcurementReadiness; error?: string }>({key:""});
+  // Never render old scope readiness for even the render before passive effect cleanup.
+  const state:{readiness?:ProcurementReadiness;error?:string}=storedState.key===readinessKey?storedState:{};
   useEffect(() => {
     if (!liveMode) return;
     const controller = new AbortController();
-    setState({});
+    const capturedKey=readinessKey;
+    setState({key:capturedKey});
     fetchProcurementReadiness(selection, controller.signal)
-      .then((readiness) => { if (!controller.signal.aborted) setState({ readiness }); })
+      .then((readiness) => { if (!controller.signal.aborted && currentKey.current===capturedKey) setState({ key:capturedKey,readiness }); })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted)
-          setState({ error: error instanceof ProcurementLiveError ? error.message : "Procurement data is not ready. Please try again later." });
+        if (!controller.signal.aborted && currentKey.current===capturedKey)
+          setState({ key:capturedKey,error: error instanceof ProcurementLiveError ? error.message : "Procurement data is not ready. Please try again later." });
       });
     return () => controller.abort();
-  }, [selection.entityId, selection.branch]);
+  }, [selection.entityId, selection.branch,authEpoch,readinessKey]);
 
   if (!liveMode) return <>{children}</>;
   if (state.readiness?.adminViewOnly && /\/(?:new|edit)\/?$/.test(location.pathname) && unavailable)
@@ -40,9 +45,14 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
-  const configurationSettingsPath = ["/settings/reference-data", "/settings/buying-rules"]
-    .includes(location.pathname);
-  if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
+  const overviewPath = location.pathname === "/" || location.pathname === "/analytics";
+  const configurationSettingsPath = /^\/settings(?:\/|$)/.test(location.pathname);
+  if (state.readiness && ((overviewPath && [
+    ["procurement-request-read", "requestDraft"], ["procurement-po-read", "orderDraft"],
+    ["procurement-plan-read", "planningDraft"], ["procurement-contract-read", "contractDraft"],
+  ].some(([permission, capability]) => state.readiness!.permissions.includes(permission)
+    && state.readiness!.capabilities[capability as keyof ProcurementReadiness["capabilities"]] === true))
+    || (vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
     || (approvalPath && state.readiness.capabilities.approvals)
@@ -53,7 +63,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && state.readiness.capabilities.orderDraft)
     || (budgetPath && state.readiness.capabilities.requestDraft)
-    || (configurationSettingsPath && state.readiness.capabilities.configurationDraft)))
+    || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
     return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{children}</LiveReadiness.Provider>;
   if (state.readiness && unavailable)
     return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{unavailable}</LiveReadiness.Provider>;

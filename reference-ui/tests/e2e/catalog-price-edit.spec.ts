@@ -67,7 +67,7 @@ test("stale price keeps the correction and explicit saved-price check performs o
 test("lost catalog correction stays unconfirmed with no automatic repeat PUT",async({page})=>{
   const f=await fixture(page,"lost");await page.goto(`/procurement/workspace/items/${item}`);await page.getByRole("button",{name:"Edit draft price",exact:true}).click();
   await page.getByRole("textbox",{name:"Draft unit price",exact:true}).fill("8.0001");await page.getByRole("button",{name:"Save draft price",exact:true}).click();
-  await expect(page.getByRole("status")).toContainText("save is unconfirmed");await expect(page.getByRole("button",{name:"Save draft price",exact:true})).toBeDisabled();
+  await expect(page.getByRole("status").filter({hasText:"This save is unconfirmed"})).toContainText("save is unconfirmed");await expect(page.getByRole("button",{name:"Save draft price",exact:true})).toBeDisabled();
   await page.getByRole("button",{name:"Check saved prices",exact:true}).click();await expect.poll(()=>f.readCount()).toBeGreaterThan(1);expect(f.writes).toHaveLength(1);
   await expect(page.getByRole("button",{name:"Save draft price",exact:true})).toBeDisabled();
 });

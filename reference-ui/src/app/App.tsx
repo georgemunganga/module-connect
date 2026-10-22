@@ -19,6 +19,7 @@ import { LiveVendorCreditList, LiveVendorCreditDetail, LiveVendorCreditEditor } 
 import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
 import { LiveBudgets } from "../features/LiveBudgets";
+import { LiveOverview } from "../features/LiveOverview";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -31,6 +32,7 @@ import { Budgets, Analytics, PayablesInbox } from "../features/Insights";
 import { BatchPayments } from "../features/BatchPayments";
 import { BatchPaymentEditor } from "../features/BatchPaymentEditor";
 import { Settings } from "../features/Settings";
+import { LiveSettingsShell } from "../features/LiveSettingsShell";
 import { modules, type ModuleKey } from "../data/modules";
 
 function EditorRoute({ kind }: { kind: Exclude<ModuleKey, "rfqs"> }) {
@@ -84,7 +86,7 @@ export function App() {
         <ProcurementLiveGate unavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<PendingLiveWorkflow />} /></Route></Routes>}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={isProcurementLiveMode ? <LiveOverview /> : <Dashboard />} />
             <Route
               path="/approvals"
               element={isProcurementLiveMode ? <LiveApprovalQueue /> : <RecordList kind="requests" approval />}
@@ -218,11 +220,8 @@ export function App() {
             />
             <Route
               path="/analytics"
-              element={
-                <div className="p-5 sm:p-8">
-                  <Analytics />
-                </div>
-              }
+              element={isProcurementLiveMode ? <LiveOverview analytics />
+                : <div className="p-5 sm:p-8"><Analytics /></div>}
             />
             <Route
               path="/inbox"
@@ -264,7 +263,7 @@ export function App() {
               }
             />
           </Route>
-          <Route path="/settings/*" element={<Settings />} />
+          <Route path="/settings/*" element={isProcurementLiveMode ? <LiveSettingsShell /> : <Settings />} />
         </Routes>
         </ProcurementLiveGate>
         </ErpShellProvider>

@@ -35,8 +35,8 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId,
       workerId: "22222222-2222-4222-8222-222222222222", permissions: options.canApprove
-        ? ["procurement-configuration-edit", "procurement-configuration-approve"]
-        : ["procurement-configuration-edit"],
+        ? ["procurement-access", "procurement-configuration-read", "procurement-configuration-edit", "procurement-configuration-approve"]
+        : ["procurement-access", "procurement-configuration-read", "procurement-configuration-edit"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     const base = "/api/procurement/v1/configuration/policies";
@@ -192,3 +192,58 @@ test("reviewer can return rules for correction", async ({ page }) => {
   await page.getByRole("button", { name: "Edit draft" }).click();
   await expect(page.getByText("Reviewer asked for changes: Add an amount band")).toBeVisible();
 });
+
+async function retirementFixture(page: Page, options: { marker?: boolean; eligible?: boolean; interrupted?: boolean; denied?: boolean } = {}) {
+  await mockErp(page);
+  let posts = 0;
+  let record = { id: policyId, policyKey: "PURCHASE_REQUEST", policyVersionNumber: 1,
+    state: "Draft", version: 1, effectiveFrom: "2026-12-01T00:00:00Z", effectiveTo: null,
+    createdAt: "2026-10-22T00:00:00Z", rulesJson: "{}",
+    draftRetirementVersion: options.marker === false ? undefined : 1,
+    canRetireDraft: options.eligible !== false };
+  await page.route("**/api/procurement/v1/configuration/policies**", (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: {
+      items: [record], total: 1, page: 1, pageSize: 100 } });
+    posts++;
+    if (options.interrupted) return route.abort("failed");
+    if (options.denied) return route.fulfill({ status: 409, json: { message: "This policy has retained review history." } });
+    expect(route.request().url()).toContain(`/${policyId}/retire`);
+    expect(route.request().postDataJSON()).toEqual({ version: 1, reason: "Duplicate draft" });
+    record = { ...record, state: "Retired", version: 2, canRetireDraft: false };
+    return route.fulfill({ json: record });
+  });
+  return { posts: () => posts };
+}
+test("unused rule retirement requires reason and retains the retired row on reload", async ({ page }) => {
+  const fixture = await retirementFixture(page);
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Retire unused draft" }).click();
+  await expect(page.getByRole("button", { name: "Confirm retirement" })).toBeDisabled();
+  await page.getByRole("textbox", { name: "Retirement reason", exact: true }).fill("Duplicate draft");
+  await page.getByRole("button", { name: "Confirm retirement" }).click();
+  await expect(page.getByText("Retired", { exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByText("Retired", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retire unused draft" })).toHaveCount(0);
+  expect(fixture.posts()).toBe(1);
+});
+for (const options of [{ marker: false }, { eligible: false }])
+  test(`old or retained policy does not offer retirement ${JSON.stringify(options)}`, async ({ page }) => {
+    const fixture = await retirementFixture(page, options);
+    await page.goto("/procurement/workspace/settings/buying-rules");
+    await expect(page.getByRole("cell", { name: "Purchase requests" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retire unused draft" })).toHaveCount(0);
+    expect(fixture.posts()).toBe(0);
+  });
+for (const options of [{ interrupted: true }, { denied: true }])
+  test(`unconfirmed or conflicting retirement stays locked and checks via GET ${JSON.stringify(options)}`, async ({ page }) => {
+    const fixture = await retirementFixture(page, options);
+    await page.goto("/procurement/workspace/settings/buying-rules");
+    await page.getByRole("button", { name: "Retire unused draft" }).click();
+    await page.getByRole("textbox", { name: "Retirement reason", exact: true }).fill("Duplicate draft");
+    await page.getByRole("button", { name: "Confirm retirement" }).click();
+    await expect(page.getByRole("button", { name: "Confirm retirement" })).toBeDisabled();
+    await expect(page.getByRole("status").filter({ hasText: "will not repeat automatically" })).toBeVisible();
+    await page.getByRole("button", { name: "Check saved rules", exact: true }).click();
+    await expect(page.getByRole("cell", { name: "Purchase requests" })).toBeVisible();
+    expect(fixture.posts()).toBe(1);
+  });
