@@ -10,7 +10,7 @@ const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDra
 const permissions = ["procurement-access", "procurement-recurring-read", "procurement-recurring-create", "procurement-recurring-edit"];
 type RecordValue = Record<string, unknown> & { id: string; version: number; status: string };
 
-async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean; closed?: boolean } = {}) {
+async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean; createStatus?: number; closed?: boolean } = {}) {
   const writes: string[] = [];
   let record: RecordValue | null = opts.closed ? { id: recordId, number: "RPC-1", title: "Past service", supplierId: supplier,
     supplierContractId: null, ownerWorkerId: worker, workLocationId: null, frequency: "Monthly",
@@ -36,6 +36,7 @@ async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: b
       if (method === "GET") return json({ items: record ? [record] : [], total: record ? 1 : 0, page: 1, pageSize: 25 });
       writes.push(path);
       if (opts.unknownCreate) return route.abort("failed");
+      if (opts.createStatus) return json({ message: "The upstream result is unconfirmed." }, opts.createStatus);
       const input = route.request().postDataJSON();
       record = { ...input, id: recordId, number: "RPC-1", ownerWorkerId: worker, workLocationId: null,
         exactExpectedAmount: input.expectedAmount, status: "Draft", version: 1,
@@ -126,3 +127,24 @@ test("unconfirmed create locks repeat submission and retains entered values", as
   await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
   expect(state.writes).toHaveLength(1);
 });
+
+for (const status of [408, 429, 499]) {
+  test(`HTTP ${status} keeps create locked after reload without a second POST`, async ({ page }) => {
+    const state = await fixture(page, { createStatus: status });
+    await page.goto("/procurement/workspace/recurring-bills/new");
+    await page.getByRole("combobox", { name: "Supplier", exact: true }).click();
+    await page.getByRole("option", { name: "Copper Services (Active)", exact: true }).click();
+    await page.getByLabel("Purchase name").fill("Cloud subscription");
+    await page.getByLabel("Expected each time").fill("10.0001");
+    await page.getByLabel("First expected date").fill("2026-11-01");
+    await page.getByLabel("Next expected date").fill("2026-11-01");
+    await page.getByRole("button", { name: "Save recurring purchase" }).click();
+    await expect(page.getByText("The save result was not confirmed.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+    expect(state.writes).toHaveLength(1);
+    await page.reload();
+    await expect(page.getByText("The save result was not confirmed.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+    expect(state.writes).toHaveLength(1);
+  });
+}

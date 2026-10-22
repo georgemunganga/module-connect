@@ -9,7 +9,7 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import { listOwnContractDrafts, type ContractSummary } from "../../../src/platform/procurement-contracts-api";
 import {
-  RecurringPurchaseError, closeRecurringPurchase, createRecurringPurchase, getRecurringPurchase,
+  RecurringPurchaseError, isDefiniteRecurringRejection, closeRecurringPurchase, createRecurringPurchase, getRecurringPurchase,
   listRecurringPurchases, updateRecurringPurchase, validateRecurringPurchase,
   type RecurringPurchase, type RecurringPurchaseDraft, type RecurringPurchasePage,
 } from "../../../src/platform/procurement-recurring-purchases-api";
@@ -147,12 +147,12 @@ export function LiveRecurringPurchaseEditor() {
       confirmRecurringWrite(writeScope);
       if (active()) navigate(`/recurring-bills/${saved.id}`);
     } catch (cause) {
-      if (cause instanceof RecurringPurchaseError && cause.status >= 400 && cause.status < 500)
+      if (isDefiniteRecurringRejection(cause))
         confirmRecurringWrite(writeScope);
       if (active()) {
         setError(errorText(cause));
         if (cause instanceof RecurringPurchaseError && cause.status === 409) setSaveBlock("stale");
-        else if (!(cause instanceof RecurringPurchaseError) || cause.status === 0 || cause.status >= 500) setSaveBlock("unknown");
+        else if (!isDefiniteRecurringRejection(cause)) setSaveBlock("unknown");
       }
     } finally { pending.current = false; if (active()) setSaving(false); }
   }
@@ -221,11 +221,11 @@ export function LiveRecurringPurchaseDetail() {
       confirmRecurringWrite(writeScope);
       if (active()) setLoaded({ key: context, record: saved });
     } catch (cause) {
-      if (cause instanceof RecurringPurchaseError && cause.status >= 400 && cause.status < 500)
+      if (isDefiniteRecurringRejection(cause))
         confirmRecurringWrite(writeScope);
       if (active()) {
         setError(errorText(cause));
-        if (!(cause instanceof RecurringPurchaseError) || cause.status === 0 || cause.status === 409 || cause.status >= 500) setBlocked(true);
+        if (!isDefiniteRecurringRejection(cause) || cause.status === 409) setBlocked(true);
       }
     } finally { busyRef.current = false; if (active()) setBusy(false); }
   }
