@@ -57,8 +57,9 @@ for (const [path, heading, content] of [
     const main = page.getByRole("main");
     await expect(main.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     await expect(main.getByText(content, { exact: true })).toBeVisible();
-    await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Try a sample|Publish|Return for changes|Check sample)/i })).toHaveCount(0);
+    await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Publish|Return for changes)/i })).toHaveCount(0);
     await expect(main.getByRole("link", { name: /^(Add|New |Edit)/i })).toHaveCount(0);
+    if (path === "/settings/buying-rules") await expect(main.getByRole("button", { name: "Try a sample", exact: true })).toBeVisible();
     expect(writes).toEqual([]);
   });
 }

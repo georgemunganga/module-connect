@@ -180,7 +180,7 @@ test("hard reload recovers lost partial creation by the original GET reference w
 
 test("malformed recovery storage blocks a new create without discarding the original journal", async ({ page }) => {
   const calls = await mock(page);
-  const slot = JSON.stringify(["amizo", company, worker, branch, "Create"]);
+  const slot = JSON.stringify(["amizo", company, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", branch, "Create"]);
   await page.addInitScript(({ slot }) => sessionStorage.setItem("erp.rfq.recovery.v1:" + slot, "{broken"), { slot });
   await page.goto("/procurement/workspace/rfqs/new?source=approved");
   await expect(page.getByRole("alert")).toContainText("No new save will be sent");
