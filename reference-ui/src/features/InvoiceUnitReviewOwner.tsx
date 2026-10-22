@@ -39,7 +39,7 @@ export function InvoiceUnitReviewOwner({ invoiceId, invoiceVersion }: { invoiceI
     if (!claimUnitReviewPending(scope, marker)) { operationInFlight.current = false; setPending(readUnitReviewPending(scope)); setError("Check the previous review action before opening another one."); return; }
     setPending(readUnitReviewPending(scope)); setBusy(true); setError("");
     try {
-      const receipt = await openUnitReview(context.legalEntityId, invoiceId, readiness.invoiceVersion, readiness.mappingRevision, reason.trim() || null, marker.key);
+      const receipt = await openUnitReview(context.legalEntityId, invoiceId, readiness.invoiceVersion, readiness.mappingRevision, reason.trim() || null, marker.key, context.principalId);
       clearUnitReviewPending(scope, marker);
       if (alive.current) { setPending(readUnitReviewPending(scope)); setNotice(`Review started. ${receipt.reviewState}.`); setReadiness(null);
         const latest = await getUnitReviewReadiness(context.legalEntityId, invoiceId); if (alive.current) setReadiness(latest); }
@@ -58,7 +58,7 @@ export function InvoiceUnitReviewOwner({ invoiceId, invoiceVersion }: { invoiceI
       // A retained review ID is only a route to the original-key receipt. It is
       // never itself proof that this particular interrupted POST succeeded.
       if (!latest.existingReviewId) throw new Error("No saved review command was found yet. Check again later or ask an administrator to inspect the history.");
-      const receipt = await recoverUnitReview(context.legalEntityId, latest.existingReviewId, marker.key, "Open", invoiceId);
+      const receipt = await recoverUnitReview(context.legalEntityId, latest.existingReviewId, marker.key, "Open", invoiceId, context.principalId);
       clearUnitReviewPending(scope, marker);
       if (alive.current) { setPending(readUnitReviewPending(scope)); setReadiness(latest); setNotice(`Saved review action found. ${receipt.reviewState}.`); }
     } catch (cause) { if (alive.current) setError(message(cause)); }

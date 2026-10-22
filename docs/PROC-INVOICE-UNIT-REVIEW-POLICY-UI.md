@@ -35,3 +35,15 @@ Pending-command clearing additionally requires the same invoice and review IDs. 
 - Existing unit-review browser journeys retain their receipt/CAS/document tests with workerless system principals.
 
 These tests are authored, not executed proof. Actual PostgreSQL P23 installation, system-only Core review execution, deployment and production smoke checks remain separate release gates owned by ERP.
+
+## Alignment after current UI main
+
+The isolated policy branch merges published UI main `63054fc` without replacing shared components or current application styling. Current P22 release remains separate from this future P23 source branch.
+
+The API decoder recognizes the actual additive `makerPrincipalId`, `identitySchemaVersion` and `evidenceSchemaVersion` fields. A supplied maker is a canonical real Core identifier, independent of optional HR linkage. This new P23 route supplies retained source identity3, distinct from receipt wire1 and terminal evidence3. The separately retained legacy identity2 consumer is not treated as a new-route source. Pending receipt evidence may be omitted by the backend's null serializer or supplied as null. Older wire1 without additive metadata remains readable; partial or malformed supplied metadata does not confirm an action.
+
+When the UI already knows the source maker/version, a decision receipt or recovered command must agree before its pending marker can clear. Opening receipts/recovery that supply maker metadata must match the actual current Core principal. Unknown outcomes remain blocked across reload; no second POST is issued merely because metadata was malformed. This is response consistency, not frontend authority. Existing server permissions, scope, document pins, exact CAS and actor-owned recovery remain required independently.
+
+Newly authored verification covers canonical current source identity3, rejecting a legacy2 source substituted into this new route, partial/invalid metadata, pending/terminal evidence combinations, wrong-maker/source receipts, missing known receipt metadata, old wire1 compatibility and rejecting wire3 substitutions. A new mocked browser case retains the interrupted open through reload and conflicting GET recovery without a second POST; the existing workerless purpose-reviewer case now includes the actual additive metadata. These additions, including TypeScript/build/browser checks, have **not run** while the current release owns the CPU slot.
+
+Backend source contract checked against `b6d62c7` on `codex/procurement-unit-review-core-principal`: the new four-table review route strictly retains source3, terminal evidence3 and receipt envelope1. Its separate legacy2 consumer does not make a source2 response valid for this new route. Seventeen focused API unit cases and one additional mocked browser scenario are authored for this alignment, with the existing workerless happy path updated to actual metadata. All remain unexecuted source evidence pending a scheduled UI gate.

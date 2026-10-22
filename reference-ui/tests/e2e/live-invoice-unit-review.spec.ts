@@ -74,6 +74,7 @@ test("purpose reviewer sees pinned original and attests explicitly without broad
       mappingVersionId: mapping, mappingRevision: 1, branchId: branch, openedAt: "2026-10-22T00:00:00Z", ...flags }],
       total: 1, page: 1, pageSize: 20, availabilityMeaning: "CurrentMappingAssignmentsOnly", canPostToFinance: false }); return true; }
     if (path === `/api/procurement/v1/invoice-unit-reviews/${review}`) { await json({ reviewId: review, invoiceId: invoice,
+      makerPrincipalId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", identitySchemaVersion: 3, evidenceSchemaVersion: votes ? 3 : null,
       invoiceVersion: 2, mappingVersionId: mapping, mappingRevision: 1, coreCaseId: caseId, caseVersion: votes ? 2 : 1,
       caseState: votes ? "Approved" : "Pending", reviewState: votes ? "Verified" : "Pending", currentMapping: true, originalDigestCurrent: true,
       original: { invoiceNumber: "INV-1", invoiceDate: "2026-10-20", currencyCode: "ZMW", netAmount: "10", taxAmount: "0", grossAmount: "10",
@@ -92,6 +93,7 @@ test("purpose reviewer sees pinned original and attests explicitly without broad
     if (path === `/api/procurement/v1/invoice-unit-reviews/${review}/assignments/${assignment}/decisions`) {
       const body = request.postDataJSON(); expect(body.attestation).toBe("OriginalDocumentUnitsConfirmed");
       expect(body.action).toBe("Approve"); votes++; await json({ ...receipt("Decision", request.headers()["idempotency-key"]), caseVersion: 2,
+        makerPrincipalId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", identitySchemaVersion: 3, evidenceSchemaVersion: 3,
         caseState: "Approved", reviewState: "Verified", decisionId: mapping, outcomeId: doc }); return true;
     }
     return false;
@@ -107,4 +109,34 @@ test("purpose reviewer sees pinned original and attests explicitly without broad
   await expect(page.getByText(/Decision recorded: Verified/)).toBeVisible();
   expect(votes).toBe(1);
   expect(calls.some((entry) => entry === `GET /api/procurement/v1/invoices/${invoice}`)).toBe(false);
+});
+test("conflicting Core maker metadata retains the unknown open after reload and GET recovery", async ({ page }) => {
+  let opens = 0, savedKey = "", existing = false;
+  await setup(page, "maker", async (route, path) => {
+    const request = route.request(), json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === `/api/procurement/v1/invoices/${invoice}`) {
+      await json({ id: invoice, supplierId: worker, invoiceNumber: "INV-CORE", invoiceDate: "2026-10-20", currencyCode: "ZMW",
+        status: "Received", intakeChannel: "Manual", grossAmount: "10", netAmount: "10", taxAmount: "0", version: 2,
+        lines: [{ id: line, lineNumber: 1, description: "Service", quantity: "1", unitPrice: "10", taxAmount: "0" }], nextStep: "Review" }); return true;
+    }
+    if (path === `/api/procurement/v1/invoices/${invoice}/unit-review-readiness`) {
+      await json({ invoiceId: invoice, invoiceVersion: 2, mappingRevision: 1, existingReviewId: existing ? review : null,
+        canRequestReview: !existing, blockers: existing ? ["OriginalUnitReviewAlreadyOpened"] : [], isUnitVerification: false, ...flags }); return true;
+    }
+    const wrongMaker = () => ({ ...receipt("Open", savedKey), makerPrincipalId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", identitySchemaVersion: 3 });
+    if (path === `/api/procurement/v1/invoices/${invoice}/unit-reviews` && request.method() === "POST") {
+      opens++; existing = true; savedKey = request.headers()["idempotency-key"]; await json(wrongMaker()); return true;
+    }
+    if (path === `/api/procurement/v1/invoice-unit-reviews/${review}/commands/${savedKey}`) { await json(wrongMaker()); return true; }
+    return false;
+  });
+  await page.goto(`/procurement/workspace/bills/${invoice}`);
+  await page.getByRole("button", { name: "Request original unit review" }).click();
+  await expect(page.getByRole("button", { name: "Check saved review action" })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Check saved review action" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "could not be confirmed" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check saved review action" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request original unit review" })).toHaveCount(0);
+  expect(opens).toBe(1);
 });
