@@ -79,11 +79,19 @@ test("Core-authorized user retains the full existing company choices", async ({ 
 test("late pre-sign-out context cannot restore the previous organisation display", async ({ page }) => {
   await fixture(page);
   let reads = 0, revoked = false;
-  let release!: () => void, entered!: () => void;
+  let release!: () => void, entered!: () => void, firstContextSeen!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; });
   const pending = new Promise<void>(resolve => { entered = resolve; });
+  const initialContext = new Promise<void>(resolve => { firstContextSeen = resolve; });
+  // Make the first context the page readiness read, then deny Core lookups so
+  // the held second response is specifically the shell's fallback read.
+  await page.route(/\/api\/hrm\/(?:admin\/legal-entities|admin\/locations|shell\/)$/, async route => {
+    await initialContext;
+    return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ message: "No Core list access" }) });
+  });
   await page.route("**/api/procurement/v1/context", async route => {
     reads++;
+    if (reads === 1) firstContextSeen();
     const saved = { tenantId: "test", principalId: principal, legalEntityId: company, workerId: null,
       permissions: ["procurement-access", "procurement-vendor-read"],
       company: { id: company, code: "AMIZO", name: "Previous account company", currencyCode: "ZMW" },
