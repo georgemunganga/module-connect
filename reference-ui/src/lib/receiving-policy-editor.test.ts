@@ -30,6 +30,7 @@ describe("receiving owner policy editor", () => {
     const json = serializeReceivingPolicy("ZMW", [goods()]);
     expect(parseReceivingPolicy(json.replace('"schemaVersion":1', '"schemaVersion":2'), "ZMW")).toBeNull();
     expect(parseReceivingPolicy(json.replace('"inspectionRequired":true', '"inspectionRequired":"true"'), "ZMW")).toBeNull();
+    expect(parseReceivingPolicy(json.replace('"purchaseType":"GOODS"', '"purchaseType":"OTHER"'), "ZMW")).toBeNull();
     const row = goods(); row.inspectorWorkerIds = ["not-a-worker"];
     expect(() => serializeReceivingPolicy("ZMW", [row])).toThrow();
   });
