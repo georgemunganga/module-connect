@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 const company="11111111-1111-4111-8111-111111111111", worker="22222222-2222-4222-8222-222222222222";
 const item="33333333-3333-4333-8333-333333333333", priceId="44444444-4444-4444-8444-444444444444", vendor="55555555-5555-4555-8555-555555555555";
+const capabilities = Object.fromEntries([
+  "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders",
+  "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
+  "configurationDraft", "contractDraft", "sourcingDraft",
+].map(key => [key, key === "itemDraft"]));
 async function fixture(page: Page, mode: "normal"|"legacy"|"stale"|"lost"|"item-fails"="normal") {
   let price={ id:priceId,catalogItemId:item,supplierId:vendor,currencyCode:"ZMW",unitCode:"each",unitPrice:1,
     taxBasis:"Exclusive",audienceCode:"STAFF",minimumQuantity:null,maximumQuantity:2,effectiveFrom:"2026-10-22T12:34:56.123456Z",effectiveTo:null,
@@ -18,7 +23,7 @@ async function fixture(page: Page, mode: "normal"|"legacy"|"stale"|"lost"|"item-
     if(path==="/api/hrm/shell/")return json({assignedLocationIds:[],confined:false});
     if(path==="/api/procurement/v1/context")return json({tenantId:"synthetic",legalEntityId:company,workerId:worker,
       permissions:["procurement-access","procurement-item-manage"],company:{id:company,code:"TEST",name:"Synthetic company",currencyCode:"ZMW"}});
-    if(path==="/api/procurement/v1/meta")return json({tenantId:"synthetic",legalEntityId:company,schemaReady:true,capabilities:{itemDraft:true}});
+    if(path==="/api/procurement/v1/meta")return json({tenantId:"synthetic",legalEntityId:company,schemaReady:true,capabilities});
     if(path==="/api/procurement/v1/vendors")return json({items:[{id:vendor,number:"VEN-1",displayName:"Actual selected vendor",legalName:"Vendor",countryCode:"ZM",status:"Active",isOrderable:true,version:1,createdAt:"2026-10-22T00:00:00Z"}],total:1,page:1,pageSize:100});
     if(path===`/api/procurement/v1/items/${item}`)return mode==="item-fails"?json({message:"Item unavailable"},404):json({id:item,code:"TEST-1",name:"Catalog item",kind:"Goods",categoryCode:"TEST",unitCode:"each",status:"Active",isPurchasable:true,isStockItem:false,isAsset:false,inspectionRequired:false,version:1});
     if(path===`/api/procurement/v1/items/${item}/catalog-entries`&&request.method()==="GET"){reads++;return json({items:[price]});}
