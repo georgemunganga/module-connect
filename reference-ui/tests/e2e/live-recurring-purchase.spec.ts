@@ -8,7 +8,7 @@ const recordId = "44444444-4444-4444-8444-444444444444";
 const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
   "orders", "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
   "configurationDraft", "contractDraft", "recurringPurchaseDraft", "sourcingDraft"].map(key => [key, key === "recurringPurchaseDraft"]));
-const permissions = ["procurement-access", "procurement-recurring-read", "procurement-recurring-create", "procurement-recurring-edit"];
+const permissions = ["procurement-access", "procurement-vendor-read", "procurement-recurring-read", "procurement-recurring-create", "procurement-recurring-edit"];
 type RecordValue = Record<string, unknown> & { id: string; version: number; status: string };
 
 async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean; createStatus?: number; closed?: boolean; wrongOwner?: boolean; wrongBranch?: boolean } = {}) {

@@ -111,7 +111,7 @@ export function LiveRecurringPurchaseEditor() {
     return () => { controller.abort(); generation.current += 1; };
   }, [context, id, scope.legalEntityId, scope.defaultCurrencyCode]);
   useEffect(() => {
-    if (!canRead(scope)) return;
+    if (!canRead(scope) || !scope.permissions.includes("procurement-vendor-read")) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       listVendorDrafts(scope.legalEntityId, { search: search.trim() || undefined, pageSize: 100, signal: controller.signal })
@@ -169,6 +169,7 @@ export function LiveRecurringPurchaseEditor() {
             {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
             {saveBlock && <p role="status" className="rounded-lg border p-3 text-sm">{saveBlock === "unknown" ? "The save result was not confirmed." : "This purchase changed."} Review the saved {id ? "purchase" : "list"} to confirm the outcome. Unconfirmed writes stay blocked for this browser session. <Link className="text-primary underline" to={id ? `/recurring-bills/${id}` : "/recurring-bills"}>Review saved records</Link></p>}
             <Panel title="Purchase schedule"><div className="grid gap-4 p-5 sm:grid-cols-2">
+              {!scope.permissions.includes("procurement-vendor-read") && <p className="sm:col-span-2 text-sm">Supplier browsing is not assigned to your account. A saved supplier link remains unchanged.</p>}
               <Field label="Search suppliers" className="sm:col-span-2"><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search supplier name" /></Field>
               <Field label="Supplier" className="sm:col-span-2"><Select required value={draft.supplierId} onChange={(e) => { field("supplierId", e.target.value); field("supplierContractId", null); }}><option value="">Choose a supplier</option>{draft.supplierId && !vendors.some((v) => v.id === draft.supplierId) && <option value={draft.supplierId}>Selected supplier</option>}{vendors.map((v) => <option key={v.id} value={v.id}>{v.displayName} ({v.status})</option>)}</Select></Field>
               <Field label="Purchase name" className="sm:col-span-2"><Input required maxLength={300} value={draft.title} onChange={(e) => field("title", e.target.value)} placeholder="For example, monthly cleaning" /></Field>
