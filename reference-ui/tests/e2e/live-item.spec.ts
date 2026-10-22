@@ -30,7 +30,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
-      permissions: options.canApprove ? ["procurement-access", "procurement-item-approve", "procurement-item-manage", "procurement-catalog-approve"] : [],
+      permissions: options.canApprove ? ["procurement-access", "procurement-item-approve", "procurement-item-manage", "procurement-catalog-approve"] : ["procurement-access", "procurement-item-manage"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/vendors") return json({ items: [{ id: vendorId, number: "SUP-1", displayName: "Office Supply", legalName: "Office Supply Ltd", countryCode: "ZM", status: "Active", isOrderable: true, version: 2, createdAt: "2026-10-19T00:00:00Z" }], total: 1, page: 1, pageSize: 100 });

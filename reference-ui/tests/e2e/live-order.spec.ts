@@ -123,3 +123,89 @@ test("read-only buyer cannot start or edit an order draft", async ({ page }) => 
   await page.goto("/procurement/workspace/purchase-orders/new");
   await expect(page.getByText("You do not have access to edit purchase orders")).toBeVisible();
 });
+
+const anotherOrderId = "77777777-7777-4777-8777-777777777777";
+const editPath = (id: string) => `/procurement/workspace/purchase-orders/${id}/edit`;
+const savedDraft = (id = orderId) => ({ id, number: "PO-SCOPED", supplierId: vendorId,
+  supplierName: "Office Supplier", buyerSubjectId: workerId, status: "Draft", version: 1,
+  currencyCode: "ZMW", shipToRef: "", billToRef: "", paymentTermRef: "",
+  expectedDeliveryOn: null, createdAt: "2026-10-20T00:00:00Z", total: 10,
+  lines: [{ id: firstLineId, lineNumber: 1, description: "First saved order", unitCode: "EA",
+    quantity: 1, unitPrice: 10, taxAmount: 0 }], nextStep: "Internal draft only" });
+async function switchEditor(page: Page, id: string) {
+  await page.evaluate((path) => {
+    history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, editPath(id));
+}
+
+test("failed edit load never falls back to creating a purchase order", async ({ page }) => {
+  await mockErp(page);
+  const writes: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/procurement/v1/orders") && request.method() !== "GET") writes.push(request.method());
+  });
+  await page.goto(editPath(orderId));
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("switching to an unavailable order removes the previous editable draft", async ({ page }) => {
+  await mockErp(page);
+  const writes: string[] = [];
+  await page.route(`**/api/procurement/v1/orders/${orderId}`, (route) => {
+    if (route.request().method() !== "GET") writes.push(route.request().method());
+    return route.fulfill({ json: savedDraft() });
+  });
+  await page.goto(editPath(orderId));
+  await expect(page.getByLabel("Description 1")).toHaveValue("First saved order");
+  await switchEditor(page, anotherOrderId);
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("Description 1")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("late order save cannot navigate over a different editor context", async ({ page }) => {
+  await mockErp(page);
+  let releaseSave!: () => void;
+  const savePending = new Promise<void>((resolve) => { releaseSave = resolve; });
+  let writes = 0;
+  await page.route(`**/api/procurement/v1/orders/${orderId}`, async (route) => {
+    if (route.request().method() === "PUT") { writes++; await savePending; }
+    await route.fulfill({ json: { ...savedDraft(), version: route.request().method() === "PUT" ? 2 : 1 } });
+  });
+  await page.route(`**/api/procurement/v1/orders/${anotherOrderId}`, (route) =>
+    route.fulfill({ json: { ...savedDraft(anotherOrderId), lines: [{ ...savedDraft().lines[0], description: "Second saved order" }] } }));
+  await page.goto(editPath(orderId));
+  await expect(page.getByLabel("Description 1")).toHaveValue("First saved order");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect.poll(() => writes).toBe(1);
+  await switchEditor(page, anotherOrderId);
+  await expect(page.getByLabel("Description 1")).toHaveValue("Second saved order");
+  const completed = page.waitForResponse((response) => response.url().endsWith(`/orders/${orderId}`) && response.request().method() === "PUT");
+  releaseSave(); await completed;
+  await expect(page).toHaveURL(new RegExp(`${anotherOrderId}/edit$`));
+  await expect(page.getByLabel("Description 1")).toHaveValue("Second saved order");
+  expect(writes).toBe(1);
+});
+
+test("unconfirmed order correction stays locked and reconciles with GET only", async ({ page }) => {
+  await mockErp(page);
+  let writes = 0;
+  await page.route(`**/api/procurement/v1/orders/${orderId}`, (route) => {
+    if (route.request().method() === "PUT") { writes++; return route.abort("failed"); }
+    return route.fulfill({ json: savedDraft() });
+  });
+  await page.goto(editPath(orderId));
+  await expect(page.getByLabel("Description 1")).toHaveValue("First saved order");
+  await page.getByLabel("Description 1").fill("Unconfirmed correction");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("This save is unconfirmed.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save draft" })).toBeDisabled();
+  await expect(page.getByLabel("Description 1")).toHaveValue("Unconfirmed correction");
+  await page.getByRole("link", { name: "Open purchase orders", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Purchase Orders", exact: true })).toBeVisible();
+  expect(writes).toBe(1);
+});

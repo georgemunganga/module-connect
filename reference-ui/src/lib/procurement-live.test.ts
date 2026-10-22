@@ -38,6 +38,14 @@ describe("Procurement live readiness", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it.each([undefined, true, "true"])("requires the explicit boolean credit capability (%s)", async flag => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["employee"] } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity, currencyCode: "ZMW" } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities: { ...capabilities, vendorCreditDraft: flag } }));
+    expect((await fetchProcurementReadiness({ entityId: entity }, undefined, fetcher)).capabilities.vendorCreditDraft).toBe(flag === true);
+  });
+
   it("does not reinterpret a server access denial as administrator review", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["erp_admin"] } }))

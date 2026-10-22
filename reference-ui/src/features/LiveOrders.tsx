@@ -1,11 +1,12 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
+import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import {
-  cancelOwnOrderDraft, createOwnOrderDraft, getOwnOrderDraft, listOwnOrderDrafts,
+  OrderDraftError, cancelOwnOrderDraft, createOwnOrderDraft, getOwnOrderDraft, listOwnOrderDrafts,
   updateOwnOrderDraft, type OrderDetail, type OrderDraftInput, type OrderDraftLine,
   type OrderPage,
 } from "../../../src/platform/procurement-orders-api";
@@ -63,6 +64,13 @@ export function LiveOrderList() {
 }
 
 export function LiveOrderEditor() {
+  const { id } = useParams(); const readiness = useCompany(); const { selection } = useErpShell();
+  if (selection.entityId && selection.entityId !== readiness.legalEntityId)
+    return <p role="status">Checking the selected company…</p>;
+  return <LiveOrderEditorRecord key={[readiness.tenantId, readiness.legalEntityId, selection.branch,
+    readiness.workerId ?? "admin", id ?? "new"].join(":")} />;
+}
+function LiveOrderEditorRecord() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { legalEntityId, defaultCurrencyCode, permissions } = useCompany();
@@ -76,14 +84,23 @@ export function LiveOrderEditor() {
   const [saving, setSaving] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const recordKey = `${legalEntityId}:${id ?? "new"}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [uncertain, setUncertain] = useState(false);
+  const [stale, setStale] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setLoadedKey(null); setVersion(null); setOriginalLineIds([]);
+    setDraft(blankDraft(defaultCurrencyCode)); setReason("");
     (id ? getOwnOrderDraft(legalEntityId, id, controller.signal) : Promise.resolve(null))
       .then((record) => {
-        if (!record) { setVersion(null); setOriginalLineIds([]); setDraft(blankDraft(defaultCurrencyCode)); return; }
-        if (record.status !== "Draft") { setError("This order is no longer a draft."); return; }
-        setVersion(record.version);
+        if (controller.signal.aborted || !alive.current) return;
+        if (!record) { if (!id) setLoadedKey(recordKey); return; }
+        if (record.id !== id || record.status !== "Draft" || !Number.isSafeInteger(record.version) || record.version < 1)
+          { setError("This order is unavailable for editing. Open its saved details."); return; }
+        setVersion(record.version); setLoadedKey(recordKey);
         setOriginalLineIds(record.lines.map((line) => line.id));
         setDraft({ supplierId: record.supplierId, currencyCode: record.currencyCode,
           shipToRef: record.shipToRef, billToRef: record.billToRef,
@@ -99,8 +116,8 @@ export function LiveOrderEditor() {
       setLoadingVendors(true);
       listVendorDrafts(legalEntityId, { search: vendorSearch.trim() || undefined,
         pageSize: 100, signal: controller.signal })
-        .then((page) => setVendors(page.items.filter((vendor) =>
-          (vendor.status === "Active" || vendor.status === "Approved") && vendor.isOrderable)))
+        .then((page) => { if (!controller.signal.aborted && alive.current) setVendors(page.items.filter((vendor) =>
+          (vendor.status === "Active" || vendor.status === "Approved") && vendor.isOrderable)); })
         .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
         .finally(() => { if (!controller.signal.aborted) setLoadingVendors(false); });
     }, vendorSearch ? 250 : 0);
@@ -113,8 +130,11 @@ export function LiveOrderEditor() {
       at === index ? { ...line, ...changes } : line) }));
   const total = draft.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice + line.taxAmount, 0);
   async function save(event: FormEvent) {
-    event.preventDefault(); setError("");
-    if (id && version === null) { setError("This draft is unavailable. Return to the order list."); return; }
+    event.preventDefault();
+    if (saving || uncertain || stale || !alive.current
+      || !permissions.includes(id ? "procurement-po-edit" : "procurement-po-create")) return;
+    setError("");
+    if (loadedKey !== recordKey || id && version === null) { setError("This draft is unavailable. Return to the order list."); return; }
     if (!draft.supplierId) { setError("Choose an active vendor."); return; }
     if (!draft.lines.length) { setError("Add at least one order line."); return; }
     if (id && !reason.trim() && originalLineIds.some((lineId) =>
@@ -126,18 +146,24 @@ export function LiveOrderEditor() {
       const record = id && version !== null
         ? await updateOwnOrderDraft(legalEntityId, id, version, draft, reason.trim() || undefined)
         : await createOwnOrderDraft(legalEntityId, draft);
-      navigate(`/purchase-orders/${record.id}`);
-    } catch (cause) { setError(errorText(cause)); }
-    finally { setSaving(false); }
+      if (alive.current) navigate(`/purchase-orders/${record.id}`);
+    } catch (cause) {
+      if (!alive.current) return;
+      setError(errorText(cause));
+      if (cause instanceof OrderDraftError && cause.status === 409) setStale(true);
+      if (!(cause instanceof OrderDraftError) || cause.status === 0 || cause.status >= 500) setUncertain(true);
+    }
+    finally { if (alive.current) setSaving(false); }
   }
   if (!permissions.includes(id ? "procurement-po-edit" : "procurement-po-create"))
     return <div className="p-5 sm:p-8" role="alert">You do not have access to edit purchase orders for this company.</div>;
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit order draft" : "New purchase order draft"} subtitle="This stays internal until approvals and budget checks are available." />
-    {loading ? <p role="status">Loading order…</p> : id && version === null
+    {loading ? <p role="status">Loading order…</p> : loadedKey !== recordKey || id && version === null
       ? <p role="alert">{error || "This draft is unavailable. Return to the order list."}</p>
       : <form onSubmit={save} className="max-w-5xl space-y-5">
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      <fieldset disabled={saving || uncertain || stale} className="contents">
       <Panel title="Order details"><div className="grid gap-4 p-5 sm:grid-cols-2">
         <Field label="Find vendor"><Input value={vendorSearch} onChange={(event) => setVendorSearch(event.target.value)} placeholder="Search vendor name" /></Field>
         <Field label="Vendor"><Select required value={draft.supplierId} disabled={loadingVendors}
@@ -178,8 +204,11 @@ export function LiveOrderEditor() {
         <p className="text-right text-sm font-semibold">Estimated total {money(total, draft.currencyCode)}</p>
       </div></Panel>
       {id && <Field label="Reason for removing a saved line" hint="Required if you remove a line from an existing draft."><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>}
-      <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save draft"}</Button>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || uncertain || stale}>{saving ? "Saving…" : "Save draft"}</Button>
         <Button type="button" variant="secondary" onClick={() => navigate(id ? `/purchase-orders/${id}` : "/purchase-orders")}>Cancel</Button></div>
+      </fieldset>
+      {stale && <p role="alert">This saved order changed. Your entries stay here. Open the saved draft to compare before making another correction. <Link to={`/purchase-orders/${id}`}>Open saved draft</Link></p>}
+      {uncertain && <p role="alert">This save is unconfirmed. Check the order list before making another change; the save will not be repeated automatically. <Link to="/purchase-orders">Open purchase orders</Link></p>}
     </form>}
   </div>;
 }

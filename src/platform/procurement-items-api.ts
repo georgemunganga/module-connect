@@ -16,14 +16,19 @@ export type ItemSummary = Pick<ItemDraft, "code" | "name" | "kind" | "categoryCo
 export type ItemDetail = ItemSummary & ItemDraft;
 export type ItemPage = { items: ItemSummary[]; total: number; page: number; pageSize: number };
 export type CatalogPriceDraft = {
-  supplierId: string; currencyCode: string; unitCode: string; unitPrice: number;
+  supplierId: string; currencyCode: string; unitCode: string; unitPrice: number | string;
   effectiveFrom: string; effectiveTo?: string | null;
-  taxBasis?: string | null; minimumQuantity?: number | null;
-  maximumQuantity?: number | null; audienceCode?: string | null;
+  taxBasis?: string | null; minimumQuantity?: number | string | null;
+  maximumQuantity?: number | string | null; audienceCode?: string | null;
 };
 export type CatalogPrice = Omit<CatalogPriceDraft, "supplierId"> & {
   id: string; catalogItemId: string; supplierId: string | null;
   status: string; version: number;
+  catalogEditVersion?: number;
+  exactAmounts?: { unitPrice: string; minimumQuantity: string | null; maximumQuantity: string | null };
+};
+export type CatalogPriceEdit = Omit<CatalogPriceDraft, "supplierId" | "unitPrice" | "minimumQuantity" | "maximumQuantity"> & {
+  supplierId: string | null; unitPrice: string; minimumQuantity: string | null; maximumQuantity: string | null;
 };
 
 export class ItemApiError extends Error {
@@ -107,7 +112,7 @@ export async function activateItem(companyId: string, id: string, version: numbe
 function validPrice(value: unknown): value is CatalogPrice {
   return object(value) && guid.test(String(value.id)) && guid.test(String(value.catalogItemId))
     && typeof value.status === "string" && typeof value.version === "number"
-    && typeof value.unitPrice === "number";
+    && (typeof value.unitPrice === "number" || typeof value.unitPrice === "string");
 }
 export async function listCatalogPrices(companyId: string, itemId: string,
   signal?: AbortSignal): Promise<CatalogPrice[]> {
@@ -142,5 +147,39 @@ export async function withdrawCatalogPrice(companyId: string, itemId: string,
     { method: "POST", body: JSON.stringify({ version, reason }) });
   if (!validPrice(body) || body.status !== "Withdrawn")
     throw new ItemApiError(0, "The ERP did not confirm withdrawal. Refresh before retrying.");
+  return body;
+}
+
+/** Completeness marker is additive. Older DTOs remain readable, never editable by guessing hidden terms. */
+export function catalogPriceEditDraft(price: CatalogPrice): CatalogPriceEdit {
+  const amounts = price.exactAmounts;
+  const exact = (value: unknown): value is string => typeof value === "string"
+    && /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(value);
+  if (price.catalogEditVersion !== 1 || price.status !== "Draft" || !Number.isSafeInteger(price.version) || price.version < 1
+    || !guid.test(price.id) || !guid.test(price.catalogItemId) || price.supplierId !== null && !guid.test(price.supplierId)
+    || !Object.prototype.hasOwnProperty.call(price, "taxBasis") || !Object.prototype.hasOwnProperty.call(price, "audienceCode")
+    || price.taxBasis !== null && typeof price.taxBasis !== "string" || price.audienceCode !== null && typeof price.audienceCode !== "string"
+    || !amounts || !exact(amounts.unitPrice) || amounts.minimumQuantity !== null && !exact(amounts.minimumQuantity)
+    || amounts.maximumQuantity !== null && !exact(amounts.maximumQuantity)
+    || typeof price.currencyCode !== "string" || typeof price.unitCode !== "string"
+    || typeof price.effectiveFrom !== "string" || !Number.isFinite(Date.parse(price.effectiveFrom))
+    || price.effectiveTo != null && !Number.isFinite(Date.parse(price.effectiveTo)))
+    throw new ItemApiError(0, "Exact catalog price details are unavailable. Refresh before editing; no saved terms were guessed.");
+  return { supplierId: price.supplierId, currencyCode: price.currencyCode, unitCode: price.unitCode,
+    unitPrice: amounts.unitPrice, minimumQuantity: amounts.minimumQuantity, maximumQuantity: amounts.maximumQuantity,
+    taxBasis: price.taxBasis, audienceCode: price.audienceCode, effectiveFrom: price.effectiveFrom, effectiveTo: price.effectiveTo ?? null };
+}
+export function catalogPriceCanEdit(price: CatalogPrice): boolean {
+  try { catalogPriceEditDraft(price); return true; } catch { return false; }
+}
+export async function updateCatalogPrice(companyId: string, itemId: string, priceId: string,
+  version: number, entry: CatalogPriceEdit): Promise<CatalogPrice> {
+  if (!guid.test(itemId) || !guid.test(priceId) || !Number.isSafeInteger(version) || version < 1)
+    throw new ItemApiError(0, "Refresh the catalog price before editing.");
+  const body: unknown = await request(companyId, `/${itemId}/catalog-entries/${priceId}`,
+    { method: "PUT", body: JSON.stringify({ version, entry }) });
+  if (!validPrice(body) || body.id !== priceId || body.catalogItemId !== itemId || body.version !== version + 1
+    || !catalogPriceCanEdit(body))
+    throw new ItemApiError(0, "The ERP did not confirm this catalog price correction. Check its saved details before trying again.");
   return body;
 }

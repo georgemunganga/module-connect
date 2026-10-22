@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
+  PlanApiError,
   cancelOwnPlan, createOwnPlan, getOwnPlan, listOwnPlans, updateOwnPlan,
   type PlanDetail, type PlanDraft, type PlanLineDraft, type PlanPage,
 } from "../../../src/platform/procurement-plans-api";
@@ -55,12 +56,21 @@ export function LivePlanEditor() {
   const [loading, setLoading] = useState(Boolean(id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const editorContext = `${legalEntityId}:${id ?? "new"}`;
+  const currentEditorContext = useRef(editorContext);
+  currentEditorContext.current = editorContext;
+  const editorGeneration = useRef(0);
+  const [saveBlock, setSaveBlock] = useState<"stale" | "unknown" | null>(null);
+  useEffect(() => { setSaveBlock(null); return () => { editorGeneration.current += 1; }; }, [editorContext]);
+  const [loadedContext, setLoadedContext] = useState<string | null>(null);
   useEffect(() => {
-    if (!id) { setDraft(emptyDraft(defaultCurrencyCode)); setVersion(null); setLoading(false); return; }
+    setVersion(null); setLoadedContext(null); setSaving(false); setError("");
+    if (!id) { setLoading(false); setDraft(emptyDraft(defaultCurrencyCode)); setVersion(null); setLoading(false); return; }
     const controller = new AbortController();
     setLoading(true); setError("");
     getOwnPlan(legalEntityId, id, controller.signal).then((record) => {
-      setVersion(record.version);
+      if (controller.signal.aborted) return;
+      setVersion(record.version); setLoadedContext(editorContext);
       setDraft({ financialPeriodRef: record.financialPeriodRef, currencyCode: record.currencyCode,
         fundingSourceRef: record.fundingSourceRef || null,
         lines: record.lines.filter((line) => line.status === "Active").map((line) => ({
@@ -78,21 +88,36 @@ export function LivePlanEditor() {
   const lineField = <K extends keyof PlanLineDraft>(index: number, key: K, value: PlanLineDraft[K]) =>
     setDraft((current) => ({ ...current, lines: current.lines.map((line, at) => at === index ? { ...line, [key]: value } : line) }));
   async function save(event: FormEvent) {
-    event.preventDefault(); setError("");
+    event.preventDefault();
+    if (saving || saveBlock) return;
+    if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the list."); return; }
+    const savingContext = editorContext;
+    const savingGeneration = editorGeneration.current;
+    const isCurrentSave = () => currentEditorContext.current === savingContext && editorGeneration.current === savingGeneration;
+    setError("");
     if (!draft.lines.length) { setError("Add at least one planned need."); return; }
     setSaving(true);
     try {
       const saved = id && version !== null
         ? await updateOwnPlan(legalEntityId, id, version, draft)
         : await createOwnPlan(legalEntityId, draft);
-      navigate(`/plans/${saved.id}`);
-    } catch (cause) { setError(errorText(cause)); }
-    finally { setSaving(false); }
+      if (isCurrentSave()) navigate(`/plans/${saved.id}`);
+    } catch (cause) {
+      if (isCurrentSave()) {
+        setError(errorText(cause));
+        if (cause instanceof PlanApiError && cause.status === 409) setSaveBlock("stale");
+        else if (!(cause instanceof PlanApiError) || cause.status === 0 || cause.status >= 500) setSaveBlock("unknown");
+      }
+    }
+    finally { if (isCurrentSave()) setSaving(false); }
   }
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit purchase plan" : "New purchase plan"} subtitle="Estimate what your department may need. This draft does not commit a budget." />
-    {loading ? <p role="status">Loading plan…</p> : <form onSubmit={save} className="max-w-6xl space-y-5">
+    {loading ? <p role="status">Loading plan…</p> : id && (version === null || loadedContext !== editorContext)
+      ? <p role="alert">{error || "This draft is unavailable. Return to the list."}</p>
+      : <form onSubmit={save} className="max-w-6xl space-y-5">
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current plan before retrying.</span>}</p>}
+      {saveBlock && <p role="status" className="rounded-lg border border-border p-3 text-sm">{saveBlock === "stale" ? "The saved plan changed. Review it before saving again." : "The save result was not confirmed. Review saved plans before trying again."} <Link className="text-primary underline" to={id ? `/plans/${id}` : "/plans"}>Review saved plan{id ? "" : "s"}</Link></p>}
       <Panel title="Plan details"><div className="grid gap-4 p-5 sm:grid-cols-3">
         <Field label="Financial period"><Input required maxLength={100} placeholder="For example, FY 2027" value={draft.financialPeriodRef} onChange={(event) => field("financialPeriodRef", event.target.value)} /></Field>
         <Field label="Currency"><Input required maxLength={3} value={draft.currencyCode} onChange={(event) => field("currencyCode", event.target.value.toUpperCase())} /></Field>
@@ -111,7 +136,7 @@ export function LivePlanEditor() {
         </div>)}
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add need</Button>
       </div></Panel>
-      <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/plans/${id}` : "/plans"}><Button variant="secondary">Cancel</Button></Link></div>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/plans/${id}` : "/plans"}><Button variant="secondary">Cancel</Button></Link></div>
     </form>}
   </div>;
 }
