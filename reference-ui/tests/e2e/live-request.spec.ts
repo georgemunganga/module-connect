@@ -14,7 +14,7 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "requestDraft"]));
 type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean; oldEditContract?: boolean; missingCatalogExact?: boolean } = {}) {
   let record: RecordValue | null = null;
   let policyChecked = false;
   let policyBlocked = Boolean(options.blockedPolicy);
@@ -35,7 +35,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/procurement/v1/catalog") return json({ items: [{
       entryId: catalogEntryId, itemId: catalogItemId, supplierId: catalogSupplierId,
       code: "CHAIR-1", name: "Office chair", kind: "Goods", categoryCode: "OFFICE",
-      unitCode: "each", estimatedUnitPrice: 250, currencyCode: "ZMW",
+      unitCode: "each", estimatedUnitPrice: 250, exactEstimatedUnitPrice: options.missingCatalogExact ? undefined : "250", currencyCode: "ZMW",
       supplierName: "Office Supply", publishedVersion: 1,
     }], total: 1, page: 1, pageSize: 25 });
     if (path === "/api/procurement/v1/requests/policy-queue")
@@ -51,19 +51,21 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403) : json({ records: record ? [{ ...record, lineCount: record.lines.length }] : [], count: record ? 1 : 0, limit: 50, offset: 0 });
       if (request.method() === "POST") {
         const input = request.postDataJSON();
-        record = { ...input, id: requestId, number: "PR-001", status: "Draft", version: 1, currencyCode: input.currencyCode || "ZMW", createdAt: "2026-10-18T00:00:00Z",
-          lines: input.lines.map((line: Record<string, unknown>, index: number) => ({ ...line, id: index ? "99999999-9999-4999-8999-999999999999" : lineId, lineNumber: index + 1, approvalStatus: "Pending" })) };
+        record = { ...input, id: requestId, number: "PR-001", status: "Draft", version: 1, requestEditVersion: 1, currencyCode: input.currencyCode || "ZMW", createdAt: "2026-10-18T00:00:00Z",
+          lines: input.lines.map((line: Record<string, unknown>, index: number) => ({ ...line, requestedQuantity: Number(line.requestedQuantity), estimatedUnitPrice: Number(line.estimatedUnitPrice),
+            discountPercent: line.discountPercent == null ? null : Number(line.discountPercent), exactAmounts: { requestedQuantity: String(line.requestedQuantity), estimatedUnitPrice: String(line.estimatedUnitPrice), discountPercent: line.discountPercent == null ? null : String(line.discountPercent) }, id: index ? "99999999-9999-4999-8999-999999999999" : lineId, lineNumber: index + 1, approvalStatus: "Pending" })) };
         return json(record, 201);
       }
     }
     if (path === `/api/procurement/v1/requests/${requestId}` && record) {
-      if (request.method() === "GET") return json(record);
+      if (request.method() === "GET") return json(options.oldEditContract ? { ...record, requestEditVersion: undefined } : record);
       if (request.method() === "PUT") {
         if (options.staleUpdate) return json({ message: "Refresh this request before saving changes." }, 409);
         const input = request.postDataJSON();
         if (input.version !== record.version) return json({ message: "Stale version" }, 409);
         record = { ...record, ...input, version: input.version + 1,
-          lines: input.lines.map((line: Record<string, unknown>, index: number) => ({ ...line, id: line.id || (index ? "99999999-9999-4999-8999-999999999999" : lineId), lineNumber: index + 1, approvalStatus: "Pending" })) };
+          lines: input.lines.map((line: Record<string, unknown>, index: number) => ({ ...line, requestedQuantity: Number(line.requestedQuantity), estimatedUnitPrice: Number(line.estimatedUnitPrice),
+            discountPercent: line.discountPercent == null ? null : Number(line.discountPercent), exactAmounts: { requestedQuantity: String(line.requestedQuantity), estimatedUnitPrice: String(line.estimatedUnitPrice), discountPercent: line.discountPercent == null ? null : String(line.discountPercent) }, id: line.id || (index ? "99999999-9999-4999-8999-999999999999" : lineId), lineNumber: index + 1, approvalStatus: "Pending" })) };
         if (record.lines.every((line) => line.categoryCode !== "UNKNOWN")) policyBlocked = false;
         return json(record);
       }
@@ -354,4 +356,83 @@ test("unconfirmed requests create preserves entries and blocks repeat submission
   await page.getByRole("link", { name: /^Review saved / }).click();
   await expect(page).toHaveURL(/\/requests$/);
   expect(attempts).toBe(1);
+});
+
+
+test("wide request originals stay exact through capture, reload and header-only edit", async ({ page }) => {
+  await mockErp(page);
+  const mutations: Array<{ method: string; body: Record<string, unknown> }> = [];
+  page.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    if (["POST", "PUT"].includes(request.method()) && ["/api/procurement/v1/requests", `/api/procurement/v1/requests/${requestId}`].includes(path))
+      mutations.push({ method: request.method(), body: request.postDataJSON() });
+  });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Exact wide original");
+  await page.getByLabel("Item or service 1").fill("Exact original line");
+  await page.getByLabel("Estimated unit price").fill("12345678901234.5678");
+  await page.getByLabel("Funding source").fill("Retained hidden source");
+  await expect(page.getByText("Estimated amount before discounts, tax and delivery: ZMW 12,345,678,901,234.5678")).toBeVisible();
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Exact wide original" })).toBeVisible();
+  await page.reload();
+  await page.getByRole("link", { name: "Edit request" }).click();
+  await expect(page.getByLabel("Estimated unit price")).toHaveValue("12345678901234.5678");
+  await expect(page.getByLabel("Funding source")).toHaveValue("Retained hidden source");
+  await page.getByLabel("What do you need?").fill("Corrected exact header");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Corrected exact header" })).toBeVisible();
+  expect(mutations.map(row => row.method)).toEqual(["POST", "PUT"]);
+  for (const mutation of mutations) {
+    expect(mutation.body.fundingSourceRef).toBe("Retained hidden source");
+    expect((mutation.body.lines as Record<string, unknown>[])[0]).toMatchObject({ requestedQuantity: "1", estimatedUnitPrice: "12345678901234.5678" });
+  }
+});
+
+test("two exact eight-place products remain visible and are not rounded before save", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Tiny exact originals");
+  await page.getByLabel("Item or service 1").fill("Tiny1");
+  await page.getByLabel("Quantity", { exact: true }).fill("0.0001");
+  await page.getByLabel("Estimated unit price").fill("0.0001");
+  await page.getByRole("button", { name: "Add line", exact: true }).click();
+  await page.getByLabel("Item or service 2").fill("Tiny2");
+  await page.getByLabel("Quantity", { exact: true }).nth(1).fill("0.0001");
+  await page.getByLabel("Estimated unit price").nth(1).fill("0.0001");
+  await expect(page.getByText("Estimated amount before discounts, tax and delivery: ZMW 0.00000002")).toBeVisible();
+  const saving = page.waitForRequest(request => new URL(request.url()).pathname === "/api/procurement/v1/requests" && request.method() === "POST");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  expect((await saving).postDataJSON().lines).toEqual(expect.arrayContaining([expect.objectContaining({ requestedQuantity: "0.0001", estimatedUnitPrice: "0.0001" })]));
+  await expect(page.getByRole("heading", { name: "Tiny exact originals" })).toBeVisible();
+});
+
+test("a readable older request cannot be edited without the complete exact contract", async ({ page }) => {
+  await mockErp(page, { oldEditContract: true });
+  let puts = 0;
+  page.on("request", request => { if (request.method() === "PUT") puts += 1; });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?").fill("Older readable draft");
+  await page.getByLabel("Item or service 1").fill("Old contract line");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Older readable draft" })).toBeVisible();
+  await page.getByRole("link", { name: "Edit request" }).click();
+  await expect(page.getByRole("alert")).toContainText("Exact request editing is unavailable");
+  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+  expect(puts).toBe(0);
+});
+
+test("catalog selection needs its exact saved price and invalid precision sends no request", async ({ page }) => {
+  await mockErp(page, { missingCatalogExact: true });
+  let posts = 0;
+  page.on("request", request => { if (request.method() === "POST" && new URL(request.url()).pathname === "/api/procurement/v1/requests") posts += 1; });
+  await page.goto("/procurement/workspace/requests/new");
+  await expect(page.getByText("Office Supply · Confirm price")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use item" })).toBeDisabled();
+  await page.getByLabel("What do you need?").fill("Invalid precision");
+  await page.getByLabel("Item or service 1").fill("Custom original");
+  await page.getByLabel("Estimated unit price").fill("1.00001");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("alert")).toContainText("up to four decimal places");
+  expect(posts).toBe(0);
 });

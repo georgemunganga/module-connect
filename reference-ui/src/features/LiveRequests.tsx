@@ -6,16 +6,17 @@ import { RequestApprovalPanel } from "./LiveApprovals";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  RequestApiError,
+  RequestApiError, readExactRequestDraft,
   createOwnRequestDraft, getOwnRequestDraft, getRequestForReview, getRequestApprovalReadiness, listOwnRequestDrafts,
   checkRequestPolicy, getOwnRequestBudgetStatus, getOwnRequestPolicyStatus, returnRequestForChanges,
   listRequestsWaitingForPolicy, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
   type ApprovalReadinessStatus, type OwnBudgetStatus, type OwnPolicyStatus, type PolicyQueuePage,
   type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
 } from "../../../src/platform/procurement-requests-api";
+import { requestBaseAmount, formatRequestBaseAmount } from "./request-draft-values";
 import { listPublishedCatalog, type PublishedCatalogPrice } from "../../../src/platform/procurement-catalog-api";
 
-const emptyLine = (): RequestLineDraft => ({ description: "", unitCode: "each", requestedQuantity: 1, estimatedUnitPrice: 0, categoryCode: "" });
+const emptyLine = (): RequestLineDraft => ({ description: "", unitCode: "each", requestedQuantity: "1", estimatedUnitPrice: "0", categoryCode: "" });
 const errorText = (error: unknown) => error instanceof Error ? error.message : "The request action failed. Try again.";
 const approvalBlockerLabels: Record<string, string> = {
   RequestNotCurrent: "The request needs to be submitted again.",
@@ -176,7 +177,7 @@ export function LiveRequestEditor() {
     setCatalogPrices([]); setCatalogLoading(true); setCatalogError("");
     const timer = window.setTimeout(() => {
       listPublishedCatalog(legalEntityId, catalogSearch, controller.signal)
-        .then((page) => setCatalogPrices(page.items))
+        .then((page) => { if (!controller.signal.aborted) setCatalogPrices(page.items); })
         .catch((cause: unknown) => { if (!controller.signal.aborted) setCatalogError(errorText(cause)); })
         .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false); });
     }, 250);
@@ -189,12 +190,8 @@ export function LiveRequestEditor() {
     setLoading(true); setError("");
     getOwnRequestDraft(legalEntityId, id, controller.signal).then((record) => {
       if (controller.signal.aborted) return;
-      setVersion(record.version); setLoadedContext(editorContext);
-      setDraft({ purpose: record.purpose, currencyCode: record.currencyCode, neededBy: record.neededBy,
-        costCenterRef: record.costCenterRef, projectRef: record.projectRef,
-        deliveryLocationRef: record.deliveryLocationRef, deliveryAddressText: record.deliveryAddressText,
-        fundingSourceRef: record.fundingSourceRef, notesToApprover: record.notesToApprover,
-        lines: record.lines.filter((line) => line.approvalStatus !== "Cancelled") });
+      const exactDraft = readExactRequestDraft(record);
+      setDraft(exactDraft); setVersion(record.version); setLoadedContext(editorContext);
     }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -202,13 +199,14 @@ export function LiveRequestEditor() {
   const field = (key: keyof RequestDraft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   const lineField = (index: number, key: keyof RequestLineDraft, value: string | number | null) => setDraft((current) => ({ ...current, lines: current.lines.map((line, at) => at === index ? { ...line, [key]: value } : line) }));
   function addCatalogPrice(price: PublishedCatalogPrice) {
+    if (price.exactEstimatedUnitPrice === undefined) { setError("Confirm this catalog price before using it. Its exact saved value is unavailable."); return; }
     if (draft.currencyCode?.toUpperCase() !== price.currencyCode.toUpperCase()) {
       setError(`This price is in ${price.currencyCode}. Choose that request currency before adding it.`);
       return;
     }
     const line: RequestLineDraft = {
-      description: price.name, unitCode: price.unitCode, requestedQuantity: 1,
-      estimatedUnitPrice: price.estimatedUnitPrice, categoryCode: price.categoryCode,
+      description: price.name, unitCode: price.unitCode, requestedQuantity: "1",
+      estimatedUnitPrice: price.exactEstimatedUnitPrice, categoryCode: price.categoryCode,
       purchaseType: price.kind, catalogItemId: price.itemId, catalogEntryId: price.entryId,
       catalogPublishedVersion: price.publishedVersion, preferredSupplierId: price.supplierId,
     };
@@ -217,7 +215,8 @@ export function LiveRequestEditor() {
         ? [line] : [...current.lines, line] }));
     setError("");
   }
-  const total = draft.lines.reduce((sum, line) => sum + line.requestedQuantity * line.estimatedUnitPrice, 0);
+  let total: string | null = null;
+  try { total = requestBaseAmount(draft.lines); } catch { /* Incomplete input has no asserted estimate. */ }
   async function save(event: FormEvent) {
     event.preventDefault();
     if (saving || saveBlock) return;
@@ -262,23 +261,23 @@ export function LiveRequestEditor() {
             : catalogError ? <p role="alert" className="text-sm text-red-700">{catalogError}</p>
             : catalogPrices.length ? <div className="grid gap-2 sm:grid-cols-2">{catalogPrices.map((price) =>
               <div key={price.entryId} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
-                <div><p className="font-medium">{price.name}</p><p className="text-muted-foreground">{price.supplierName} · {price.currencyCode} {price.estimatedUnitPrice.toLocaleString()} / {price.unitCode}</p></div>
-                <Button type="button" variant="secondary" onClick={() => addCatalogPrice(price)}>Use item</Button>
+                <div><p className="font-medium">{price.name}</p><p className="text-muted-foreground">{price.supplierName} · {price.exactEstimatedUnitPrice === undefined ? "Confirm price" : `${price.currencyCode} ${price.exactEstimatedUnitPrice} / ${price.unitCode}`}</p></div>
+                <Button type="button" variant="secondary" disabled={price.exactEstimatedUnitPrice === undefined} onClick={() => addCatalogPrice(price)}>Use item</Button>
               </div>)}</div> : <p className="text-sm text-muted-foreground">No approved items found. You can enter an item below.</p>}
         </div>
         {draft.lines.map((line, index) => <div className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-6" key={line.id ?? `new-${index}`}>
           {line.catalogEntryId && <div className="sm:col-span-6 flex items-center justify-between gap-3 text-sm"><span>From approved catalog · price checked when you send the request</span><Button type="button" variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: current.lines.map((value, at) => at === index ? { ...value, catalogEntryId: null, catalogItemId: null, catalogPublishedVersion: null, preferredSupplierId: null } : value) }))}>Switch to custom item</Button></div>}
           <Field label={`Item or service ${index + 1}`} className="sm:col-span-3"><Input required readOnly={Boolean(line.catalogEntryId)} maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field>
-          <Field label="Quantity"><Input required type="number" min="0.0001" step="0.0001" value={line.requestedQuantity} onChange={(event) => lineField(index, "requestedQuantity", Number(event.target.value))} /></Field>
+          <Field label="Quantity"><Input required inputMode="decimal" value={line.requestedQuantity} onChange={(event) => lineField(index, "requestedQuantity", event.target.value)} /></Field>
           <Field label="Unit"><Input required readOnly={Boolean(line.catalogEntryId)} value={line.unitCode} onChange={(event) => lineField(index, "unitCode", event.target.value)} /></Field>
-          <Field label="Estimated unit price"><Input required readOnly={Boolean(line.catalogEntryId)} type="number" min="0" step="0.0001" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", Number(event.target.value))} /></Field>
+          <Field label="Estimated unit price"><Input required readOnly={Boolean(line.catalogEntryId)} inputMode="decimal" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", event.target.value)} /></Field>
           <Field label="Category"><Input readOnly={Boolean(line.catalogEntryId)} value={line.categoryCode ?? ""} onChange={(event) => lineField(index, "categoryCode", event.target.value)} /></Field>
           <Field label="Type"><Input readOnly={Boolean(line.catalogEntryId)} value={line.purchaseType ?? ""} onChange={(event) => lineField(index, "purchaseType", event.target.value)} /></Field>
           <Field label="Needed by"><Input type="date" value={line.neededBy ?? ""} onChange={(event) => lineField(index, "neededBy", event.target.value)} /></Field>
           <div className="flex items-end">{draft.lines.length > 1 && <Button variant="ghost" aria-label={`Remove line ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((_, at) => at !== index) }))}><Trash2 size={16} /></Button>}</div>
         </div>)}
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add line</Button>
-        <p className="text-right text-sm font-semibold">Estimated amount before discounts, tax and delivery: {draft.currencyCode || defaultCurrencyCode} {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+        <p className="text-right text-sm font-semibold">Estimated amount before discounts, tax and delivery: {draft.currencyCode || defaultCurrencyCode} {total === null ? "Enter valid quantities and prices" : formatRequestBaseAmount(total)}</p>
       </div></Panel>
       <div className="flex gap-3"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/requests/${id}` : "/requests"}><Button variant="secondary">Cancel</Button></Link></div>
     </form>}

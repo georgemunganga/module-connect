@@ -1,13 +1,14 @@
+import { invoiceDecimal } from "../../shared/procurement-decimal";
 import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 /** Own purchase requests. Submission records demand but does not approve spending. */
 export type RequestLineDraft = {
   id?: string | null; description: string; unitCode: string;
-  requestedQuantity: number; estimatedUnitPrice: number;
+  requestedQuantity: string | number; estimatedUnitPrice: string | number;
   catalogItemId?: string | null; catalogEntryId?: string | null;
   catalogPublishedVersion?: number | null; preferredSupplierId?: string | null;
   categoryCode?: string | null; purchaseType?: string | null; neededBy?: string | null;
-  discountPercent?: number | null; taxCodeRef?: string | null;
+  discountPercent?: string | number | null; taxCodeRef?: string | null;
   costCenterRef?: string | null; projectRef?: string | null;
   specificationDocumentRefId?: string | null;
 };
@@ -20,10 +21,16 @@ export type RequestDraft = {
 };
 export type RequestSummary = { id: string; number: string; purpose: string; status: string;
   currencyCode: string; neededBy?: string | null; createdAt: string; version: number; lineCount: number };
+export type RequestLineDetail = Omit<RequestLineDraft, "requestedQuantity" | "estimatedUnitPrice" | "discountPercent"> & {
+  id: string; lineNumber: number; approvalStatus: string; requestedQuantity: number; estimatedUnitPrice: number;
+  discountPercent?: number | null;
+  exactAmounts?: { requestedQuantity: string; estimatedUnitPrice: string; discountPercent: string | null };
+};
 export type RequestDetail = RequestSummary & Omit<RequestDraft, "lines"> & {
+  requestEditVersion?: number;
   approvalState?: string | null; approvalInstanceRef?: string | null; submittedAt?: string | null; submittedVersion?: number | null;
   returnedAt?: string | null; returnedBySubjectId?: string | null; returnReason?: string | null;
-  lines: (RequestLineDraft & { id: string; lineNumber: number; approvalStatus: string })[];
+  lines: RequestLineDetail[];
 };
 export type RequestPage = { records: RequestSummary[]; count: number; limit: number; offset: number };
 export type OwnBudgetStatus = { requestId: string; requestVersion: number;
@@ -84,6 +91,68 @@ function validDetail(value: unknown): value is RequestDetail {
     && rows.every((line: unknown) => object(line) && guid.test(String(line.id))
       && typeof line.description === "string" && typeof line.requestedQuantity === "number");
 }
+const headerOptional = ["neededBy", "costCenterRef", "projectRef", "deliveryLocationRef", "deliveryAddressText", "fundingSourceRef", "notesToApprover"] as const;
+const lineOptional = ["catalogItemId", "catalogEntryId", "catalogPublishedVersion", "preferredSupplierId", "categoryCode", "purchaseType", "neededBy", "discountPercent", "taxCodeRef", "costCenterRef", "projectRef", "specificationDocumentRefId"] as const;
+/** Strict edit projection: never reconstruct original values from legacy numeric fields. */
+export function readExactRequestDraft(record: RequestDetail): RequestDraft {
+  if (record.requestEditVersion !== 1 || !guid.test(record.id) || !Number.isSafeInteger(record.version) || record.version < 1
+    || !["Draft", "ReturnedForChanges"].includes(record.status) || typeof record.purpose !== "string"
+    || typeof record.currencyCode !== "string" || !Array.isArray(record.lines)
+    || headerOptional.some(key => !Object.prototype.hasOwnProperty.call(record, key)
+      || !(record[key] === null || typeof record[key] === "string")))
+    throw new RequestApiError(0, "Exact request editing is unavailable. Open the saved request before changing it.");
+  const lines = record.lines.filter(line => line.approvalStatus !== "Cancelled").map(line => {
+    const exact = line.exactAmounts;
+    if (!guid.test(line.id) || typeof line.description !== "string" || typeof line.unitCode !== "string"
+      || typeof line.approvalStatus !== "string" || lineOptional.some(key => !Object.prototype.hasOwnProperty.call(line, key))
+      || ["categoryCode", "purchaseType", "neededBy", "taxCodeRef", "costCenterRef", "projectRef"].some(key => {
+        const value = (line as unknown as Record<string, unknown>)[key]; return value !== null && typeof value !== "string";
+      })
+      || ["catalogItemId", "catalogEntryId", "preferredSupplierId", "specificationDocumentRefId"].some(key => {
+        const value = (line as unknown as Record<string, unknown>)[key]; return value !== null && (typeof value !== "string" || !guid.test(value));
+      })
+      || !(line.catalogPublishedVersion === null || Number.isSafeInteger(line.catalogPublishedVersion) && Number(line.catalogPublishedVersion) > 0)
+      || !exact
+      || typeof exact.requestedQuantity !== "string" || typeof exact.estimatedUnitPrice !== "string"
+      || !(exact.discountPercent === null || typeof exact.discountPercent === "string"))
+      throw new RequestApiError(0, "Complete exact request line details are unavailable. No changes were saved.");
+    let quantity: string, price: string, discount: string | null;
+    try { quantity = invoiceDecimal(exact.requestedQuantity, true); price = invoiceDecimal(exact.estimatedUnitPrice);
+      discount = exact.discountPercent === null ? null : invoiceDecimal(exact.discountPercent); }
+    catch { throw new RequestApiError(0, "The ERP returned an invalid exact request amount. No changes were saved."); }
+    if ((line.discountPercent == null) !== (discount === null))
+      throw new RequestApiError(0, "Complete exact discount evidence is unavailable. No changes were saved.");
+    return { id: line.id, description: line.description, unitCode: line.unitCode,
+      requestedQuantity: quantity, estimatedUnitPrice: price, catalogItemId: line.catalogItemId,
+      catalogEntryId: line.catalogEntryId, catalogPublishedVersion: line.catalogPublishedVersion,
+      preferredSupplierId: line.preferredSupplierId, categoryCode: line.categoryCode, purchaseType: line.purchaseType,
+      neededBy: line.neededBy, discountPercent: discount, taxCodeRef: line.taxCodeRef,
+      costCenterRef: line.costCenterRef, projectRef: line.projectRef, specificationDocumentRefId: line.specificationDocumentRefId };
+  });
+  if (!lines.length) throw new RequestApiError(0, "This request has no editable active lines.");
+  return { purpose: record.purpose, currencyCode: record.currencyCode, neededBy: record.neededBy,
+    costCenterRef: record.costCenterRef, projectRef: record.projectRef, deliveryLocationRef: record.deliveryLocationRef,
+    deliveryAddressText: record.deliveryAddressText, fundingSourceRef: record.fundingSourceRef,
+    notesToApprover: record.notesToApprover, lines };
+}
+/** Whitelist mutable fields; retain hidden owned fields, omit status/counters/approval authority. */
+export function exactRequestPayload(draft: RequestDraft): RequestDraft {
+  try {
+  const lines = draft.lines.map(line => ({ id: line.id ?? null, description: line.description, unitCode: line.unitCode,
+    requestedQuantity: invoiceDecimal(line.requestedQuantity, true), estimatedUnitPrice: invoiceDecimal(line.estimatedUnitPrice),
+    catalogItemId: line.catalogItemId ?? null, catalogEntryId: line.catalogEntryId ?? null,
+    catalogPublishedVersion: line.catalogPublishedVersion ?? null, preferredSupplierId: line.preferredSupplierId ?? null,
+    categoryCode: line.categoryCode ?? null, purchaseType: line.purchaseType ?? null, neededBy: line.neededBy ?? null,
+    discountPercent: line.discountPercent == null ? null : invoiceDecimal(line.discountPercent), taxCodeRef: line.taxCodeRef ?? null,
+    costCenterRef: line.costCenterRef ?? null, projectRef: line.projectRef ?? null,
+    specificationDocumentRefId: line.specificationDocumentRefId ?? null }));
+  return { purpose: draft.purpose, currencyCode: draft.currencyCode ?? null, neededBy: draft.neededBy ?? null,
+    costCenterRef: draft.costCenterRef ?? null, projectRef: draft.projectRef ?? null,
+    deliveryLocationRef: draft.deliveryLocationRef ?? null, deliveryAddressText: draft.deliveryAddressText ?? null,
+    fundingSourceRef: draft.fundingSourceRef ?? null, notesToApprover: draft.notesToApprover ?? null, lines };
+  } catch { throw new RequestApiError(422, "Use exact positive quantities and non-negative prices with up to four decimal places."); }
+}
+
 export async function listOwnRequestDrafts(companyId: string, offset = 0, signal?: AbortSignal): Promise<RequestPage> {
   const body: unknown = await request(companyId, `?limit=50&offset=${offset}`, { signal });
   if (!object(body) || !Array.isArray(body.records) || !body.records.every(validSummary)
@@ -94,7 +163,7 @@ export async function listOwnRequestDrafts(companyId: string, offset = 0, signal
 export async function getOwnRequestDraft(companyId: string, id: string, signal?: AbortSignal): Promise<RequestDetail> {
   if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
   const body: unknown = await request(companyId, `/${id}`, { signal });
-  if (!validDetail(body)) throw new RequestApiError(0, "The ERP returned invalid request details.");
+  if (!validDetail(body) || body.id !== id) throw new RequestApiError(0, "The ERP returned invalid request details.");
   return body;
 }
 export async function getRequestForReview(companyId: string, id: string, signal?: AbortSignal): Promise<RequestDetail> {
@@ -161,14 +230,16 @@ export async function returnRequestForChanges(companyId: string, id: string, ver
   return body;
 }
 export async function createOwnRequestDraft(companyId: string, draft: RequestDraft): Promise<RequestDetail> {
-  const body: unknown = await request(companyId, "", { method: "POST", body: JSON.stringify(draft) });
+  const body: unknown = await request(companyId, "", { method: "POST", body: JSON.stringify(exactRequestPayload(draft)) });
   if (!validDetail(body)) throw new RequestApiError(0, "The ERP did not confirm the saved request. Refresh before retrying.");
+  readExactRequestDraft(body);
   return body;
 }
 export async function updateOwnRequestDraft(companyId: string, id: string, version: number, draft: RequestDraft): Promise<RequestDetail> {
-  if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
-  const body: unknown = await request(companyId, `/${id}`, { method: "PUT", body: JSON.stringify({ ...draft, version }) });
-  if (!validDetail(body)) throw new RequestApiError(0, "The ERP did not confirm the request update. Refresh before retrying.");
+  if (!guid.test(id) || !Number.isSafeInteger(version) || version < 1) throw new RequestApiError(0, "The request reference or version is invalid.");
+  const body: unknown = await request(companyId, `/${id}`, { method: "PUT", body: JSON.stringify({ ...exactRequestPayload(draft), version }) });
+  if (!validDetail(body) || body.id !== id || body.version !== version + 1) throw new RequestApiError(0, "The ERP did not confirm the request update. Refresh before retrying.");
+  readExactRequestDraft(body);
   return body;
 }
 export async function submitOwnRequest(companyId: string, id: string, version: number): Promise<RequestDetail> {
