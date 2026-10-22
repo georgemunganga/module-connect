@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { isBuyingRulePolicy, ownedPolicySettings, policyLabel } from "./policy-key-dispatch";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Switch } from "../components/ui";
 import { useErpShell } from "../lib/erpShell";
@@ -28,6 +30,7 @@ const onlyKeys = (value: Record<string, unknown>, allowed: string[]) =>
   Object.keys(value).every((name) => allowed.includes(name));
 
 function toRuleJson(key: string, currency: string, rows: RuleRow[]): string {
+  if (!isBuyingRulePolicy(key)) throw new Error("This policy needs its own settings editor.");
   return JSON.stringify({ schemaVersion: 1,
     transactionType: key === "PURCHASE_ORDER" ? "PurchaseOrder" : "PurchaseRequest",
     currencyCode: currency, amountBasis: key === "PURCHASE_ORDER" ? "ApprovedLineBase" : "EstimatedLineBase",
@@ -48,6 +51,7 @@ function toRuleJson(key: string, currency: string, rows: RuleRow[]): string {
 }
 
 function fromRuleJson(json: string, key: string, currency: string): RuleRow[] | null {
+  if (!isBuyingRulePolicy(key)) return null;
   try {
     const document = JSON.parse(json) as Record<string, unknown>;
     if (document.schemaVersion !== 1 || !Array.isArray(document.rules)
@@ -116,6 +120,7 @@ function LivePoliciesRecord() {
   const [deciding, setDeciding] = useState<PolicyPage["items"][number] | null>(null);
   const [decisionAction, setDecisionAction] = useState<"publish" | "return">("publish");
   const [decisionReason, setDecisionReason] = useState("");
+  const [viewing, setViewing] = useState<PolicyRecord | null>(null);
   const [previewing, setPreviewing] = useState<PolicyPage["items"][number] | null>(null);
   const [sampleAmount, setSampleAmount] = useState("0");
   const [sampleCategory, setSampleCategory] = useState("");
@@ -169,6 +174,16 @@ function LivePoliciesRecord() {
   const newDraft = () => { if (!canEdit || !canStart()) return; setEditing("new"); setKey("PURCHASE_REQUEST");
     setStart(tomorrow()); setEnd(""); setRows([emptyRule()]);
     setIssues([]); setError(""); };
+  async function viewSavedPolicy(id: string) {
+    if (!alive.current || busy.current) return;
+    busy.current = true; setSaving(true); setError(""); setViewing(null);
+    try {
+      const record = await getPolicy(companyId, id);
+      if (record.id !== id) throw new Error("The saved policy response did not match this version. Refresh the list.");
+      if (alive.current) setViewing(record);
+    } catch (cause) { if (alive.current) setError(errorText(cause)); }
+    finally { busy.current = false; if (alive.current) setSaving(false); }
+  }
   async function edit(id: string) {
     if (!canEdit || !canStart()) return;
     busy.current = true; setSaving(true); setEditing(null);
@@ -191,7 +206,8 @@ function LivePoliciesRecord() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!canEdit || !editing || !canStart()) return;
+    if (!canEdit || !editing || !isBuyingRulePolicy(key)
+      || (editing !== "new" && (!isBuyingRulePolicy(editing.policyKey) || editing.policyKey !== key)) || !canStart()) return;
     busy.current = true;
     setSaving(true); setError(""); setIssues([]);
     let mutationStarted = false;
@@ -214,7 +230,7 @@ function LivePoliciesRecord() {
 
   async function sendForReview(event: FormEvent) {
     event.preventDefault();
-    if (!canEdit || !reviewing || !reviewReason.trim() || !canStart()) return;
+    if (!canEdit || !reviewing || !isBuyingRulePolicy(reviewing.policyKey) || !reviewReason.trim() || !canStart()) return;
     busy.current = true;
     setSaving(true); setError("");
     try {
@@ -226,7 +242,7 @@ function LivePoliciesRecord() {
   }
   async function runPreview(event: FormEvent) {
     event.preventDefault();
-    if (!canPreview || !previewing || !canStart()) return;
+    if (!canPreview || !previewing || !isBuyingRulePolicy(previewing.policyKey) || !canStart()) return;
     busy.current = true;
     setSaving(true); setError(""); setPreview(null);
     try {
@@ -241,7 +257,7 @@ function LivePoliciesRecord() {
   }
   async function makeDecision(event: FormEvent) {
     event.preventDefault();
-    if (!canApprove || !deciding || !decisionReason.trim() || !canStart()) return;
+    if (!canApprove || !deciding || !isBuyingRulePolicy(deciding.policyKey) || !decisionReason.trim() || !canStart()) return;
     busy.current = true;
     setSaving(true); setError("");
     try {
@@ -279,10 +295,10 @@ function LivePoliciesRecord() {
       {listError && <p role="alert" className="mb-4 text-sm text-red-700">{listError}</p>}
       {loading ? <p role="status">Loading buying rules…</p> : page?.items.length
         ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Used for</th><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2">{canPreview && <Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>}{canEdit && canRetirePolicyDraft(record) && <Button variant="secondary" disabled={saving || writeLocked} onClick={() => {
+          <tbody>{page.items.map((record) => <tr key={record.id}><td>{policyLabel(record.policyKey)}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={saving} onClick={() => void viewSavedPolicy(record.id)}>View saved version</Button>{!isBuyingRulePolicy(record.policyKey) && <span className="text-sm text-muted-foreground">Read only here. <Link className="text-primary hover:underline" to={ownedPolicySettings(record.policyKey).path}>{ownedPolicySettings(record.policyKey).label}</Link></span>}{canPreview && isBuyingRulePolicy(record.policyKey) && <Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>}{canEdit && canRetirePolicyDraft(record) && <Button variant="secondary" disabled={saving || writeLocked} onClick={() => {
             setRetiring(record); setRetirementReason(""); setRetirementLocked(false); setEditing(null);
             setReviewing(null); setDeciding(null); setPreviewing(null); setError("");
-          }}>Retire unused draft</Button>}{canEdit && record.state === "Draft" && <><Button variant="secondary" disabled={saving || writeLocked} onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setReviewing(record); setPreviewing(null); setDeciding(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}{canApprove && record.state === "PendingReview" && <><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setDeciding(record); setDecisionAction("publish"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Publish</Button><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setDeciding(record); setDecisionAction("return"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
+          }}>Retire unused draft</Button>}{canEdit && isBuyingRulePolicy(record.policyKey) && record.state === "Draft" && <><Button variant="secondary" disabled={saving || writeLocked} onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setReviewing(record); setPreviewing(null); setDeciding(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}{canApprove && isBuyingRulePolicy(record.policyKey) && record.state === "PendingReview" && <><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setDeciding(record); setDecisionAction("publish"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Publish</Button><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setDeciding(record); setDecisionAction("return"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
         : <EmptyState title="No buying rules yet" description="Add a draft for purchase requests or purchase orders." action={canEdit ? <Button disabled={saving || writeLocked} onClick={newDraft}>Add buying rule draft</Button> : undefined} />}
       {page && page.total > page.items.length && <p className="mt-3 text-xs text-muted-foreground">Showing the first {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
@@ -295,12 +311,19 @@ function LivePoliciesRecord() {
       <div className="flex gap-3"><Button type="submit" variant="danger" disabled={saving || retirementLocked || !retirementReason.trim()}>{saving ? "Retiring…" : "Confirm retirement"}</Button>
         <Button type="button" variant="secondary" disabled={saving || checkingSaved} onClick={() => void checkSaved()}>Check saved rules</Button></div>
     </div></Panel></fieldset></form>}
-    {canApprove && deciding && <form onSubmit={makeDecision}><fieldset className="min-w-0" disabled={saving}><Panel title={decisionAction === "publish" ? "Publish buying rules" : "Return buying rules for changes"}><div className="space-y-4 p-5">
+    {viewing && <Panel title={`${policyLabel(viewing.policyKey)} — saved version ${viewing.policyVersionNumber}`}><div className="space-y-3 p-5">
+      <p className="text-sm">Status: {viewing.state} · From {day(viewing.effectiveFrom)} · Until {day(viewing.effectiveTo) || "No end date"}</p>
+      {!isBuyingRulePolicy(viewing.policyKey) && <p className="text-sm text-muted-foreground">This version is retained history. Its typed editor is not connected on this page; preview, editing and review cannot use the purchase request or order controls. <Link className="text-primary hover:underline" to={ownedPolicySettings(viewing.policyKey).path}>{ownedPolicySettings(viewing.policyKey).label}</Link></p>}
+      {viewing.lastReturnReason && <p className="text-sm">Returned for changes: {viewing.lastReturnReason}</p>}
+      <details><summary className="cursor-pointer text-sm">Saved policy definition (read only)</summary><pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border p-3 text-xs">{viewing.rulesJson}</pre></details>
+      <Button type="button" variant="secondary" onClick={() => setViewing(null)}>Close saved version</Button>
+    </div></Panel>}
+    {canApprove && deciding && isBuyingRulePolicy(deciding.policyKey) && <form onSubmit={makeDecision}><fieldset className="min-w-0" disabled={saving}><Panel title={decisionAction === "publish" ? "Publish buying rules" : "Return buying rules for changes"}><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">{decisionAction === "publish" ? "A separate reviewer must confirm these rules. The start date must be in the future, the rules must cover all purchases, and the effective period cannot overlap another published version. Publication does not approve a purchase." : "Send the rules back to their author with a clear correction note. They can edit the draft and request review again."}</p>
       <Field label={decisionAction === "publish" ? "Publication reason" : "What needs to change?"}><Input required maxLength={1000} value={decisionReason} onChange={(event) => setDecisionReason(event.target.value)} /></Field>
       <div className="flex gap-3"><Button type="submit" disabled={saving || writeLocked || !decisionReason.trim()}>{saving ? "Checking…" : decisionAction === "publish" ? "Publish rules" : "Return to author"}</Button><Button variant="secondary" onClick={() => setDeciding(null)}>Cancel</Button></div>
     </div></Panel></fieldset></form>}
-    {canPreview && previewing && <form onSubmit={runPreview}><fieldset className="min-w-0" disabled={saving}><Panel title="Try a sample purchase"><div className="space-y-4 p-5">
+    {canPreview && previewing && isBuyingRulePolicy(previewing.policyKey) && <form onSubmit={runPreview}><fieldset className="min-w-0" disabled={saving}><Panel title="Try a sample purchase"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">See which rule a sample purchase matches. This check does not approve or change a purchase. Branch-specific conditions need a fuller preview.</p>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label={`Sample line amount before adjustments (${currency})`}><Input type="number" min={0} step="0.0001" required value={sampleAmount} onChange={(event) => setSampleAmount(event.target.value)} /></Field>
@@ -316,12 +339,12 @@ function LivePoliciesRecord() {
         <p className="mt-3 text-xs text-muted-foreground">Sample only. This is not a spending approval.</p>
       </div>}
     </div></Panel></fieldset></form>}
-    {canEdit && reviewing && <form onSubmit={sendForReview}><fieldset className="min-w-0" disabled={saving}><Panel title="Send buying rule for review"><div className="space-y-4 p-5">
+    {canEdit && reviewing && isBuyingRulePolicy(reviewing.policyKey) && <form onSubmit={sendForReview}><fieldset className="min-w-0" disabled={saving}><Panel title="Send buying rule for review"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">Only the draft author can send it. ERP will check the company currency and active categories, branches and buying methods. A review request does not approve spending.</p>
       <Field label="What should the reviewer check?"><Input required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
       <div className="flex gap-3"><Button type="submit" disabled={saving || writeLocked || !reviewReason.trim()}>{saving ? "Checking…" : "Send for review"}</Button><Button variant="secondary" onClick={() => setReviewing(null)}>Cancel</Button></div>
     </div></Panel></fieldset></form>}
-    {canEdit && editing && <form onSubmit={save}><fieldset className="min-w-0" disabled={saving}>
+    {canEdit && editing && isBuyingRulePolicy(key) && <form onSubmit={save}><fieldset className="min-w-0" disabled={saving}>
       <Panel title={editing === "new" ? "New buying rule draft" : `Edit ${key.replaceAll("_", " ").toLowerCase()} draft`}>
         <div className="space-y-5 p-5">
           {editing !== "new" && editing.lastReturnReason && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Reviewer asked for changes: {editing.lastReturnReason}</p>}
