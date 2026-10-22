@@ -86,7 +86,7 @@ export async function getUnitReviewDetail(company: string, review: string, signa
     || !x.originalDocumentLines.every((l: unknown) => obj(l) && id(l.invoiceLineId) && id(l.documentVersionId)
       && typeof l.documentSha256 === "string" && /^[a-f\d]{64}$/i.test(l.documentSha256)
       && typeof l.documentLineReference === "string" && typeof l.unitCode === "string")
-    || !x.actionCandidates.every((a: unknown) => ["Approve", "Return", "Reject"].includes(String(a))) throw invalid();
+    || !x.actionCandidates.every((a: unknown) => ["Approve", "Return", "Reject"].includes(String(a)))) throw invalid();
   if ((!x.currentMapping || !x.originalDigestCurrent) && (x.assignments.length || x.actionCandidates.length)) throw invalid();
   return x as unknown as UnitReviewDetail;
 }
