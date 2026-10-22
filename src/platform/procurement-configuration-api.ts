@@ -89,3 +89,15 @@ export async function activateReference(companyId: string, kind: ReferenceKind, 
 
 export const activateCategory = (companyId: string, id: string, version: number, reason: string) =>
   activateReference(companyId, "categories", id, version, reason);
+
+/** Retain history while removing an unused draft from future buying choices. */
+export async function retireReference(companyId: string, kind: ReferenceKind, id: string,
+  version: number, reason: string): Promise<ReferenceRecord> {
+  if (!guid.test(id)) throw new ConfigurationApiError(0, "The setting reference is invalid.");
+  if (!reason.trim()) throw new ConfigurationApiError(422, "Enter a reason for removing this draft.");
+  const body = await call(companyId, kind, `/${id}/retire`,
+    { method: "POST", body: JSON.stringify({ version, reason: reason.trim() }) });
+  if (!valid(body) || body.status !== "Retired")
+    throw new ConfigurationApiError(0, "Removal was not confirmed. Refresh before trying again.");
+  return body;
+}

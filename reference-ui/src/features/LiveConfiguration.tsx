@@ -3,7 +3,7 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } 
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  activateReference, createReference, listReferences, updateReference,
+  activateReference, createReference, listReferences, retireReference, updateReference,
   type ReferenceDraft, type ReferenceKind, type ReferencePage, type ReferenceRecord,
 } from "../../../src/platform/procurement-configuration-api";
 
@@ -27,6 +27,8 @@ export function LiveConfiguration() {
   const [refresh, setRefresh] = useState(0);
   const [editing, setEditing] = useState<ReferenceRecord | "new" | null>(null);
   const [activating, setActivating] = useState<ReferenceRecord | null>(null);
+  const [retiring, setRetiring] = useState<ReferenceRecord | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
   const [reviewReason, setReviewReason] = useState("");
   const [draft, setDraft] = useState<ReferenceDraft>(blank);
   const [saving, setSaving] = useState(false);
@@ -40,14 +42,15 @@ export function LiveConfiguration() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [companyId, kind, page, refresh]);
+  useEffect(() => { setEditing(null); setActivating(null); setRetiring(null); setRemoveReason(""); setError(""); setDraft(blank()); }, [companyId]);
   const changeKind = (next: ReferenceKind) => {
-    setKind(next); setPage(1); setEditing(null); setActivating(null); setError(""); setData(null);
+    setKind(next); setPage(1); setEditing(null); setActivating(null); setRetiring(null); setError(""); setData(null);
   };
   const field = <K extends keyof ReferenceDraft>(key: K, value: ReferenceDraft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
   const begin = (record?: ReferenceRecord) => {
     if (viewOnly) return;
-    setEditing(record ?? "new"); setError("");
+    setEditing(record ?? "new"); setActivating(null); setRetiring(null); setError("");
     setDraft(record ? { code: record.code, name: record.name, parentCode: record.parentCode || null,
       expenseAccountRef: record.expenseAccountRef || null, description: record.description || null,
       policyVersionId: record.policyVersionId || null } : blank());
@@ -73,6 +76,16 @@ export function LiveConfiguration() {
     } catch (cause) { setError(errorText(cause)); }
     finally { setSaving(false); }
   }
+  async function removeDraft(event: FormEvent) {
+    event.preventDefault();
+    if (viewOnly || !retiring || !removeReason.trim() || saving) return;
+    setSaving(true); setError("");
+    try {
+      await retireReference(companyId, kind, retiring.id, retiring.version, removeReason);
+      setRetiring(null); setRemoveReason(""); setRefresh((value) => value + 1);
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setSaving(false); }
+  }
   return <div className="mx-auto max-w-5xl space-y-5">
     <PageHeader title="Buying categories & methods" subtitle="Keep buying categories and methods organized for your company." />
     <div role="tablist" aria-label="Reference type" className="flex gap-2 border-b border-border">
@@ -81,9 +94,15 @@ export function LiveConfiguration() {
     <Panel><div className="p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{labels[kind].plural}</h2><p className="text-sm text-muted-foreground">{labels[kind].description}</p></div>{!viewOnly && <Button onClick={() => begin()}>Add {labels[kind].singular}</Button>}</div>
       {listError && <p role="alert" className="mb-4 text-sm text-red-600">{listError}</p>}
-      {loading ? <p role="status">Loading {labels[kind].plural.toLowerCase()}…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Code</th><th>Name</th><th>{kind === "categories" ? "Parent" : "Description"}</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td>{item.code}</td><td>{item.name}</td><td>{kind === "categories" ? item.parentCode || "—" : item.description || "—"}</td><td><Badge>{item.status}</Badge></td><td>{!viewOnly && item.status === "Draft" ? <div className="flex gap-2"><Button variant="secondary" onClick={() => begin(item)}>Edit</Button>{readiness.permissions.includes("procurement-configuration-approve") && <Button variant="secondary" onClick={() => { setActivating(item); setEditing(null); setReviewReason(""); setError(""); }}>Review</Button>}</div> : "—"}</td></tr>)}</tbody></RecordTable></div> : <EmptyState title={`No ${labels[kind].plural.toLowerCase()} yet`} description={`Add a draft ${labels[kind].singular} for this company.`} action={!viewOnly ? <Button onClick={() => begin()}>Add {labels[kind].singular}</Button> : undefined} />}
+      {loading ? <p role="status">Loading {labels[kind].plural.toLowerCase()}…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Code</th><th>Name</th><th>{kind === "categories" ? "Parent" : "Description"}</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td>{item.code}</td><td>{item.name}</td><td>{kind === "categories" ? item.parentCode || "—" : item.description || "—"}</td><td><Badge>{item.status}</Badge></td><td>{!viewOnly && item.status === "Draft" ? <div className="flex gap-2"><Button variant="secondary" onClick={() => begin(item)}>Edit</Button><Button variant="secondary" onClick={() => { setRetiring(item); setEditing(null); setActivating(null); setRemoveReason(""); setError(""); }}>Remove</Button>{readiness.permissions.includes("procurement-configuration-approve") && <Button variant="secondary" onClick={() => { setActivating(item); setEditing(null); setRetiring(null); setReviewReason(""); setError(""); }}>Review</Button>}</div> : "—"}</td></tr>)}</tbody></RecordTable></div> : <EmptyState title={`No ${labels[kind].plural.toLowerCase()} yet`} description={`Add a draft ${labels[kind].singular} for this company.`} action={!viewOnly ? <Button onClick={() => begin()}>Add {labels[kind].singular}</Button> : undefined} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
+    {!viewOnly && retiring && <form onSubmit={removeDraft}><Panel title={`Remove ${retiring.name}`}><div className="space-y-3 p-5">
+      <p className="text-sm text-muted-foreground">Remove this unused draft from buying choices. Its record and history will remain available.</p>
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      <Field label="Removal reason"><Textarea required maxLength={1000} value={removeReason} onChange={(event) => setRemoveReason(event.target.value)} /></Field>
+      <div className="flex gap-2"><Button type="submit" disabled={saving || !removeReason.trim()}>{saving ? "Removing…" : `Remove ${labels[kind].singular}`}</Button><Button variant="secondary" disabled={saving} onClick={() => setRetiring(null)}>Keep draft</Button></div>
+    </div></Panel></form>}
     {!viewOnly && activating && <form onSubmit={activate}><Panel title={`Review ${activating.name}`}><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">{kind === "categories" ? "Check the category and its parent before making it available for items." : "Check the buying method and any linked policy before making it available."} Another person must review a {labels[kind].singular} you created.</p>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}

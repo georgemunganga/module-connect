@@ -11,7 +11,7 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "configurationDraft"]));
 type Reference = Record<string, unknown> & { id: string; code: string; name: string; version: number; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; canApprove?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; staleRemoval?: boolean; canApprove?: boolean } = {}) {
   let category: Reference | null = null;
   let method: Reference | null = null;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
@@ -51,6 +51,14 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
           if (kind === "categories") category = saved; else method = saved;
           return json(saved);
         }
+      }
+      if (path === `${base}/${id}/retire` && current) {
+        if (options.staleRemoval) return json({ message: "Refresh this setting before removing it." }, 409);
+        const { version, reason } = request.postDataJSON();
+        if (version !== current.version || !reason?.trim()) return json({ message: "Refresh or add a removal reason." }, 409);
+        const retired = { ...current, status: "Retired", version: current.version + 1 };
+        if (kind === "categories") category = retired; else method = retired;
+        return json(retired);
       }
       if (path === `${base}/${id}/activate` && current) {
         const { version, reason } = request.postDataJSON();
@@ -137,4 +145,42 @@ test("stale configuration edit keeps entered fields", async ({ page }) => {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("alert")).toContainText("Refresh");
   await expect(page.getByLabel("Name")).toHaveValue("Revised technology");
+});
+
+
+for (const kind of ["category", "buying method"] as const) {
+  test(`unused ${kind} removal is confirmed and survives a reload (mocked API)`, async ({ page }) => {
+    await mockErp(page);
+    await page.goto("/procurement/workspace/settings/reference-data");
+    if (kind === "buying method") await page.getByRole("tab", { name: "Buying methods" }).click();
+    await page.getByRole("button", { name: `Add ${kind}` }).first().click();
+    await page.getByRole("textbox", { name: "Code", exact: true }).fill("UNUSED");
+    await page.getByLabel("Name", { exact: true }).fill("Unused setting");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await page.getByRole("button", { name: "Remove", exact: true }).click();
+    await expect(page.getByRole("button", { name: `Remove ${kind}`, exact: true })).toBeDisabled();
+    await page.getByLabel("Removal reason").fill("Draft is not required");
+    await page.getByRole("button", { name: `Remove ${kind}`, exact: true }).click();
+    await expect(page.getByRole("cell", { name: "Retired", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+    await page.reload();
+    if (kind === "buying method") await page.getByRole("tab", { name: "Buying methods" }).click();
+    await expect(page.getByRole("cell", { name: "Unused setting", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Retired", exact: true })).toBeVisible();
+  });
+}
+
+test("stale draft removal preserves the reason and does not claim success (mocked API)", async ({ page }) => {
+  await mockErp(page, { staleRemoval: true });
+  await page.goto("/procurement/workspace/settings/reference-data");
+  await page.getByRole("button", { name: "Add category" }).first().click();
+  await page.getByRole("textbox", { name: "Code", exact: true }).fill("STALE");
+  await page.getByLabel("Name", { exact: true }).fill("Keep my draft");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByLabel("Removal reason").fill("Reason stays here");
+  await page.getByRole("button", { name: "Remove category", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Refresh this setting");
+  await expect(page.getByLabel("Removal reason")).toHaveValue("Reason stays here");
+  await expect(page.getByRole("cell", { name: "Draft", exact: true })).toBeVisible();
 });
