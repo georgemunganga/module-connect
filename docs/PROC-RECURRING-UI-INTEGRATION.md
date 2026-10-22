@@ -14,7 +14,7 @@ Status: source integrated; runtime verification pending. This is not a deploymen
 
 Uses shared controls, Core company/default currency and branch headers, canonical worker/account context, permissions and auth epoch, existing supplier/contract APIs, exact string amounts, explicit Draft/Closed status, versioned updates, closure reason and read-only closed records. No employee/company/supplier master is added.
 
-New source guards validate real calendar dates, exact returned identity/status and owned draft values. Create expects version 1. Update accepts version +1, or the same version only when all submitted normalized owned fields match the response, because the current backend can return an unchanged revision for a no-op PUT. Closure expects exact +1 and saved reason/timestamp. Invalid successful responses are uncertain writes, not success.
+New source guards validate real calendar dates, exact returned identity/status and owned draft values. Create expects version 1. Update requires exact version +1 and all submitted normalized owned fields to match the response. Backend integration must explicitly advance the parent revision for every accepted PUT, including a no-op; the author a80b09b does not yet guarantee this. This prerequisite is being corrected in the separate backend integration. Closure expects exact +1 and saved reason/timestamp. Invalid successful responses are uncertain writes, not success.
 
 ## Unconfirmed writes
 

@@ -67,9 +67,9 @@ describe("recurring purchase planning contract", () => {
     await expect(getRecurringPurchase(company, id)).rejects.toMatchObject({ status: 0 });
     await expect(updateRecurringPurchase(company, id, 1, { ...draft, title: "Different title" })).rejects.toMatchObject({ status: 0 });
   });
-  it("accepts the backend no-op revision only with the exact submitted saved fields", async () => {
+  it("rejects an unadvanced revision even when submitted fields are unchanged", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(row), { status: 200 })));
-    expect((await updateRecurringPurchase(company, id, 1, draft)).version).toBe(1);
+    await expect(updateRecurringPurchase(company, id, 1, draft)).rejects.toMatchObject({ status: 0 });
   });
   it("rejects unconfirmed closure details and a different closure revision", async () => {
     const fetcher = vi.fn()
