@@ -2,7 +2,14 @@ import { expect, test, type Page } from "@playwright/test";
 
 const company = "11111111-1111-4111-8111-111111111111";
 const worker = "22222222-2222-4222-8222-222222222222";
-const capabilities = { configurationDraft: true };
+// Readiness requires the existing capability contract even when only settings
+// are under test. Explicit false values keep unrelated workflows disabled.
+const capabilities = {
+  vendorDraft: false, itemDraft: false, requestDraft: false, approvals: false,
+  sourcing: false, contracts: false, orders: false, receiving: false,
+  invoiceValidation: false, financeHandoff: false, supplierPortal: false,
+  planningDraft: false, configurationDraft: true, contractDraft: false, sourcingDraft: false,
+};
 type Options = { key: "INVOICE_MATCHING" | "SOURCING" | "RECEIVING"; permissions: string[]; schema?: boolean; lostCreate?: boolean; categoryPages?: boolean };
 
 async function fixture(page: Page, options: Options) {
