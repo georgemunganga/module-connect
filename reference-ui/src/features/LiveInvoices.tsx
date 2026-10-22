@@ -31,7 +31,7 @@ export function LiveInvoiceList() {
   const readiness = useCompany();
   const { selection } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <InvoiceListRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}`} />;
+  return <InvoiceListRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}`} />;
 }
 function InvoiceListRecord() {
   const navigate = useNavigate();
@@ -77,14 +77,14 @@ export function LiveInvoiceEditor() {
   const readiness = useCompany();
   const { selection } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <InvoiceEditorRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${id ?? "new"}`} />;
+  return <InvoiceEditorRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id ?? "new"}`} />;
 }
 function InvoiceEditorRecord() {
   const { id } = useParams();
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const navigate = useNavigate();
-  const { legalEntityId, defaultCurrencyCode, permissions, adminViewOnly } = useCompany();
+  const { legalEntityId, defaultCurrencyCode, permissions } = useCompany();
   const [input, setInput] = useState<InvoiceIntakeInput>({ supplierId: "", invoiceNumber: "",
     invoiceDate: new Date().toISOString().slice(0, 10), currencyCode: defaultCurrencyCode, lines: [blankLine()] });
   const [original, setOriginal] = useState<InvoiceDetail | null>(null);
@@ -148,7 +148,7 @@ function InvoiceEditorRecord() {
       if (!(cause instanceof InvoiceIntakeError) || cause.status === 0 || cause.status >= 500) setUncertain(true);
     } finally { if (alive.current) setSaving(false); }
   }
-  if (adminViewOnly || !permissions.includes("procurement-invoice-capture")) return <div className="p-5 sm:p-8" role="alert">You do not have access to record invoices for this company.</div>;
+  if (!permissions.includes("procurement-invoice-capture")) return <div className="p-5 sm:p-8" role="alert">You do not have access to record invoices for this company.</div>;
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit supplier invoice" : "Record supplier invoice"} subtitle="Save the invoice as received. Review and matching happen next." />
     {loadingInvoice ? <p role="status">Loading invoice…</p> : id && !original ? <p role="alert">{error || "Invoice not found."}</p> : id && (!original || !invoiceAllows(original, "Edit")) ? <p role="alert">This invoice cannot be edited. Open its details to review the current status.</p> :
@@ -205,13 +205,13 @@ export function LiveInvoiceDetail() {
   const { selection } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
   return <InvoiceDetailRecord key={JSON.stringify([readiness.tenantId, readiness.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
-    readiness.workerId, readiness.permissions, readiness.capabilities, id])} />;
+    readiness.principalId, readiness.permissions, readiness.capabilities, id])} />;
 }
 function InvoiceDetailRecord() {
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const { id } = useParams();
-  const { legalEntityId, capabilities, permissions, adminViewOnly } = useCompany();
+  const { legalEntityId, capabilities, permissions } = useCompany();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -232,7 +232,7 @@ function InvoiceDetailRecord() {
     return () => controller.abort();
   }, [id, legalEntityId, refresh]);
   async function cancel() {
-    if (!invoice || busy || uncertain || stale || adminViewOnly || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
+    if (!permissions.includes("procurement-invoice-capture") || !invoice || busy || uncertain || stale || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
     setBusy(true); setError("");
     try {
       await cancelInvoiceIntake(legalEntityId, invoice.id, invoice.version, reason);
@@ -250,7 +250,7 @@ function InvoiceDetailRecord() {
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."}</div>;
   return <div className="p-5 sm:p-8">
-    <PageHeader title={`Invoice ${invoice.invoiceNumber}`} subtitle={`${invoice.supplierName || "Vendor"} · ${invoice.currencyCode}`} actions={<><Badge>{invoice.status}</Badge>{!adminViewOnly && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit") && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}</>} />
+    <PageHeader title={`Invoice ${invoice.invoiceNumber}`} subtitle={`${invoice.supplierName || "Vendor"} · ${invoice.currencyCode}`} actions={<><Badge>{invoice.status}</Badge>{permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit") && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}</>} />
     {notice && <p role="status" className="mb-5 text-sm">{notice}</p>}
     {error && <div role="alert" className="mb-4 text-destructive">{error}<Button variant="secondary" onClick={() => window.location.reload()}>Refresh invoice</Button></div>}
     {uncertain && <p role="status">The response was not confirmed. Refresh the invoice to check its saved status before trying another action.</p>}
@@ -270,9 +270,9 @@ function InvoiceDetailRecord() {
     {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
     {capabilities.invoiceComparison && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
       company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
-      comparisonAvailable={capabilities.invoiceComparison && !adminViewOnly} refresh={(message) => { setNotice(message ?? ""); setRefresh((value) => value + 1); }} />}
+      comparisonAvailable={capabilities.invoiceComparison} refresh={(message) => { setNotice(message ?? ""); setRefresh((value) => value + 1); }} />}
     {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
-    {!adminViewOnly && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel") && <Panel title="Cancel invoice" className="mt-5"><div className="space-y-3 p-5">
+    {permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel") && <Panel title="Cancel invoice" className="mt-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
       <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>
       <Button variant="danger" disabled={busy || uncertain || stale || !reason.trim()} onClick={() => { if (window.confirm("Cancel this invoice? Its saved history will be retained.")) void cancel(); }}>Cancel invoice</Button>

@@ -69,7 +69,7 @@ export function LiveItemEditor() {
   const { id } = useParams(); const readiness = useLiveReadiness(); const { selection } = useErpShell();
   if (!readiness?.permissions.includes("procurement-item-manage"))
     return <div className="p-5 sm:p-8" role="alert">Item changes are unavailable for your account. <Link to="/items">Browse approved items</Link></div>;
-  return <LiveItemEditorBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.workerId, selection.entityId, selection.branch, id ?? "new"].join(":")} />;
+  return <LiveItemEditorBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.principalId, selection.entityId, selection.branch, id ?? "new"].join(":")} />;
 }
 function LiveItemEditorBody() {
   const { id } = useParams();
@@ -84,7 +84,7 @@ function LiveItemEditorBody() {
   const savingRef=useRef(false);
   const mounted = useRef(true); useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [loadedKey, setLoadedKey] = useState<string | null>(id ? null : `${company}:new`);
-  const viewOnly = useLiveReadiness()?.adminViewOnly === true;
+  const viewOnly = useLiveReadiness()?.permissions.includes("procurement-item-manage") !== true;
   useEffect(() => {
     setVersion(null); setLoadedKey(null);
     if (!id) { setDraft(initial); setLoadedKey(`${company}:new`); return; }
@@ -161,12 +161,12 @@ export function LiveItemDetail() {
 
 function ManagedItemDetail() {
   const { id } = useParams(); const readiness = useLiveReadiness(); const { selection } = useErpShell();
-  return <LiveItemDetailBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.workerId, selection.entityId, selection.branch, id].join(":")} />;
+  return <LiveItemDetailBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.principalId, selection.entityId, selection.branch, id].join(":")} />;
 }
 function LiveItemDetailBody() {
   const { id } = useParams();
   const readiness = useLiveReadiness();
-  const viewOnly = readiness?.adminViewOnly === true;
+  const viewOnly = readiness?.permissions.includes("procurement-item-manage") !== true;
   const company = companyId();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState("");

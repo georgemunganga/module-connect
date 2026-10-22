@@ -31,7 +31,7 @@ async function mock(page: Page, options: { action?: keyof typeof permissions; lo
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: company, workerId: worker,
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: worker,
       permissions: ["procurement-access", ...(options.enabled === false ? ["procurement-po-read", "procurement-po-create"] : [permissions[options.action ?? "Finance"]]), ...(options.buyerBoth ? ["procurement-po-read", "procurement-po-submit", "procurement-po-issue"] : [])],
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,

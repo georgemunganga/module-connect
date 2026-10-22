@@ -24,7 +24,7 @@ async function readonlyErp(page: Page) {
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId,
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId,
       workerId: null, adminViewOnly: true, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" },
       permissions: ["procurement-access", "procurement-request-read", "procurement-sourcing-read", "procurement-contract-read", "procurement-plan-read", "procurement-configuration-read"] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
@@ -57,8 +57,9 @@ for (const [path, heading, content] of [
     const main = page.getByRole("main");
     await expect(main.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     await expect(main.getByText(content, { exact: true })).toBeVisible();
-    await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Try a sample|Publish|Return for changes|Check sample)/i })).toHaveCount(0);
+    await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Publish|Return for changes)/i })).toHaveCount(0);
     await expect(main.getByRole("link", { name: /^(Add|New |Edit)/i })).toHaveCount(0);
+    if (path === "/settings/buying-rules") await expect(main.getByRole("button", { name: "Try a sample", exact: true })).toBeVisible();
     expect(writes).toEqual([]);
   });
 }

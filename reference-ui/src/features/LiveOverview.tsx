@@ -31,7 +31,7 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
   const { legalEntityId, permissions } = readiness;
   const permissionKey = permissions.slice().sort().join("|");
   const capabilityKey = metrics.map(metric => `${metric.capability}:${readiness.capabilities[metric.capability] === true}`).join("|");
-  const contextKey = `${readiness.tenantId}:${legalEntityId}:${selection.entityId ?? ""}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${permissionKey}:${capabilityKey}`;
+  const contextKey = `${readiness.tenantId}:${legalEntityId}:${selection.entityId ?? ""}:${selection.branch ?? ""}:${readiness.principalId}:${permissionKey}:${capabilityKey}`;
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{ key: string; values: Record<string, Result> }>({ key: "", values: {} });
 

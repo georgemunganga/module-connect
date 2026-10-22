@@ -101,15 +101,15 @@ export function LivePolicies() {
   if (selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
   return <LivePoliciesRecord key={[readiness.tenantId, readiness.legalEntityId, selection.branch,
-    readiness.workerId ?? "admin"].join(":")} />;
+    readiness.principalId].join(":")} />;
 }
 function LivePoliciesRecord() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Buying rules require an ERP company.");
   const companyId = readiness.legalEntityId;
-  const canEdit = !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-edit");
-  const canApprove = !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-approve");
-  const canPreview = !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-read");
+  const canEdit = readiness.permissions.includes("procurement-configuration-edit");
+  const canApprove = readiness.permissions.includes("procurement-configuration-approve");
+  const canPreview = readiness.permissions.includes("procurement-configuration-read");
   const currency = readiness.defaultCurrencyCode;
   const [page, setPage] = useState<PolicyPage | null>(null);
   const [refresh, setRefresh] = useState(0);

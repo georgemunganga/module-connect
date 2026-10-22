@@ -34,7 +34,7 @@ function validDates(draft: ContractDraft): string | null {
 }
 
 export function LiveContractList() {
-  const { legalEntityId, adminViewOnly } = useCompany();
+  const { legalEntityId, permissions } = useCompany();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ContractPage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,13 +48,13 @@ export function LiveContractList() {
     return () => controller.abort();
   }, [legalEntityId, page]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Contracts" subtitle="Keep supplier agreements together. Drafts need approval and signature before they can be used for purchasing." actions={!adminViewOnly ? <Link to="/contracts/new"><Button><Plus size={16} className="mr-2 inline" />New contract</Button></Link> : undefined} />
+    <PageHeader title="Contracts" subtitle="Keep supplier agreements together. Drafts need approval and signature before they can be used for purchasing." actions={permissions.includes("procurement-contract-create") ? <Link to="/contracts/new"><Button><Plus size={16} className="mr-2 inline" />New contract</Button></Link> : undefined} />
     <Panel><div className="p-5">
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading contracts…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Reference</th><th>Contract</th><th>Type</th><th>Limit</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>{data.items.map((item) => <tr key={item.id}><td>{item.number}</td><td><Link to={`/contracts/${item.id}`} className="font-medium text-primary hover:underline">{item.title}</Link></td><td>{item.contractType}</td><td>{money(item.ceilingAmount, item.currencyCode)}</td><td>{item.expiresOn || "—"}</td><td><Badge>{item.status}</Badge></td><td><Link to={`/contracts/${item.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="No contracts yet" description="Create a draft to record the supplier, dates and spending limit." action={!adminViewOnly ? <Link to="/contracts/new"><Button>New contract</Button></Link> : undefined} />}
+      </RecordTable></div> : <EmptyState title="No contracts yet" description="Create a draft to record the supplier, dates and spending limit." action={permissions.includes("procurement-contract-create") ? <Link to="/contracts/new"><Button>New contract</Button></Link> : undefined} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
   </div>;
@@ -63,7 +63,7 @@ export function LiveContractList() {
 export function LiveContractEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, defaultCurrencyCode } = useCompany();
+  const { legalEntityId, defaultCurrencyCode, permissions } = useCompany();
   const [draft, setDraft] = useState<ContractDraft>(() => emptyDraft(defaultCurrencyCode));
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
   const [supplierSearch, setSupplierSearch] = useState("");
@@ -113,7 +113,7 @@ export function LiveContractEditor() {
     setDraft((current) => ({ ...current, [key]: value }));
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saving || saveBlock) return;
+    if (saving || saveBlock || !permissions.includes(id ? "procurement-contract-edit" : "procurement-contract-create")) return;
     if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the list."); return; }
     const savingContext = editorContext;
     const savingGeneration = editorGeneration.current;
@@ -137,6 +137,7 @@ export function LiveContractEditor() {
     }
     finally { if (isCurrentSave()) setSaving(false); }
   }
+  if (!permissions.includes(id ? "procurement-contract-edit" : "procurement-contract-create")) return <p role="alert" className="p-5 sm:p-8">You cannot change this contract for this company.</p>;
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit contract draft" : "New contract"} subtitle="Save the commercial details for review. The contract remains a draft until a separate approval and signature process is complete." />
     {loading ? <p role="status">Loading contract…</p> : id && (version === null || loadedContext !== editorContext)
@@ -164,7 +165,7 @@ export function LiveContractEditor() {
 export function LiveContractDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, adminViewOnly } = useCompany();
+  const { legalEntityId, permissions } = useCompany();
   const [record, setRecord] = useState<ContractDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -180,7 +181,7 @@ export function LiveContractDetail() {
     return () => controller.abort();
   }, [id, legalEntityId]);
   async function cancel() {
-    if (adminViewOnly) return;
+    if (!permissions.includes("procurement-contract-edit")) return;
     if (!record || !reason.trim()) { setError("Give a reason for cancelling this draft."); return; }
     setBusy(true); setError("");
     try { await cancelOwnContractDraft(legalEntityId, record.id, record.version, reason.trim()); navigate("/contracts"); }
@@ -189,7 +190,7 @@ export function LiveContractDetail() {
   }
   return <div className="p-5 sm:p-8">
     {loading ? <p role="status">Loading contract…</p> : record ? <>
-      <PageHeader title={record.title} subtitle={`${record.number} · Supplier agreement`} actions={!adminViewOnly && record.status === "Draft" ? <Link to={`/contracts/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
+      <PageHeader title={record.title} subtitle={`${record.number} · Supplier agreement`} actions={permissions.includes("procurement-contract-edit") && record.status === "Draft" ? <Link to={`/contracts/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       <Panel title="Contract details"><dl className="grid gap-5 p-5 text-sm sm:grid-cols-2">
         <div><dt className="text-muted-foreground">Status</dt><dd className="mt-1"><Badge>{record.status}</Badge></dd></div>
@@ -202,7 +203,7 @@ export function LiveContractDetail() {
         <div><dt className="text-muted-foreground">Draft revision</dt><dd className="mt-1">{record.draftVersion?.revisionNumber ?? "—"}</dd></div>
         {record.terminationReason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Cancellation reason</dt><dd className="mt-1">{record.terminationReason}</dd></div>}
       </dl></Panel>
-      {!adminViewOnly && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
+      {permissions.includes("procurement-contract-edit") && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
     </> : <p role="alert">{error || "Contract not found."}</p>}
     <Link to="/contracts" className="mt-5 inline-block text-sm text-primary hover:underline">Back to contracts</Link>
   </div>;

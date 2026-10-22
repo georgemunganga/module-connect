@@ -60,7 +60,7 @@ export function LiveOrderExecutionList() {
 export function LiveOrderExecutionDetail() {
   const { id = "" } = useParams(), context = useLiveReadiness()!;
   const branch = procurementScopeHeaders(context.legalEntityId)["X-Shell-Location"] ?? "";
-  return <ExecutionDetail key={`${context.tenantId}:${context.legalEntityId}:${context.workerId}:${branch}:${id}`} id={id} scopeKey={`${context.tenantId}:${context.legalEntityId}:${context.workerId}:${branch}:${id}`} />;
+  return <ExecutionDetail key={`${context.tenantId}:${context.legalEntityId}:${context.principalId}:${branch}:${id}`} id={id} scopeKey={`${context.tenantId}:${context.legalEntityId}:${context.principalId}:${branch}:${id}`} />;
 }
 function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
   const context = useLiveReadiness()!, company = context.legalEntityId;

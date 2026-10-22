@@ -20,8 +20,8 @@ export function LivePublishedCatalog() {
   if (!readiness) throw new Error("Catalog requires ERP company context.");
   const company = readiness.legalEntityId;
   const canRead = readiness.permissions.includes("procurement-item-read") && readiness.capabilities.itemDraft === true;
-  const canCreateRequest = !readiness.adminViewOnly && readiness.permissions.includes("procurement-request-create") && readiness.capabilities.requestDraft === true;
-  const scopeKey = `${readiness.tenantId}:${company}:${selection.entityId ?? ""}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${readiness.permissions.slice().sort().join("|")}:${readiness.capabilities.itemDraft}:${readiness.capabilities.requestDraft}`;
+  const canCreateRequest = readiness.permissions.includes("procurement-request-create") && readiness.capabilities.requestDraft === true;
+  const scopeKey = `${readiness.tenantId}:${company}:${selection.entityId ?? ""}:${selection.branch ?? ""}:${readiness.principalId}:${readiness.permissions.slice().sort().join("|")}:${readiness.capabilities.itemDraft}:${readiness.capabilities.requestDraft}`;
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);

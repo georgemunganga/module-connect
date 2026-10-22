@@ -29,7 +29,7 @@ async function mock(page: Page, options: Options = {}) {
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === api + "/context") return json({ tenantId: "amizo", legalEntityId: company, workerId: worker, permissions, company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === api + "/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: worker, permissions, company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === api + "/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities: Object.fromEntries(["vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders", "orderDraft", "receiving", "receivingDrafts", "receivingGoods", "receivingInspection", "receivingServices", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft"].map((key) => [key, key.startsWith("receiving") && key !== "receiving" && options.enabled !== false])) });
     if (request.method() === "GET") {
       reads.push(path + url.search);

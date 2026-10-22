@@ -15,7 +15,7 @@ async function fixture(page: Page, options: { enabled?: boolean; readOnly?: bool
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path.startsWith("/api/procurement/") && request.headers()["x-shell-entity"] !== company) return json({ message: "Company mismatch" }, 403);
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "test", legalEntityId: company, workerId: worker, company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" }, permissions: ["procurement-access", "procurement-invoice-read", ...(options.readOnly ? [] : ["procurement-invoice-capture"])] });
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "test", legalEntityId: company, workerId: worker, company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" }, permissions: ["procurement-access", "procurement-invoice-read", ...(options.readOnly ? [] : ["procurement-invoice-capture"])] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities });
     const bill = { id: billId, supplierId: worker, supplierName: "Actual supplier", invoiceNumber: "BILL-1", invoiceDate: "2026-10-22", currencyCode: "ZMW", status: "Received", grossAmount: 100, taxAmount: 0, netAmount: 100, intakeChannel: "Manual", version: 1, createdAt: "2026-10-22T00:00:00Z", lines: [] };
     if (path === "/api/procurement/v1/invoices") return json({ items: [bill], total: 1, page: 1, pageSize: 25 });

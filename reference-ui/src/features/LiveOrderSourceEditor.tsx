@@ -13,7 +13,7 @@ const empty = (currency: string): ExactOrderDraft => ({ supplierId: "", currency
 export function LiveOrderSourceEditor() {
   const { id } = useParams(), context = useLiveReadiness()!;
   const branch = procurementScopeHeaders(context.legalEntityId)["X-Shell-Location"] ?? "";
-  const scopeKey = `${context.tenantId}:${context.legalEntityId}:${context.workerId}:${branch}:${id ?? "new"}`;
+  const scopeKey = `${context.tenantId}:${context.legalEntityId}:${context.principalId}:${branch}:${id ?? "new"}`;
   return <SourceEditor key={scopeKey} id={id} scopeKey={scopeKey} />;
 }
 function SourceEditor({ id, scopeKey }: { id?: string; scopeKey: string }) {
