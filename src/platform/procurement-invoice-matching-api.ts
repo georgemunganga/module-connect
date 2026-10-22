@@ -18,7 +18,7 @@ export type InvoiceCompareInput = { version: number; mappingVersionId: string; r
 export type InvoiceMatchingCommand = { operation: "InvoiceMapping" | "InvoiceCompare"; invoiceId: string; key: string; body: string; ownLineIds: string[] };
 /** Nonsecret locator retained for GET-only recovery; no document reference or note. */
 export type InvoiceMatchingRecovery = { operation: InvoiceMatchingCommand["operation"]; invoiceId: string; key: string;
-  expectedVersion: number; ownLineIds: string[] };
+  expectedVersion: number; ownLineIds: string[]; purchaseOrderId: string | null; issuedVersionId: string | null; mappingVersionId: string | null };
 export type InvoiceMatchingReply = { invoiceId: string; key: string; operation: InvoiceMatchingCommand["operation"]; id: string; version: number;
   outcome: "MappingUnverified" | "Blocked" | "Compared"; mappingRevision?: number; issues: { invoiceLineId: string | null; code: string }[] };
 export class InvoiceMatchingError extends Error { constructor(readonly status: number, message: string) { super(message); } }
@@ -119,8 +119,13 @@ export function invoiceMatchingRecovery(command: InvoiceMatchingCommand): Invoic
   if (!object(intended) || !int(intended.version) || intended.version < 1 || !id(command.invoiceId) || !id(command.key)
     || !Array.isArray(command.ownLineIds) || command.ownLineIds.length > 200 || !command.ownLineIds.every(id)
     || new Set(command.ownLineIds).size !== command.ownLineIds.length) throw invalid();
+  if (command.operation === "InvoiceMapping" ? !id(intended.purchaseOrderId) || !id(intended.issuedVersionId)
+    : command.operation === "InvoiceCompare" ? !id(intended.mappingVersionId) : true) throw invalid();
   return { operation: command.operation, invoiceId: command.invoiceId, key: command.key,
-    expectedVersion: intended.version, ownLineIds: [...command.ownLineIds] };
+    expectedVersion: intended.version, ownLineIds: [...command.ownLineIds],
+    purchaseOrderId: command.operation === "InvoiceMapping" ? intended.purchaseOrderId as string : null,
+    issuedVersionId: command.operation === "InvoiceMapping" ? intended.issuedVersionId as string : null,
+    mappingVersionId: command.operation === "InvoiceCompare" ? intended.mappingVersionId as string : null };
 }
 function reply(body: unknown, command: InvoiceMatchingRecovery): InvoiceMatchingReply {
   const permission = command.operation === "InvoiceMapping" ? "procurement-invoice-capture" : "procurement-invoice-match";
@@ -149,9 +154,28 @@ export async function recoverInvoiceMatching(company: string, command: InvoiceMa
   if (!id(command.invoiceId) || !id(command.key) || !["InvoiceMapping", "InvoiceCompare"].includes(command.operation)
     || !int(command.expectedVersion) || command.expectedVersion < 1 || !Array.isArray(command.ownLineIds)
     || command.ownLineIds.length > 200 || !command.ownLineIds.every(id)
-    || new Set(command.ownLineIds).size !== command.ownLineIds.length) throw invalid();
+    || new Set(command.ownLineIds).size !== command.ownLineIds.length
+    || command.operation === "InvoiceMapping" && (!id(command.purchaseOrderId) || !id(command.issuedVersionId) || command.mappingVersionId !== null)
+    || command.operation === "InvoiceCompare" && (!id(command.mappingVersionId) || command.purchaseOrderId !== null || command.issuedVersionId !== null)) throw invalid();
   const body = await request(company, command.invoiceId, `/commands/${command.key}?operation=${command.operation}`);
   if (!object(body) || body.operation !== command.operation || body.commandKey !== command.key || body.recordedHistoricalResult !== true
     || body.isCurrentReplayAuthorization !== false || body.canPostToFinance !== false || !int(body.currentInvoiceVersion)) throw invalid();
-  return reply(body.recordedResult, command);
+  const result = reply(body.recordedResult, command);
+  // The recovery receipt is actor/key scoped. A second purpose-only GET binds
+  // its exact saved row to the original nonsecret source pins before clearing
+  // the browser marker. Older records remain in history after later changes.
+  const history = await request(company, command.invoiceId, "");
+  if (!object(history) || history.invoiceId !== command.invoiceId || !int(history.version) || history.version < result.version
+    || !Array.isArray(history.mappings)
+    || !Array.isArray(history.comparisons) || history.isInvoiceApproval !== false || history.canPostToFinance !== false
+    || history.matchingStateIsRecordedResult !== true) throw invalid();
+  const rows = command.operation === "InvoiceMapping" ? history.mappings : history.comparisons;
+  const matching = rows.filter((row: unknown) => object(row) && row.id === result.id);
+  if (matching.length !== 1 || !object(matching[0])) throw invalid();
+  const saved = matching[0] as Record<string, unknown>;
+  if (command.operation === "InvoiceMapping"
+    ? saved.purchaseOrderId !== command.purchaseOrderId || saved.issuedVersionId !== command.issuedVersionId
+    : saved.mappingVersionId !== command.mappingVersionId || saved.recordedHistoricalResult !== true
+      || saved.isCurrentApproval !== false || saved.canPostToFinance !== false) throw invalid();
+  return result;
 }
