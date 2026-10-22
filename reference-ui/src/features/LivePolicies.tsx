@@ -103,7 +103,9 @@ function LivePoliciesRecord() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Buying rules require an ERP company.");
   const companyId = readiness.legalEntityId;
-  const viewOnly = readiness.adminViewOnly === true;
+  const canEdit = !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-edit");
+  const canApprove = !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-approve");
+  const canPreview = !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-read");
   const currency = readiness.defaultCurrencyCode;
   const [page, setPage] = useState<PolicyPage | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -127,12 +129,33 @@ function LivePoliciesRecord() {
   const [error, setError] = useState("");
   const [listError, setListError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [writeLocked, setWriteLocked] = useState(false);
+  const [checkingSaved, setCheckingSaved] = useState(false);
   const [retiring, setRetiring] = useState<PolicyPage["items"][number] | null>(null);
   const [retirementReason, setRetirementReason] = useState("");
   const [retirementLocked, setRetirementLocked] = useState(false);
   const alive = useRef(true);
+  const busy = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const canEdit = !viewOnly && readiness.permissions.includes("procurement-configuration-edit");
+  const canStart = () => alive.current && !busy.current && !writeLocked;
+  const uncertain = (cause: unknown) => !(cause instanceof PolicyActionError)
+    || cause.status === 0 || cause.status === 409 || cause.status >= 500;
+  const failWrite = (cause: unknown) => {
+    if (!alive.current) return;
+    setError(errorText(cause));
+    if (uncertain(cause)) setWriteLocked(true);
+  };
+  async function checkSaved() {
+    if (!alive.current || busy.current || checkingSaved) return;
+    setCheckingSaved(true);
+    try {
+      const latest = await listPolicies(companyId);
+      if (!alive.current) return;
+      setPage(latest);
+      setError("Saved rules were loaded for comparison. The unconfirmed command is still locked; open the saved record to continue.");
+    } catch (cause) { if (alive.current) setError(errorText(cause)); }
+    finally { if (alive.current) setCheckingSaved(false); }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -143,14 +166,16 @@ function LivePoliciesRecord() {
     return () => controller.abort();
   }, [companyId, refresh]);
 
-  const newDraft = () => { if (viewOnly) return; setEditing("new"); setKey("PURCHASE_REQUEST");
+  const newDraft = () => { if (!canEdit || !canStart()) return; setEditing("new"); setKey("PURCHASE_REQUEST");
     setStart(tomorrow()); setEnd(""); setRows([emptyRule()]);
     setIssues([]); setError(""); };
   async function edit(id: string) {
-    if (viewOnly) return;
+    if (!canEdit || !canStart()) return;
+    busy.current = true; setSaving(true); setEditing(null);
     setError(""); setIssues([]);
     try {
       const record = await getPolicy(companyId, id);
+      if (!alive.current) return;
       const parsed = fromRuleJson(record.rulesJson, record.policyKey, currency);
       if (!parsed?.length) {
         setError("This draft uses settings that need a fuller editor. Ask Procurement to review the existing draft before changing it.");
@@ -158,66 +183,79 @@ function LivePoliciesRecord() {
       }
       setEditing(record); setKey(record.policyKey); setStart(day(record.effectiveFrom));
       setEnd(day(record.effectiveTo)); setRows(parsed);
-    } catch (cause) { setError(errorText(cause)); }
+    } catch (cause) { if (alive.current) setError(errorText(cause)); }
+    finally { busy.current = false; if (alive.current) setSaving(false); }
   }
   const changeRow = (index: number, patch: Partial<RuleRow>) =>
     setRows((current) => current.map((row, i) => i === index ? { ...row, ...patch } : row));
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (viewOnly || !editing) return;
+    if (!canEdit || !editing || !canStart()) return;
+    busy.current = true;
     setSaving(true); setError(""); setIssues([]);
+    let mutationStarted = false;
     try {
       const rulesJson = toRuleJson(key, currency, rows);
       const check = await validatePolicy(companyId, rulesJson);
+      if (!alive.current) return;
       setIssues(check.issues);
       if (!check.isValid) return;
       const draft = { policyKey: key, effectiveFrom: utc(start),
         effectiveTo: end ? utc(end) : null, rulesJson };
+      mutationStarted = true;
       if (editing === "new") await createPolicy(companyId, draft);
       else await updatePolicy(companyId, editing.id, editing.version, draft);
+      if (!alive.current) return;
       setEditing(null); setRefresh((value) => value + 1);
-    } catch (cause) { setError(errorText(cause)); }
-    finally { setSaving(false); }
+    } catch (cause) { if (alive.current) mutationStarted ? failWrite(cause) : setError(errorText(cause)); }
+    finally { busy.current = false; if (alive.current) setSaving(false); }
   }
 
   async function sendForReview(event: FormEvent) {
     event.preventDefault();
-    if (viewOnly || !reviewing || !reviewReason.trim()) return;
+    if (!canEdit || !reviewing || !reviewReason.trim() || !canStart()) return;
+    busy.current = true;
     setSaving(true); setError("");
     try {
       await submitPolicyReview(companyId, reviewing.id, reviewing.version, reviewReason.trim());
+      if (!alive.current) return;
       setReviewing(null); setReviewReason(""); setRefresh((value) => value + 1);
-    } catch (cause) { setError(errorText(cause)); }
-    finally { setSaving(false); }
+    } catch (cause) { failWrite(cause); }
+    finally { busy.current = false; if (alive.current) setSaving(false); }
   }
   async function runPreview(event: FormEvent) {
     event.preventDefault();
-    if (viewOnly || !previewing) return;
+    if (!canPreview || !previewing || !canStart()) return;
+    busy.current = true;
     setSaving(true); setError(""); setPreview(null);
     try {
-      setPreview(await previewPolicy(companyId, previewing.id, {
+      const result = await previewPolicy(companyId, previewing.id, {
         currencyCode: currency, lineBaseAmount: Number(sampleAmount),
         categoryCode: sampleCategory.trim().toUpperCase() || null,
         purchaseType: sampleType || null, branchId: null,
-      }));
-    } catch (cause) { setError(errorText(cause)); }
-    finally { setSaving(false); }
+      });
+      if (alive.current) setPreview(result);
+    } catch (cause) { if (alive.current) setError(errorText(cause)); }
+    finally { busy.current = false; if (alive.current) setSaving(false); }
   }
   async function makeDecision(event: FormEvent) {
     event.preventDefault();
-    if (viewOnly || !deciding || !decisionReason.trim()) return;
+    if (!canApprove || !deciding || !decisionReason.trim() || !canStart()) return;
+    busy.current = true;
     setSaving(true); setError("");
     try {
       await decidePolicy(companyId, deciding.id, deciding.version, decisionAction, decisionReason.trim());
+      if (!alive.current) return;
       setDeciding(null); setDecisionReason(""); setRefresh((value) => value + 1);
-    } catch (cause) { setError(errorText(cause)); }
-    finally { setSaving(false); }
+    } catch (cause) { failWrite(cause); }
+    finally { busy.current = false; if (alive.current) setSaving(false); }
   }
 
   async function retire(event: FormEvent) {
     event.preventDefault();
-    if (!canEdit || !retiring || saving || retirementLocked || !alive.current) return;
+    if (!canEdit || !retiring || !canStart() || retirementLocked) return;
+    busy.current = true;
     setSaving(true); setError("");
     try {
       await retirePolicyDraft(companyId, retiring, retirementReason);
@@ -226,8 +264,8 @@ function LivePoliciesRecord() {
     } catch (cause) {
       if (!alive.current) return;
       setError(errorText(cause));
-      if (!(cause instanceof PolicyActionError) || ![400, 422].includes(cause.status)) setRetirementLocked(true);
-    } finally { if (alive.current) setSaving(false); }
+      if (uncertain(cause)) { setRetirementLocked(true); setWriteLocked(true); }
+    } finally { busy.current = false; if (alive.current) setSaving(false); }
   }
 
   return <div className="mx-auto max-w-5xl space-y-5">
@@ -236,39 +274,40 @@ function LivePoliciesRecord() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-semibold">Rules for {currency}</h2>
           <p className="text-sm text-muted-foreground">Saved rules are drafts. A draft does not approve or release a purchase.</p></div>
-        {!viewOnly && <Button onClick={newDraft}>Add buying rule draft</Button>}
+        {canEdit && <Button disabled={saving || writeLocked} onClick={newDraft}>Add buying rule draft</Button>}
       </div>
       {listError && <p role="alert" className="mb-4 text-sm text-red-700">{listError}</p>}
       {loading ? <p role="status">Loading buying rules…</p> : page?.items.length
         ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Used for</th><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2">{!viewOnly && <Button variant="secondary" onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>}{canEdit && canRetirePolicyDraft(record) && <Button variant="secondary" disabled={saving} onClick={() => {
+          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2">{canPreview && <Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>}{canEdit && canRetirePolicyDraft(record) && <Button variant="secondary" disabled={saving || writeLocked} onClick={() => {
             setRetiring(record); setRetirementReason(""); setRetirementLocked(false); setEditing(null);
             setReviewing(null); setDeciding(null); setPreviewing(null); setError("");
-          }}>Retire unused draft</Button>}{!viewOnly && record.state === "Draft" && <><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setPreviewing(null); setDeciding(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}{!viewOnly && record.state === "PendingReview" && readiness.permissions.includes("procurement-configuration-approve") && <><Button variant="secondary" onClick={() => { setDeciding(record); setDecisionAction("publish"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Publish</Button><Button variant="secondary" onClick={() => { setDeciding(record); setDecisionAction("return"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
-        : <EmptyState title="No buying rules yet" description="Add a draft for purchase requests or purchase orders." action={!viewOnly ? <Button onClick={newDraft}>Add buying rule draft</Button> : undefined} />}
+          }}>Retire unused draft</Button>}{canEdit && record.state === "Draft" && <><Button variant="secondary" disabled={saving || writeLocked} onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setReviewing(record); setPreviewing(null); setDeciding(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}{canApprove && record.state === "PendingReview" && <><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setDeciding(record); setDecisionAction("publish"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Publish</Button><Button variant="secondary" disabled={saving || writeLocked} onClick={() => { setDeciding(record); setDecisionAction("return"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
+        : <EmptyState title="No buying rules yet" description="Add a draft for purchase requests or purchase orders." action={canEdit ? <Button disabled={saving || writeLocked} onClick={newDraft}>Add buying rule draft</Button> : undefined} />}
       {page && page.total > page.items.length && <p className="mt-3 text-xs text-muted-foreground">Showing the first {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-    {canEdit && retiring && <form onSubmit={retire}><Panel title="Retire unused buying rule draft"><div className="space-y-4 p-5">
+    {writeLocked && <div role="status" className="rounded-lg border border-border bg-surface p-4 text-sm"><p>A change is unconfirmed or these rules changed. Do not submit it again. Your entered values are still here.</p><Button type="button" variant="secondary" disabled={checkingSaved || saving} onClick={() => void checkSaved()}>{checkingSaved ? "Checking saved rules…" : "Check saved rules (read only)"}</Button></div>}
+    {canEdit && retiring && <form onSubmit={retire}><fieldset className="min-w-0" disabled={saving}><Panel title="Retire unused buying rule draft"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">Retirement keeps this draft and its history. Reviewed, published or referenced policies cannot be retired here. No spending authority changes.</p>
       <Field label="Retirement reason"><Input required maxLength={1000} disabled={saving || retirementLocked} value={retirementReason} onChange={(event) => setRetirementReason(event.target.value)} /></Field>
       {retirementLocked && <p role="status">The retirement is unconfirmed or the draft changed. Check the saved rules before making another change. This command will not repeat automatically.</p>}
       <div className="flex gap-3"><Button type="submit" variant="danger" disabled={saving || retirementLocked || !retirementReason.trim()}>{saving ? "Retiring…" : "Confirm retirement"}</Button>
-        <Button type="button" variant="secondary" disabled={saving} onClick={() => { setRetiring(null); setRefresh((value) => value + 1); }}>Check saved rules</Button></div>
-    </div></Panel></form>}
-    {!viewOnly && deciding && <form onSubmit={makeDecision}><Panel title={decisionAction === "publish" ? "Publish buying rules" : "Return buying rules for changes"}><div className="space-y-4 p-5">
+        <Button type="button" variant="secondary" disabled={saving || checkingSaved} onClick={() => void checkSaved()}>Check saved rules</Button></div>
+    </div></Panel></fieldset></form>}
+    {canApprove && deciding && <form onSubmit={makeDecision}><fieldset className="min-w-0" disabled={saving}><Panel title={decisionAction === "publish" ? "Publish buying rules" : "Return buying rules for changes"}><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">{decisionAction === "publish" ? "A separate reviewer must confirm these rules. The start date must be in the future, the rules must cover all purchases, and the effective period cannot overlap another published version. Publication does not approve a purchase." : "Send the rules back to their author with a clear correction note. They can edit the draft and request review again."}</p>
       <Field label={decisionAction === "publish" ? "Publication reason" : "What needs to change?"}><Input required maxLength={1000} value={decisionReason} onChange={(event) => setDecisionReason(event.target.value)} /></Field>
-      <div className="flex gap-3"><Button type="submit" disabled={saving || !decisionReason.trim()}>{saving ? "Checking…" : decisionAction === "publish" ? "Publish rules" : "Return to author"}</Button><Button variant="secondary" onClick={() => setDeciding(null)}>Cancel</Button></div>
-    </div></Panel></form>}
-    {!viewOnly && previewing && <form onSubmit={runPreview}><Panel title="Try a sample purchase"><div className="space-y-4 p-5">
+      <div className="flex gap-3"><Button type="submit" disabled={saving || writeLocked || !decisionReason.trim()}>{saving ? "Checking…" : decisionAction === "publish" ? "Publish rules" : "Return to author"}</Button><Button variant="secondary" onClick={() => setDeciding(null)}>Cancel</Button></div>
+    </div></Panel></fieldset></form>}
+    {canPreview && previewing && <form onSubmit={runPreview}><fieldset className="min-w-0" disabled={saving}><Panel title="Try a sample purchase"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">See which rule a sample purchase matches. This check does not approve or change a purchase. Branch-specific conditions need a fuller preview.</p>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label={`Sample line amount before adjustments (${currency})`}><Input type="number" min={0} step="0.0001" required value={sampleAmount} onChange={(event) => setSampleAmount(event.target.value)} /></Field>
         <Field label="Sample category"><Input value={sampleCategory} placeholder="IT" onChange={(event) => setSampleCategory(event.target.value.toUpperCase())} /></Field>
         <Field label="Sample purchase type"><Select value={sampleType} onChange={(event) => setSampleType(event.target.value)}><option value="">Any type</option><option value="GOODS">Goods</option><option value="SERVICES">Services</option><option value="ASSETS">Assets</option><option value="SUBSCRIPTIONS">Subscriptions</option></Select></Field>
       </div>
-      <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Checking…" : "Check sample"}</Button><Button variant="secondary" onClick={() => setPreviewing(null)}>Close</Button></div>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || writeLocked}>{saving ? "Checking…" : "Check sample"}</Button><Button variant="secondary" onClick={() => setPreviewing(null)}>Close</Button></div>
       {preview && <div role="status" className="rounded-lg border border-border bg-surface-muted p-4 text-sm">
         <p className="font-semibold">{preview.decision.status === "Match" ? `Matched ${preview.decision.ruleCode}` : `Check result: ${preview.decision.status}`}</p>
         {preview.decision.status === "Match" && <p className="mt-2">Budget: {preview.decision.budgetReservation} · Buying method: {preview.decision.sourcingMethodCode || "No specific method"} · Quotes: {preview.decision.minimumQuoteCount ?? "Not specified"} · Approvers: {preview.decision.approvalStages.map((stage) => stage.assignee).join(", ")}</p>}
@@ -276,13 +315,13 @@ function LivePoliciesRecord() {
         {!!preview.decision.issues.length && <ul className="mt-2 list-disc pl-5">{preview.decision.issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>}
         <p className="mt-3 text-xs text-muted-foreground">Sample only. This is not a spending approval.</p>
       </div>}
-    </div></Panel></form>}
-    {!viewOnly && reviewing && <form onSubmit={sendForReview}><Panel title="Send buying rule for review"><div className="space-y-4 p-5">
+    </div></Panel></fieldset></form>}
+    {canEdit && reviewing && <form onSubmit={sendForReview}><fieldset className="min-w-0" disabled={saving}><Panel title="Send buying rule for review"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">Only the draft author can send it. ERP will check the company currency and active categories, branches and buying methods. A review request does not approve spending.</p>
       <Field label="What should the reviewer check?"><Input required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
-      <div className="flex gap-3"><Button type="submit" disabled={saving || !reviewReason.trim()}>{saving ? "Checking…" : "Send for review"}</Button><Button variant="secondary" onClick={() => setReviewing(null)}>Cancel</Button></div>
-    </div></Panel></form>}
-    {!viewOnly && editing && <form onSubmit={save}>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || writeLocked || !reviewReason.trim()}>{saving ? "Checking…" : "Send for review"}</Button><Button variant="secondary" onClick={() => setReviewing(null)}>Cancel</Button></div>
+    </div></Panel></fieldset></form>}
+    {canEdit && editing && <form onSubmit={save}><fieldset className="min-w-0" disabled={saving}>
       <Panel title={editing === "new" ? "New buying rule draft" : `Edit ${key.replaceAll("_", " ").toLowerCase()} draft`}>
         <div className="space-y-5 p-5">
           {editing !== "new" && editing.lastReturnReason && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Reviewer asked for changes: {editing.lastReturnReason}</p>}
@@ -311,9 +350,9 @@ function LivePoliciesRecord() {
           </section>)}
           <Button variant="secondary" onClick={() => setRows((current) => [...current, { ...emptyRule(), code: `RULE_${current.length + 1}`, priority: current.length }])}>Add another rule</Button>
           {!!issues.length && <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Check these rule details:</p><ul className="mt-2 list-disc pl-5">{issues.map((issue, index) => <li key={index}>{issue.path}: {issue.message}</li>)}</ul></div>}
-          <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Checking…" : "Check and save draft"}</Button><Button variant="secondary" onClick={() => { setEditing(null); setIssues([]); }}>Cancel</Button></div>
+          <div className="flex gap-3"><Button type="submit" disabled={saving || writeLocked}>{saving ? "Checking…" : "Check and save draft"}</Button><Button variant="secondary" onClick={() => { setEditing(null); setIssues([]); }}>Cancel</Button></div>
         </div>
       </Panel>
-    </form>}
+    </fieldset></form>}
   </div>;
 }

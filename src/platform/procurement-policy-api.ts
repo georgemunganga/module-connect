@@ -66,7 +66,7 @@ async function call(companyId: string, path: string, init: RequestInit = {}): Pr
         : message || (response.status === 409 ? "This draft changed. Refresh it before saving." : "The buying rule action failed."), response.status);
   }
   try { return await response.json() as unknown; }
-  catch { throw new Error("ERP returned an invalid buying rule response."); }
+  catch { throw new PolicyActionError("ERP returned an invalid buying rule response. Check saved rules before another change.", 0); }
 }
 
 function validRecord(value: unknown): value is PolicyRecord {
@@ -85,24 +85,24 @@ export async function listPolicies(companyId: string, signal?: AbortSignal): Pro
   if (!object(body) || !Array.isArray(body.items) || !body.items.every(validSummary)
     || typeof body.total !== "number" || typeof body.page !== "number"
     || typeof body.pageSize !== "number")
-    throw new Error("ERP returned an invalid buying rule list.");
+    throw new PolicyActionError("ERP returned an invalid buying rule list.", 0);
   return body as PolicyPage;
 }
 export async function getPolicy(companyId: string, id: string, signal?: AbortSignal): Promise<PolicyRecord> {
   if (!guid.test(id)) throw new Error("Choose a valid buying rule.");
   const body = await call(companyId, `/${id}`, { signal });
-  if (!validRecord(body)) throw new Error("ERP returned invalid buying rule details.");
+  if (!validRecord(body)) throw new PolicyActionError("ERP returned invalid buying rule details.", 0);
   return body;
 }
 export async function validatePolicy(companyId: string, rulesJson: string): Promise<PolicyValidation> {
   const body = await call(companyId, "/validate", { method: "POST", body: JSON.stringify({ rulesJson }) });
   if (!object(body) || typeof body.isValid !== "boolean" || !Array.isArray(body.issues))
-    throw new Error("ERP returned an invalid buying rule check.");
+    throw new PolicyActionError("ERP returned an invalid buying rule check.", 0);
   return body as PolicyValidation;
 }
 export async function createPolicy(companyId: string, draft: PolicyDraft): Promise<PolicyRecord> {
   const body = await call(companyId, "", { method: "POST", body: JSON.stringify(draft) });
-  if (!validRecord(body)) throw new Error("ERP did not confirm the draft. Refresh before retrying.");
+  if (!validRecord(body)) throw new PolicyActionError("ERP did not confirm the draft. Check saved rules before retrying.", 0);
   return body;
 }
 export async function updatePolicy(companyId: string, id: string, version: number,
@@ -110,7 +110,7 @@ export async function updatePolicy(companyId: string, id: string, version: numbe
   if (!guid.test(id)) throw new Error("Choose a valid buying rule.");
   const body = await call(companyId, `/${id}`,
     { method: "PUT", body: JSON.stringify({ version, draft }) });
-  if (!validRecord(body)) throw new Error("ERP did not confirm the updated draft. Refresh before retrying.");
+  if (!validRecord(body)) throw new PolicyActionError("ERP did not confirm the updated draft. Check saved rules before retrying.", 0);
   return body;
 }
 export async function submitPolicyReview(companyId: string, id: string, version: number,
@@ -119,7 +119,7 @@ export async function submitPolicyReview(companyId: string, id: string, version:
   const body = await call(companyId, `/${id}/submit-review`,
     { method: "POST", body: JSON.stringify({ version, reason }) });
   if (!validRecord(body) || body.state !== "PendingReview")
-    throw new Error("ERP did not confirm the review request. Refresh before retrying.");
+    throw new PolicyActionError("ERP did not confirm the review request. Check saved rules before retrying.", 0);
   return body;
 }
 export async function previewPolicy(companyId: string, id: string,
@@ -138,7 +138,7 @@ export async function decidePolicy(companyId: string, id: string, version: numbe
   const body = await call(companyId, `/${id}/${action === "return" ? "return-for-changes" : "publish"}`,
     { method: "POST", body: JSON.stringify({ version, reason }) });
   if (!validRecord(body) || body.state !== (action === "publish" ? "Published" : "Draft"))
-    throw new Error("ERP did not confirm the policy decision. Refresh before retrying.");
+    throw new PolicyActionError("ERP did not confirm the policy decision. Check saved rules before retrying.", 0);
   return body;
 }
 export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER"):
