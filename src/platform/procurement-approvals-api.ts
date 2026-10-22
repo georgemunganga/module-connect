@@ -27,10 +27,14 @@ const object = (v: unknown): v is Record<string, unknown> => Boolean(v && typeof
 const version = (v: unknown) => Number.isSafeInteger(v) && Number(v) > 0;
 const validId = (id: string) => { if (!guid.test(id)) throw new ApprovalApiError(0, "The approval reference is invalid."); };
 const actions = ["Approve", "Reject", "Return"];
-async function request(company: string, path: string, init: RequestInit = {}): Promise<unknown> {
+async function request(company: string, path: string, init: RequestInit = {}, effectiveBranchId?: string | null): Promise<unknown> {
   validId(company);
   const headers = new Headers(init.headers);
   Object.entries(procurementScopeHeaders(company)).forEach(([key, value]) => headers.set(key, value));
+  if (effectiveBranchId !== undefined) {
+    headers.delete("X-Shell-Location");
+    if (effectiveBranchId !== null) { validId(effectiveBranchId); headers.set("X-Shell-Location", effectiveBranchId); }
+  }
   if (init.body) headers.set("Content-Type", "application/json");
   let response: Response;
   try { response = await fetch(`/api/procurement/v1${path}`, { ...init, headers, credentials: "include", cache: "no-store" }); }
@@ -83,18 +87,18 @@ export async function getApproval(company: string, caseId: string, signal?: Abor
     throw new ApprovalApiError(0, "The ERP returned invalid approval details.");
   return body as unknown as ApprovalDetail;
 }
-export async function openApproval(company: string, requestId: string, expectedRequestVersion: number, key: string): Promise<ApprovalReceipt> {
+export async function openApproval(company: string, requestId: string, expectedRequestVersion: number, key: string, effectiveBranchId?: string | null): Promise<ApprovalReceipt> {
   validId(requestId); validId(key);
   return receipt(await request(company, `/requests/${requestId}/approval-cases`, { method: "POST",
-    headers: { "Idempotency-Key": key }, body: JSON.stringify({ expectedRequestVersion }) }));
+    headers: { "Idempotency-Key": key }, body: JSON.stringify({ expectedRequestVersion }) }, effectiveBranchId));
 }
-export async function decideApproval(company: string, caseId: string, assignmentId: string, command: ApprovalCommand, key: string): Promise<ApprovalReceipt> {
+export async function decideApproval(company: string, caseId: string, assignmentId: string, command: ApprovalCommand, key: string, effectiveBranchId?: string | null): Promise<ApprovalReceipt> {
   validId(caseId); validId(assignmentId); validId(key);
   if (!actions.includes(command.action) || !version(command.expectedCaseVersion) || !version(command.expectedAssignmentVersion)
     || !version(command.expectedRequestVersion) || (command.reason?.length ?? 0) > 2000
     || command.action !== "Approve" && !command.reason?.trim()) throw new ApprovalApiError(422, "Add a reason for rejecting or returning this request.");
   const result = receipt(await request(company, `/approvals/${caseId}/assignments/${assignmentId}/decisions`, { method: "POST",
-    headers: { "Idempotency-Key": key }, body: JSON.stringify(command) }));
+    headers: { "Idempotency-Key": key }, body: JSON.stringify(command) }, effectiveBranchId));
   if (result.caseId !== caseId || result.assignmentId !== assignmentId || !guid.test(String(result.decisionId)) || !version(result.assignmentVersion))
     throw new ApprovalApiError(0, "The ERP did not confirm this decision. Retry the same action.");
   return result;
