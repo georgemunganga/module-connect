@@ -72,7 +72,11 @@ these test contexts, never global production TLS policy.
    detail and verify Withdrawn.
 4. Separate normal-cookie ungranted user signs in, while actual Procurement
    context/list deny 403. No permission grants or admin aliases are added.
-5. Typed 0600 results retain actual record/line IDs, versions and allowlisted
+5. Both real contexts perform actual logout200 and subsequent auth/me reports
+   authenticated=false; the original maker Procurement context then denies401.
+   This verifies normal session revocation with declared legitimate auth writes,
+   not a business no-effects claim or simulated cookie clearing.
+6. Typed 0600 results retain actual record/line IDs, versions and allowlisted
    exact amounts through every stage; failures keep a bounded failedStep and
    original records. No delete/submit/approval/Finance action or business mock.
 

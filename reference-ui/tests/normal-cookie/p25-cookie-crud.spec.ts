@@ -153,6 +153,17 @@ test('normal cookie Core-only request draft create edit reload withdraw and ungr
     const forbiddenList=await api(()=>denied!.request.get('/api/procurement/v1/requests',{headers:selection}));
     expect(forbiddenList.status()).toBe(403);
     evidence.ungrantedLocalCookieLoginVerified=true; evidence.ungrantedProcurementDenied403=true;
+    step='normal-session-logout-revocation';
+    for (const active of [denied,context]) {
+      const logout=await api(()=>active.request.post('/api/hrm/auth/logout'));
+      expect(logout.status()).toBe(200);
+      const signedOut=await api(()=>active.request.get('/api/hrm/auth/me'));
+      expect(signedOut.status()).toBe(200);
+      expect((await json(signedOut)).authenticated).toBe(false);
+    }
+    const revoked=await api(()=>context.request.get('/api/procurement/v1/context',{headers:selection}));
+    expect(revoked.status()).toBe(401);
+    evidence.normalSessionRevocationVerified=true;
     evidence.status='PASS_NORMAL_COOKIE_DRAFT_UI_ONLY'; evidence.browserDraftCrudVerified=true;
   } catch { failed=true; evidence.status='FAILED_RETAIN_FIXTURE'; evidence.failedStep=step; }
   finally {
