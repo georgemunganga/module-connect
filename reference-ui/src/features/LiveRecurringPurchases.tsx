@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { claimRecurringWrite, confirmRecurringWrite, recurringWriteLocked } from "../lib/recurring-write-lock";
 import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -18,8 +19,9 @@ function useRecurringScope() {
   const readiness = useLiveReadiness();
   const shell = useErpShell();
   if (!readiness) throw new Error("Recurring purchases require an ERP company.");
-  return { ...readiness, key: JSON.stringify([readiness.tenantId, readiness.legalEntityId,
-    readiness.workerId, shell.selection.branch ?? "", shell.authEpoch]) };
+  const writeScope = JSON.stringify([readiness.tenantId, readiness.legalEntityId,
+    readiness.workerId, shell.selection.branch ?? ""]);
+  return { ...readiness, writeScope, key: JSON.stringify([writeScope, shell.authEpoch]) };
 }
 function emptyDraft(currency: string): RecurringPurchaseDraft {
   return { supplierId: "", supplierContractId: null, title: "", frequency: "Monthly",
@@ -75,6 +77,7 @@ export function LiveRecurringPurchaseEditor() {
   const navigate = useNavigate();
   const scope = useRecurringScope();
   const context = `${scope.key}:${id ?? "new"}`;
+  const writeScope = `${scope.writeScope}:${id ?? "new"}`;
   const current = useRef(context); current.current = context;
   const generation = useRef(0);
   const pending = useRef(false);
@@ -92,7 +95,7 @@ export function LiveRecurringPurchaseEditor() {
   useEffect(() => {
     generation.current += 1;
     const controller = new AbortController();
-    setLoaded(null); setVersion(null); setRecordStatus(null); setError(""); setSaveBlock(null); setLoading(Boolean(id));
+    setLoaded(null); setVersion(null); setRecordStatus(null); setSaving(false); setError(""); setSaveBlock(recurringWriteLocked(writeScope) ? "unknown" : null); setLoading(Boolean(id));
     setVendors([]); setContracts([]); setDraft(emptyDraft(scope.defaultCurrencyCode));
     if (id) getRecurringPurchase(scope.legalEntityId, id, controller.signal)
       .then((record) => { if (!controller.signal.aborted) {
@@ -135,13 +138,17 @@ export function LiveRecurringPurchaseEditor() {
     if (issue) { setError(issue); return; }
     const captured = context, at = generation.current;
     const active = () => current.current === captured && generation.current === at;
+    if (!claimRecurringWrite(writeScope)) { setSaveBlock("unknown"); return; }
     pending.current = true; setSaving(true); setError("");
     try {
       const saved = id && version !== null
         ? await updateRecurringPurchase(scope.legalEntityId, id, version, draft)
         : await createRecurringPurchase(scope.legalEntityId, draft);
+      confirmRecurringWrite(writeScope);
       if (active()) navigate(`/recurring-bills/${saved.id}`);
     } catch (cause) {
+      if (cause instanceof RecurringPurchaseError && cause.status >= 400 && cause.status < 500)
+        confirmRecurringWrite(writeScope);
       if (active()) {
         setError(errorText(cause));
         if (cause instanceof RecurringPurchaseError && cause.status === 409) setSaveBlock("stale");
@@ -157,7 +164,7 @@ export function LiveRecurringPurchaseEditor() {
           : id && recordStatus !== "Draft" ? <p role="status">This recurring purchase is closed. <Link className="text-primary underline" to={`/recurring-bills/${id}`}>Open its saved history</Link>.</p>
           : <form onSubmit={save} className="max-w-5xl space-y-5">
             {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-            {saveBlock && <p role="status" className="rounded-lg border p-3 text-sm">{saveBlock === "unknown" ? "The save result was not confirmed." : "This purchase changed."} Your entered values are still here. Review the saved {id ? "purchase" : "list"} before trying again. <Link className="text-primary underline" to={id ? `/recurring-bills/${id}` : "/recurring-bills"}>Review saved records</Link></p>}
+            {saveBlock && <p role="status" className="rounded-lg border p-3 text-sm">{saveBlock === "unknown" ? "The save result was not confirmed." : "This purchase changed."} Review the saved {id ? "purchase" : "list"} to confirm the outcome. Unconfirmed writes stay blocked for this browser session. <Link className="text-primary underline" to={id ? `/recurring-bills/${id}` : "/recurring-bills"}>Review saved records</Link></p>}
             <Panel title="Purchase schedule"><div className="grid gap-4 p-5 sm:grid-cols-2">
               <Field label="Search suppliers" className="sm:col-span-2"><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search supplier name" /></Field>
               <Field label="Supplier" className="sm:col-span-2"><Select required value={draft.supplierId} onChange={(e) => { field("supplierId", e.target.value); field("supplierContractId", null); }}><option value="">Choose a supplier</option>{draft.supplierId && !vendors.some((v) => v.id === draft.supplierId) && <option value={draft.supplierId}>Selected supplier</option>}{vendors.map((v) => <option key={v.id} value={v.id}>{v.displayName} ({v.status})</option>)}</Select></Field>
@@ -179,6 +186,7 @@ export function LiveRecurringPurchaseDetail() {
   const { id } = useParams();
   const scope = useRecurringScope();
   const context = `${scope.key}:${id ?? ""}`;
+  const writeScope = `${scope.writeScope}:${id ?? ""}`;
   const current = useRef(context); current.current = context;
   const generation = useRef(0);
   const busyRef = useRef(false);
@@ -193,9 +201,9 @@ export function LiveRecurringPurchaseDetail() {
     generation.current += 1;
     if (!id || !canRead(scope)) return;
     const controller = new AbortController();
-    setLoaded(null); setLoading(true); setError("");
+    setLoaded(null); setLoading(true); setBusy(false); setReason(""); setError("");
     getRecurringPurchase(scope.legalEntityId, id, controller.signal)
-      .then((record) => { if (!controller.signal.aborted) { setLoaded({ key: context, record }); setBlocked(false); } })
+      .then((record) => { if (!controller.signal.aborted) { setLoaded({ key: context, record }); setBlocked(recurringWriteLocked(writeScope)); } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); generation.current += 1; };
@@ -206,11 +214,15 @@ export function LiveRecurringPurchaseDetail() {
     if (!reason.trim()) { setError("Give a reason for closing this schedule."); return; }
     const captured = context, at = generation.current;
     const active = () => current.current === captured && generation.current === at;
+    if (!claimRecurringWrite(writeScope)) { setBlocked(true); return; }
     busyRef.current = true; setBusy(true); setError("");
     try {
       const saved = await closeRecurringPurchase(scope.legalEntityId, id, record.version, reason);
+      confirmRecurringWrite(writeScope);
       if (active()) setLoaded({ key: context, record: saved });
     } catch (cause) {
+      if (cause instanceof RecurringPurchaseError && cause.status >= 400 && cause.status < 500)
+        confirmRecurringWrite(writeScope);
       if (active()) {
         setError(errorText(cause));
         if (!(cause instanceof RecurringPurchaseError) || cause.status === 0 || cause.status === 409 || cause.status >= 500) setBlocked(true);
@@ -223,7 +235,7 @@ export function LiveRecurringPurchaseDetail() {
         : record ? <>
           <PageHeader title={record.title} subtitle={`${record.number} · Planned repeat purchase`} actions={canEdit(scope) && record.status === "Draft" ? <Link to={`/recurring-bills/${record.id}/edit`}><Button>Edit</Button></Link> : undefined} />
           {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
-          {blocked && <p role="status" className="mb-4">The close result is uncertain or this version changed. <Button variant="secondary" onClick={() => setRefresh((value) => value + 1)}>Reload saved purchase</Button></p>}
+          {blocked && <p role="status" className="mb-4">The close result is uncertain or this version changed. Reloading does not retry the close action. <Button variant="secondary" onClick={() => setRefresh((value) => value + 1)}>Reload saved purchase</Button></p>}
           <Panel title="Schedule"><dl className="grid gap-5 p-5 text-sm sm:grid-cols-2">
             <div><dt className="text-muted-foreground">Status</dt><dd><Badge>{record.status}</Badge></dd></div>
             <div><dt className="text-muted-foreground">Owner employee ID</dt><dd>{record.ownerWorkerId}</dd></div>

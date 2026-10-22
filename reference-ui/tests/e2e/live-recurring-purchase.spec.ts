@@ -50,7 +50,7 @@ async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: b
       return json(record);
     }
     if (path === `/api/procurement/v1/recurring-purchases/${recordId}/close`) {
-      writes.push(path); record = { ...record!, status: "Closed", version: record!.version + 1, closedReason: route.request().postDataJSON().reason };
+      writes.push(path); record = { ...record!, status: "Closed", version: record!.version + 1, closedAt: "2026-10-22T00:00:00Z", closedReason: route.request().postDataJSON().reason };
       return json(record);
     }
     return json({ message: `Unexpected: ${path}` }, 404);
@@ -63,7 +63,8 @@ test("recurring purchase can be created, edited and closed without a Finance req
   await page.goto("/procurement/workspace/recurring-bills");
   await expect(page.getByText("No recurring purchases yet")).toBeVisible();
   await page.getByRole("link", { name: "New recurring purchase" }).first().click();
-  await page.getByRole("combobox", { name: "Supplier" }).selectOption(supplier);
+  await page.getByRole("combobox", { name: "Supplier", exact: true }).click();
+  await page.getByRole("option", { name: "Copper Services (Active)", exact: true }).click();
   await page.getByLabel("Purchase name").fill("Monthly cleaning");
   await page.getByLabel("Expected each time").fill("12345678901234.5678");
   await page.getByLabel("First expected date").fill("2026-11-01");
@@ -109,7 +110,8 @@ test("direct edit URL for a closed purchase shows saved history, without a write
 test("unconfirmed create locks repeat submission and retains entered values", async ({ page }) => {
   const state = await fixture(page, { unknownCreate: true });
   await page.goto("/procurement/workspace/recurring-bills/new");
-  await page.getByRole("combobox", { name: "Supplier" }).selectOption(supplier);
+  await page.getByRole("combobox", { name: "Supplier", exact: true }).click();
+  await page.getByRole("option", { name: "Copper Services (Active)", exact: true }).click();
   await page.getByLabel("Purchase name").fill("Cloud subscription");
   await page.getByLabel("Expected each time").fill("10.0001");
   await page.getByLabel("First expected date").fill("2026-11-01");
@@ -117,6 +119,10 @@ test("unconfirmed create locks repeat submission and retains entered values", as
   await page.getByRole("button", { name: "Save recurring purchase" }).click();
   await expect(page.getByText("The save result was not confirmed.")).toBeVisible();
   await expect(page.getByLabel("Purchase name")).toHaveValue("Cloud subscription");
+  await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+  expect(state.writes).toHaveLength(1);
+  await page.reload();
+  await expect(page.getByText("The save result was not confirmed.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
   expect(state.writes).toHaveLength(1);
 });
