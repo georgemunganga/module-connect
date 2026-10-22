@@ -10,9 +10,14 @@ const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDra
 const permissions = ["procurement-access", "procurement-recurring-read", "procurement-recurring-create", "procurement-recurring-edit"];
 type RecordValue = Record<string, unknown> & { id: string; version: number; status: string };
 
-async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean } = {}) {
+async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean; closed?: boolean } = {}) {
   const writes: string[] = [];
-  let record: RecordValue | null = null;
+  let record: RecordValue | null = opts.closed ? { id: recordId, number: "RPC-1", title: "Past service", supplierId: supplier,
+    supplierContractId: null, ownerWorkerId: worker, workLocationId: null, frequency: "Monthly",
+    firstCycleOn: "2026-01-01", nextCycleOn: "2026-09-01", lastCycleOn: null,
+    expectedAmount: 20, exactExpectedAmount: "20", currencyCode: "ZMW",
+    status: "Closed", version: 2, createdAt: "2026-01-01T00:00:00Z", closedAt: "2026-10-01T00:00:00Z",
+    closedReason: "Completed" } : null;
   await page.addInitScript(id => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: id })), company);
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
@@ -89,6 +94,14 @@ test("read-only user cannot open a write action", async ({ page }) => {
   const state = await fixture(page, { permissions: ["procurement-access", "procurement-recurring-read"] });
   await page.goto("/procurement/workspace/recurring-bills/new");
   await expect(page.getByRole("alert")).toContainText("cannot create");
+  await expect(page.getByRole("button", { name: "Save recurring purchase" })).toHaveCount(0);
+  expect(state.writes).toHaveLength(0);
+});
+
+test("direct edit URL for a closed purchase shows saved history, without a write form", async ({ page }) => {
+  const state = await fixture(page, { closed: true });
+  await page.goto(`/procurement/workspace/recurring-bills/${recordId}/edit`);
+  await expect(page.getByText("This recurring purchase is closed.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save recurring purchase" })).toHaveCount(0);
   expect(state.writes).toHaveLength(0);
 });
