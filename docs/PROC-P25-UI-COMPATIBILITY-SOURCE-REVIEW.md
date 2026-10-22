@@ -1,6 +1,6 @@
 # P25 purchase request approval UI compatibility
 
-22 October 2026. Source-only candidate based on published UI `6fca23d`. Backend reference: P25 `b871caf`/`04126` source. No build, browser, backend readiness registration or production activation is claimed.
+22 October 2026. Candidate based on published UI `6fca23d`, verified through `e00d475`. Staged build and controlled browser acceptance passed as recorded below. Actual backend approval execution and production activation are not established by these UI tests. Backend P25 remains a separate draft.
 
 ## Bounded change
 
@@ -8,7 +8,7 @@ The existing live readiness parser accepts optional `principalApprovals` only wh
 
 The current request editor and submit action already use actual Core permissions, principal context, selected company/branch and organisation-default currency, without requiring an employee. Existing request and approval wire routes remain unchanged in P25. Retained submission identity version 3 is a backend storage contract, not a new wire envelope; this patch invents no schema-version fields or employee UUIDs.
 
-Authored verification (unrun): optional-capability parser cases, all four old/new availability combinations with downstream flags unchanged, controlled workerless principal-only approval queue/detail/decision, request-detail opening, opening queue, and missing decision permission. Existing legacy browser cases remain intact. These controlled responses are UI contract tests, not PostgreSQL, finite-login or operational Finance proof.
+Initial source checkpoint authored the following verification, subsequently executed below: optional-capability parser cases, all four old/new availability combinations with downstream flags unchanged, controlled workerless principal-only approval queue/detail/decision, request-detail opening, opening queue, and missing decision permission. Existing legacy browser cases remain intact. These controlled responses are UI contract tests, not PostgreSQL, finite-login or operational Finance proof.
 
 ## Remaining activation work
 
@@ -16,7 +16,7 @@ Authored verification (unrun): optional-capability parser cases, all four old/ne
 2. `src/platform/procurement-requests-api.ts`: explicitly type/validate actual `requesterPrincipalId` plus nullable `requesterWorkerId` for provenance display where needed; preserve exact draft field projection, no client authority from identity metadata. Submit response should bind exact request ID and expected persisted version/state before releasing an intent.
 3. `reference-ui/src/features/LiveRequests.tsx`: create/update/submit unknown outcomes currently rely on component memory. Adopt the existing shared actor/session-scoped durable write guard, including principal/tenant/company/branch/mutation identity, before POST. No reset on reload/unmount/context change, no second create after an uncertain response, and storage failures block before POST. Treat HTTP408/429/499 and unrecognized proxy statuses as uncertain. Separate this safety change from capability plumbing.
 4. `ApprovalOpeningPanel.tsx`, `LiveApprovals.tsx` request opening/decision: preserve exact command/key across reload and actor/context changes, actor-owned recovery and strict request/case/assignment/version receipt linkage. The earlier all-4xx opening unlock and decision uncertainty classification are corrected by the bounded in-session slice below. `ApprovalDecisionDialog.tsx` now offers an explicit PR-only frozen-command retry while preventing edits/new decisions; durable journals and strict receipt linkage still need their own gate. No broad rewrite of PO dialog contracts.
-5. Backend `ProcurementSpendingAuthorityReads.cs` people lookup still uses worker-bound `CanonicalPeopleQuery` despite principal-aware creation/action dispatch. Reuse a reviewed current Core principal picker for request-approval action only; preserve old PO authority route. The UI already sends principal IDs and accepts optional worker data; never substitute fake employees or role-only grants.
+5. The audit at backend `b871caf` found a worker-bound authority people lookup. Backend source `9744dbc` corrects the request-approval picker with current Core principals, explicit action/branch checks and unchanged PO/RFQ lookup behavior; 24 focused mapped tests passed. Its actual finite-role acceptance is still required. The UI sends real principal IDs and accepts optional worker data; it supplies no fake employees or role-only grants.
 6. `LiveRequests.tsx` approval-readiness labels should explain actual P25 blockers (principal/schema availability, original identity, line-manager unavailable, finite authority unavailable/ambiguous), while raw IDs must not become friendly person labels. A genuine LineManager strategy alone may require actual HR manager mapping; workerless named ProcurementManager routing must remain supported.
 7. `LiveBudgets.tsx` and `FinanceReleasePanel.tsx` must obey actual `budgetEvidence`/`budgetRecording`/Finance-owner capabilities before offering operations. Current budget page is gated by requestDraft/permission alone; do not activate it through principalApprovals or fabricate reservations. Review exact amount/receipt/recovery separately before Finance-owned integration exists.
 
@@ -27,3 +27,13 @@ Use existing isolated mapped API/PostgreSQL fixture and normal controls, with ex
 ## Bounded in-session retry correction
 
 A retained controlled Playwright failure proved the shared dialog disabled its own same-command retry once a key existed. A separate explicit opt-in now permits only an uncertain PR decision with both the original frozen key and payload to confirm again; reason editing, cancellation and other decisions remain locked. PO and invoice dialog callers do not opt in. PR opening/decision classify only explicit rejection statuses as definite; 408/429/499 and unknown proxy errors retain the original intent. Controlled regressions assert exact repeated key/body with only one recorded decision. This corrects in-session recovery only: durable reload/context journals, strict receipt binding and actual PostgreSQL/finite-role gates remain outstanding. No new permission or command is granted by the retry control.
+
+## Actual controlled acceptance — 22 October 2026
+
+At UI source `e00d4753ccb217d199583759e961d301d3fdad5a`, **53/53 unit cases**, staged TypeScript/build and **25/25 controlled Playwright cases** passed, with no skipped or flaky browser cases and unchanged tracked source. This includes the existing approval scenarios, principal-only availability, workerless context, missing action permission, original lost-response retry and HTTP 408/429/499 same-key/payload recovery. The reason/comment input now has an explicit accessible label, preserving its help text.
+
+Receipt: `/home/amizo/erp-backups/procurement-p25-principal-ui-label-20261022/acceptance.json`, SHA-256 `2db9616daafda1d41f21d6f9c17cdb7bfcd28ac8ce90bf31680d62e8de49e7fb`.
+
+Earlier failures are retained separately: the original capability run had 17 passing browser cases and one disabled-retry failure; the intermediate retry run was interrupted after reason-label failures (19 passed, two unexpected/interrupted, four skipped). Neither is represented as a passing run. The final 25-case run passed after the fixes without weakening those assertions.
+
+These are controlled UI contracts against staged assets. They do not prove actual identity-provider authentication, PostgreSQL workflow execution, Finance availability, durable recovery across reload/context changes or production deployment. Production UI assets and backend flags were not changed by this verification.
