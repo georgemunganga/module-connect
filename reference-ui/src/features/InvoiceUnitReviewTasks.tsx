@@ -75,7 +75,7 @@ function Detail({ reviewId }: { reviewId: string }) {
       setData(value);
       if (value.currentMapping && value.originalDigestCurrent && value.actionCandidates.length > 0) {
         try {
-          const pins = await getPinnedReviewDocuments(context.legalEntityId, reviewId, abort.signal);
+          const pins = await getPinnedReviewDocuments(context.legalEntityId, reviewId, value.invoiceId, abort.signal);
           const required = new Map(value.originalDocumentLines.map((line) => [line.documentVersionId, line.documentSha256.toLowerCase()]));
           if (!pins.length || pins.length !== required.size || new Set(pins.map((doc) => doc.versionId)).size !== required.size
             || pins.some((doc) => required.get(doc.versionId) !== doc.sha256.toLowerCase() || !doc.canDownload))
