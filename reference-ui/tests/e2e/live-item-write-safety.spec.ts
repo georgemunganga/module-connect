@@ -1,5 +1,6 @@
 import {expect,test,type Page} from "@playwright/test";
 const company="11111111-1111-4111-8111-111111111111",worker="22222222-2222-4222-8222-222222222222",item="33333333-3333-4333-8333-333333333333",price="44444444-4444-4444-8444-444444444444",vendor="55555555-5555-4555-8555-555555555555";
+const capabilities=Object.fromEntries(["vendorDraft","itemDraft","requestDraft","approvals","sourcing","contracts","orders","receiving","invoiceIntake","invoiceValidation","financeHandoff","supplierPortal","planningDraft","configurationDraft","contractDraft","sourcingDraft"].map(key=>[key,key==="itemDraft"]));
 async function fixture(page:Page,options:{active?:boolean;create?:"lost"|"malformed"|"server"|"validation";stale?:boolean;priceLost?:boolean;reconcileDenied?:boolean;readonly?:boolean;held?:Promise<void>;onWrite?:()=>void}={}){
  let row={id:item,code:"ITEM-1",name:"Saved item",kind:"Goods",categoryCode:"OFFICE",unitCode:"each",status:options.active?"Active":"Inactive",isPurchasable:!!options.active,isStockItem:false,isAsset:false,inspectionRequired:false,version:1};let priceWrites=0;
  const writes:Array<{method:string;path:string;body:Record<string,unknown>}>=[];
@@ -8,7 +9,7 @@ async function fixture(page:Page,options:{active?:boolean;create?:"lost"|"malfor
  if(path==="/api/hrm/auth/me")return json({authenticated:true,user:{id:worker,isActive:true,displayName:"Synthetic",roles:[options.readonly?"erp_admin":"procurement_buyer"]}});
  if(path==="/api/hrm/branding")return json({displayName:"Synthetic company"});if(path==="/api/hrm/admin/legal-entities")return json({items:[{id:company,code:"TEST",registeredName:"Synthetic company"}]});if(path==="/api/hrm/admin/locations")return json({items:[]});if(path==="/api/hrm/shell/")return json({assignedLocationIds:[],confined:false});
  if(path==="/api/procurement/v1/context")return json({tenantId:"synthetic",legalEntityId:company,workerId:options.readonly?null:worker,adminViewOnly:options.readonly||undefined,permissions:["procurement-access","procurement-item-manage","procurement-item-read","procurement-item-approve","procurement-catalog-approve"],company:{id:company,code:"TEST",name:"Synthetic company",currencyCode:"ZMW"}});
- if(path==="/api/procurement/v1/meta")return json({tenantId:"synthetic",legalEntityId:company,schemaReady:true,capabilities:{itemDraft:true}});
+  if(path==="/api/procurement/v1/meta")return json({tenantId:"synthetic",legalEntityId:company,schemaReady:true,capabilities});
  if(path==="/api/procurement/v1/vendors")return json({items:[{id:vendor,number:"VEN-1",displayName:"Approved vendor",legalName:"Approved vendor",countryCode:"ZM",status:"Active",isOrderable:true,version:1,createdAt:"2026-10-22T00:00:00Z"}],total:1,page:1,pageSize:100});
  if(method!=="GET"){writes.push({method,path,body:req.postDataJSON()});options.onWrite?.();if(options.held)await options.held;}
  if(path==="/api/procurement/v1/items"&&method==="GET")return json({items:[row],total:1,page:1,pageSize:25});
