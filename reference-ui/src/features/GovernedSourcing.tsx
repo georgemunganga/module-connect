@@ -5,7 +5,6 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
 import { pendingRfqCommands } from "../lib/rfq-command-memory";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
-import { formatInvoiceDecimal } from "../../../src/platform/procurement-invoice-exact";
 import { cancelRfqCommand, createRfqCommand, getGovernedRfq, listGovernedRfq, listRfqSources, recoverRfqCommand, sendRfqCommand,
   RfqExecutionError, type RfqCommand, type RfqDetail, type RfqOwnedPage, type RfqSelection, type RfqSource, type RfqSourcePage } from "../../../src/platform/procurement-sourcing-execution-api";
 const message = (error: unknown) => error instanceof Error ? error.message : "The quote action could not be confirmed.";
@@ -95,7 +94,7 @@ export function GovernedSourcingCreate() {
         {loadError ? <p role="alert">{loadError}</p> : !data ? <p role="status">Loading approved requests…</p> : !data.items.length ? <EmptyState title="No approved requests found" description="Approved competitive purchases appear here after their funding and source checks pass." />
           : <div className="overflow-x-auto"><RecordTable><thead><tr><th>Request</th><th>Item or service</th><th>Available</th><th>Approved estimate</th><th>Action</th></tr></thead><tbody>{data.items.map(row => <tr key={row.purchaseRequestLineId}>
             <td>{row.requestNumber}</td><td>{row.description ?? "Needs review"}</td><td>{row.availableQuantity ?? "—"} {row.unitCode}</td>
-            <td>{row.approvedUnitEstimate ? `${row.currencyCode} ${formatInvoiceDecimal(row.approvedUnitEstimate)}` : "—"}</td>
+            <td>{row.approvedUnitEstimate ? `${row.currencyCode} ${row.approvedUnitEstimate}` : "—"}</td>
             <td><Button type="button" variant="secondary" disabled={!row.canSelect || selected.some(x => x.source.purchaseRequestLineId === row.purchaseRequestLineId)} onClick={() => choose(row)}>
               {row.state === "Unavailable" ? "Needs review" : row.state === "FullyAllocated" ? "Already assigned" : "Add line"}</Button></td></tr>)}</tbody></RecordTable></div>}
         {data && <><p className="text-sm text-muted-foreground">{data.candidateTotal} request lines to check. This includes lines needing review or already assigned.</p><Pager page={page} total={data.candidateTotal} size={data.pageSize} change={setPage} /></>}
@@ -146,7 +145,7 @@ export function GovernedSourcingDetail({ id }: { id: string }) {
   if (!record) return <div className="p-5 sm:p-8">{error ? <p role="alert">{error}</p> : <p role="status">Loading quote request…</p>}{pending && <Pending command={pending} busy={busy} error={error} check={() => void recover()} />}</div>;
   return <div className="p-5 sm:p-8"><PageHeader title={record.title} subtitle={`${record.number} · ${record.method} · ${record.currencyCode}`} actions={<Badge>{record.status}</Badge>} />
     <Panel title="Items and services"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Approved estimate</th><th>Draft balance</th></tr></thead><tbody>{record.lines.map(row => <tr key={row.id}>
-      <td>{row.description}</td><td>{row.quantity}</td><td>{row.unitCode}</td><td>{record.currencyCode} {formatInvoiceDecimal(row.approvedUnitEstimate)}</td><td>{row.allocationState === "Reserved" ? "Held for this draft" : "Released"}</td></tr>)}</tbody></RecordTable></div></Panel>
+      <td>{row.description}</td><td>{row.quantity}</td><td>{row.unitCode}</td><td>{record.currencyCode} {row.approvedUnitEstimate}</td><td>{row.allocationState === "Reserved" ? "Held for this draft" : "Released"}</td></tr>)}</tbody></RecordTable></div></Panel>
     <Panel title="Next step" className="mt-5"><p className="p-5 text-sm text-muted-foreground">This is an internal draft. Sending to vendors, invitations and award open only when their controlled workflows are ready. No Finance reservation was changed.</p></Panel>
     {record.cancellationReason && <Panel title="Cancellation reason" className="mt-5"><p className="p-5">{record.cancellationReason}</p></Panel>}
     {pending ? <div className="mt-5"><Pending command={pending} busy={busy} error={error} check={() => void recover()} /></div> : record.status === "Draft" && permissions.includes("procurement-sourcing-cancel") && <Panel title="Cancel this internal draft" className="mt-5"><div className="space-y-3 p-5">

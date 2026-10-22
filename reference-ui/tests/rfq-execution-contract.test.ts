@@ -35,7 +35,8 @@ describe("governed quote draft adapter", () => {
     const fetch = respond({}); const command = createRfqCommand("  Office    supplies ", [{ source: source(), quantity: "12345678901234.5678" }], key);
     expect(fetch).not.toHaveBeenCalled(); expect(JSON.parse(command.body).sources[0].quantity).toBe("12345678901234.5678");
     expect(rfqQuantityFits("99999999999999.9999", "99999999999999.9998")).toBe(false);
-    expect(() => createRfqCommand("Office", [{ source: source(), quantity: "0.00001" }], key)).toThrow();
+    for (const quantity of ["0", "0.0000", "0.00001", "-1"])
+      expect(() => createRfqCommand("Office", [{ source: source(), quantity }], key)).toThrow();
     respond(reply(command)); await sendRfqCommand(company, command);
   });
   it("blocks mixed currency/branch, stale same-request versions and duplicate source lines before transport", () => {

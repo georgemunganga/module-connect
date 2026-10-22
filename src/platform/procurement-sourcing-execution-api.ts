@@ -1,5 +1,5 @@
 import { procurementScopeHeaders } from "../../shared/shell-scope";
-import { invoiceDecimal } from "./procurement-invoice-exact";
+import { invoiceDecimal } from "../../shared/procurement-decimal";
 
 /** Governed internal RFQ holds only; publication/award/payment are not implied. */
 export type RfqSource = { purchaseRequestId: string; purchaseRequestLineId: string; requestNumber: string; state: "Available" | "FullyAllocated" | "Unavailable";
@@ -27,7 +27,7 @@ const nullableId = (v: unknown): v is string | null => v === null || id(v);
 const exact = (v: unknown): v is string => text(v) && /^(?:0|[1-9]\d{0,37})(?:\.\d{1,8})?$/.test(v);
 const invalid = () => new RfqExecutionError(0, "ERP did not confirm the quote information. Refresh or check the saved result before continuing.");
 export function rfqQuantity(value: string): string {
-  try { const result = invoiceDecimal(value); if (result === "0") throw invalid(); return result; }
+  try { return invoiceDecimal(value, true); }
   catch { throw new RfqExecutionError(0, "Enter a quantity greater than zero, with up to four decimal places."); }
 }
 function units(value: string): bigint { const [whole, fraction = ""] = rfqQuantity(value).split("."); return BigInt(whole + fraction.padEnd(4, "0")); }
