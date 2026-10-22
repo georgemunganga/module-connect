@@ -8,6 +8,7 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { findModule, procurementModuleGroups, procurementModuleSlugs, settingsRoutes } from "../data/settings";
 import { LiveConfiguration } from "./LiveConfiguration";
 import { LivePolicies } from "./LivePolicies";
+import { LiveApprovalSettings } from "./LiveApprovalSettings";
 
 const buyingLinks = [
   { label: "Buying categories & methods", href: "/settings/reference-data" },
@@ -81,10 +82,13 @@ export function LiveSettingsShell() {
           aria-current={item.slug === tab ? "page" : undefined}
           className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm ${item.slug === tab ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{item.title}</Link>)}
       </nav>
-      <section className="rounded-xl border border-border bg-surface p-7">
+      {(slug === "purchase-requests" || slug === "purchase-orders") && tab === "approvals"
+        ? <LiveApprovalSettings key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${slug}`}
+          initialAction={slug === "purchase-orders" ? "PurchaseOrder.Approve" : "PurchaseRequest.Approve"} />
+        : <section className="rounded-xl border border-border bg-surface p-7">
         <h2 className="text-lg font-semibold">{module.tabs.find(item => item.slug === tab)?.title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">This setting does not have a live editor yet. No changes can be saved here. Buying categories and rules are available from the Settings directory.</p>
-      </section>
+      </section>}
     </div> : <Notice title="Setting not found" detail="Choose a Procurement setting from the directory." />;
   } else if (settingsRoutes.some(route => route.path === path))
     content = <Notice title="Setting unavailable" detail="This control is not connected to the live ERP. Company identity and user access are managed in ERP Core; Finance manages tax and payment settings." />;
