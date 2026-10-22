@@ -34,7 +34,7 @@ export function ReceivingReferencePicker({ company, kind, label, selected, onCha
     }, 200);
     return () => { clearTimeout(timer); abort.abort(); };
   }, [company, kind, search, offset]);
-  return <div className="space-y-3 sm:col-span-2"><Field label={`Find ${label.toLowerCase()}`}><Input maxLength={100} disabled={disabled} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} /></Field>
+  return <div className="min-w-0 space-y-3 sm:col-span-2"><Field label={`Find ${label.toLowerCase()}`}><Input maxLength={100} disabled={disabled} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} /></Field>
     <Field label={label}><Select value="" disabled={disabled || loading || !!error || selected.length >= 100} onChange={event => {
       if (event.target.value && !selected.includes(event.target.value)) onChange([...selected, event.target.value]);
     }}><option value="">{loading ? "Loading names…" : `Add ${label.toLowerCase()}`}</option>
@@ -43,7 +43,7 @@ export function ReceivingReferencePicker({ company, kind, label, selected, onCha
     {namesError && <p role="alert" className="text-sm text-destructive">{namesError}</p>}
     <div className="flex flex-wrap gap-2">{selected.map((id, index) => <span key={id} className="flex items-center gap-2"><Badge>{namesScope === scope ? names[id] || "Saved name unavailable" : "Loading saved name…"}</Badge>
       <Button variant="secondary" disabled={disabled} aria-label={`Remove ${names[id] || `saved selection ${index + 1}`}`} onClick={() => onChange(selected.filter(value => value !== id))}>Remove</Button></span>)}</div>
-    <div className="flex gap-2"><Button variant="secondary" disabled={disabled || loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</Button>
+    <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={disabled || loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</Button>
       <Button variant="secondary" disabled={disabled || loading || page?.nextOffset == null} onClick={() => setOffset(page!.nextOffset!)}>More</Button></div>
   </div>;
 }
@@ -63,14 +63,14 @@ export function ReceivingCategoryPicker({ company, value, onChange, disabled }: 
       .finally(() => { if (!abort.signal.aborted) setLoading(false); }), 200);
     return () => { clearTimeout(timer); abort.abort(); };
   }, [company, search, offset]);
-  return <div className="space-y-2"><Field label="Find purchase category"><Input maxLength={100} disabled={disabled} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} /></Field>
+  return <div className="min-w-0 space-y-2"><Field label="Find purchase category"><Input maxLength={100} disabled={disabled} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} /></Field>
     <Field label="Purchase category"><Select required disabled={disabled || loading || !!error} value={value} onChange={event => onChange(event.target.value)}>
       <option value="">{loading ? "Loading categories…" : "Choose category"}</option>
       {value && !page?.items.some(item => item.code === value) && <option value={value}>{value} · saved selection</option>}
       {page?.items.filter(item => item.code).map(item => <option key={item.id} value={item.code!}>{item.displayName} · {item.code}</option>)}</Select></Field>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {value && <p className="text-xs text-muted-foreground">Saved category code: {value}. ERP checks that it is still valid before saving.</p>}
-    <div className="flex gap-2"><Button variant="secondary" disabled={disabled || loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous categories</Button>
+    <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={disabled || loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous categories</Button>
       <Button variant="secondary" disabled={disabled || loading || page?.nextOffset == null} onClick={() => setOffset(page!.nextOffset!)}>More categories</Button></div>
   </div>;
 }
