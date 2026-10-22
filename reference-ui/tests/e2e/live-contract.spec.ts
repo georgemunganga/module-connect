@@ -134,3 +134,25 @@ test("unavailable contracts edit cannot create a replacement record", async ({ p
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
   expect(writes).toBe(0);
 });
+
+
+test("unconfirmed contracts create preserves entries and blocks repeat submission", async ({ page }) => {
+  await mockErp(page);
+  let attempts = 0;
+  await page.route("**/api/procurement/v1/contracts", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    attempts++; await route.abort("connectionreset");
+  });
+  await page.goto("/procurement/workspace/contracts/new");
+  await page.getByRole("combobox", { name: "Supplier" }).click();
+  await page.getByRole("option", { name: /Copper Supplies/ }).click();
+  await page.getByLabel("Contract title", { exact: true }).fill("Unconfirmed contract");
+  await page.getByLabel("Spending limit", { exact: true }).fill("100");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("save result was not confirmed");
+  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Contract title", { exact: true })).toHaveValue("Unconfirmed contract");
+  await page.getByRole("link", { name: /^Review saved / }).click();
+  await expect(page).toHaveURL(/\/contracts$/);
+  expect(attempts).toBe(1);
+});

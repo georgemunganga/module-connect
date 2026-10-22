@@ -6,6 +6,7 @@ import { RequestApprovalPanel } from "./LiveApprovals";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
+  RequestApiError,
   createOwnRequestDraft, getOwnRequestDraft, getRequestForReview, getRequestApprovalReadiness, listOwnRequestDrafts,
   checkRequestPolicy, getOwnRequestBudgetStatus, getOwnRequestPolicyStatus, returnRequestForChanges,
   listRequestsWaitingForPolicy, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
@@ -163,7 +164,8 @@ export function LiveRequestEditor() {
   const currentEditorContext = useRef(editorContext);
   currentEditorContext.current = editorContext;
   const editorGeneration = useRef(0);
-  useEffect(() => () => { editorGeneration.current += 1; }, [editorContext]);
+  const [saveBlock, setSaveBlock] = useState<"stale" | "unknown" | null>(null);
+  useEffect(() => { setSaveBlock(null); return () => { editorGeneration.current += 1; }; }, [editorContext]);
   const [loadedContext, setLoadedContext] = useState<string | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogPrices, setCatalogPrices] = useState<PublishedCatalogPrice[]>([]);
@@ -218,7 +220,7 @@ export function LiveRequestEditor() {
   const total = draft.lines.reduce((sum, line) => sum + line.requestedQuantity * line.estimatedUnitPrice, 0);
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || saveBlock) return;
     if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the list."); return; }
     const savingContext = editorContext;
     const savingGeneration = editorGeneration.current;
@@ -227,7 +229,13 @@ export function LiveRequestEditor() {
     try {
       const result = id && version !== null ? await updateOwnRequestDraft(legalEntityId, id, version, draft) : await createOwnRequestDraft(legalEntityId, draft);
       if (isCurrentSave()) navigate(`/requests/${result.id}`);
-    } catch (cause) { if (isCurrentSave()) setError(errorText(cause)); }
+    } catch (cause) {
+      if (isCurrentSave()) {
+        setError(errorText(cause));
+        if (cause instanceof RequestApiError && cause.status === 409) setSaveBlock("stale");
+        else if (!(cause instanceof RequestApiError) || cause.status === 0 || cause.status >= 500) setSaveBlock("unknown");
+      }
+    }
     finally { if (isCurrentSave()) setSaving(false); }
   }
   return <div className="p-5 sm:p-8">
@@ -236,6 +244,7 @@ export function LiveRequestEditor() {
       ? <p role="alert">{error || "This draft is unavailable. Return to the list."}</p>
       : <form className="max-w-6xl space-y-5" onSubmit={save}>
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current request before retrying.</span>}</p>}
+      {saveBlock && <p role="status" className="rounded-lg border border-border p-3 text-sm">{saveBlock === "stale" ? "The saved request changed. Review it before saving again." : "The save result was not confirmed. Review saved requests before trying again."} <Link className="text-primary underline" to={id ? `/requests/${id}` : "/requests"}>Review saved request{id ? "" : "s"}</Link></p>}
       <Panel title="Request details"><div className="grid gap-4 p-5 sm:grid-cols-2">
         <Field label="What do you need?" className="sm:col-span-2"><Input required maxLength={1000} value={draft.purpose} onChange={(event) => field("purpose", event.target.value)} /></Field>
         <Field label="Needed by"><Input type="date" value={draft.neededBy ?? ""} onChange={(event) => field("neededBy", event.target.value)} /></Field>
@@ -271,7 +280,7 @@ export function LiveRequestEditor() {
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add line</Button>
         <p className="text-right text-sm font-semibold">Estimated amount before discounts, tax and delivery: {draft.currencyCode || defaultCurrencyCode} {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
       </div></Panel>
-      <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/requests/${id}` : "/requests"}><Button variant="secondary">Cancel</Button></Link></div>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/requests/${id}` : "/requests"}><Button variant="secondary">Cancel</Button></Link></div>
     </form>}
   </div>;
 }

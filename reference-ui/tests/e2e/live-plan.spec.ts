@@ -114,3 +114,24 @@ test("unavailable plans edit cannot create a replacement record", async ({ page 
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
   expect(writes).toBe(0);
 });
+
+
+test("unconfirmed plans create preserves entries and blocks repeat submission", async ({ page }) => {
+  await mockErp(page);
+  let attempts = 0;
+  await page.route("**/api/procurement/v1/plans", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    attempts++; await route.abort("connectionreset");
+  });
+  await page.goto("/procurement/workspace/plans/new");
+  await page.getByLabel("Financial period", { exact: true }).fill("Unconfirmed FY");
+  await page.getByLabel("Need 1", { exact: true }).fill("Desk");
+  await page.getByLabel("Estimated amount", { exact: true }).fill("100");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("save result was not confirmed");
+  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Financial period", { exact: true })).toHaveValue("Unconfirmed FY");
+  await page.getByRole("link", { name: /^Review saved / }).click();
+  await expect(page).toHaveURL(/\/plans$/);
+  expect(attempts).toBe(1);
+});

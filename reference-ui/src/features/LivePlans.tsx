@@ -5,6 +5,7 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } 
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
+  PlanApiError,
   cancelOwnPlan, createOwnPlan, getOwnPlan, listOwnPlans, updateOwnPlan,
   type PlanDetail, type PlanDraft, type PlanLineDraft, type PlanPage,
 } from "../../../src/platform/procurement-plans-api";
@@ -59,7 +60,8 @@ export function LivePlanEditor() {
   const currentEditorContext = useRef(editorContext);
   currentEditorContext.current = editorContext;
   const editorGeneration = useRef(0);
-  useEffect(() => () => { editorGeneration.current += 1; }, [editorContext]);
+  const [saveBlock, setSaveBlock] = useState<"stale" | "unknown" | null>(null);
+  useEffect(() => { setSaveBlock(null); return () => { editorGeneration.current += 1; }; }, [editorContext]);
   const [loadedContext, setLoadedContext] = useState<string | null>(null);
   useEffect(() => {
     setVersion(null); setLoadedContext(null); setSaving(false); setError("");
@@ -87,7 +89,7 @@ export function LivePlanEditor() {
     setDraft((current) => ({ ...current, lines: current.lines.map((line, at) => at === index ? { ...line, [key]: value } : line) }));
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || saveBlock) return;
     if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the list."); return; }
     const savingContext = editorContext;
     const savingGeneration = editorGeneration.current;
@@ -100,7 +102,13 @@ export function LivePlanEditor() {
         ? await updateOwnPlan(legalEntityId, id, version, draft)
         : await createOwnPlan(legalEntityId, draft);
       if (isCurrentSave()) navigate(`/plans/${saved.id}`);
-    } catch (cause) { if (isCurrentSave()) setError(errorText(cause)); }
+    } catch (cause) {
+      if (isCurrentSave()) {
+        setError(errorText(cause));
+        if (cause instanceof PlanApiError && cause.status === 409) setSaveBlock("stale");
+        else if (!(cause instanceof PlanApiError) || cause.status === 0 || cause.status >= 500) setSaveBlock("unknown");
+      }
+    }
     finally { if (isCurrentSave()) setSaving(false); }
   }
   return <div className="p-5 sm:p-8">
@@ -109,6 +117,7 @@ export function LivePlanEditor() {
       ? <p role="alert">{error || "This draft is unavailable. Return to the list."}</p>
       : <form onSubmit={save} className="max-w-6xl space-y-5">
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current plan before retrying.</span>}</p>}
+      {saveBlock && <p role="status" className="rounded-lg border border-border p-3 text-sm">{saveBlock === "stale" ? "The saved plan changed. Review it before saving again." : "The save result was not confirmed. Review saved plans before trying again."} <Link className="text-primary underline" to={id ? `/plans/${id}` : "/plans"}>Review saved plan{id ? "" : "s"}</Link></p>}
       <Panel title="Plan details"><div className="grid gap-4 p-5 sm:grid-cols-3">
         <Field label="Financial period"><Input required maxLength={100} placeholder="For example, FY 2027" value={draft.financialPeriodRef} onChange={(event) => field("financialPeriodRef", event.target.value)} /></Field>
         <Field label="Currency"><Input required maxLength={3} value={draft.currencyCode} onChange={(event) => field("currencyCode", event.target.value.toUpperCase())} /></Field>
@@ -127,7 +136,7 @@ export function LivePlanEditor() {
         </div>)}
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add need</Button>
       </div></Panel>
-      <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/plans/${id}` : "/plans"}><Button variant="secondary">Cancel</Button></Link></div>
+      <div className="flex gap-3"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/plans/${id}` : "/plans"}><Button variant="secondary">Cancel</Button></Link></div>
     </form>}
   </div>;
 }

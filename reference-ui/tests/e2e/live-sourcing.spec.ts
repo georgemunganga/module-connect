@@ -142,3 +142,23 @@ test("a delayed quote save cannot reopen the editor after navigating away", asyn
   await expect(page.getByRole("heading", { name: "Request for Quotes", exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/rfqs$/);
 });
+
+
+test("unconfirmed rfqs create preserves entries and blocks repeat submission", async ({ page }) => {
+  await mockErp(page);
+  let attempts = 0;
+  await page.route("**/api/procurement/v1/sourcing", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    attempts++; await route.abort("connectionreset");
+  });
+  await page.goto("/procurement/workspace/rfqs/new");
+  await page.getByLabel("What are you buying?", { exact: true }).fill("Unconfirmed quotes");
+  await page.getByLabel("Item or service 1", { exact: true }).fill("Chair");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("save result was not confirmed");
+  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
+  await expect(page.getByLabel("What are you buying?", { exact: true })).toHaveValue("Unconfirmed quotes");
+  await page.getByRole("link", { name: /^Review saved / }).click();
+  await expect(page).toHaveURL(/\/rfqs$/);
+  expect(attempts).toBe(1);
+});

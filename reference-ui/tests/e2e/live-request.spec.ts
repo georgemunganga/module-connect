@@ -335,3 +335,23 @@ test("unavailable requests edit cannot create a replacement record", async ({ pa
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
   expect(writes).toBe(0);
 });
+
+
+test("unconfirmed requests create preserves entries and blocks repeat submission", async ({ page }) => {
+  await mockErp(page);
+  let attempts = 0;
+  await page.route("**/api/procurement/v1/requests", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    attempts++; await route.abort("connectionreset");
+  });
+  await page.goto("/procurement/workspace/requests/new");
+  await page.getByLabel("What do you need?", { exact: true }).fill("Unconfirmed request");
+  await page.getByLabel("Item or service 1", { exact: true }).fill("Chair");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("save result was not confirmed");
+  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
+  await expect(page.getByLabel("What do you need?", { exact: true })).toHaveValue("Unconfirmed request");
+  await page.getByRole("link", { name: /^Review saved / }).click();
+  await expect(page).toHaveURL(/\/requests$/);
+  expect(attempts).toBe(1);
+});
