@@ -8,6 +8,7 @@ const review = "33333333-3333-4333-8333-333333333333", mapping = "44444444-4444-
 const assignment = "55555555-5555-4555-8555-555555555555", core = "66666666-6666-4666-8666-666666666666";
 const line = "77777777-7777-4777-8777-777777777777", doc = "88888888-8888-4888-8888-888888888888";
 const key = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const decisionId = "99999999-9999-4999-8999-999999999999", outcomeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const mock = (body: unknown, status = 200) => { const fetch = vi.fn().mockResolvedValue(json(body, status)); vi.stubGlobal("fetch", fetch); return fetch; };
 const flags = { isInvoiceApproval: false, canPostToFinance: false };
@@ -22,8 +23,10 @@ const detail = (): UnitReviewDetail => ({ reviewId: review, invoiceId: invoice, 
 const detailWire = () => ({ ...detail(), attestation: "OriginalDocumentUnitsConfirmed",
   actionCandidateMeaning: "CurrentAssignmentOnlyRevalidatedByCommand", ...flags });
 const receipt = (operation: "Open" | "Decision") => ({ schemaVersion: 1, invoiceId: invoice, reviewId: review, coreCaseId: core,
-  commandKey: key, operation, invoiceVersion: 4, caseVersion: 1, caseState: "Pending", reviewState: "Pending",
-  decisionId: null, outcomeId: null, completedAt: "2026-10-22T00:00:00Z", recordedHistoricalResult: true, ...flags });
+  commandKey: key, operation, invoiceVersion: 4, caseVersion: operation === "Open" ? 1 : 2,
+  caseState: operation === "Open" ? "Pending" : "Approved", reviewState: operation === "Open" ? "Pending" : "Verified",
+  decisionId: operation === "Open" ? null : decisionId, outcomeId: operation === "Open" ? null : outcomeId,
+  completedAt: "2026-10-22T00:00:00Z", recordedHistoricalResult: true, ...flags });
 afterEach(() => vi.unstubAllGlobals());
 describe("original invoice unit review purpose API", () => {
   it("requires actual readiness and keeps unavailable distinct from empty", async () => {
@@ -47,9 +50,9 @@ describe("original invoice unit review purpose API", () => {
     mock({ ...detailWire(), currentMapping: false }); await expect(getUnitReviewDetail(company, review)).rejects.toThrow("confirmed");
   });
   it("sends plain open and explicit human attested decision, with original-key GET-only recovery", async () => {
-    const fetch = mock(receipt("Open")); await openUnitReview(company, invoice, 3, 1, null, key);
+    const fetch = mock(receipt("Open")); await openUnitReview(company, invoice, 4, 1, null, key);
     expect(fetch.mock.calls[0][1].method).toBe("POST"); expect(fetch.mock.calls[0][1].headers.get("Idempotency-Key")).toBe(key);
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ invoiceVersion: 3, mappingRevision: 1, reason: null });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ invoiceVersion: 4, mappingRevision: 1, reason: null });
     await expect(decideUnitReview(company, detail(), assignment, 1, "Approve", null, false, key)).rejects.toThrow("confirmed");
     expect(fetch).toHaveBeenCalledTimes(1);
     const vote = mock(receipt("Decision")); await decideUnitReview(company, detail(), assignment, 1, "Approve", null, true, key);
@@ -58,6 +61,14 @@ describe("original invoice unit review purpose API", () => {
     const recovery = mock(receipt("Decision")); await recoverUnitReview(company, review, key, "Decision", invoice);
     expect(recovery.mock.calls[0][1].method).toBe("GET"); expect(recovery.mock.calls[0][0]).toContain(`/invoice-unit-reviews/${review}/commands/${key}`);
     mock({ ...receipt("Decision"), canPostToFinance: true }); await expect(recoverUnitReview(company, review, key, "Decision", invoice)).rejects.toThrow("confirmed");
+  });
+  it("rejects replies for another invoice version or a non-advancing decision case", async () => {
+    mock(receipt("Open"));
+    await expect(openUnitReview(company, invoice, 3, 1, null, key)).rejects.toThrow("confirmed");
+    mock({ ...receipt("Decision"), invoiceVersion: 5 });
+    await expect(decideUnitReview(company, detail(), assignment, 1, "Approve", null, true, key)).rejects.toThrow("confirmed");
+    mock({ ...receipt("Decision"), caseVersion: 1 });
+    await expect(decideUnitReview(company, detail(), assignment, 1, "Approve", null, true, key)).rejects.toThrow("confirmed");
   });
 });
 describe("reload-safe unit review marker", () => {

@@ -125,18 +125,23 @@ function receipt(x: unknown, key: string, operation: UnitReviewReceipt["operatio
 }
 export async function openUnitReview(company: string, invoice: string, version: number, mappingRevision: number, reason: string | null, key: string) {
   if (!id(invoice) || !id(key) || !pos(version) || !count(mappingRevision) || reason !== null && reason.length > 2000) throw invalid();
-  return receipt(await call(company, `/invoices/${invoice}/unit-reviews`, { method: "POST", headers: { "Idempotency-Key": key },
+  const result = receipt(await call(company, `/invoices/${invoice}/unit-reviews`, { method: "POST", headers: { "Idempotency-Key": key },
     body: JSON.stringify({ invoiceVersion: version, mappingRevision, reason }) }), key, "Open", invoice);
+  if (result.invoiceVersion !== version || result.caseVersion !== 1) throw invalid();
+  return result;
 }
 export async function decideUnitReview(company: string, detail: UnitReviewDetail, assignmentId: string, assignmentVersion: number,
   action: UnitReviewAction, reason: string | null, attested: boolean, key: string) {
-  if (!id(key) || !id(assignmentId) || !pos(assignmentVersion) || !detail.actionCandidates.includes(action)
+  if (!id(key) || !id(detail.reviewId) || !id(detail.invoiceId) || !pos(detail.invoiceVersion) || !pos(detail.caseVersion)
+    || !id(assignmentId) || !pos(assignmentVersion) || !detail.actionCandidates.includes(action)
     || !detail.assignments.some((a) => a.assignmentId === assignmentId && a.assignmentVersion === assignmentVersion)
     || action === "Approve" && !attested || action !== "Approve" && !reason?.trim() || reason !== null && reason.length > 2000) throw invalid();
-  return receipt(await call(company, `/invoice-unit-reviews/${detail.reviewId}/assignments/${assignmentId}/decisions`, {
+  const result = receipt(await call(company, `/invoice-unit-reviews/${detail.reviewId}/assignments/${assignmentId}/decisions`, {
     method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ invoiceVersion: detail.invoiceVersion,
       caseVersion: detail.caseVersion, assignmentVersion, action, reason, attestation: action === "Approve" ? "OriginalDocumentUnitsConfirmed" : null })
   }), key, "Decision", detail.invoiceId, detail.reviewId);
+  if (result.invoiceVersion !== detail.invoiceVersion || result.caseVersion <= detail.caseVersion) throw invalid();
+  return result;
 }
 export async function recoverUnitReview(company: string, review: string, key: string, operation: UnitReviewReceipt["operation"], invoice: string) {
   if (![review, key, invoice].every(id)) throw invalid();
