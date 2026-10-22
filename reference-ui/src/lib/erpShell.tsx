@@ -1,4 +1,5 @@
 import { flushSync } from "react-dom";
+import { fetchVerifiedOrganisationContext, type VerifiedOrganisationContext } from "./verified-organisation-context";
 import { observeAuthContext } from "./auth-context-invalidation";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../shared/branding";
@@ -34,6 +35,7 @@ type ErpShellContext = {
   branches: Branch[];
   selection: ShellSelection;
   contextAvailable: boolean;
+  verifiedContext: VerifiedOrganisationContext | null;
   assignedRoles: string[];
   selectEntity: (id: string) => void;
   selectBranch: (id: string, entityId: string) => void;
@@ -41,6 +43,7 @@ type ErpShellContext = {
 
 const SHELL_KEY = ERP_SHELL_STORAGE_KEY;
 const SESSION_KEY = "erp.oidc.session";
+class ShellLookupError extends Error { constructor(readonly status: number) { super("Organisation choices unavailable."); } }
 const ShellContext = createContext<ErpShellContext | null>(null);
 function readSelection(): ShellSelection {
   try {
@@ -73,10 +76,15 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const [selection, setSelection] = useState<ShellSelection>(readSelection);
   const [contextAvailable, setContextAvailable] = useState(false);
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
+  const [lookupDenied, setLookupDenied] = useState(false);
+  const [verifiedSelection, setVerifiedSelection] = useState<{ key: string; value: VerifiedOrganisationContext } | null>(null);
+  const verifiedKey = JSON.stringify([authEpoch, selection.entityId ?? "", selection.branch ?? ""]);
+  const currentVerifiedKey = useRef(verifiedKey); currentVerifiedKey.current = verifiedKey;
+  const verifiedContext = verifiedSelection?.key === verifiedKey ? verifiedSelection.value : null;
 
   useEffect(()=>observeAuthContext(window,()=>{
     authGeneration.current+=1;
-    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);});
+    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupDenied(false);setVerifiedSelection(null);});
   }),[]);
 
   useLayoutEffect(() => {
@@ -164,15 +172,25 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
         credentials: "include",
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`Context unavailable: ${response.status}`);
+      if (!response.ok) throw new ShellLookupError(response.status);
       return response.json() as Promise<unknown>;
     };
-    Promise.all([
+    Promise.allSettled([
       request("/api/hrm/admin/legal-entities"),
       request("/api/hrm/admin/locations"),
       request("/api/hrm/shell/"),
-    ]).then(([entityData, branchData, shellData]) => {
+    ]).then((results) => {
       if(controller.signal.aborted || epoch!==authGeneration.current)return;
+      if (!results.every(result => result.status === "fulfilled")) {
+        const coreDenied = results.slice(0, 2).some(result => result.status === "rejected"
+          && result.reason instanceof ShellLookupError && result.reason.status === 403);
+        const onlyForbiddenFailures = results.every(result => result.status === "fulfilled"
+          || result.reason instanceof ShellLookupError && result.reason.status === 403);
+        setLookupDenied(coreDenied && onlyForbiddenFailures);
+        return;
+      }
+      const [entityData, branchData, shellData] = results.map(result => result.status === "fulfilled" ? result.value : undefined);
+      setLookupDenied(false);
       const scope = shellData as { assignedLocationIds?: string[]; confined?: boolean };
       const allowed = new Set(scope.assignedLocationIds ?? []);
       setEntities(rows(entityData).map((row) => ({
@@ -190,15 +208,30 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [authEpoch]);
 
+  useEffect(() => {
+    if (!lookupDenied) { setVerifiedSelection(null); return; }
+    const controller = new AbortController();
+    const capturedKey = verifiedKey;
+    const capturedSelection = { entityId: selection.entityId, branch: selection.branch };
+    setVerifiedSelection(null);
+    fetchVerifiedOrganisationContext(capturedSelection, controller.signal, fetch, accessToken())
+      .then(value => {
+        if (!controller.signal.aborted && currentVerifiedKey.current === capturedKey)
+          setVerifiedSelection({ key: capturedKey, value });
+      })
+      .catch(() => { /* A denied or invalid context never becomes a selectable organisation. */ });
+    return () => controller.abort();
+  }, [lookupDenied, verifiedKey, selection.entityId, selection.branch, authEpoch]);
+
   const updateSelection = (next: ShellSelection) => {
     localStorage.setItem(SHELL_KEY, JSON.stringify(next));
     setSelection(next);
   };
   const value = useMemo<ErpShellContext>(() => ({
-    authEpoch,branding, entities, branches, selection, contextAvailable, assignedRoles,
+    authEpoch,branding, entities, branches, selection, contextAvailable, verifiedContext, assignedRoles,
     selectEntity: (id) => updateSelection({ ...selection, entityId: id, branch: "" }),
     selectBranch: (id, entityId) => updateSelection({ ...selection, entityId, branch: id }),
-  }), [authEpoch,branding, entities, branches, selection, contextAvailable, assignedRoles]);
+  }), [authEpoch,branding, entities, branches, selection, contextAvailable, verifiedContext, assignedRoles]);
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }
 
