@@ -48,7 +48,7 @@ const payables = [
 export function AppShell() {
   const location = useLocation();
   const { records, notify } = useApp();
-  const { branding, entities, branches, selection, contextAvailable, assignedRoles, selectEntity, selectBranch } = useErpShell();
+  const { branding, entities, branches, selection, contextAvailable, verifiedContext, procurementScopeStatus, assignedRoles, selectEntity, selectBranch } = useErpShell();
   const roleSet = new Set(assignedRoles.map((role) => role.toLowerCase()));
   const canOpenHrm = ["employee", "manager", "hr_ops", "payroll", "finance_approver", "hr_admin", "investigator", "timesheet_operator"].some((role) => roleSet.has(role));
   const canOpenCore = roleSet.has("erp_admin") || roleSet.has("hr_admin");
@@ -75,8 +75,8 @@ export function AppShell() {
   useEffect(() => {
     window.localStorage.setItem("erp.sidebar.collapsed.v1", String(compact));
   }, [compact]);
-  const activeEntity = entities.find((item) => item.id === selection.entityId) ?? entities[0];
-  const activeBranch = branches.find((item) => item.id === selection.branch);
+  const activeEntity = entities.find((item) => item.id === selection.entityId) ?? entities[0] ?? verifiedContext?.company;
+  const activeBranch = branches.find((item) => item.id === selection.branch) ?? verifiedContext?.branch;
   const results = (isProcurementLiveMode ? [] : records)
     .filter((record) =>
       `${record.id} ${record.title} ${record.party}`
@@ -140,7 +140,13 @@ export function AppShell() {
             {contextAvailable ? entities.map((entity) => <div key={entity.id}>
               <button type="button" onClick={() => selectEntity(entity.id)} className={`w-full rounded px-2 py-2 text-left text-sm hover:bg-secondary ${selection.entityId === entity.id && !selection.branch ? "bg-primary-soft font-semibold text-primary" : ""}`}>{entity.name}</button>
               {branches.filter((branch) => branch.legalEntityId === entity.id).map((branch) => <button key={branch.id} type="button" onClick={() => selectBranch(branch.id, entity.id)} className={`block w-full rounded px-6 py-1.5 text-left text-xs hover:bg-secondary ${selection.branch === branch.id ? "bg-primary-soft font-semibold text-primary" : "text-muted-foreground"}`}>{branch.name}</button>)}
-            </div>) : <p className="px-2 py-2 text-xs text-muted-foreground">Sign in to the ERP to see your permitted entities and branches.</p>}
+            </div>) : verifiedContext ? <div className="space-y-1 px-2 py-2" aria-label="Verified current organisation">
+              <p className="text-sm font-medium">{verifiedContext.company.name}</p>
+              {verifiedContext.branch && (procurementScopeStatus === "selection-required"
+                ? <button type="button" className="rounded px-2 py-2 text-left text-sm hover:bg-secondary" onClick={() => selectBranch(verifiedContext.branch!.id, verifiedContext.company.id)}>Use {verifiedContext.branch.name}</button>
+                : <p className="text-sm text-muted-foreground">{verifiedContext.branch.name}</p>)}
+              <p className="pt-2 text-xs text-muted-foreground">Current workspace. Organisation switching is not available for this account.</p>
+            </div> : <p className="px-2 py-2 text-xs text-muted-foreground">Organisation choices are not available for this account.</p>}
           </div>}
         </div>
         <div className={`${searchOpen ? "fixed inset-x-3 top-16 z-50 block" : "hidden"} lg:relative lg:inset-auto lg:top-auto lg:z-auto lg:ml-auto lg:block lg:w-[min(25vw,320px)]`}>

@@ -9,16 +9,16 @@ export const useLiveReadiness = () => useContext(LiveReadiness);
 export const isProcurementLiveMode = liveMode;
 
 /** Live transactions stay closed until their individual API adapters pass acceptance. */
-export function ProcurementLiveGate({ children, unavailable }: { children: ReactNode; unavailable?: ReactNode }) {
-  const { selection,authEpoch } = useErpShell();
+export function ProcurementLiveGate({ children, unavailable, scopeUnavailable }: { children: ReactNode; unavailable?: ReactNode; scopeUnavailable?: ReactNode }) {
+  const { selection,authEpoch,procurementScopeStatus } = useErpShell();
   const location = useLocation();
-  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? ""]);
+  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",procurementScopeStatus]);
   const currentKey=useRef(readinessKey);currentKey.current=readinessKey;
   const [storedState, setState] = useState<{ key:string; readiness?: ProcurementReadiness; error?: string }>({key:""});
   // Never render old scope readiness for even the render before passive effect cleanup.
   const state:{readiness?:ProcurementReadiness;error?:string}=storedState.key===readinessKey?storedState:{};
   useEffect(() => {
-    if (!liveMode) return;
+    if (!liveMode || procurementScopeStatus !== "ready") return;
     const controller = new AbortController();
     const capturedKey=readinessKey;
     setState({key:capturedKey});
@@ -29,9 +29,10 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
           setState({ key:capturedKey,error: error instanceof ProcurementLiveError ? error.message : "Procurement data is not ready. Please try again later." });
       });
     return () => controller.abort();
-  }, [selection.entityId, selection.branch,authEpoch,readinessKey]);
+  }, [selection.entityId, selection.branch,authEpoch,readinessKey,procurementScopeStatus]);
 
   if (!liveMode) return <>{children}</>;
+  if (procurementScopeStatus !== "ready") return <>{scopeUnavailable ?? <ProcurementScopeSelectionState />}</>;
   const vendorPath = /^\/vendors(?:\/|$)/.test(location.pathname);
   const itemPath = /^\/items(?:\/|$)/.test(location.pathname);
   const approvalPath = /^\/approvals(?:\/|$)/.test(location.pathname);
@@ -90,4 +91,11 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
       {state.readiness ? <p className="mt-3 text-sm text-muted-foreground" role="status">Your ERP account and company are connected. Procurement transaction screens will open as their live workflows are verified. No demo transactions are shown in live mode.</p> : null}
     </div>
   </main>;
+}
+
+/** Keeps the existing shell/header available while a saved label needs selection. */
+export function ProcurementScopeSelectionState() {
+  const { procurementScopeStatus, scopeMessage } = useErpShell();
+  return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">{procurementScopeStatus === "resolving" ? "Checking your branch" : "Choose your branch"}</h1>
+    <p className="mt-3 text-sm text-muted-foreground" role={procurementScopeStatus === "resolving" ? "status" : "alert"}>{scopeMessage}</p></div>;
 }

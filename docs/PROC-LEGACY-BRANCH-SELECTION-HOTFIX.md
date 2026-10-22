@@ -1,0 +1,9 @@
+# Procurement saved branch selection correction
+
+HRM previously stored a branch name where Procurement adapters require the actual Core location ID. A saved label now blocks transaction screens and readiness until the current authorized Core location list supplies exactly one matching name in the selected company. The original selection is retained for unknown, ambiguous, invalid, other-company or unavailable matches. No first branch is guessed and no branch is silently cleared into company-wide scope.
+
+A unique real ID is persisted before Procurement context/meta/list/form rendering. Storage rejection stays blocked. Company/branch changes, authentication invalidation and cancellation continue to discard obsolete readiness. Existing GUID selections and deliberate company-only selections keep their current behavior. The adapter UUID checks remain strict; readiness also rejects an unresolved label rather than omitting it.
+
+The existing header remains available for explicit selection when a saved label needs correction. For a Procurement-only user whose Core list reads return403, the existing verified-context projection remains limited to that selected server-verified company/branch. A legacy label is never automatically replaced with the server's default. Using a displayed verified branch is an explicit user selection, not additional Core organisation administration or access authority.
+
+Verification:17 resolver cases, targeted readiness/scope and verified-context tests; six focused browser cases cover legacy label migration, scoped vendor/request reads and supplier create/reload, unknown/ambiguous/foreign-company/invalid recovery, and failed browser storage. Test results and frozen staged bundle are maintained in the protected release evidence directory; actual signed-in public validation is performed by the release coordinator. This hotfix contains no P23 feature changes or backend permission/schema change.

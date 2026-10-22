@@ -27,15 +27,18 @@ const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
 export class ProcurementLiveError extends Error {
-  constructor(public readonly code: "sign-in" | "access" | "unavailable" | "invalid-response") {
+  constructor(public readonly code: "sign-in" | "access" | "unavailable" | "invalid-response" | "invalid-scope") {
     super(code === "sign-in" ? "Sign in to ERP to open Procurement."
       : code === "access" ? "Your account does not have Procurement access for this company."
+      : code === "invalid-scope" ? "Choose your company and branch from Organisation context before continuing."
       : code === "invalid-response" ? "The ERP returned an invalid Procurement response."
       : "Procurement data is not ready. Please try again later.");
   }
 }
 
 function scopeHeaders(selection: ShellSelection): HeadersInit {
+  if (selection.entityId && !guid.test(selection.entityId) || selection.branch && !guid.test(selection.branch))
+    throw new ProcurementLiveError("invalid-scope");
   const headers: Record<string, string> = {};
   if (selection.entityId && guid.test(selection.entityId)) headers["X-Shell-Entity"] = selection.entityId;
   if (selection.branch && guid.test(selection.branch)) headers["X-Shell-Location"] = selection.branch;
@@ -48,6 +51,7 @@ export async function fetchProcurementReadiness(
   signal?: AbortSignal,
   fetcher: typeof fetch = fetch,
 ): Promise<ProcurementReadiness> {
+  const headers = scopeHeaders(selection);
   const common: RequestInit = { credentials: "include", cache: "no-store", signal };
   let auth: Response;
   try { auth = await fetcher("/api/hrm/auth/me", common); }
@@ -62,7 +66,6 @@ export async function fetchProcurementReadiness(
   if (!object(authBody.user) || authBody.user.isActive !== true)
     throw new ProcurementLiveError("access");
 
-  const headers = scopeHeaders(selection);
   const scoped: RequestInit = { ...common, headers };
   let contextResponse: Response;
   try { contextResponse = await fetcher("/api/procurement/v1/context", scoped); }
