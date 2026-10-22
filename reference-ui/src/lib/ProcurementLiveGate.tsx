@@ -40,6 +40,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const requestPath = /^\/(?:requests|procurement-requests)(?:\/|$)/.test(location.pathname);
   const sourcingPath = /^\/rfqs(?:\/|$)/.test(location.pathname);
   const contractPath = /^\/contracts(?:\/|$)/.test(location.pathname);
+  const recurringPurchasePath = /^\/recurring-bills(?:\/|$)/.test(location.pathname);
   const planPath = /^\/plans(?:\/|$)/.test(location.pathname);
   const creditPath = /^\/vendor-credits(?:\/|$)/.test(location.pathname);
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
@@ -61,6 +62,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))))
     || (sourcingPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts))
     || (contractPath && state.readiness.capabilities.contractDraft)
+    || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
