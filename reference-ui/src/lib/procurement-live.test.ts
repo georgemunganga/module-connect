@@ -92,3 +92,8 @@ describe("Procurement system-user readiness", () => {
     await expect(fetchProcurementReadiness({}, undefined, fetcher)).rejects.toBeInstanceOf(ProcurementLiveError);
   });
 });
+it("rejects a legacy branch label before any readiness request can omit its scope", async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  await expect(fetchProcurementReadiness({ entityId: entity, branch: "Lusaka (Main)" }, undefined, fetcher)).rejects.toMatchObject({ code: "invalid-scope" });
+  expect(fetcher).not.toHaveBeenCalled();
+});
