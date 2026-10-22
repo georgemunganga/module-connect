@@ -1,0 +1,79 @@
+# Actual receiving browser contract
+
+Source-only checkpoint. This is authored coverage, not a passing browser or production claim.
+
+Frontend base: `375861d`. Backend fixture: `5acc2e4` (`--serve --receiving`), with later root mapping corrections required before execution. The test changes no application source. Reuse the exact staged receiving candidate after its TypeScript/build gate; this test starts only the existing static preview, never the backend or a database.
+
+## Operator sequence
+
+1. Root provisions a new disposable `proc_approval_http_*` database, matching migrations, distinct restricted runtime role and actual loopback Kestrel fixture. Set `PROCUREMENT_RECEIVING_BROWSER_VERIFY_ON_STOP=1` when starting `--serve --receiving`. Never reuse a partially executed fixture.
+2. Root confirms the new owner-private manifest and server readiness. Set `PROCUREMENT_APPROVAL_BROWSER_MANIFEST` to that manifest. It contains synthetic scoped actor/context/source references and no passwords/tokens.
+3. In `reference-ui`, with Node22.23.3, run only:
+
+   ```sh
+   NODE_OPTIONS=--max-old-space-size=512 nice -n 10 ./node_modules/.bin/playwright test --config playwright.backend.config.ts tests/backend-browser/receiving.spec.ts --workers=1 --reporter=list
+   ```
+
+   The existing configuration uses an already built `.verification-dist` preview on loopback3011,180-second case timeout,30-second UI expectations and45-second transport requests. No timeout broadening or backend build is included. Preserve the original candidate hash and first failure artifacts.
+4. Capture terminal result and `actual-receiving-api-traffic.json` (materialized0600, including browser and direct verification calls). Notify root when no further calls will run. Root gracefully stops the server to run independent owner-side persisted checks. Browser success alone does not replace those checks.
+
+## Coverage and invariants
+
+- Real seeded approved/funded/issued goods/service source authority; no receiving effects seeded.
+- Physical goods2 against authorized1, qualification2 by named inspector, independent acceptance1, held1; no invented acceptance of the excess.
+- Receiver, named inspector, independent acceptor and named service owner are different actual identities. Purpose actors have no broad receipt/PO read. Actual full-detail403, unnamed task404 and empty queues are asserted; purpose responses omit private notes/documents.
+- Two independently drafted0.5 service certificates at exact net50 each. Second pending detail retains null persisted ledger link while reporting current nonzero shared sourceCAS; command uses that exact detail version. First1500-character notes survive certification, separately from cancellation reason.
+- Eight real UI commands, eight unique UUID keys, actor order and source/version/body pins asserted. Exact goods-accept replay returns the original response and does not add an effect. No automatic POST retry and no Procurement response mocking.
+- Root's graceful verifier checks one goods header/line/inspection, goods source sequence3 and accepted1/net100, two service certificates/source sequence2 and cumulative1/net100, independent worker attribution, PR/PO accepted counters, eight command/audit records and five outbox effects. It also checks no invoice/AP records were created.
+- Broad `receiving` capability remains false while granular receiving capabilities gate the actual UI. No matching/AP authorization is fabricated.
+
+Only ERP shell authentication/branding/organization presentation is synthetic. Procurement context, metadata, sources, queues, reads, commands, authorization failures, replay and persisted effects use the real API. Actor-specific fixture headers are a test-only authentication bridge, not production authentication.
+
+
+## Actual first-run correction
+
+The first complete browser case reached real goods acceptance, both service
+drafts and the first service certification, then exhausted its 180-second total
+case budget on the resource-limited server. Its original log, trace, screenshot
+and incomplete database remain protected under `20261020_151917_browser`. The
+independent completion verifier correctly rejected the incomplete service state.
+No actual browser pass is claimed for that run.
+
+Coverage is now split into **two serial cases**, goods then services, each with
+the original 180-second limit. Every former command, privacy, exact quantity,
+replay, source-CAS and combined eight-command assertion remains. Each response
+is written to owner-private traffic evidence immediately, and final evidence is
+saved before route cleanup so page timeout cannot prevent capture. The final
+service evidence combines both cases. Serial mode skips service verification if
+goods fails; no used fixture may be retried. This changes test organization only;
+the frozen application asset hashes and transport timeouts are unchanged.
+
+Playwright `--list` successfully discovers both cases. A fresh backend fixture
+and the real browser execution remain required after this correction.
+
+
+## Actual backend browser gate completed — 20 October 2026
+
+Source-only warnings above describe earlier checkpoints. The fresh private
+`20261020_153636_browser` fixture subsequently passed both serial actual API
+Playwright cases (**2 passed, 2.8m, exit0**) on test `a563616` and the unchanged
+frozen `132ab18` app bundle (HTML/JS/CSS hashes rechecked OK). All eight UI
+commands, exact decimal/source/version assertions, purpose-role denials,
+response replay and complete command/privacy assertions passed. Procurement
+business responses were forwarded to the real API; only ERP shell presentation
+and test authentication were synthetic.
+
+Graceful server shutdown then passed the independent owner-side database
+verifier with exit0: physical2/qualified2/accepted1/held1; two service0.5/net50
+certificates; independent workers; conserved PR/PO counters; eight command/audit
+records and five outbox effects; no invoice/AP authority. The API and preview
+were stopped. Owner-private evidence includes per-response traffic and terminal
+logs; production was not deployed.
+
+The first combined180-second case timed out after partial execution; its trace,
+screenshot, logs and incomplete DB remain preserved under
+`20261020_151917_browser`. Its owner verifier correctly rejected completion.
+The successful retry used a fresh DB and split the same assertions into goods
+and service cases, retaining180 seconds per case without changing app assets
+or API request timeouts. This completes the receiving integration checkpoint,
+not all Procurement features or production release gates.

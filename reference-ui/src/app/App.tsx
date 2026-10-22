@@ -18,6 +18,8 @@ import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePl
 import { LiveVendorCreditList, LiveVendorCreditDetail, LiveVendorCreditEditor } from "../features/LiveVendorCredits";
 import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
+import { LiveReceivingList, LiveReceivingDetail } from "../features/LiveReceiving";
+import { LiveReceivingEditor } from "../features/LiveReceivingEditor";
 import { LiveBudgets } from "../features/LiveBudgets";
 import { LiveOverview } from "../features/LiveOverview";
 import { AppShell } from "../components/layout/AppShell";
@@ -104,6 +106,7 @@ export function App() {
                   : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingList />
                     : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditList />
                     : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceList />
+                    : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingList />
                     : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderList />
                     : <RecordList key={module.key} kind={module.key} />}
               />
@@ -114,6 +117,7 @@ export function App() {
                 path={`/${module.key}/:id`}
                 element={isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditDetail />
                   : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceDetail />
+                  : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingDetail />
                   : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderDetail />
                   : <div className="p-5 sm:p-8">
                     {isProcurementLiveMode && module.key === "requests" ? <LiveRequestRoute />
@@ -132,6 +136,7 @@ export function App() {
                     isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
                       : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditEditor />
                       : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceEditor />
+                        : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingEditor />
                         : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderEditor /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />
@@ -144,6 +149,7 @@ export function App() {
                     isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
                       : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditEditor />
                       : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceEditor />
+                        : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingEditor />
                         : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderEditor /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />

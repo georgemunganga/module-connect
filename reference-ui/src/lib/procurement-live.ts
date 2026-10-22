@@ -3,7 +3,7 @@ export type ShellSelection = { entityId?: string; branch?: string };
 export type ProcurementCapability =
   | "vendorDraft" | "itemDraft" | "requestDraft" | "approvals" | "sourcing"
   | "contracts" | "orders" | "orderDraft" | "receiving" | "invoiceIntake" | "invoiceDocuments" | "invoiceValidation" | "financeHandoff" | "supplierPortal"
-  | "planningDraft" | "configurationDraft" | "contractDraft" | "sourcingDraft" | "vendorCreditDraft";
+  | "planningDraft" | "configurationDraft" | "contractDraft" | "sourcingDraft" | "vendorCreditDraft" | "receivingDrafts" | "receivingGoods" | "receivingInspection" | "receivingServices";
 
 export type ProcurementReadiness = {
   tenantId: string;
@@ -19,7 +19,7 @@ export type ProcurementReadiness = {
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const capabilityKeys: ProcurementCapability[] = [
   "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
-  "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft", "vendorCreditDraft",
+  "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft", "vendorCreditDraft", "receivingDrafts", "receivingGoods", "receivingInspection", "receivingServices",
 ];
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -90,7 +90,7 @@ export async function fetchProcurementReadiness(
   const resolvedCapabilities = object(meta) && object(meta.capabilities) ? meta.capabilities : null;
   if (!object(meta) || meta.tenantId !== context.tenantId || meta.legalEntityId !== context.legalEntityId
     || meta.schemaReady !== true || !resolvedCapabilities
-    || !capabilityKeys.every((key) => key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments" || key === "vendorCreditDraft"
+    || !capabilityKeys.every((key) => key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments" || (key === "vendorCreditDraft" || (key.startsWith("receiving") && key !== "receiving"))
       || typeof resolvedCapabilities[key] === "boolean"))
     throw new ProcurementLiveError("unavailable");
 
@@ -106,7 +106,7 @@ export async function fetchProcurementReadiness(
         && (!adminViewOnly || permission === "procurement-access" || permission.endsWith("-read")
           || permission === "procurement-receipt-view")) : [],
     capabilities: Object.fromEntries(capabilityKeys.map((key) =>
-      [key, key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments" || key === "vendorCreditDraft"
+      [key, key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments" || (key === "vendorCreditDraft" || (key.startsWith("receiving") && key !== "receiving"))
         ? resolvedCapabilities[key] === true : resolvedCapabilities[key]])) as Record<ProcurementCapability, boolean>,
   };
 }

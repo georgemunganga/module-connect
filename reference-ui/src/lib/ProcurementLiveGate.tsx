@@ -44,6 +44,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const creditPath = /^\/vendor-credits(?:\/|$)/.test(location.pathname);
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
+  const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
   const overviewPath = location.pathname === "/" || location.pathname === "/analytics";
   const configurationSettingsPath = /^\/settings(?:\/|$)/.test(location.pathname);
@@ -62,6 +63,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && state.readiness.capabilities.orderDraft)
+    || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
     return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{children}</LiveReadiness.Provider>;
