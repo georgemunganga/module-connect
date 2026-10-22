@@ -31,5 +31,6 @@ describe("owned sourcing publication editor", () => {
     const json = serializeSourcingPolicy("ZMW", [complete()]);
     expect(parseSourcingPolicy(json.replace('"schemaVersion":1', '"schemaVersion":2'), "ZMW")).toBeNull();
     expect(parseSourcingPolicy(json.replace('"branchIds":[]', '"branchIds":["22222222-2222-4222-8222-222222222222"]'), "ZMW")).toBeNull();
+    expect(parseSourcingPolicy(json.replace('"requirementsPackRequired":true', '"requirementsPackRequired":"true"'), "ZMW")).toBeNull();
   });
 });

@@ -32,6 +32,7 @@ describe("owned invoice matching policy editor", () => {
     expect(() => serializeMatchPolicy("ZMW", form)).toThrow();
     const valid = serializeMatchPolicy("ZMW", complete());
     expect(parseMatchPolicy(valid.replace('"moneyScale":2', '"moneyScale":2,"newServerRule":true'), "ZMW")).toBeNull();
+    expect(parseMatchPolicy(valid.replace('"moneyScale":2', '"moneyScale":"2"'), "ZMW")).toBeNull();
     expect(parseMatchPolicy(valid, "USD")).toBeNull();
   });
   it("maps two way matching to no accepted goods or service record", () => {

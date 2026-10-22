@@ -126,7 +126,8 @@ function SourcingRecord() {
       const { item, action } = pending;
       const result = action === "review" ? await submitPolicyReview(company, item.id, item.version, reason.trim())
         : await decidePolicy(company, item.id, item.version, action === "publish" ? "publish" : "return", reason.trim());
-      if (result.id !== item.id || result.policyKey !== KEY || result.version <= item.version)
+      if (result.id !== item.id || result.policyKey !== KEY || result.version <= item.version
+        || result.state !== (action === "review" ? "PendingReview" : action === "publish" ? "Published" : "Draft"))
         throw new PolicyActionError("ERP did not confirm this sourcing decision. Check the saved record.", 0);
       settle(); if (alive.current) { setPending(null); setReason(""); setRefresh(value => value + 1); }
     } catch (cause) { settle(cause); }
