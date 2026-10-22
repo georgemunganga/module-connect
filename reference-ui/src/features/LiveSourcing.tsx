@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
+import { useErpShell } from "../lib/erpShell";
+import { GovernedSourcingCreate, GovernedSourcingDetail, GovernedSourcingList } from "./GovernedSourcing";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   cancelOwnSourcingDraft, createOwnSourcingDraft, getOwnSourcingDraft,
@@ -25,7 +27,36 @@ function localDateTime(value: string | null | undefined) {
 }
 function iso(value: string) { return value ? new Date(value).toISOString() : null; }
 
-export function LiveSourcingList() {
+/** One reactive context boundary clears both governed and ad-hoc surfaces immediately. */
+function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
+  const company = useCompany(); const { selection } = useErpShell(); const { id = "" } = useParams();
+  const [query] = useSearchParams(); const governed = query.get("source") === "approved";
+  const key = JSON.stringify([company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
+    company.workerId, company.permissions, company.capabilities, governed, view, id]);
+  return <SourcingPageContent key={key} view={view} governed={governed} id={id} />;
+}
+function SourcingPageContent({ view, governed, id }: { view: "list" | "editor" | "detail"; governed: boolean; id: string }) {
+  const { capabilities, permissions } = useCompany();
+  const canConvert = permissions.includes("procurement-sourcing-convert");
+  const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel");
+  const enabled = capabilities.sourcingSourceDrafts === true;
+  return <>
+    {view === "list" && enabled && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">
+      <Link to="/rfqs?source=approved"><Button variant={governed ? "primary" : "secondary"}>From approved requests</Button></Link>
+      {capabilities.sourcingDraft && <Link to="/rfqs"><Button variant={!governed ? "primary" : "secondary"}>Ad hoc drafts</Button></Link>}
+    </div>}
+    {governed ? !enabled || !canReadGoverned || view === "editor" && (!canConvert || Boolean(id))
+      ? <div className="p-5 sm:p-8" role="alert">This quote action is not available with your current access. <Link to="/rfqs">Back to quote requests</Link></div>
+      : view === "list" ? <GovernedSourcingList /> : view === "editor" ? <GovernedSourcingCreate /> : <GovernedSourcingDetail id={id} />
+      : !capabilities.sourcingDraft ? <div className="p-5 sm:p-8" role="status">Ad hoc quote drafts are not available yet.</div>
+        : view === "list" ? <LegacySourcingList /> : view === "editor" ? <LegacySourcingEditor /> : <LegacySourcingDetail />}
+  </>;
+}
+export function LiveSourcingList() { return <ScopedSourcingPage view="list" />; }
+export function LiveSourcingEditor() { return <ScopedSourcingPage view="editor" />; }
+export function LiveSourcingDetail() { return <ScopedSourcingPage view="detail" />; }
+
+function LegacySourcingList() {
   const { legalEntityId } = useCompany();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<SourcingPage | null>(null);
@@ -52,7 +83,7 @@ export function LiveSourcingList() {
   </div>;
 }
 
-export function LiveSourcingEditor() {
+function LegacySourcingEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { legalEntityId, defaultCurrencyCode } = useCompany();
@@ -121,7 +152,7 @@ export function LiveSourcingEditor() {
   </div>;
 }
 
-export function LiveSourcingDetail() {
+function LegacySourcingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { legalEntityId } = useCompany();

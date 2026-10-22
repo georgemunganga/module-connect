@@ -19,6 +19,7 @@ describe("Procurement live readiness", () => {
       .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities }));
     const result = await fetchProcurementReadiness({ entityId: entity, branch }, undefined, fetcher);
     expect(result.capabilities.invoiceComparison).toBe(false);
+    expect(result.capabilities.sourcingSourceDrafts).toBe(false);
     expect(result.capabilities.vendorDraft).toBe(true);
     expect(result.defaultCurrencyCode).toBe("ZMW");
     expect(result.capabilities.orders).toBe(false);
@@ -43,6 +44,17 @@ describe("Procurement live readiness", () => {
     expect(result.capabilities.receivingGoods).toBe(false);
     expect(result.capabilities.receivingInspection).toBe(false);
     expect(result.capabilities.receivingServices).toBe(false);
+  });
+
+  it("enables governed quote drafts only for an explicit boolean true without changing legacy capability", async () => {
+    for (const supplied of [true, false, "true", undefined]) {
+      const fetcher = vi.fn().mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
+        .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity, currencyCode: "ZMW" } }))
+        .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities: { ...capabilities, sourcingSourceDrafts: supplied } }));
+      const result = await fetchProcurementReadiness({}, undefined, fetcher);
+      expect(result.capabilities.sourcingSourceDrafts).toBe(supplied === true);
+      expect(result.capabilities.sourcingDraft).toBe(true);
+    }
   });
 
   it("never falls back to demo data when sign-in or schema readiness fails", async () => {
