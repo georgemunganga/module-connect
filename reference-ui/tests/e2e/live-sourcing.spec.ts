@@ -162,3 +162,16 @@ test("unconfirmed rfqs create preserves entries and blocks repeat submission", a
   await expect(page).toHaveURL(/\/rfqs$/);
   expect(attempts).toBe(1);
 });
+
+test("actual exported ad hoc editor and detail routes remain legacy and never recurse into governed dispatch", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/rfqs/new");
+  await page.getByLabel("What are you buying?").fill("Ad hoc route proof");
+  await page.getByLabel("Item or service 1").fill("Paper");
+  await page.getByLabel("Quantity").fill("2");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Ad hoc route proof", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Ad hoc route proof", exact: true })).toBeVisible();
+  await expect(page.getByText("This is an internal draft.", { exact: false })).toHaveCount(0);
+});

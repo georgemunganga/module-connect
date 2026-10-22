@@ -3,10 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
+import { readRfqRecovery, writeRfqRecovery } from "../lib/rfq-command-journal";
 import { pendingRfqCommands } from "../lib/rfq-command-memory";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { cancelRfqCommand, createRfqCommand, getGovernedRfq, listGovernedRfq, listRfqSources, recoverRfqCommand, sendRfqCommand,
-  RfqExecutionError, type RfqCommand, type RfqDetail, type RfqOwnedPage, type RfqSelection, type RfqSource, type RfqSourcePage } from "../../../src/platform/procurement-sourcing-execution-api";
+  rfqRecoveryReference, RfqExecutionError, type RfqRecoveryReference, type RfqCommand, type RfqDetail, type RfqOwnedPage, type RfqSelection, type RfqSource, type RfqSourcePage } from "../../../src/platform/procurement-sourcing-execution-api";
 const message = (error: unknown) => error instanceof Error ? error.message : "The quote action could not be confirmed.";
 function useCompany() { const value = useLiveReadiness(); if (!value) throw new Error("Choose an ERP company first."); return value; }
 function useCommandSlot(operation: string) {
@@ -36,7 +37,7 @@ export function GovernedSourcingList() {
       {data && <Pager page={page} total={data.total} size={data.pageSize} change={setPage} />}</div></Panel></div>;
 }
 
-function Pending({ command, busy, error, check }: { command: RfqCommand; busy: boolean; error: string; check: () => void }) {
+function Pending({ command, busy, error, check }: { command: RfqRecoveryReference; busy: boolean; error: string; check: () => void }) {
   return <Panel title="Check the saved result"><div className="space-y-3 p-5"><p role="alert">{error || "This save has not been confirmed. Check its original reference before another change."}</p>
     <p className="break-all text-sm text-muted-foreground">Save reference: {command.key}</p>
     <Button type="button" variant="secondary" disabled={busy} onClick={check}>{busy ? "Checking…" : "Check saved result"}</Button>
@@ -49,10 +50,22 @@ export function GovernedSourcingCreate() {
   const [page, setPage] = useState(1), [search, setSearch] = useState(""), [title, setTitle] = useState(""), [refresh, setRefresh] = useState(0);
   const [data, setData] = useState<RfqSourcePage | null>(null), [selected, setSelected] = useState<RfqSelection[]>([]);
   const [error, setError] = useState(""), [loadError, setLoadError] = useState(""), [busy, setBusy] = useState(false);
-  const [pending, setPendingState] = useState<RfqCommand | null>(() => pendingRfqCommands.get(slot) ?? null);
+  const [journal] = useState(() => {
+    try {
+      const reference = readRfqRecovery(slot);
+      if (!reference && pendingRfqCommands.has(slot)) throw new Error("The original save reference is missing from recovery storage. No new save will be sent. Ask Procurement to reconcile the saved result.");
+      return { reference, error: "" };
+    }
+    catch (error) { return { reference: null, error: message(error) }; }
+  });
+  const [pending, setPendingState] = useState<RfqRecoveryReference | null>(journal.reference);
   function setPending(value: RfqCommand | null) {
+    const reference = value ? rfqRecoveryReference(value) : null;
+    // Complete and verify the durable write before any POST. Restored locators
+    // cannot be passed to sendRfqCommand: only the original in-memory body can.
+    writeRfqRecovery(slot, reference);
     if (value) pendingRfqCommands.set(slot, value); else pendingRfqCommands.delete(slot);
-    if (live.current) setPendingState(value);
+    if (live.current) setPendingState(reference);
   }
   useEffect(() => { const controller = new AbortController(); setData(null); setLoadError("");
     listRfqSources(legalEntityId, page, search, controller.signal).then(value => { if (!controller.signal.aborted) setData(value); })
@@ -68,13 +81,16 @@ export function GovernedSourcingCreate() {
     setSelected([...selected, { source, quantity: source.availableQuantity }]);
   }
   async function create(event: FormEvent) {
-    event.preventDefault(); if (pending || working.current) return; setError("");
+    event.preventDefault(); if (journal.error || pending || working.current) return; setError("");
     let command: RfqCommand;
     try { command = createRfqCommand(title, selected, crypto.randomUUID()); } catch (error) { setError(message(error)); return; }
-    setPending(command); working.current = true; setBusy(true);
+    try { setPending(command); } catch (error) { setError(message(error)); return; }
+    working.current = true; setBusy(true);
     try { const saved = await sendRfqCommand(legalEntityId, command); setPending(null); if (live.current) navigate(detailLink(saved.eventId)); }
     catch (error) {
-      if (error instanceof RfqExecutionError && (error.status === 400 || error.status === 422)) setPending(null);
+      if (error instanceof RfqExecutionError && (error.status === 400 || error.status === 422)) {
+        try { setPending(null); } catch (journalError) { setError(message(journalError)); return; }
+      }
       if (error instanceof RfqExecutionError && (error.status === 401 || error.status === 403 || error.status === 404)) { setSelected([]); setData(null); }
       setError(message(error));
     }
@@ -86,7 +102,7 @@ export function GovernedSourcingCreate() {
     catch (error) { setError(message(error)); } finally { working.current = false; if (live.current) setBusy(false); }
   }
   return <div className="p-5 sm:p-8"><PageHeader title="Use approved purchase requests" subtitle="Choose full or partial quantities. A draft holds quantities only after you explicitly create it." />
-    {pending ? <Pending command={pending} busy={busy} error={error} check={() => void recover()} /> : <form className="space-y-5" onSubmit={create}>
+    {journal.error ? <p role="alert">{journal.error}</p> : pending ? <Pending command={pending} busy={busy} error={error} check={() => void recover()} /> : <form className="space-y-5" onSubmit={create}>
       {error && <p role="alert" className="text-red-600">{error}</p>}
       <Panel title="Quote request"><div className="p-5"><Field label="What are you buying?"><Input required maxLength={200} value={title} onChange={e => setTitle(e.target.value)} /></Field></div></Panel>
       <Panel title="Approved requests"><div className="space-y-4 p-5"><div className="flex items-end gap-3"><Field label="Find request or item" className="flex-1"><Input maxLength={100} value={search} onChange={e => { setPage(1); setSearch(e.target.value); }} /></Field>
@@ -112,25 +128,40 @@ export function GovernedSourcingDetail({ id }: { id: string }) {
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const { legalEntityId, permissions } = useCompany(); const [record, setRecord] = useState<RfqDetail | null>(null), [error, setError] = useState("");
   const [reason, setReason] = useState(""), [busy, setBusy] = useState(false), [refresh, setRefresh] = useState(0);
-  const [pending, setPendingState] = useState<RfqCommand | null>(() => pendingRfqCommands.get(slot) ?? null);
+  const [journal] = useState(() => {
+    try {
+      const reference = readRfqRecovery(slot);
+      if (!reference && pendingRfqCommands.has(slot)) throw new Error("The original save reference is missing from recovery storage. No new save will be sent. Ask Procurement to reconcile the saved result.");
+      return { reference, error: "" };
+    }
+    catch (error) { return { reference: null, error: message(error) }; }
+  });
+  const [pending, setPendingState] = useState<RfqRecoveryReference | null>(journal.reference);
   function setPending(value: RfqCommand | null) {
+    const reference = value ? rfqRecoveryReference(value) : null;
+    // Complete and verify the durable write before any POST. Restored locators
+    // cannot be passed to sendRfqCommand: only the original in-memory body can.
+    writeRfqRecovery(slot, reference);
     if (value) pendingRfqCommands.set(slot, value); else pendingRfqCommands.delete(slot);
-    if (live.current) setPendingState(value);
+    if (live.current) setPendingState(reference);
   }
   useEffect(() => { const controller = new AbortController(); setRecord(null); setError("");
     getGovernedRfq(legalEntityId, id, controller.signal).then(value => { if (!controller.signal.aborted) setRecord(value); })
       .catch(error => { if (!controller.signal.aborted) setError(message(error)); }); return () => controller.abort();
   }, [legalEntityId, id, refresh]);
   async function cancel() {
-    if (!record || pending || working.current || !permissions.includes("procurement-sourcing-cancel")) return; setError(""); let command: RfqCommand;
+    if (journal.error || !record || pending || working.current || !permissions.includes("procurement-sourcing-cancel")) return; setError(""); let command: RfqCommand;
     try { command = cancelRfqCommand(record, reason, crypto.randomUUID()); } catch (error) { setError(message(error)); return; }
-    setPending(command); working.current = true; setBusy(true);
+    try { setPending(command); } catch (error) { setError(message(error)); return; }
+    working.current = true; setBusy(true);
     try { await sendRfqCommand(legalEntityId, command); setPending(null); setReason(""); setRefresh(value => value + 1); }
     catch (error) {
       // A validated 400/422 rejection did not apply this command: retain the reason
       // for correction and require a fresh explicit submission. Unknown outcomes
       // keep their original UUID and expose GET-only recovery instead.
-      if (error instanceof RfqExecutionError && (error.status === 400 || error.status === 422)) setPending(null);
+      if (error instanceof RfqExecutionError && (error.status === 400 || error.status === 422)) {
+        try { setPending(null); } catch (journalError) { setError(message(journalError)); return; }
+      }
       if (error instanceof RfqExecutionError && (error.status === 401 || error.status === 403 || error.status === 404)) setRecord(null);
       setError(message(error));
     }
@@ -142,6 +173,7 @@ export function GovernedSourcingDetail({ id }: { id: string }) {
     catch (error) { if (error instanceof RfqExecutionError && (error.status === 401 || error.status === 403 || error.status === 404)) setRecord(null); setError(message(error)); }
     finally { working.current = false; if (live.current) setBusy(false); }
   }
+  if (journal.error) return <div className="p-5 sm:p-8"><p role="alert">{journal.error}</p></div>;
   if (!record) return <div className="p-5 sm:p-8">{error ? <p role="alert">{error}</p> : <p role="status">Loading quote request…</p>}{pending && <Pending command={pending} busy={busy} error={error} check={() => void recover()} />}</div>;
   return <div className="p-5 sm:p-8"><PageHeader title={record.title} subtitle={`${record.number} · ${record.method} · ${record.currencyCode}`} actions={<Badge>{record.status}</Badge>} />
     <Panel title="Items and services"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Approved estimate</th><th>Draft balance</th></tr></thead><tbody>{record.lines.map(row => <tr key={row.id}>

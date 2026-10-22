@@ -155,3 +155,51 @@ test("unconfirmed create survives same-session navigation and recovers its origi
   expect(calls.filter(x => x.method === "POST")).toHaveLength(1);
   expect(calls.find(x => x.path.includes("/command-receipts/"))!.path).toContain(`/Create/${key}`);
 });
+
+
+test("hard reload recovers lost partial creation by the original GET reference without a second POST", async ({ page }) => {
+  const calls = await mock(page, { loseCreate: true });
+  await page.goto("/procurement/workspace/rfqs/new?source=approved"); await selectTwo(page);
+  await page.getByRole("button", { name: "Create internal draft", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+  const create = calls.find(x => x.path.endsWith("/from-approved-sources"))!;
+  const stored = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("erp.rfq.recovery.v1:")).map(key => sessionStorage.getItem(key)!));
+  expect(stored).toHaveLength(1);
+  expect(JSON.parse(stored[0])).toEqual({ operation: "Create", key: create.key, eventId: null });
+  expect(stored[0]).not.toContain("Office"); expect(stored[0]).not.toContain("quantity");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create internal draft", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Check saved result", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
+  expect(calls.filter(x => x.method === "POST")).toHaveLength(1);
+  const recovered = calls.filter(x => x.path.includes("/command-receipts/"));
+  expect(recovered).toHaveLength(1); expect(recovered[0].method).toBe("GET");
+  expect(recovered[0].path).toContain(`/Create/${create.key}`);
+});
+
+test("malformed recovery storage blocks a new create without discarding the original journal", async ({ page }) => {
+  const calls = await mock(page);
+  const slot = JSON.stringify(["amizo", company, worker, branch, "Create"]);
+  await page.addInitScript(({ slot }) => sessionStorage.setItem("erp.rfq.recovery.v1:" + slot, "{broken"), { slot });
+  await page.goto("/procurement/workspace/rfqs/new?source=approved");
+  await expect(page.getByRole("alert")).toContainText("No new save will be sent");
+  await expect(page.getByRole("button", { name: "Create internal draft", exact: true })).toHaveCount(0);
+  expect(calls.filter(x => x.method === "POST")).toHaveLength(0);
+  expect(await page.evaluate(slot => sessionStorage.getItem("erp.rfq.recovery.v1:" + slot), slot)).toBe("{broken");
+});
+
+test("unavailable session journal cannot send a create", async ({ page }) => {
+  const calls = await mock(page);
+  await page.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith("erp.rfq.recovery.v1:")) throw new DOMException("Unavailable", "QuotaExceededError");
+      original.call(this, key, value);
+    };
+  });
+  await page.goto("/procurement/workspace/rfqs/new?source=approved"); await selectTwo(page);
+  await page.getByRole("button", { name: "Create internal draft", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("No new save will be sent");
+  expect(calls.filter(x => x.method === "POST")).toHaveLength(0);
+});

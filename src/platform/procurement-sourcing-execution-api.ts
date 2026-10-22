@@ -15,6 +15,25 @@ export type RfqDetail = { id: string; number: string; title: string; method: str
     description: string; unitCode: string; categoryCode: string | null; quantity: string; approvedUnitEstimate: string; estimatedValue: string; allocationState: "Reserved" | "Released" }[] };
 export type RfqSelection = { source: RfqSource; quantity: string };
 export type RfqCommand = { operation: "Create" | "Cancel"; key: string; eventId: string | null; body: string };
+/** Read-only receipt locator: deliberately has no POST body. */
+export type RfqRecoveryReference = { operation: "Create"; key: string; eventId: null } |
+  { operation: "Cancel"; key: string; eventId: string; expectedEventVersion: number; originalDraftFingerprint: string };
+export function validateRfqRecoveryReference(value: unknown): RfqRecoveryReference {
+  if (!object(value) || !id(value.key)) throw invalid();
+  const keys = Object.keys(value).sort().join(",");
+  if (value.operation === "Create" && value.eventId === null && keys === "eventId,key,operation")
+    return { operation: "Create", key: value.key, eventId: null };
+  if (value.operation === "Cancel" && id(value.eventId) && positive(value.expectedEventVersion) && sha(value.originalDraftFingerprint)
+    && keys === "eventId,expectedEventVersion,key,operation,originalDraftFingerprint")
+    return { operation: "Cancel", key: value.key, eventId: value.eventId, expectedEventVersion: value.expectedEventVersion, originalDraftFingerprint: value.originalDraftFingerprint };
+  throw invalid();
+}
+export function rfqRecoveryReference(command: RfqCommand): RfqRecoveryReference {
+  validCommand(command);
+  return validateRfqRecoveryReference(command.operation === "Create" ? { operation: command.operation, key: command.key, eventId: null }
+    : { operation: command.operation, key: command.key, eventId: command.eventId,
+      expectedEventVersion: JSON.parse(command.body).expectedEventVersion, originalDraftFingerprint: JSON.parse(command.body).originalDraftFingerprint });
+}
 export type RfqReply = { eventId: string; number: string; status: "Draft" | "Cancelled"; version: number; originalDraftFingerprint: string; recordedHistoricalResult: true };
 export class RfqExecutionError extends Error { constructor(readonly status: number, message: string) { super(message); } }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -131,11 +150,11 @@ export function cancelRfqCommand(record: RfqDetail, reason: string, key: string)
   if (!id(key) || !id(record.id) || record.status !== "Draft" || !positive(record.version) || !sha(record.originalDraftFingerprint) || !clean || clean.length > 2000) throw invalid();
   return { operation: "Cancel", key, eventId: record.id, body: JSON.stringify({ expectedEventVersion: record.version, originalDraftFingerprint: record.originalDraftFingerprint, reason: clean }) };
 }
-function response(body: unknown, command: RfqCommand): RfqReply {
+function response(body: unknown, command: RfqRecoveryReference): RfqReply {
   if (!object(body) || !id(body.eventId) || !text(body.number) || body.commandKey !== command.key || !positive(body.version) || !sha(body.originalDraftFingerprint)
     || body.recordedHistoricalResult !== true || body.canPublish !== false || body.supplierDeliveryState !== "NotStarted" || body.financeReservationChanged !== false
     || body.status !== (command.operation === "Create" ? "Draft" : "Cancelled") || command.eventId !== null && body.eventId !== command.eventId) throw invalid();
-  if (command.operation === "Cancel") { const input = JSON.parse(command.body) as Record<string, unknown>;
+  if (command.operation === "Cancel") { const input = command;
     if (!positive(input.expectedEventVersion) || body.version <= input.expectedEventVersion || body.originalDraftFingerprint !== input.originalDraftFingerprint) throw invalid(); }
   return { eventId: body.eventId, number: body.number, status: body.status as RfqReply["status"], version: body.version,
     originalDraftFingerprint: body.originalDraftFingerprint, recordedHistoricalResult: true };
@@ -146,13 +165,13 @@ function validCommand(command: RfqCommand) {
     || !text(command.body) || command.body.length > 1048576) throw invalid();
 }
 export async function sendRfqCommand(company: string, command: RfqCommand): Promise<RfqReply> {
-  validCommand(command);
+  const reference = rfqRecoveryReference(command);
   const body = await request(company, command.operation === "Create" ? "/from-approved-sources" : `/${command.eventId}/source-cancel`,
     { method: "POST", headers: { "Idempotency-Key": command.key }, body: command.body });
-  return response(body, command);
+  return response(body, reference);
 }
-export async function recoverRfqCommand(company: string, command: RfqCommand): Promise<RfqReply> {
-  validCommand(command);
+export async function recoverRfqCommand(company: string, reference: RfqRecoveryReference | RfqCommand): Promise<RfqReply> {
+  const command = validateRfqRecoveryReference("body" in reference ? rfqRecoveryReference(reference) : reference);
   const body = await request(company, `/command-receipts/${command.operation}/${command.key}`);
   if (!object(body) || body.operation !== command.operation || body.commandKey !== command.key || body.recordedHistoricalResult !== true
     || body.canPublish !== false || body.originalStatusCode !== (command.operation === "Create" ? 201 : 200) || !text(body.responseJson) || body.responseJson.length > 1048576) throw invalid();

@@ -56,8 +56,8 @@ function SourcingPageContent({ view, governed, id }: { view: "list" | "editor" |
   </>;
 }
 export function LiveSourcingList() { return <ScopedSourcingPage view="list" />; }
-function LegacySourcingEditor() { return <ScopedSourcingPage view="editor" />; }
-function LegacySourcingDetail() { return <ScopedSourcingPage view="detail" />; }
+export function LiveSourcingEditor() { return <ScopedSourcingPage view="editor" />; }
+export function LiveSourcingDetail() { return <ScopedSourcingPage view="detail" />; }
 
 function LegacySourcingList() {
   const { legalEntityId, adminViewOnly, permissions } = useCompany();
@@ -86,7 +86,7 @@ function LegacySourcingList() {
   </div>;
 }
 
-export function LiveSourcingEditor() {
+function LegacySourcingEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { legalEntityId, defaultCurrencyCode } = useCompany();
@@ -180,7 +180,7 @@ export function LiveSourcingEditor() {
   </div>;
 }
 
-export function LiveSourcingDetail() {
+function LegacySourcingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { legalEntityId, adminViewOnly, permissions } = useCompany();
