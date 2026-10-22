@@ -7,7 +7,7 @@ import {
 } from "react-router-dom";
 import { AppProvider } from "../lib/store";
 import { ErpShellProvider } from "../lib/erpShell";
-import { ProcurementLiveGate, isProcurementLiveMode, useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { ProcurementLiveGate, ProcurementScopeSelectionState, isProcurementLiveMode, useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/LiveVendors";
 import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
 import { LiveApprovalQueue, LiveApprovalDetail } from "../features/LiveApprovals";
@@ -86,7 +86,7 @@ export function App() {
     <BrowserRouter basename="/procurement/workspace">
       <AppProvider>
         <ErpShellProvider>
-        <ProcurementLiveGate unavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<PendingLiveWorkflow />} /></Route></Routes>}>
+        <ProcurementLiveGate scopeUnavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<ProcurementScopeSelectionState />} /></Route></Routes>} unavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<PendingLiveWorkflow />} /></Route></Routes>}>
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={isProcurementLiveMode ? <LiveOverview /> : <Dashboard />} />

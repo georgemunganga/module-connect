@@ -4,6 +4,7 @@ import { observeAuthContext } from "./auth-context-invalidation";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../shared/branding";
 import { ERP_SHELL_STORAGE_KEY } from "../../../shared/shell-scope";
+import { canonicalScopeId, resolveLegacyBranchSelection } from "./legacy-branch-selection";
 
 type Branding = {
   displayName: string;
@@ -35,6 +36,8 @@ type ErpShellContext = {
   branches: Branch[];
   selection: ShellSelection;
   contextAvailable: boolean;
+  procurementScopeStatus: "ready" | "resolving" | "selection-required";
+  scopeMessage: string;
   verifiedContext: VerifiedOrganisationContext | null;
   assignedRoles: string[];
   selectEntity: (id: string) => void;
@@ -47,7 +50,8 @@ class ShellLookupError extends Error { constructor(readonly status: number) { su
 const ShellContext = createContext<ErpShellContext | null>(null);
 function readSelection(): ShellSelection {
   try {
-    return JSON.parse(localStorage.getItem(SHELL_KEY) || "{}") as ShellSelection;
+    const value: unknown = JSON.parse(localStorage.getItem(SHELL_KEY) || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value as ShellSelection : {};
   } catch {
     return {};
   }
@@ -76,6 +80,8 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const [selection, setSelection] = useState<ShellSelection>(readSelection);
   const [contextAvailable, setContextAvailable] = useState(false);
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
+  const [lookupFinished, setLookupFinished] = useState(false);
+  const [storageFailure, setStorageFailure] = useState<string | null>(null);
   const [lookupDenied, setLookupDenied] = useState(false);
   const [verifiedSelection, setVerifiedSelection] = useState<{ key: string; value: VerifiedOrganisationContext } | null>(null);
   const verifiedKey = JSON.stringify([authEpoch, selection.entityId ?? "", selection.branch ?? ""]);
@@ -84,7 +90,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
 
   useEffect(()=>observeAuthContext(window,()=>{
     authGeneration.current+=1;
-    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupDenied(false);setVerifiedSelection(null);});
+    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupFinished(false);setLookupDenied(false);setVerifiedSelection(null);});
   }),[]);
 
   useLayoutEffect(() => {
@@ -181,6 +187,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
       request("/api/hrm/shell/"),
     ]).then((results) => {
       if(controller.signal.aborted || epoch!==authGeneration.current)return;
+      setLookupFinished(true);
       if (!results.every(result => result.status === "fulfilled")) {
         const coreDenied = results.slice(0, 2).some(result => result.status === "rejected"
           && result.reason instanceof ShellLookupError && result.reason.status === 403);
@@ -212,7 +219,10 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     if (!lookupDenied) { setVerifiedSelection(null); return; }
     const controller = new AbortController();
     const capturedKey = verifiedKey;
-    const capturedSelection = { entityId: selection.entityId, branch: selection.branch };
+    // A legacy label is never sent as an ID or automatically replaced with the
+    // server's default branch. This request supplies display/explicit choices only.
+    const capturedSelection = { entityId: selection.entityId,
+      branch: canonicalScopeId(selection.branch) ? selection.branch : undefined };
     setVerifiedSelection(null);
     fetchVerifiedOrganisationContext(capturedSelection, controller.signal, fetch, accessToken())
       .then(value => {
@@ -223,15 +233,34 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [lookupDenied, verifiedKey, selection.entityId, selection.branch, authEpoch]);
 
+  const selectionKey = JSON.stringify([authEpoch, selection.entityId ?? "", selection.branch ?? ""]);
+  const resolution = resolveLegacyBranchSelection(selection, branches,
+    contextAvailable ? "ready" : lookupFinished ? "unavailable" : "loading");
+  const failedStorage = storageFailure === selectionKey;
+  const procurementScopeStatus = failedStorage ? "selection-required"
+    : resolution.kind === "ready" ? "ready" : resolution.kind === "waiting" || resolution.kind === "canonicalize" ? "resolving" : "selection-required";
+  const scopeMessage = failedStorage ? "Your branch could not be saved in this browser. Allow local storage, then choose your branch again."
+    : procurementScopeStatus === "resolving" ? "Checking the branch saved by your ERP workspace…"
+      : "Choose your company and branch from Organisation context in the top bar. Your saved branch could not be matched safely, so no purchase records have been opened or changed.";
+  useEffect(() => {
+    if (resolution.kind !== "canonicalize" || failedStorage) return;
+    const epoch = authEpoch;
+    const current = readSelection();
+    if (epoch !== authGeneration.current) return;
+    if (current.entityId !== selection.entityId || current.branch !== selection.branch) { setSelection(current); return; }
+    const next = { ...current, branch: resolution.branchId };
+    try { localStorage.setItem(SHELL_KEY, JSON.stringify(next)); setStorageFailure(null); setSelection(next); }
+    catch { setStorageFailure(selectionKey); }
+  }, [authEpoch, selectionKey, resolution.kind, resolution.kind === "canonicalize" ? resolution.branchId : "", failedStorage]);
   const updateSelection = (next: ShellSelection) => {
-    localStorage.setItem(SHELL_KEY, JSON.stringify(next));
-    setSelection(next);
+    try { localStorage.setItem(SHELL_KEY, JSON.stringify(next)); setStorageFailure(null); setSelection(next); }
+    catch { setStorageFailure(selectionKey); }
   };
   const value = useMemo<ErpShellContext>(() => ({
-    authEpoch,branding, entities, branches, selection, contextAvailable, verifiedContext, assignedRoles,
+    authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, verifiedContext, assignedRoles,
     selectEntity: (id) => updateSelection({ ...selection, entityId: id, branch: "" }),
     selectBranch: (id, entityId) => updateSelection({ ...selection, entityId, branch: id }),
-  }), [authEpoch,branding, entities, branches, selection, contextAvailable, verifiedContext, assignedRoles]);
+  }), [authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, verifiedContext, assignedRoles]);
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }
 
