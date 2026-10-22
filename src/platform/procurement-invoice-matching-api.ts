@@ -16,6 +16,9 @@ export type InvoiceMappingLine = { invoiceLineId: string; purchaseOrderLineId: s
 export type InvoiceMappingInput = { version: number; purchaseOrderId: string; issuedVersionId: string; lines: InvoiceMappingLine[] };
 export type InvoiceCompareInput = { version: number; mappingVersionId: string; reason: string | null };
 export type InvoiceMatchingCommand = { operation: "InvoiceMapping" | "InvoiceCompare"; invoiceId: string; key: string; body: string; ownLineIds: string[] };
+/** Nonsecret locator retained for GET-only recovery; no document reference or note. */
+export type InvoiceMatchingRecovery = { operation: InvoiceMatchingCommand["operation"]; invoiceId: string; key: string;
+  expectedVersion: number; ownLineIds: string[] };
 export type InvoiceMatchingReply = { invoiceId: string; key: string; operation: InvoiceMatchingCommand["operation"]; id: string; version: number;
   outcome: "MappingUnverified" | "Blocked" | "Compared"; mappingRevision?: number; issues: { invoiceLineId: string | null; code: string }[] };
 export class InvoiceMatchingError extends Error { constructor(readonly status: number, message: string) { super(message); } }
@@ -111,13 +114,20 @@ export function invoiceCompareCommand(invoice: string, ownLines: readonly string
   if (![invoice, key, input.mappingVersionId].every(id) || !int(input.version) || !ownLines.every(id) || input.reason !== null && input.reason.length > 2000) throw invalid();
   return { invoiceId: invoice, operation: "InvoiceCompare", key, body: JSON.stringify(input), ownLineIds: [...ownLines] };
 }
-function reply(body: unknown, command: InvoiceMatchingCommand): InvoiceMatchingReply {
+export function invoiceMatchingRecovery(command: InvoiceMatchingCommand): InvoiceMatchingRecovery {
+  let intended: unknown; try { intended = JSON.parse(command.body); } catch { throw invalid(); }
+  if (!object(intended) || !int(intended.version) || intended.version < 1 || !id(command.invoiceId) || !id(command.key)
+    || !Array.isArray(command.ownLineIds) || command.ownLineIds.length > 200 || !command.ownLineIds.every(id)
+    || new Set(command.ownLineIds).size !== command.ownLineIds.length) throw invalid();
+  return { operation: command.operation, invoiceId: command.invoiceId, key: command.key,
+    expectedVersion: intended.version, ownLineIds: [...command.ownLineIds] };
+}
+function reply(body: unknown, command: InvoiceMatchingRecovery): InvoiceMatchingReply {
   const permission = command.operation === "InvoiceMapping" ? "procurement-invoice-capture" : "procurement-invoice-match";
   if (!object(body) || body.invoiceId !== command.invoiceId || body.commandKey !== command.key || body.commandPermission !== permission
     || body.commandSchemaVersion !== 1 || body.recordedHistoricalResult !== true || body.isCurrentApproval !== false || body.canPostToFinance !== false || !object(body.result)) throw invalid();
   const r = body.result;
-  let intended: unknown; try { intended = JSON.parse(command.body); } catch { throw invalid(); }
-  if (!object(intended) || !int(intended.version) || !id(r.id) || !int(r.version) || r.version <= intended.version) throw invalid();
+  if (!int(command.expectedVersion) || command.expectedVersion < 1 || !id(r.id) || !int(r.version) || r.version <= command.expectedVersion) throw invalid();
   if (command.operation === "InvoiceMapping") {
     if (r.verificationState !== "Unverified" || !int(r.mappingRevision) || !text(r.mappingSha256) || !/^[a-f0-9]{64}$/i.test(r.mappingSha256)) throw invalid();
     return { invoiceId: command.invoiceId, key: command.key, operation: command.operation, id: r.id, version: r.version, outcome: "MappingUnverified", mappingRevision: r.mappingRevision, issues: [] };
@@ -131,10 +141,15 @@ function reply(body: unknown, command: InvoiceMatchingCommand): InvoiceMatchingR
   return { invoiceId: command.invoiceId, key: command.key, operation: command.operation, id: r.id, version: r.version, outcome: r.outcome as "Blocked" | "Compared", issues };
 }
 export async function sendInvoiceMatching(company: string, command: InvoiceMatchingCommand): Promise<InvoiceMatchingReply> {
+  const locator = invoiceMatchingRecovery(command);
   return reply(await request(company, command.invoiceId, command.operation === "InvoiceMapping" ? "/mappings" : "/compare",
-    { method: "POST", headers: { "Idempotency-Key": command.key }, body: command.body }), command);
+    { method: "POST", headers: { "Idempotency-Key": command.key }, body: command.body }), locator);
 }
-export async function recoverInvoiceMatching(company: string, command: InvoiceMatchingCommand): Promise<InvoiceMatchingReply> {
+export async function recoverInvoiceMatching(company: string, command: InvoiceMatchingRecovery): Promise<InvoiceMatchingReply> {
+  if (!id(command.invoiceId) || !id(command.key) || !["InvoiceMapping", "InvoiceCompare"].includes(command.operation)
+    || !int(command.expectedVersion) || command.expectedVersion < 1 || !Array.isArray(command.ownLineIds)
+    || command.ownLineIds.length > 200 || !command.ownLineIds.every(id)
+    || new Set(command.ownLineIds).size !== command.ownLineIds.length) throw invalid();
   const body = await request(company, command.invoiceId, `/commands/${command.key}?operation=${command.operation}`);
   if (!object(body) || body.operation !== command.operation || body.commandKey !== command.key || body.recordedHistoricalResult !== true
     || body.isCurrentReplayAuthorization !== false || body.canPostToFinance !== false || !int(body.currentInvoiceVersion)) throw invalid();

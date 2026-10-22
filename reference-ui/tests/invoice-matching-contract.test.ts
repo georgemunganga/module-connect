@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { invoiceMappingCommand, invoiceCompareCommand, listInvoiceSources, listInvoiceAcceptances, sendInvoiceMatching, recoverInvoiceMatching,
+import { invoiceMappingCommand, invoiceCompareCommand, invoiceMatchingRecovery, listInvoiceSources, listInvoiceAcceptances, sendInvoiceMatching, recoverInvoiceMatching,
   type InvoiceMappingInput, type InvoiceSource, type InvoiceMatchingCommand } from "../../src/platform/procurement-invoice-matching-api";
 const company = "11111111-1111-4111-8111-111111111111", invoice = "22222222-2222-4222-8222-222222222222";
 const line = "33333333-3333-4333-8333-333333333333", order = "44444444-4444-4444-8444-444444444444";
@@ -57,6 +57,7 @@ describe("invoice matching adapter", () => {
   });
   it("sends the exact stable command once and accepts only unverified mapping confirmation", async () => {
     const command = invoiceMappingCommand(invoice, [line], input(), key), fetch = respond(envelope(invoiceMappingCommand(invoice, [line], input(), key)));
+    expect(invoiceMatchingRecovery(command)).toEqual({ operation: "InvoiceMapping", invoiceId: invoice, key, expectedVersion: 3, ownLineIds: [line] });
     expect((await sendInvoiceMatching(company, command)).outcome).toBe("MappingUnverified");
     expect(fetch).toHaveBeenCalledTimes(1); expect(fetch.mock.calls[0][1].body).toBe(command.body);
     expect(fetch.mock.calls[0][1].headers.get("Idempotency-Key")).toBe(key);
@@ -75,8 +76,8 @@ describe("invoice matching adapter", () => {
     await expect(sendInvoiceMatching(company, command)).rejects.toThrow("interrupted"); expect(fetch).toHaveBeenCalledTimes(1);
     fetch.mockResolvedValue(new Response(JSON.stringify({ operation: "InvoiceMapping", commandKey: key, recordedHistoricalResult: true, isCurrentReplayAuthorization: false,
       currentInvoiceVersion: 4, canPostToFinance: false, recordedResult: envelope(command) })));
-    expect((await recoverInvoiceMatching(company, command)).id).toBe(doc); expect(fetch.mock.calls[1][1].method).toBe("GET");
+    expect((await recoverInvoiceMatching(company, invoiceMatchingRecovery(command))).id).toBe(doc); expect(fetch.mock.calls[1][1].method).toBe("GET");
     expect(fetch.mock.calls[1][0]).toContain(`/commands/${key}?operation=InvoiceMapping`);
-    respond({ operation: "InvoiceCompare", commandKey: key }); await expect(recoverInvoiceMatching(company, command)).rejects.toThrow("confirm");
+    respond({ operation: "InvoiceCompare", commandKey: key }); await expect(recoverInvoiceMatching(company, invoiceMatchingRecovery(command))).rejects.toThrow("confirm");
   });
 });
