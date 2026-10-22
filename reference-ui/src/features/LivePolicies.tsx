@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Switch } from "../components/ui";
+import { useErpShell } from "../lib/erpShell";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
+  canRetirePolicyDraft, retirePolicyDraft, PolicyActionError,
   createPolicy, decidePolicy, getPolicy, listPolicies, previewPolicy,
   submitPolicyReview, updatePolicy, validatePolicy,
   type PolicyPage, type PolicyRecord, type PolicyIssue, type PolicyPreview,
@@ -90,6 +92,14 @@ function fromRuleJson(json: string, key: string, currency: string): RuleRow[] | 
 }
 
 export function LivePolicies() {
+  const readiness = useLiveReadiness(); const { selection } = useErpShell();
+  if (!readiness) throw new Error("Buying rules require an ERP company.");
+  if (selection.entityId && selection.entityId !== readiness.legalEntityId)
+    return <p role="status">Checking the selected company…</p>;
+  return <LivePoliciesRecord key={[readiness.tenantId, readiness.legalEntityId, selection.branch,
+    readiness.workerId ?? "admin"].join(":")} />;
+}
+function LivePoliciesRecord() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Buying rules require an ERP company.");
   const companyId = readiness.legalEntityId;
@@ -117,11 +127,17 @@ export function LivePolicies() {
   const [error, setError] = useState("");
   const [listError, setListError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [retiring, setRetiring] = useState<PolicyPage["items"][number] | null>(null);
+  const [retirementReason, setRetirementReason] = useState("");
+  const [retirementLocked, setRetirementLocked] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const canEdit = !viewOnly && readiness.permissions.includes("procurement-configuration-edit");
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setListError("");
-    listPolicies(companyId, controller.signal).then(setPage)
+    listPolicies(companyId, controller.signal).then((result) => { if (!controller.signal.aborted) setPage(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setListError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -199,6 +215,21 @@ export function LivePolicies() {
     finally { setSaving(false); }
   }
 
+  async function retire(event: FormEvent) {
+    event.preventDefault();
+    if (!canEdit || !retiring || saving || retirementLocked || !alive.current) return;
+    setSaving(true); setError("");
+    try {
+      await retirePolicyDraft(companyId, retiring, retirementReason);
+      if (!alive.current) return;
+      setRetiring(null); setRetirementReason(""); setRefresh((value) => value + 1);
+    } catch (cause) {
+      if (!alive.current) return;
+      setError(errorText(cause));
+      if (!(cause instanceof PolicyActionError) || ![400, 422].includes(cause.status)) setRetirementLocked(true);
+    } finally { if (alive.current) setSaving(false); }
+  }
+
   return <div className="mx-auto max-w-5xl space-y-5">
     <PageHeader title="Buying rules" subtitle="Prepare company rules for budgets, quotes and approvals." />
     <Panel><div className="p-5">
@@ -210,11 +241,21 @@ export function LivePolicies() {
       {listError && <p role="alert" className="mb-4 text-sm text-red-700">{listError}</p>}
       {loading ? <p role="status">Loading buying rules…</p> : page?.items.length
         ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Used for</th><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2">{!viewOnly && <Button variant="secondary" onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>}{!viewOnly && record.state === "Draft" && <><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setPreviewing(null); setDeciding(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}{!viewOnly && record.state === "PendingReview" && readiness.permissions.includes("procurement-configuration-approve") && <><Button variant="secondary" onClick={() => { setDeciding(record); setDecisionAction("publish"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Publish</Button><Button variant="secondary" onClick={() => { setDeciding(record); setDecisionAction("return"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
+          <tbody>{page.items.map((record) => <tr key={record.id}><td>{record.policyKey === "PURCHASE_ORDER" ? "Purchase orders" : "Purchase requests"}</td><td>{record.policyVersionNumber}</td><td>{day(record.effectiveFrom)}</td><td>{day(record.effectiveTo) || "No end date"}</td><td><Badge>{record.state}</Badge></td><td><div className="flex flex-wrap gap-2">{!viewOnly && <Button variant="secondary" onClick={() => { setPreviewing(record); setEditing(null); setReviewing(null); setDeciding(null); setPreview(null); setError(""); }}>Try a sample</Button>}{canEdit && canRetirePolicyDraft(record) && <Button variant="secondary" disabled={saving} onClick={() => {
+            setRetiring(record); setRetirementReason(""); setRetirementLocked(false); setEditing(null);
+            setReviewing(null); setDeciding(null); setPreviewing(null); setError("");
+          }}>Retire unused draft</Button>}{!viewOnly && record.state === "Draft" && <><Button variant="secondary" onClick={() => void edit(record.id)}>Edit draft</Button><Button variant="secondary" onClick={() => { setReviewing(record); setPreviewing(null); setDeciding(null); setEditing(null); setReviewReason(""); setError(""); }}>Send for review</Button></>}{!viewOnly && record.state === "PendingReview" && readiness.permissions.includes("procurement-configuration-approve") && <><Button variant="secondary" onClick={() => { setDeciding(record); setDecisionAction("publish"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Publish</Button><Button variant="secondary" onClick={() => { setDeciding(record); setDecisionAction("return"); setDecisionReason(""); setReviewing(null); setPreviewing(null); setEditing(null); setError(""); }}>Return for changes</Button></>}</div></td></tr>)}</tbody></RecordTable></div>
         : <EmptyState title="No buying rules yet" description="Add a draft for purchase requests or purchase orders." action={!viewOnly ? <Button onClick={newDraft}>Add buying rule draft</Button> : undefined} />}
       {page && page.total > page.items.length && <p className="mt-3 text-xs text-muted-foreground">Showing the first {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+    {canEdit && retiring && <form onSubmit={retire}><Panel title="Retire unused buying rule draft"><div className="space-y-4 p-5">
+      <p className="text-sm text-muted-foreground">Retirement keeps this draft and its history. Reviewed, published or referenced policies cannot be retired here. No spending authority changes.</p>
+      <Field label="Retirement reason"><Input required maxLength={1000} disabled={saving || retirementLocked} value={retirementReason} onChange={(event) => setRetirementReason(event.target.value)} /></Field>
+      {retirementLocked && <p role="status">The retirement is unconfirmed or the draft changed. Check the saved rules before making another change. This command will not repeat automatically.</p>}
+      <div className="flex gap-3"><Button type="submit" variant="danger" disabled={saving || retirementLocked || !retirementReason.trim()}>{saving ? "Retiring…" : "Confirm retirement"}</Button>
+        <Button type="button" variant="secondary" disabled={saving} onClick={() => { setRetiring(null); setRefresh((value) => value + 1); }}>Check saved rules</Button></div>
+    </div></Panel></form>}
     {!viewOnly && deciding && <form onSubmit={makeDecision}><Panel title={decisionAction === "publish" ? "Publish buying rules" : "Return buying rules for changes"}><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">{decisionAction === "publish" ? "A separate reviewer must confirm these rules. The start date must be in the future, the rules must cover all purchases, and the effective period cannot overlap another published version. Publication does not approve a purchase." : "Send the rules back to their author with a clear correction note. They can edit the draft and request review again."}</p>
       <Field label={decisionAction === "publish" ? "Publication reason" : "What needs to change?"}><Input required maxLength={1000} value={decisionReason} onChange={(event) => setDecisionReason(event.target.value)} /></Field>

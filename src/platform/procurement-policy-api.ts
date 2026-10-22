@@ -14,9 +14,11 @@ export type PolicyRecord = PolicyDraft & {
   version: number;
   createdAt: string;
   lastReturnReason?: string | null;
+  draftRetirementVersion?: number;
+  canRetireDraft?: boolean;
 };
 export type PolicyPage = {
-  items: Array<Pick<PolicyRecord, "id" | "policyKey" | "policyVersionNumber" | "state" | "effectiveFrom" | "effectiveTo" | "version" | "createdAt">>;
+  items: Array<Pick<PolicyRecord, "id" | "policyKey" | "policyVersionNumber" | "state" | "effectiveFrom" | "effectiveTo" | "version" | "createdAt" | "draftRetirementVersion" | "canRetireDraft">>;
   total: number;
   page: number;
   pageSize: number;
@@ -39,6 +41,10 @@ const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
+export class PolicyActionError extends Error {
+  constructor(message: string, readonly status: number) { super(message); this.name = "PolicyActionError"; }
+}
+
 async function call(companyId: string, path: string, init: RequestInit = {}): Promise<unknown> {
   if (!guid.test(companyId)) throw new Error("Choose an ERP company before editing buying rules.");
   const headers = new Headers(init.headers);
@@ -48,16 +54,16 @@ async function call(companyId: string, path: string, init: RequestInit = {}): Pr
   try {
     response = await fetch(`/api/procurement/v1/configuration/policies${path}`,
       { ...init, headers, credentials: "include", cache: "no-store" });
-  } catch { throw new Error("Buying rules are unavailable. Your changes were not confirmed."); }
+  } catch { throw new PolicyActionError("Buying rules are unavailable. Your changes were not confirmed.", 0); }
   if (!response.ok) {
     let message = "";
     try {
       const body: unknown = await response.json();
       if (object(body)) message = String(body.message ?? body.detail ?? "");
     } catch { /* Fall back to a safe status message. */ }
-    throw new Error(response.status === 401 ? "Sign in to ERP to manage buying rules."
+    throw new PolicyActionError(response.status === 401 ? "Sign in to ERP to manage buying rules."
       : response.status === 403 ? "You do not have access to buying rules for this company."
-        : message || (response.status === 409 ? "This draft changed. Refresh it before saving." : "The buying rule action failed."));
+        : message || (response.status === 409 ? "This draft changed. Refresh it before saving." : "The buying rule action failed."), response.status);
   }
   try { return await response.json() as unknown; }
   catch { throw new Error("ERP returned an invalid buying rule response."); }
@@ -142,4 +148,26 @@ export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUE
     throw new Error("ERP returned an invalid current-policy status.");
   return body as { status: string; isAuthority: false;
     policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null };
+}
+
+/** A server-owned, permission-filtered hint; the retirement command rechecks all facts. */
+export function canRetirePolicyDraft(record: PolicyPage["items"][number]): boolean {
+  return record.draftRetirementVersion === 1 && record.canRetireDraft === true
+    && record.state === "Draft" && Number.isSafeInteger(record.version) && record.version > 0;
+}
+export async function retirePolicyDraft(companyId: string, record: PolicyPage["items"][number],
+  reason: string): Promise<PolicyRecord> {
+  if (!guid.test(record.id) || !canRetirePolicyDraft(record))
+    throw new PolicyActionError("This draft is not available for retirement. Refresh the saved rules.", 409);
+  const trimmed = reason.trim();
+  if (!trimmed || trimmed.length > 1000)
+    throw new PolicyActionError("Enter a retirement reason of up to 1,000 characters.", 422);
+  const body = await call(companyId, `/${record.id}/retire`, {
+    method: "POST", body: JSON.stringify({ version: record.version, reason: trimmed }),
+  });
+  if (!validRecord(body) || body.id !== record.id || body.policyKey !== record.policyKey
+    || body.policyVersionNumber !== record.policyVersionNumber || body.state !== "Retired"
+    || body.version !== record.version + 1)
+    throw new PolicyActionError("Retirement was not confirmed. Check the saved rules before making another change.", 0);
+  return body;
 }
