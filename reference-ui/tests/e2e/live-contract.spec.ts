@@ -120,3 +120,17 @@ test("supplier picker searches beyond the initial supplier page", async ({ page 
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("heading", { name: "Copper supply agreement" })).toBeVisible();
 });
+
+
+test("unavailable contracts edit cannot create a replacement record", async ({ page }) => {
+  await mockErp(page);
+  let writes = 0;
+  page.on("request", request => {
+    if (new URL(request.url()).pathname.startsWith("/api/procurement/v1/contracts")
+      && ["POST", "PUT"].includes(request.method())) writes++;
+  });
+  await page.goto(`/procurement/workspace/contracts/${contractId}/edit`);
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
+  expect(writes).toBe(0);
+});

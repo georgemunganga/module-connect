@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } from "../components/ui";
@@ -159,6 +159,12 @@ export function LiveRequestEditor() {
   const [loading, setLoading] = useState(Boolean(id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const editorContext = `${legalEntityId}:${id ?? "new"}`;
+  const currentEditorContext = useRef(editorContext);
+  currentEditorContext.current = editorContext;
+  const editorGeneration = useRef(0);
+  useEffect(() => () => { editorGeneration.current += 1; }, [editorContext]);
+  const [loadedContext, setLoadedContext] = useState<string | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogPrices, setCatalogPrices] = useState<PublishedCatalogPrice[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -175,11 +181,13 @@ export function LiveRequestEditor() {
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [legalEntityId, catalogSearch]);
   useEffect(() => {
-    if (!id) { setDraft({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }); return; }
+    setVersion(null); setLoadedContext(null); setSaving(false); setError("");
+    if (!id) { setLoading(false); setDraft({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }); return; }
     const controller = new AbortController();
     setLoading(true); setError("");
     getOwnRequestDraft(legalEntityId, id, controller.signal).then((record) => {
-      setVersion(record.version);
+      if (controller.signal.aborted) return;
+      setVersion(record.version); setLoadedContext(editorContext);
       setDraft({ purpose: record.purpose, currencyCode: record.currencyCode, neededBy: record.neededBy,
         costCenterRef: record.costCenterRef, projectRef: record.projectRef,
         deliveryLocationRef: record.deliveryLocationRef, deliveryAddressText: record.deliveryAddressText,
@@ -209,16 +217,24 @@ export function LiveRequestEditor() {
   }
   const total = draft.lines.reduce((sum, line) => sum + line.requestedQuantity * line.estimatedUnitPrice, 0);
   async function save(event: FormEvent) {
-    event.preventDefault(); setSaving(true); setError("");
+    event.preventDefault();
+    if (saving) return;
+    if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the list."); return; }
+    const savingContext = editorContext;
+    const savingGeneration = editorGeneration.current;
+    const isCurrentSave = () => currentEditorContext.current === savingContext && editorGeneration.current === savingGeneration;
+    setSaving(true); setError("");
     try {
       const result = id && version !== null ? await updateOwnRequestDraft(legalEntityId, id, version, draft) : await createOwnRequestDraft(legalEntityId, draft);
-      navigate(`/requests/${result.id}`);
-    } catch (cause) { setError(errorText(cause)); }
-    finally { setSaving(false); }
+      if (isCurrentSave()) navigate(`/requests/${result.id}`);
+    } catch (cause) { if (isCurrentSave()) setError(errorText(cause)); }
+    finally { if (isCurrentSave()) setSaving(false); }
   }
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit request" : "New request"} subtitle="Save a draft for the company shown in the top bar. No budget is reserved yet." />
-    {loading ? <p role="status">Loading request…</p> : <form className="max-w-6xl space-y-5" onSubmit={save}>
+    {loading ? <p role="status">Loading request…</p> : id && (version === null || loadedContext !== editorContext)
+      ? <p role="alert">{error || "This draft is unavailable. Return to the list."}</p>
+      : <form className="max-w-6xl space-y-5" onSubmit={save}>
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current request before retrying.</span>}</p>}
       <Panel title="Request details"><div className="grid gap-4 p-5 sm:grid-cols-2">
         <Field label="What do you need?" className="sm:col-span-2"><Input required maxLength={1000} value={draft.purpose} onChange={(event) => field("purpose", event.target.value)} /></Field>

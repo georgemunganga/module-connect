@@ -1,8 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
+import { useErpShell } from "../lib/erpShell";
+import { invoiceDecimal } from "./invoice-values";
+import { ItemApiError, catalogPriceCanEdit, catalogPriceEditDraft, updateCatalogPrice, type CatalogPriceEdit } from "../../../src/platform/procurement-items-api";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   activateItem, addCatalogPrice, createItemDraft, deactivateItem, getItemDraft,
@@ -56,6 +59,10 @@ export function LiveItemList() {
 }
 
 export function LiveItemEditor() {
+  const { id } = useParams(); const readiness = useLiveReadiness(); const { selection } = useErpShell();
+  return <LiveItemEditorBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.workerId, selection.entityId, selection.branch, id ?? "new"].join(":")} />;
+}
+function LiveItemEditorBody() {
   const { id } = useParams();
   const navigate = useNavigate();
   const company = companyId();
@@ -64,27 +71,40 @@ export function LiveItemEditor() {
   const [loading, setLoading] = useState(Boolean(id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const mounted = useRef(true); useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [loadedKey, setLoadedKey] = useState<string | null>(id ? null : `${company}:new`);
+  const viewOnly = useLiveReadiness()?.adminViewOnly === true;
   useEffect(() => {
-    if (!id) { setDraft(initial); return; }
+    setVersion(null); setLoadedKey(null);
+    if (!id) { setDraft(initial); setLoadedKey(`${company}:new`); return; }
     const controller = new AbortController();
     setLoading(true); setError("");
-    getItemDraft(company, id, controller.signal).then((item) => { setDraft({ ...initial, ...item }); setVersion(item.version); })
+    getItemDraft(company, id, controller.signal).then((item) => {
+      if (controller.signal.aborted) return;
+      setDraft({ ...initial, ...item }); setVersion(item.version); setLoadedKey(`${company}:${id}`);
+    })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [company, id]);
   const field = (key: keyof ItemDraft, value: string | boolean | number | null) => setDraft((current) => ({ ...current, [key]: value }));
   async function save(event: FormEvent) {
-    event.preventDefault(); setSaving(true); setError("");
+    event.preventDefault();
+    if (saving || viewOnly || loadedKey !== `${company}:${id ?? "new"}` || id && version === null) {
+      setError("Load this item before saving. No new item was created."); return;
+    }
+    setSaving(true); setError("");
     try {
-      const result = id && version !== null ? await updateItemDraft(company, id, version, draft) : await createItemDraft(company, draft);
-      navigate(`/items/${result.id}`);
-    } catch (cause) { setError(message(cause)); }
-    finally { setSaving(false); }
+      const result = id ? await updateItemDraft(company, id, version!, draft) : await createItemDraft(company, draft);
+      if (mounted.current) navigate(`/items/${result.id}`);
+    } catch (cause) { if (mounted.current) setError(message(cause)); }
+    finally { if (mounted.current) setSaving(false); }
   }
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit item" : "New item"} subtitle="Save a draft. Items need a separate approval before employees can buy them." />
-    {loading ? <p role="status">Loading item…</p> : <form className="max-w-4xl space-y-5" onSubmit={save}>
+    {loading ? <p role="status">Loading item…</p> : id && loadedKey !== `${company}:${id}`
+      ? <div role="alert"><p>{error || "This item could not be loaded for editing. No new item will be created."}</p><Link to="/items">Back to items</Link></div>
+      : <form className="max-w-4xl space-y-5" onSubmit={save}>
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("changed") && <span className="block">Your edits are still here. Compare with the current item before retrying.</span>}</p>}
       <Panel title="Item details"><div className="grid gap-4 p-5 sm:grid-cols-2">
         <Field label="Item name"><Input required maxLength={300} value={draft.name} onChange={(event) => field("name", event.target.value)} /></Field>
@@ -112,6 +132,10 @@ export function LiveItemEditor() {
 }
 
 export function LiveItemDetail() {
+  const { id } = useParams(); const readiness = useLiveReadiness(); const { selection } = useErpShell();
+  return <LiveItemDetailBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.workerId, selection.entityId, selection.branch, id].join(":")} />;
+}
+function LiveItemDetailBody() {
   const { id } = useParams();
   const readiness = useLiveReadiness();
   const viewOnly = readiness?.adminViewOnly === true;
@@ -124,17 +148,21 @@ export function LiveItemDetail() {
   const [prices, setPrices] = useState<CatalogPrice[]>([]);
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
   const [priceError, setPriceError] = useState("");
-  const [priceDraft, setPriceDraft] = useState({ supplierId: "", unitPrice: 0,
+  const [priceDraft, setPriceDraft] = useState({ supplierId: "", unitPrice: "0",
     effectiveFrom: new Date().toISOString().slice(0, 10) });
   const [publishId, setPublishId] = useState<string | null>(null);
   const [publishReason, setPublishReason] = useState("");
   const [withdrawId, setWithdrawId] = useState<string | null>(null);
   const [withdrawReason, setWithdrawReason] = useState("");
+  const mounted = useRef(true); useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [priceEdit, setPriceEdit] = useState<{ price: CatalogPrice; draft: CatalogPriceEdit } | null>(null);
+  const [priceUnconfirmed, setPriceUnconfirmed] = useState(false);
+  const [priceSaved, setPriceSaved] = useState("");
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
     setLoading(true); setError("");
-    getItemDraft(company, id, controller.signal).then(setItem)
+    getItemDraft(company, id, controller.signal).then((value) => { if (!controller.signal.aborted) setItem(value); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -177,12 +205,44 @@ export function LiveItemDetail() {
     try {
       await addCatalogPrice(company, item.id, {
         supplierId: priceDraft.supplierId, currencyCode: readiness?.defaultCurrencyCode || "ZMW",
-        unitCode: item.unitCode, unitPrice: priceDraft.unitPrice,
+        unitCode: item.unitCode, unitPrice: invoiceDecimal(priceDraft.unitPrice),
         effectiveFrom: new Date(`${priceDraft.effectiveFrom}T00:00:00Z`).toISOString(),
       });
       setPrices(await listCatalogPrices(company, item.id));
     } catch (cause) { setPriceError(message(cause)); }
     finally { setBusy(false); }
+  }
+  function editPrice(price: CatalogPrice) {
+    if (viewOnly || busy || priceUnconfirmed || !readiness?.permissions.includes("procurement-item-manage")) return;
+    try { setPriceEdit({ price, draft: catalogPriceEditDraft(price) }); setPriceError(""); setPriceSaved(""); setPublishId(null); setWithdrawId(null); }
+    catch (cause) { setPriceError(message(cause)); }
+  }
+  async function savePrice(event: FormEvent) {
+    event.preventDefault();
+    if (viewOnly || busy || priceUnconfirmed || !item || !priceEdit || !readiness?.permissions.includes("procurement-item-manage")
+      || priceEdit.price.catalogItemId !== item.id || !catalogPriceCanEdit(priceEdit.price)) return;
+    let entry: CatalogPriceEdit;
+    try { entry = { ...priceEdit.draft, unitPrice: invoiceDecimal(priceEdit.draft.unitPrice),
+      minimumQuantity: priceEdit.draft.minimumQuantity === null || priceEdit.draft.minimumQuantity === "" ? null : invoiceDecimal(priceEdit.draft.minimumQuantity),
+      maximumQuantity: priceEdit.draft.maximumQuantity === null || priceEdit.draft.maximumQuantity === "" ? null : invoiceDecimal(priceEdit.draft.maximumQuantity) }; }
+    catch (cause) { setPriceError(message(cause)); return; }
+    setBusy(true); setPriceError(""); setPriceSaved("");
+    try {
+      const saved = await updateCatalogPrice(company, item.id, priceEdit.price.id, priceEdit.price.version, entry);
+      if (!mounted.current) return;
+      setPrices(values => values.map(value => value.id === saved.id ? saved : value)); setPriceEdit(null); setPriceSaved("Draft price updated. It still needs separate review before buying.");
+    } catch (cause) {
+      if (!mounted.current) return;
+      setPriceError(message(cause));
+      if (!(cause instanceof ItemApiError) || cause.status === 0 || cause.status >= 500) setPriceUnconfirmed(true);
+    } finally { if (mounted.current) setBusy(false); }
+  }
+  async function checkSavedPrices() {
+    if (!item || busy) return;
+    setBusy(true);
+    try { const saved = await listCatalogPrices(company, item.id); if (mounted.current) setPrices(saved); }
+    catch (cause) { if (mounted.current) setPriceError(message(cause)); }
+    finally { if (mounted.current) setBusy(false); }
   }
   async function publishPrice() {
     if (viewOnly) return;
@@ -223,12 +283,15 @@ export function LiveItemDetail() {
     </div></Panel>}
     {item.status === "Active" && <Panel title="Catalog prices" className="mt-5"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">A vendor price needs a separate review before employees see it in the catalog.</p>
+      {priceSaved && <p role="status">{priceSaved}</p>}
       {priceError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{priceError}</p>}
       {prices.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Vendor</th><th>Price</th><th>Starts</th><th>Status</th><th>Action</th></tr></thead><tbody>{prices.map((price) => <tr key={price.id}>
         <td>{vendors.find((vendor) => vendor.id === price.supplierId)?.displayName ?? "Vendor reference unavailable"}</td>
-        <td>{price.currencyCode} {price.unitPrice.toLocaleString()} / {price.unitCode}</td>
+        <td>{price.currencyCode} {price.exactAmounts?.unitPrice ?? price.unitPrice.toLocaleString()} / {price.unitCode}</td>
         <td>{price.effectiveFrom?.slice(0, 10)}</td><td><Badge>{price.status}</Badge></td>
         <td><div className="flex flex-wrap gap-2">
+          {!viewOnly && catalogPriceCanEdit(price) && readiness?.permissions.includes("procurement-item-manage") &&
+            <Button variant="secondary" disabled={busy || priceUnconfirmed} onClick={() => editPrice(price)}>Edit draft price</Button>}
           {price.status === "Draft" && readiness?.permissions.includes("procurement-catalog-approve") &&
             <Button variant="secondary" onClick={() => { setPublishId(price.id); setWithdrawId(null); setPublishReason(""); setPriceError(""); }}>Review price</Button>}
           {price.status !== "Withdrawn" && readiness?.permissions.includes("procurement-item-manage") &&
@@ -236,6 +299,29 @@ export function LiveItemDetail() {
           {price.status === "Withdrawn" && "—"}
         </div></td>
       </tr>)}</tbody></RecordTable></div> : <p className="text-sm">No vendor prices added yet.</p>}
+      {!viewOnly && priceEdit && <form aria-label="Edit catalog draft price" className="space-y-4 rounded-lg border border-border p-4" onSubmit={event => void savePrice(event)}>
+        <p className="text-sm">Correct this draft. Saved tax, quantity, audience and date details stay with this price.</p>
+        <fieldset disabled={busy || priceUnconfirmed} className="grid gap-3 sm:grid-cols-2">
+          <Field label="Price vendor"><Select value={priceEdit.draft.supplierId ?? ""} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, supplierId: event.target.value || null } }))}>
+            <option value="">No vendor selected</option>
+            {priceEdit.draft.supplierId && !vendors.some(vendor => vendor.id === priceEdit.draft.supplierId) && <option value={priceEdit.draft.supplierId}>Saved vendor — current selection unavailable</option>}
+            {vendors.map(vendor => <option key={vendor.id} value={vendor.id}>{vendor.displayName}</option>)}
+          </Select></Field>
+          <Field label="Price currency"><Input required maxLength={3} value={priceEdit.draft.currencyCode} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, currencyCode: event.target.value.toUpperCase() } }))} /></Field>
+          <Field label="Price unit"><Input required maxLength={30} value={priceEdit.draft.unitCode} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, unitCode: event.target.value } }))} /></Field>
+          <Field label="Draft unit price"><Input required inputMode="decimal" value={priceEdit.draft.unitPrice} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, unitPrice: event.target.value } }))} /></Field>
+          <Field label="Minimum price quantity"><Input inputMode="decimal" value={priceEdit.draft.minimumQuantity ?? ""} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, minimumQuantity: event.target.value || null } }))} /></Field>
+          <Field label="Maximum price quantity"><Input inputMode="decimal" value={priceEdit.draft.maximumQuantity ?? ""} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, maximumQuantity: event.target.value || null } }))} /></Field>
+          <Field label="Tax basis"><Input value={priceEdit.draft.taxBasis ?? ""} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, taxBasis: event.target.value || null } }))} /></Field>
+          <Field label="Audience code"><Input value={priceEdit.draft.audienceCode ?? ""} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, audienceCode: event.target.value || null } }))} /></Field>
+          <Field label="Draft price starts"><Input type="date" required value={priceEdit.draft.effectiveFrom.slice(0,10)} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, effectiveFrom: event.target.value === current.price.effectiveFrom.slice(0,10) ? current.price.effectiveFrom : `${event.target.value}T00:00:00Z` } }))} /></Field>
+          <Field label="Draft price ends"><Input type="date" value={priceEdit.draft.effectiveTo?.slice(0,10) ?? ""} onChange={event => setPriceEdit(current => current && ({ ...current, draft: { ...current.draft, effectiveTo: !event.target.value ? null : event.target.value === current.price.effectiveTo?.slice(0,10) ? current.price.effectiveTo : `${event.target.value}T00:00:00Z` } }))} /></Field>
+        </fieldset>
+        {priceUnconfirmed && <p role="status">This save is unconfirmed. Check saved prices before taking another action. Your correction stays here; it will not be sent again automatically.</p>}
+        <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy || priceUnconfirmed}>{busy ? "Saving…" : "Save draft price"}</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => void checkSavedPrices()}>Check saved prices</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => { setPriceEdit(null); setPriceError(""); }}>Close correction</Button></div>
+      </form>}
       {!viewOnly && publishId && <div className="space-y-3 rounded-lg border border-border p-4">
         <p className="text-sm">Review the vendor, amount, unit and dates. A different person must approve a price they entered.</p>
         <Field label="Price review reason"><Textarea required maxLength={1000} value={publishReason} onChange={(event) => setPublishReason(event.target.value)} /></Field>
@@ -248,7 +334,7 @@ export function LiveItemDetail() {
       </div>}
       {readiness?.permissions.includes("procurement-item-manage") && <form className="grid gap-3 border-t border-border pt-4 sm:grid-cols-4" onSubmit={(event) => void addPrice(event)}>
         <Field label="Vendor" className="sm:col-span-2"><Select required value={priceDraft.supplierId} onChange={(event) => setPriceDraft((value) => ({ ...value, supplierId: event.target.value }))}><option value="">Choose approved vendor</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.displayName}</option>)}</Select></Field>
-        <Field label={`Unit price (${readiness.defaultCurrencyCode})`}><Input required type="number" min="0" step="0.0001" value={priceDraft.unitPrice} onChange={(event) => setPriceDraft((value) => ({ ...value, unitPrice: Number(event.target.value) }))} /></Field>
+        <Field label={`Unit price (${readiness.defaultCurrencyCode})`}><Input required inputMode="decimal" value={priceDraft.unitPrice} onChange={(event) => setPriceDraft((value) => ({ ...value, unitPrice: event.target.value }))} /></Field>
         <Field label="Price starts"><Input required type="date" value={priceDraft.effectiveFrom} onChange={(event) => setPriceDraft((value) => ({ ...value, effectiveFrom: event.target.value }))} /></Field>
         <div className="sm:col-span-4 flex items-center gap-3"><Button type="submit" disabled={busy || !vendors.length || !priceDraft.supplierId}>{busy ? "Saving…" : "Add draft price"}</Button>{!vendors.length && <Link to="/vendors" className="text-sm text-primary hover:underline">Add an approved vendor first</Link>}</div>
       </form>}

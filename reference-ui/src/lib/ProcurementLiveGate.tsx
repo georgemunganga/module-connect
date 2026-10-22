@@ -36,6 +36,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const sourcingPath = /^\/rfqs(?:\/|$)/.test(location.pathname);
   const contractPath = /^\/contracts(?:\/|$)/.test(location.pathname);
   const planPath = /^\/plans(?:\/|$)/.test(location.pathname);
+  const creditPath = /^\/vendor-credits(?:\/|$)/.test(location.pathname);
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
@@ -49,6 +50,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
+    || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && state.readiness.capabilities.orderDraft)
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.capabilities.configurationDraft)))

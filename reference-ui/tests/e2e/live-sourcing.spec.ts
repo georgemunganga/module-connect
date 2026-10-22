@@ -99,3 +99,46 @@ test("stale quote edit preserves entered values", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("Refresh");
   await expect(page.getByLabel("Item or service 1")).toHaveValue("Updated chair");
 });
+
+test("unavailable quote edit never falls back to creating another draft", async ({ page }) => {
+  await mockErp(page);
+  let writes = 0;
+  page.on("request", request => {
+    if (new URL(request.url()).pathname.startsWith("/api/procurement/v1/sourcing")
+      && ["POST", "PUT"].includes(request.method())) writes++;
+  });
+  await page.goto(`/procurement/workspace/rfqs/${eventId}/edit`);
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("What are you buying?", { exact: true })).toHaveCount(0);
+  expect(writes).toBe(0);
+});
+
+test("a delayed quote save cannot reopen the editor after navigating away", async ({ page }) => {
+  await mockErp(page);
+  let release!: () => void;
+  let arrived!: () => void;
+  const received = new Promise<void>(resolve => { arrived = resolve; });
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/procurement/v1/sourcing", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    arrived(); await blocked;
+    const input = route.request().postDataJSON();
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({
+      ...input, id: eventId, number: "RF-001", status: "Draft", version: 1,
+      lines: input.lines.map((line: Record<string, unknown>) => ({ ...line, id: lineId, lineNumber: 1, status: "Active", version: 1 })),
+    }) });
+  });
+  await page.goto("/procurement/workspace/rfqs/new");
+  await page.getByLabel("What are you buying?", { exact: true }).fill("Delayed chairs");
+  await page.getByLabel("Item or service 1", { exact: true }).fill("Chair");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await received;
+  await page.getByRole("link", { name: "Request for Quotes", exact: true }).click();
+  await expect(page).toHaveURL(/\/rfqs$/);
+  const settled = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/sourcing"));
+  release(); const response = await settled; await response.finished();
+  await expect(page.waitForURL(new RegExp(`/rfqs/${eventId}$`), { timeout: 1000 })).rejects.toThrow();
+  await expect(page.getByRole("heading", { name: "Request for Quotes", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/rfqs$/);
+});

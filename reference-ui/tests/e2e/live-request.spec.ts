@@ -321,3 +321,17 @@ test("stale request edit keeps entered lines", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("Refresh");
   await expect(page.getByLabel("Item or service 1")).toHaveValue("Unsaved chair change");
 });
+
+
+test("unavailable requests edit cannot create a replacement record", async ({ page }) => {
+  await mockErp(page);
+  let writes = 0;
+  page.on("request", request => {
+    if (new URL(request.url()).pathname.startsWith("/api/procurement/v1/requests")
+      && ["POST", "PUT"].includes(request.method())) writes++;
+  });
+  await page.goto(`/procurement/workspace/requests/${requestId}/edit`);
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
+  expect(writes).toBe(0);
+});

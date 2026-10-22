@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
@@ -71,13 +71,21 @@ export function LiveContractEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const editorContext = `${legalEntityId}:${id ?? "new"}`;
+  const currentEditorContext = useRef(editorContext);
+  currentEditorContext.current = editorContext;
+  const editorGeneration = useRef(0);
+  useEffect(() => () => { editorGeneration.current += 1; }, [editorContext]);
+  const [loadedContext, setLoadedContext] = useState<string | null>(null);
   useEffect(() => {
+    setVersion(null); setLoadedContext(null); setSaving(false);
     const controller = new AbortController();
     setLoading(true); setError("");
     (id ? getOwnContractDraft(legalEntityId, id, controller.signal) : Promise.resolve(null))
       .then((record) => {
+      if (controller.signal.aborted) return;
       if (record) {
-        setVersion(record.version);
+        setVersion(record.version); setLoadedContext(editorContext);
         setDraft({ supplierId: record.supplierId, title: record.title, contractType: record.contractType,
           currencyCode: record.currencyCode, ceilingAmount: record.ceilingAmount,
           effectiveFrom: record.effectiveFrom || null, expiresOn: record.expiresOn || null,
@@ -102,7 +110,13 @@ export function LiveContractEditor() {
   const field = <K extends keyof ContractDraft>(key: K, value: ContractDraft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
   async function save(event: FormEvent) {
-    event.preventDefault(); setError("");
+    event.preventDefault();
+    if (saving) return;
+    if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the list."); return; }
+    const savingContext = editorContext;
+    const savingGeneration = editorGeneration.current;
+    const isCurrentSave = () => currentEditorContext.current === savingContext && editorGeneration.current === savingGeneration;
+    setError("");
     const dateIssue = validDates(draft);
     if (dateIssue) { setError(dateIssue); return; }
     if (!draft.supplierId) { setError("Choose a supplier."); return; }
@@ -111,13 +125,15 @@ export function LiveContractEditor() {
       const saved = id && version !== null
         ? await updateOwnContractDraft(legalEntityId, id, version, draft)
         : await createOwnContractDraft(legalEntityId, draft);
-      navigate(`/contracts/${saved.id}`);
-    } catch (cause) { setError(errorText(cause)); }
-    finally { setSaving(false); }
+      if (isCurrentSave()) navigate(`/contracts/${saved.id}`);
+    } catch (cause) { if (isCurrentSave()) setError(errorText(cause)); }
+    finally { if (isCurrentSave()) setSaving(false); }
   }
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit contract draft" : "New contract"} subtitle="Save the commercial details for review. The contract remains a draft until a separate approval and signature process is complete." />
-    {loading ? <p role="status">Loading contract…</p> : <form onSubmit={save} className="max-w-5xl space-y-5">
+    {loading ? <p role="status">Loading contract…</p> : id && (version === null || loadedContext !== editorContext)
+      ? <p role="alert">{error || "This draft is unavailable. Return to the list."}</p>
+      : <form onSubmit={save} className="max-w-5xl space-y-5">
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current draft before retrying.</span>}</p>}
       <Panel title="Agreement details"><div className="grid gap-4 p-5 sm:grid-cols-2">
         <Field label="Search suppliers" className="sm:col-span-2"><Input value={supplierSearch} onChange={(event) => setSupplierSearch(event.target.value)} placeholder="Search by name or supplier number" /></Field>

@@ -100,3 +100,17 @@ test("stale plan edit preserves entered values", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("Refresh");
   await expect(page.getByLabel("Need 1")).toHaveValue("Revised desks");
 });
+
+
+test("unavailable plans edit cannot create a replacement record", async ({ page }) => {
+  await mockErp(page);
+  let writes = 0;
+  page.on("request", request => {
+    if (new URL(request.url()).pathname.startsWith("/api/procurement/v1/plans")
+      && ["POST", "PUT"].includes(request.method())) writes++;
+  });
+  await page.goto(`/procurement/workspace/plans/${planId}/edit`);
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
+  expect(writes).toBe(0);
+});
