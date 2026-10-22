@@ -69,6 +69,10 @@ describe("original invoice unit review purpose API", () => {
     await expect(decideUnitReview(company, detail(), assignment, 1, "Approve", null, true, key)).rejects.toThrow("confirmed");
     mock({ ...receipt("Decision"), caseVersion: 1 });
     await expect(decideUnitReview(company, detail(), assignment, 1, "Approve", null, true, key)).rejects.toThrow("confirmed");
+    mock({ ...receipt("Decision"), caseVersion: 3 });
+    await expect(decideUnitReview(company, detail(), assignment, 1, "Approve", null, true, key)).rejects.toThrow("confirmed");
+    mock({ ...receipt("Decision"), coreCaseId: mapping });
+    await expect(decideUnitReview(company, detail(), assignment, 1, "Approve", null, true, key)).rejects.toThrow("confirmed");
   });
 });
 describe("reload-safe unit review marker", () => {

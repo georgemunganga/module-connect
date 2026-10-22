@@ -132,7 +132,8 @@ export async function openUnitReview(company: string, invoice: string, version: 
 }
 export async function decideUnitReview(company: string, detail: UnitReviewDetail, assignmentId: string, assignmentVersion: number,
   action: UnitReviewAction, reason: string | null, attested: boolean, key: string) {
-  if (!id(key) || !id(detail.reviewId) || !id(detail.invoiceId) || !pos(detail.invoiceVersion) || !pos(detail.caseVersion)
+  if (!id(key) || !id(detail.reviewId) || !id(detail.invoiceId) || !id(detail.coreCaseId)
+    || !pos(detail.invoiceVersion) || !pos(detail.caseVersion) || !Number.isSafeInteger(detail.caseVersion + 1)
     || !id(assignmentId) || !pos(assignmentVersion) || !detail.actionCandidates.includes(action)
     || !detail.assignments.some((a) => a.assignmentId === assignmentId && a.assignmentVersion === assignmentVersion)
     || action === "Approve" && !attested || action !== "Approve" && !reason?.trim() || reason !== null && reason.length > 2000) throw invalid();
@@ -140,7 +141,8 @@ export async function decideUnitReview(company: string, detail: UnitReviewDetail
     method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ invoiceVersion: detail.invoiceVersion,
       caseVersion: detail.caseVersion, assignmentVersion, action, reason, attestation: action === "Approve" ? "OriginalDocumentUnitsConfirmed" : null })
   }), key, "Decision", detail.invoiceId, detail.reviewId);
-  if (result.invoiceVersion !== detail.invoiceVersion || result.caseVersion <= detail.caseVersion) throw invalid();
+  if (result.invoiceVersion !== detail.invoiceVersion || result.coreCaseId !== detail.coreCaseId
+    || result.caseVersion !== detail.caseVersion + 1) throw invalid();
   return result;
 }
 export async function recoverUnitReview(company: string, review: string, key: string, operation: UnitReviewReceipt["operation"], invoice: string) {
