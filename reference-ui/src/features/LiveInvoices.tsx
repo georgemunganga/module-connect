@@ -4,6 +4,7 @@ import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Tex
 import { useErpShell } from "../lib/erpShell";
 import { invoiceDecimal, invoicePreview } from "./invoice-values";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
+import { InvoiceReviewPanel } from "./InvoiceReview";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
@@ -202,7 +203,8 @@ export function LiveInvoiceDetail() {
   const readiness = useCompany();
   const { selection } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <InvoiceDetailRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${id}`} />;
+  return <InvoiceDetailRecord key={JSON.stringify([readiness.tenantId, readiness.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
+    readiness.workerId, readiness.permissions, readiness.capabilities, id])} />;
 }
 function InvoiceDetailRecord() {
   const alive = useRef(true);
@@ -214,6 +216,8 @@ function InvoiceDetailRecord() {
   const [uncertain, setUncertain] = useState(false);
   const [stale, setStale] = useState(false);
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
+  const [refresh, setRefresh] = useState(0);
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -225,7 +229,7 @@ function InvoiceDetailRecord() {
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [id, legalEntityId]);
+  }, [id, legalEntityId, refresh]);
   async function cancel() {
     if (!invoice || busy || uncertain || stale || adminViewOnly || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
     setBusy(true); setError("");
@@ -246,6 +250,7 @@ function InvoiceDetailRecord() {
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."}</div>;
   return <div className="p-5 sm:p-8">
     <PageHeader title={`Invoice ${invoice.invoiceNumber}`} subtitle={`${invoice.supplierName || "Vendor"} · ${invoice.currencyCode}`} actions={<><Badge>{invoice.status}</Badge>{!adminViewOnly && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit") && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}</>} />
+    {notice && <p role="status" className="mb-5 text-sm">{notice}</p>}
     {error && <div role="alert" className="mb-4 text-destructive">{error}<Button variant="secondary" onClick={() => window.location.reload()}>Refresh invoice</Button></div>}
     {uncertain && <p role="status">The response was not confirmed. Refresh the invoice to check its saved status before trying another action.</p>}
     <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">{invoice.nextStep}</p>
@@ -262,6 +267,9 @@ function InvoiceDetailRecord() {
         <td>{line.exactAmounts?.quantity ?? line.quantity}</td><td>{money(line.exactAmounts?.unitPrice ?? line.unitPrice, invoice.currencyCode)}</td><td>{money(line.exactAmounts?.taxAmount ?? line.taxAmount, invoice.currencyCode)}</td></tr>)}</tbody>
     </RecordTable></div></Panel>
     {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
+    {capabilities.invoiceComparison && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
+      company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
+      comparisonAvailable={capabilities.invoiceComparison && !adminViewOnly} refresh={(message) => { setNotice(message ?? ""); setRefresh((value) => value + 1); }} />}
     {!adminViewOnly && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel") && <Panel title="Cancel invoice" className="mt-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
       <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>
