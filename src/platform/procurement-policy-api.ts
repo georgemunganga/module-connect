@@ -80,8 +80,8 @@ function validSummary(value: unknown): boolean {
     && typeof value.version === "number" && typeof value.effectiveFrom === "string";
 }
 
-export async function listPolicies(companyId: string, signal?: AbortSignal): Promise<PolicyPage> {
-  const body = await call(companyId, "?page=1&pageSize=100", { signal });
+export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "SOURCING" | "RECEIVING"): Promise<PolicyPage> {
+  const body = await call(companyId, `?page=1&pageSize=100${key ? `&key=${key}` : ""}`, { signal });
   if (!object(body) || !Array.isArray(body.items) || !body.items.every(validSummary)
     || typeof body.total !== "number" || typeof body.page !== "number"
     || typeof body.pageSize !== "number")
@@ -141,13 +141,41 @@ export async function decidePolicy(companyId: string, id: string, version: numbe
     throw new PolicyActionError("ERP did not confirm the policy decision. Check saved rules before retrying.", 0);
   return body;
 }
-export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER"):
+export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING"):
   Promise<{ status: string; isAuthority: false; policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null }> {
   const body = await call(companyId, `/effective?key=${key}`);
   if (!object(body) || typeof body.status !== "string" || body.isAuthority !== false)
     throw new Error("ERP returned an invalid current-policy status.");
   return body as { status: string; isAuthority: false;
     policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null };
+}
+
+/** Canonical active workers eligible to be named for sourcing publication review. */
+export type SourcingReviewerPage = { items: Array<{ principalId: string; displayName: string; workerId: string }>;
+  total: number; offset: number; limit: number; nextOffset: number | null; isAuthority: false; configurationVersion: 1 };
+const canonicalId = (value: unknown): value is string => typeof value === "string" && guid.test(value)
+  && value === value.toLowerCase() && value !== "00000000-0000-0000-0000-000000000000";
+function reviewerPage(body: unknown, offset: number): SourcingReviewerPage {
+  if (!object(body) || !Array.isArray(body.items) || body.items.length > 25 || body.isAuthority !== false || body.configurationVersion !== 1
+    || body.items.some(item => !object(item) || !canonicalId(item.principalId) || !canonicalId(item.workerId) || typeof item.displayName !== "string")
+    || !Number.isInteger(body.total) || body.offset !== offset || body.limit !== 25 || Number(body.total) < 0
+    || body.nextOffset !== null && (!Number.isInteger(body.nextOffset) || body.nextOffset !== offset + 25 || Number(body.nextOffset) >= Number(body.total))
+    || new Set(body.items.map(item => object(item) ? item.principalId : "")).size !== body.items.length)
+    throw new PolicyActionError("Reviewer names are unavailable. Selected people have not changed.", 0);
+  return body as SourcingReviewerPage;
+}
+export async function lookupSourcingReviewers(companyId: string, search: string, offset: number, signal?: AbortSignal): Promise<SourcingReviewerPage> {
+  if (search.trim().length > 100 || !Number.isInteger(offset) || offset < 0 || offset > 100000)
+    throw new Error("Use a shorter name search and a valid page.");
+  return reviewerPage(await call(companyId, `/lookups/sourcing-reviewers?${new URLSearchParams({ search: search.trim(), offset: String(offset), limit: "25" })}`, { signal }), offset);
+}
+export async function lookupSelectedSourcingReviewers(companyId: string, principalIds: readonly string[], signal?: AbortSignal): Promise<SourcingReviewerPage> {
+  if (!principalIds.length || principalIds.length > 25 || principalIds.some(id => !canonicalId(id)) || new Set(principalIds).size !== principalIds.length)
+    throw new Error("Choose a bounded set of saved reviewers.");
+  const page = reviewerPage(await call(companyId, `/lookups/sourcing-reviewers?${new URLSearchParams({ principalIds: principalIds.join(","), search: "", offset: "0", limit: "25" })}`, { signal }), 0);
+  if (page.nextOffset !== null || page.total !== page.items.length || page.items.some(item => !principalIds.includes(item.principalId)))
+    throw new Error("Reviewer names are unavailable. Selected people have not changed.");
+  return page;
 }
 
 /** A server-owned, permission-filtered hint; the retirement command rechecks all facts. */
