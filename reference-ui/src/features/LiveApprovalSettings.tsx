@@ -3,6 +3,7 @@ import { Badge, Button, EmptyState, Field, Input, Modal, Panel, Select, Switch, 
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { useErpShell } from "../lib/erpShell";
+import { claimAuthorityCreateGuard, clearAuthorityCreateGuard, readAuthorityCreateGuard, type AuthorityCreateGuardState } from "../lib/authority-create-guard";
 import { Link } from "react-router-dom";
 import { AuthorityApiError, actOnAuthority, getAuthority, listAuthorities, lookupAuthorities, saveAuthority, validAuthorityAmount, authorityUseForAction, supportedAuthorityUse,
   type AuthoritySpendAction, type Authority, type AuthorityAction, type AuthorityDraft, type AuthorityPage, type LookupKind, type LookupPage } from "../../../src/platform/procurement-authority-api";
@@ -11,9 +12,6 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : "Ap
 const local = (value: string) => { const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 23); };
 const labels: Record<AuthorityAction, string> = { Edit: "Edit draft", Submit: "Send for review", Return: "Return for changes",
   Activate: "Activate limit", Supersede: "Replace active limit", Revoke: "Revoke limit" };
-const unconfirmedCreate = (key: string) => {
-  try { return window.sessionStorage.getItem(key) === "1"; } catch { return false; }
-};
 
 export function LiveApprovalSettings({ initialAction = "PurchaseRequest.Approve" }: { initialAction?: AuthoritySpendAction }) {
   const context = useLiveReadiness();
@@ -67,8 +65,9 @@ function ApprovalLimits({ initialAction, pendingKey }: { initialAction: Authorit
   const [editing, setEditing] = useState<Authority | "new" | null>(null), [review, setReview] = useState<{ record: Authority; action: Exclude<AuthorityAction, "Edit"> } | null>(null);
   const [newVersionSeed, setNewVersionSeed] = useState<Authority | null>(null);
   const [reason, setReason] = useState(""), [busy, setBusy] = useState(false);
-  const [pendingCreate, setPendingCreate] = useState(() => unconfirmedCreate(pendingKey));
-  const [uncertain, setUncertain] = useState(() => unconfirmedCreate(pendingKey));
+  const [createGuard, setCreateGuard] = useState<AuthorityCreateGuardState>(() => readAuthorityCreateGuard(pendingKey));
+  const pendingCreate = createGuard !== "clear";
+  const [uncertain, setUncertain] = useState(() => readAuthorityCreateGuard(pendingKey) !== "clear");
   const [actionError, setActionError] = useState("");
   const mounted = useRef(true), detailSequence = useRef(0), commandBusy = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; detailSequence.current++; }; }, []);
@@ -143,12 +142,12 @@ function ApprovalLimits({ initialAction, pendingKey }: { initialAction: Authorit
   return <div className="space-y-5"><p className="text-sm text-muted-foreground">Give named people finite spending limits. Drafts grant no authority; a separate authorised person must activate them. Request limits use the estimated line amount. Order limits use the approved order line amount (quantity × unit price, before discounts, tax and delivery). Finance confirms the full amount including tax separately.</p>
     <div className="flex flex-wrap items-end justify-between gap-3"><Field label="Limit status"><Select value={state} disabled={busy || uncertain} onChange={(event) => { detailSequence.current++; setActionError(""); setEditing(null); setReview(null); setPage(1); setState(event.target.value); }}><option value="">All statuses</option>{["Draft", "PendingReview", "Active", "Revoked", "Superseded"].map((value) => <option key={value}>{value}</option>)}</Select></Field>
       <div className="flex gap-2"><Button variant="secondary" disabled={busy || (uncertain && !pendingCreate)} onClick={() => void refreshList()}>Refresh limits</Button>{canCreate && <Button disabled={busy || uncertain} onClick={() => { detailSequence.current++; setActionError(""); setNewVersionSeed(null); setEditing("new"); setReview(null); setError(""); setNotice(""); }}>Add approval limit</Button>}</div></div>
-    {pendingCreate && <p role="alert" className="text-sm text-red-700">An earlier approval limit create has no confirmed result. This approval type is read-only in this session. Refresh the saved list and ask an administrator to reconcile the operation before creating another limit.</p>}
+    {pendingCreate && <p role="alert" className="text-sm text-red-700">{createGuard === "pending" ? "An approval limit create has no confirmed result." : "This browser cannot verify the approval limit create guard."} This approval type is read-only in this session. Refresh the saved list and ask an administrator to reconcile before creating another limit.</p>}
     {(error || actionError) && !review && !editing && <p role="alert" className="text-sm text-red-700">{error || actionError}</p>}{notice && <p role="status" className="text-sm">{notice}</p>}
     {loading ? <p role="status">Loading approval limits…</p> : data?.items.length ? <Panel><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Person</th><th>Reference</th><th>Approval use</th><th>Maximum amount</th><th>Effective dates</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.items.map((row) => <tr key={row.id}><td>{row.principalDisplayName || "Person unavailable"}</td><td>{row.authorityReference} · v{row.authorityVersion}</td><td>{grantUse(row)?.label ?? "Unsupported type — read-only"}</td><td>{row.currencyCode} {row.maximumAmount}</td><td>{new Date(row.effectiveFrom).toLocaleDateString()} → {row.effectiveUntil ? new Date(row.effectiveUntil).toLocaleDateString() : "No end date"}</td><td><Badge>{row.state}</Badge></td><td><div className="flex flex-wrap gap-2">{(grantUse(row) ? row.allowedActions.filter(canPerform) : []).map((action) => <Button key={action} variant="secondary" disabled={busy || uncertain} onClick={() => void choose(row, action)}>{labels[action]}</Button>)}{canCreate && grantUse(row) && row.state === "Active" && <Button variant="secondary" disabled={busy || uncertain} onClick={() => { detailSequence.current++; setActionError(""); setNewVersionSeed(row); setEditing("new"); setReview(null); setError(""); }}>Create new version</Button>}</div></td></tr>)}</tbody></RecordTable></div></Panel>
       : data && <EmptyState title="No approval limits yet" description="Add a draft limit for a named person. It will need independent review." />}
     {data && data.total > data.pageSize && <div className="flex gap-3"><Button variant="secondary" disabled={page === 1 || busy} onClick={() => { setActionError(""); setEditing(null); setReview(null); setPage((n) => n - 1); }}>Previous limits</Button><span className="text-sm">Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total || busy} onClick={() => { setActionError(""); setEditing(null); setReview(null); setPage((n) => n + 1); }}>Next limits</Button></div>}
-    {editing && data && data.createAction === spendAction && <AuthorityForm key={editing === "new" ? `new:${newVersionSeed?.id ?? ""}` : `${editing.id}:${editing.version}`} company={company} currency={context.defaultCurrencyCode} createAction={data.createAction} record={editing} seed={newVersionSeed} scope={data.scope} onBusy={(value) => { if (mounted.current) setBusy(value); }} onUnconfirmed={(creating) => { if (!mounted.current) return; setUncertain(true); if (creating) { setPendingCreate(true); try { window.sessionStorage.setItem(pendingKey, "1"); } catch { /* In-memory lock remains. */ } } }}
+    {editing && data && data.createAction === spendAction && <AuthorityForm key={editing === "new" ? `new:${newVersionSeed?.id ?? ""}` : `${editing.id}:${editing.version}`} company={company} currency={context.defaultCurrencyCode} createAction={data.createAction} pendingKey={pendingKey} record={editing} seed={newVersionSeed} scope={data.scope} onBusy={(value) => { if (mounted.current) setBusy(value); }} onGuardState={(value) => { if (mounted.current) { setCreateGuard(value); setUncertain(value !== "clear"); } }} onUnconfirmed={() => { if (mounted.current) setUncertain(true); }}
       onSaved={() => { setEditing(null); setRevision((n) => n + 1); setNotice("Draft saved. It does not grant approval authority."); }} onCancel={() => { setEditing(null); if (!pendingCreate) setUncertain(false); setRevision((n) => n + 1); }} />}
     {review && <Modal title={`${labels[review.action]} · ${review.record.authorityReference}`} onClose={() => { if (!busy && !uncertain) setReview(null); }}><form onSubmit={(event) => void confirm(event)} className="space-y-4">
       <p className="text-sm">{review.record.principalDisplayName || "Named account"} · {review.record.currencyCode} {review.record.maximumAmount} · {supportedAuthorityUse(review.record)?.label}. {review.action === "Supersede" ? "This will retire the previous active version in the same transaction." : review.action === "Revoke" ? "This removes the active limit. Existing approval decisions remain in history." : "ERP will recheck your permission, scope and required independence."}</p>
@@ -159,8 +158,8 @@ function ApprovalLimits({ initialAction, pendingKey }: { initialAction: Authorit
   </div>;
 }
 
-function AuthorityForm({ company, currency, createAction, record, seed, scope, onSaved, onCancel, onBusy, onUnconfirmed }: { company: string; currency: string; createAction: AuthoritySpendAction;
-  record: Authority | "new"; seed: Authority | null; scope: AuthorityPage["scope"]; onSaved: () => void; onCancel: () => void; onBusy: (value: boolean) => void; onUnconfirmed: (creating: boolean) => void }) {
+function AuthorityForm({ company, currency, createAction, pendingKey, record, seed, scope, onSaved, onCancel, onBusy, onGuardState, onUnconfirmed }: { company: string; currency: string; createAction: AuthoritySpendAction; pendingKey: string;
+  record: Authority | "new"; seed: Authority | null; scope: AuthorityPage["scope"]; onSaved: () => void; onCancel: () => void; onBusy: (value: boolean) => void; onGuardState: (value: AuthorityCreateGuardState) => void; onUnconfirmed: () => void }) {
   const existing = record === "new" ? null : record;
   const initial = existing ?? seed;
   const use = initial ? supportedAuthorityUse(initial) : authorityUseForAction(createAction);
@@ -186,9 +185,33 @@ function AuthorityForm({ company, currency, createAction, record, seed, scope, o
     event.preventDefault(); if (uncertain || saving.current) return;
     if (!use) { setError("This approval type is not supported by this editor. Keep it read-only."); return; }
     if (!validAuthorityAmount(draft.maximumAmount) && draft.maximumAmount !== "0") { setError("Use a finite amount with up to four decimal places."); return; }
+    if (!existing) {
+      if (!claimAuthorityCreateGuard(pendingKey)) {
+        onGuardState(readAuthorityCreateGuard(pendingKey)); setUncertain(true);
+        setError("Approval limit creation is blocked because its pending result cannot be verified. Read the saved list before starting another create.");
+        return;
+      }
+      onGuardState("pending");
+    }
     saving.current = true; setBusy(true); onBusy(true); setError("");
-    try { await saveAuthority(company, draft, existing ? { id: existing.id, version: existing.version, action: use.action } : { authorityReference: reference.trim(), principalId: principal, action: use.action }); if (alive.current) onSaved(); }
-    catch (cause) { if (alive.current) { setError(message(cause)); if (!(cause instanceof AuthorityApiError) || cause.status === 0 || cause.status === 409 || cause.status >= 500) { setUncertain(true); onUnconfirmed(!existing); } } }
+    try {
+      await saveAuthority(company, draft, existing ? { id: existing.id, version: existing.version, action: use.action } : { authorityReference: reference.trim(), principalId: principal, action: use.action });
+      if (!existing) { clearAuthorityCreateGuard(pendingKey); if (alive.current) onGuardState(readAuthorityCreateGuard(pendingKey)); }
+      if (alive.current) onSaved();
+    }
+    catch (cause) {
+      const knownValidation = cause instanceof AuthorityApiError && [400, 422].includes(cause.status);
+      if (!existing && knownValidation) {
+        clearAuthorityCreateGuard(pendingKey);
+        if (alive.current) onGuardState(readAuthorityCreateGuard(pendingKey));
+      }
+      if (alive.current) { setError(message(cause));
+        if ((!existing && (!knownValidation || readAuthorityCreateGuard(pendingKey) !== "clear"))
+          || (existing && (!(cause instanceof AuthorityApiError) || cause.status === 0 || cause.status === 409 || cause.status >= 500))) {
+          setUncertain(true); onUnconfirmed();
+        }
+      }
+    }
     finally { saving.current = false; onBusy(false); if (alive.current) setBusy(false); }
   }
   async function reconcileDraft() {

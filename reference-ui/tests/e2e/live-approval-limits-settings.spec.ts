@@ -78,3 +78,41 @@ test("interrupted PO limit create keeps entered data and blocks a second POST", 
   await expect(page.getByRole("button", { name: "Add approval limit" })).toHaveCount(0);
   expect(state.creates()).toBe(1);
 });
+
+test("reload during an in-flight create retains the pending marker before the server responds", async ({ page }) => {
+  await fixture(page, ["procurement-authority-read", "procurement-authority-configure"]);
+  let posts = 0;
+  let sawPost!: () => void, releasePost!: () => void;
+  const sent = new Promise<void>(resolve => { sawPost = resolve; });
+  const held = new Promise<void>(resolve => { releasePost = resolve; });
+  await page.route("**/api/procurement/v1/configuration/spending-authorities", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    posts++; sawPost(); await held; await route.abort("failed").catch(() => {});
+  });
+  await page.goto("/procurement/workspace/settings/modules/purchase-requests/approvals");
+  await page.getByRole("button", { name: "Add approval limit" }).click();
+  await page.getByLabel("Limit reference").fill("PR-IN-FLIGHT");
+  await page.getByLabel("Person", { exact: true }).selectOption(person);
+  await page.getByLabel("Maximum amount").fill("100.00");
+  await page.getByRole("button", { name: "Save limit draft" }).click();
+  await sent;
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("procurement.authority.create.unconfirmed.v1:"))
+    .map(key => sessionStorage.getItem(key)))).toEqual(["pending"]);
+  const reloaded = page.reload({ waitUntil: "domcontentloaded" }); releasePost(); await reloaded;
+  await expect(page.getByText("This approval type is read-only in this session.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add approval limit" })).toHaveCount(0);
+  expect(posts).toBe(1);
+});
+
+test("blocked session storage fails closed before any create POST", async ({ page }) => {
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (key) { if (key.startsWith("procurement.authority.create.unconfirmed.v1:")) throw new Error("storage blocked"); return get.call(this, key); };
+    Storage.prototype.setItem = function (key, value) { if (key.startsWith("procurement.authority.create.unconfirmed.v1:")) throw new Error("storage blocked"); return set.call(this, key, value); };
+  });
+  const state = await fixture(page, ["procurement-authority-read", "procurement-authority-configure"]);
+  await page.goto("/procurement/workspace/settings/modules/purchase-orders/approvals");
+  await expect(page.getByText("This browser cannot verify the approval limit create guard.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add approval limit" })).toHaveCount(0);
+  expect(state.creates()).toBe(0);
+});
