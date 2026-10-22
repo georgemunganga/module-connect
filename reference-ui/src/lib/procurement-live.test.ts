@@ -57,6 +57,17 @@ describe("Procurement live readiness", () => {
     expect(result.capabilities.invoiceOriginalUnitReview).toBe(flag === true);
   });
 
+  it.each([undefined, false, true, "true"])("requires explicit recurring planning availability (%s)", async flag => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["employee"] } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker,
+        company: { id: entity, currencyCode: "ZMW" }, permissions: ["procurement-access", "procurement-recurring-read"] }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true,
+        capabilities: { ...capabilities, recurringPurchaseDraft: flag } }));
+    expect((await fetchProcurementReadiness({ entityId: entity }, undefined, fetcher))
+      .capabilities.recurringPurchaseDraft).toBe(flag === true);
+  });
+
   it("does not reinterpret a server access denial as administrator review", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["erp_admin"] } }))

@@ -19,6 +19,11 @@ export class RecurringPurchaseError extends Error {
 }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const date = /^\d{4}-\d{2}-\d{2}$/;
+function validDate(value: unknown): value is string {
+  if (typeof value !== "string" || !date.test(value) || value < "0001-01-01") return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
@@ -27,7 +32,7 @@ export function validateRecurringPurchase(draft: RecurringPurchaseDraft): string
   if (draft.supplierContractId && !guid.test(draft.supplierContractId)) return "Choose a valid contract.";
   if (!draft.title.trim() || draft.title.trim().length > 300) return "Enter a title of up to 300 characters.";
   if (!["Weekly", "Monthly", "Quarterly", "Yearly"].includes(draft.frequency)) return "Choose how often this purchase is expected.";
-  if (!date.test(draft.firstCycleOn) || !date.test(draft.nextCycleOn) || draft.lastCycleOn && !date.test(draft.lastCycleOn))
+  if (!validDate(draft.firstCycleOn) || !validDate(draft.nextCycleOn) || draft.lastCycleOn && !validDate(draft.lastCycleOn))
     return "Choose valid purchase dates.";
   if (draft.nextCycleOn < draft.firstCycleOn || draft.lastCycleOn &&
       (draft.lastCycleOn < draft.firstCycleOn || draft.nextCycleOn > draft.lastCycleOn))
@@ -43,12 +48,15 @@ function parseRow(value: unknown): RecurringPurchase {
     || value.workLocationId !== null && !guid.test(String(value.workLocationId))
     || typeof value.number !== "string" || typeof value.title !== "string"
     || !["Weekly", "Monthly", "Quarterly", "Yearly"].includes(String(value.frequency))
-    || typeof value.firstCycleOn !== "string" || !date.test(value.firstCycleOn)
-    || value.lastCycleOn !== null && (typeof value.lastCycleOn !== "string" || !date.test(value.lastCycleOn))
-    || typeof value.nextCycleOn !== "string" || !date.test(value.nextCycleOn)
+    || !validDate(value.firstCycleOn)
+    || value.lastCycleOn !== null && !validDate(value.lastCycleOn)
+    || !validDate(value.nextCycleOn)
     || typeof value.currencyCode !== "string" || !/^[A-Z]{3}$/.test(value.currencyCode)
     || typeof value.exactExpectedAmount !== "string" || !Number.isSafeInteger(value.version)
     || Number(value.version) < 1 || !["Draft", "Closed"].includes(String(value.status))
+    || value.status === "Closed" && (typeof value.closedReason !== "string" || !value.closedReason.trim()
+      || typeof value.closedAt !== "string" || !Number.isFinite(Date.parse(value.closedAt)))
+    || value.status === "Draft" && (value.closedAt !== null || value.closedReason !== null)
     || typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt)))
     throw new RecurringPurchaseError(0, "The ERP returned invalid recurring purchase details.");
   try { invoiceDecimal(value.exactExpectedAmount, true); }
@@ -86,17 +94,34 @@ export async function listRecurringPurchases(company: string, page = 1, signal?:
 }
 export async function getRecurringPurchase(company: string, id: string, signal?: AbortSignal): Promise<RecurringPurchase> {
   if (!guid.test(id)) throw new RecurringPurchaseError(422, "The recurring purchase reference is invalid.");
-  return parseRow(await request(company, `/${id}`, { signal }));
+  const saved = parseRow(await request(company, `/${id}`, { signal }));
+  if (saved.id !== id) throw new RecurringPurchaseError(0, "The ERP returned a different purchase. Refresh the list.");
+  return saved;
 }
 export async function createRecurringPurchase(company: string, draft: RecurringPurchaseDraft): Promise<RecurringPurchase> {
   const issue = validateRecurringPurchase(draft); if (issue) throw new RecurringPurchaseError(422, issue);
-  return parseRow(await request(company, "", { method: "POST", body: JSON.stringify(ownedDraft(draft)) }));
+  const saved = parseRow(await request(company, "", { method: "POST", body: JSON.stringify(ownedDraft(draft)) }));
+  if (saved.version !== 1 || saved.status !== "Draft" || !matchesDraft(saved, draft))
+    throw new RecurringPurchaseError(0, "The new purchase was not confirmed. Review the saved list.");
+  return saved;
 }
 export async function updateRecurringPurchase(company: string, id: string, version: number,
   draft: RecurringPurchaseDraft): Promise<RecurringPurchase> {
   const issue = validateRecurringPurchase(draft); if (issue) throw new RecurringPurchaseError(422, issue);
-  if (!guid.test(id) || !Number.isSafeInteger(version) || version < 1) throw new RecurringPurchaseError(422, "Refresh the saved purchase.");
-  return parseRow(await request(company, `/${id}`, { method: "PUT", body: JSON.stringify({ version, draft: ownedDraft(draft) }) }));
+  if (!guid.test(id) || !Number.isSafeInteger(version) || version < 1 || !Number.isSafeInteger(version + 1)) throw new RecurringPurchaseError(422, "Refresh the saved purchase.");
+  const saved = parseRow(await request(company, `/${id}`, { method: "PUT", body: JSON.stringify({ version, draft: ownedDraft(draft) }) }));
+  if (saved.id !== id || (saved.version !== version && saved.version !== version + 1)
+    || saved.status !== "Draft" || !matchesDraft(saved, draft))
+    throw new RecurringPurchaseError(0, "The update was not confirmed. Review the saved purchase.");
+  return saved;
+}
+function matchesDraft(saved: RecurringPurchase, draft: RecurringPurchaseDraft): boolean {
+  const amount = (value: string) => value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
+  return saved.supplierId === draft.supplierId && saved.supplierContractId === draft.supplierContractId
+    && saved.title === draft.title.trim() && saved.frequency === draft.frequency
+    && saved.firstCycleOn === draft.firstCycleOn && saved.lastCycleOn === draft.lastCycleOn
+    && saved.nextCycleOn === draft.nextCycleOn && saved.currencyCode === draft.currencyCode.trim().toUpperCase()
+    && amount(saved.exactExpectedAmount) === amount(draft.expectedAmount);
 }
 function ownedDraft(draft: RecurringPurchaseDraft): RecurringPurchaseDraft {
   return { supplierId: draft.supplierId, supplierContractId: draft.supplierContractId,
@@ -106,9 +131,9 @@ function ownedDraft(draft: RecurringPurchaseDraft): RecurringPurchaseDraft {
 }
 export async function closeRecurringPurchase(company: string, id: string, version: number,
   reason: string): Promise<RecurringPurchase> {
-  if (!guid.test(id) || !Number.isSafeInteger(version) || version < 1 || !reason.trim() || reason.trim().length > 1000)
+  if (!guid.test(id) || !Number.isSafeInteger(version) || version < 1 || !Number.isSafeInteger(version + 1) || !reason.trim() || reason.trim().length > 1000)
     throw new RecurringPurchaseError(422, "Give a reason of up to 1,000 characters.");
   const value = parseRow(await request(company, `/${id}/close`, { method: "POST", body: JSON.stringify({ version, reason: reason.trim() }) }));
-  if (value.status !== "Closed") throw new RecurringPurchaseError(0, "Closure was not confirmed. Review the saved purchase.");
+  if (value.id !== id || value.version !== version + 1 || value.status !== "Closed" || value.closedReason !== reason.trim()) throw new RecurringPurchaseError(0, "Closure was not confirmed. Review the saved purchase.");
   return value;
 }

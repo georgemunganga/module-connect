@@ -24,6 +24,8 @@ describe("recurring purchase planning contract", () => {
       expect(validateRecurringPurchase({ ...draft, expectedAmount })).not.toBeNull();
     expect(validateRecurringPurchase({ ...draft, nextCycleOn: "2028-01-01" })).not.toBeNull();
     expect(validateRecurringPurchase({ ...draft, supplierId: "" })).not.toBeNull();
+    for (const firstCycleOn of ["2026-02-30", "0000-01-01", "2026-13-01"])
+      expect(validateRecurringPurchase({ ...draft, firstCycleOn })).not.toBeNull();
   });
   it("sends exact string, captured company and branch without posting a bill", async () => {
     vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch: id }) });
@@ -40,7 +42,7 @@ describe("recurring purchase planning contract", () => {
   it("uses authoritative exact amount for edits and sends CAS", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify(row), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ...row, version: 2 }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...row, title: "Updated service", version: 2 }), { status: 200 }));
     vi.stubGlobal("fetch", fetcher);
     const loaded = await getRecurringPurchase(company, id);
     expect(loaded.expectedAmount).toBe("99999999999999.9999");
@@ -56,6 +58,27 @@ describe("recurring purchase planning contract", () => {
     vi.stubGlobal("fetch", fetcher);
     expect((await listRecurringPurchases(company)).total).toBe(101);
     await expect(createRecurringPurchase(company, draft)).rejects.toMatchObject({ status: 0 });
+  });
+  it("rejects a different saved identity and mismatched update fields", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...row, id: supplier }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(row), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(getRecurringPurchase(company, id)).rejects.toMatchObject({ status: 0 });
+    await expect(updateRecurringPurchase(company, id, 1, { ...draft, title: "Different title" })).rejects.toMatchObject({ status: 0 });
+  });
+  it("accepts the backend no-op revision only with the exact submitted saved fields", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(row), { status: 200 })));
+    expect((await updateRecurringPurchase(company, id, 1, draft)).version).toBe(1);
+  });
+  it("rejects unconfirmed closure details and a different closure revision", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...row, status: "Closed", version: 2 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...row, status: "Closed", version: 3,
+        closedAt: "2026-10-22T00:00:00Z", closedReason: "Ended" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(closeRecurringPurchase(company, id, 1, "Ended")).rejects.toMatchObject({ status: 0 });
+    await expect(closeRecurringPurchase(company, id, 1, "Ended")).rejects.toMatchObject({ status: 0 });
   });
   it("does not assume a failed close succeeded", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: "Refresh first" }), { status: 409 }));
