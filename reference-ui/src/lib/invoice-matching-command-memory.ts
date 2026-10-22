@@ -1,22 +1,23 @@
-import type { InvoiceMatchingCommand } from "../../../src/platform/procurement-invoice-matching-api";
+import type { InvoiceMatchingRecovery } from "../../../src/platform/procurement-invoice-matching-api";
 
-/** A scoped, tab-lifetime command marker. It is claimed before POST and never
- * replays a command automatically. The original key/body permit GET-only
- * recovery of the server's idempotent receipt after a reload. */
+/** A scoped, tab-lifetime locator claimed before POST. It carries only IDs,
+ * operation and expected version for GET-only receipt recovery after reload. */
 const prefix = "procurement:invoice-matching:pending:v1:";
 const key = (scope: string) => prefix + scope;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const valid = (value: unknown): value is InvoiceMatchingCommand => {
+const valid = (value: unknown): value is InvoiceMatchingRecovery => {
   if (!value || typeof value !== "object") return false;
-  const command = value as Partial<InvoiceMatchingCommand>;
+  const command = value as Partial<InvoiceMatchingRecovery>;
   return (command.operation === "InvoiceMapping" || command.operation === "InvoiceCompare")
     && typeof command.invoiceId === "string" && uuid.test(command.invoiceId)
     && typeof command.key === "string" && uuid.test(command.key)
-    && typeof command.body === "string" && command.body.length <= 100_000
+    && typeof command.expectedVersion === "number" && Number.isSafeInteger(command.expectedVersion) && command.expectedVersion > 0
     && Array.isArray(command.ownLineIds) && command.ownLineIds.length <= 200
-    && command.ownLineIds.every((id) => typeof id === "string" && uuid.test(id));
+    && command.ownLineIds.every((id) => typeof id === "string" && uuid.test(id))
+    && new Set(command.ownLineIds).size === command.ownLineIds.length
+    && Object.keys(command).every((key) => ["operation", "invoiceId", "key", "expectedVersion", "ownLineIds"].includes(key));
 };
-export type PendingInvoiceCommand = { command: InvoiceMatchingCommand | null; blocked: boolean };
+export type PendingInvoiceCommand = { command: InvoiceMatchingRecovery | null; blocked: boolean };
 export function readPendingInvoiceMatching(scope: string): PendingInvoiceCommand {
   try {
     const raw = sessionStorage.getItem(key(scope));
@@ -25,7 +26,7 @@ export function readPendingInvoiceMatching(scope: string): PendingInvoiceCommand
     return valid(command) ? { command, blocked: true } : { command: null, blocked: true };
   } catch { return { command: null, blocked: true }; }
 }
-export function claimPendingInvoiceMatching(scope: string, command: InvoiceMatchingCommand): boolean {
+export function claimPendingInvoiceMatching(scope: string, command: InvoiceMatchingRecovery): boolean {
   if (!valid(command) || readPendingInvoiceMatching(scope).blocked) return false;
   try {
     const stored = JSON.stringify(command);
@@ -33,7 +34,7 @@ export function claimPendingInvoiceMatching(scope: string, command: InvoiceMatch
     return sessionStorage.getItem(key(scope)) === stored;
   } catch { return false; }
 }
-export function clearPendingInvoiceMatching(scope: string, command: InvoiceMatchingCommand): boolean {
+export function clearPendingInvoiceMatching(scope: string, command: InvoiceMatchingRecovery): boolean {
   const current = readPendingInvoiceMatching(scope);
   if (!current.command || current.command.key !== command.key) return false;
   try {
