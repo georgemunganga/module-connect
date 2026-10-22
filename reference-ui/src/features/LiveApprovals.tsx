@@ -1,4 +1,4 @@
-import { useRequestApprovalJournal } from "../lib/RequestApprovalJournal";
+import { useRequestApprovalOperation } from "../lib/RequestApprovalJournal";
 import { approvalPayloadFingerprint, type ApprovalLocator } from "../lib/request-approval-journal";
 import { readBoundApprovalResult } from "../../../src/platform/procurement-approval-acknowledgements-api";
 import { requestApprovalsAvailable } from "../lib/request-approval-availability";
@@ -73,7 +73,7 @@ export function LiveApprovalDetail() {
   const [data, setData] = useState<ApprovalDetail | null>(null), [error, setError] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [notice, setNotice] = useState("");
   const [pending, setPending] = useState<PendingDecision | null>(null);
-  const journal = useRequestApprovalJournal();
+  const journal = useRequestApprovalOperation(`decision:${id ?? ""}`);
   const write = journal.state("Decide");
   const priorRecoveryBlocked = useRef(write.blocked);
   const canRead = permissions.includes("procurement-approval-read");
@@ -154,7 +154,7 @@ export function LiveApprovalDetail() {
 export function RequestApprovalPanel({ requestId, version, status, onChanged }: { requestId: string; version: number; status: string; onChanged: () => Promise<void> }) {
   const { legalEntityId, permissions, capabilities } = useApprovalContext();
   const requestApprovalAvailable = requestApprovalsAvailable(capabilities);
-  const journal = useRequestApprovalJournal();
+  const journal = useRequestApprovalOperation(`opening:${requestId}`);
   const write = journal.state("Open");
   const priorRecoveryBlocked = useRef(write.blocked);
   const [history, setHistory] = useState<ApprovalHistory | null>(null), [error, setError] = useState("");

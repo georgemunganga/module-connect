@@ -1,4 +1,4 @@
-import { useRequestApprovalJournal } from "../lib/RequestApprovalJournal";
+import { useRequestApprovalOperation } from "../lib/RequestApprovalJournal";
 import { approvalPayloadFingerprint, type ApprovalLocator } from "../lib/request-approval-journal";
 import { readBoundApprovalResult } from "../../../src/platform/procurement-approval-acknowledgements-api";
 import { requestApprovalsAvailable } from "../lib/request-approval-availability";
@@ -12,7 +12,7 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : "Ap
 export function ApprovalOpeningPanel() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Starting approvals needs ERP company context.");
-  const journal = useRequestApprovalJournal();
+  const journal = useRequestApprovalOperation("approval-opening-queue");
   const write = journal.state("Open");
   const priorRecoveryBlocked = useRef(write.blocked);
   const company = readiness.legalEntityId;

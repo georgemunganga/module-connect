@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, Panel } from "../components/ui";
 import { useErpShell } from "./erpShell";
 import type { ProcurementReadiness } from "./procurement-live";
@@ -15,6 +15,14 @@ export function useRequestApprovalJournal(): Journal {
   const context = useContext(Context);
   if (!context) throw new Error("Approval commands require verified ERP recovery context.");
   return context;
+}
+/** Capture both record and component lifetime, in addition to the provider's actor/scope epoch. */
+export function useRequestApprovalOperation(resourceKey: string): Journal {
+  const journal = useRequestApprovalJournal();
+  const resource = useRef(resourceKey), alive = useRef(true);
+  resource.current = resourceKey;
+  useLayoutEffect(() => { alive.current = true; return () => { alive.current = false; }; }, [resourceKey]);
+  return { ...journal, current: () => alive.current && resource.current === resourceKey && journal.current() };
 }
 export function RequestApprovalJournalBoundary({ readiness, isScopeCurrent, children }: { readiness: ProcurementReadiness; isScopeCurrent: () => boolean; children: ReactNode }) {
   const { authEpoch } = useErpShell();
