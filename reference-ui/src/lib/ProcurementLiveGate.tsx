@@ -9,7 +9,7 @@ export const useLiveReadiness = () => useContext(LiveReadiness);
 export const isProcurementLiveMode = liveMode;
 
 /** Live transactions stay closed until their individual API adapters pass acceptance. */
-export function ProcurementLiveGate({ children, unavailable, scopeUnavailable }: { children: ReactNode; unavailable?: ReactNode; scopeUnavailable?: ReactNode }) {
+export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, blockedShell }: { children: ReactNode; unavailable?: ReactNode; scopeUnavailable?: ReactNode; blockedShell?: (content: ReactNode) => ReactNode }) {
   const { selection,authEpoch,procurementScopeStatus } = useErpShell();
   const location = useLocation();
   const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",procurementScopeStatus]);
@@ -83,7 +83,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable }:
     return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
   if (state.readiness && unavailable)
     return <LiveReadiness.Provider value={state.readiness}>{unavailable}</LiveReadiness.Provider>;
-  return <main className="flex min-h-dvh items-center justify-center bg-background px-5 text-foreground">
+  const blocked = <main className={blockedShell && state.error ? "p-5 sm:p-8" : "flex min-h-dvh items-center justify-center bg-background px-5 text-foreground"}>
     <div className="w-full max-w-lg">
       <h1 className="text-2xl font-semibold">Procurement</h1>
       {!state.readiness && !state.error ? <p className="mt-3 text-sm text-muted-foreground" role="status">Checking your ERP access and company…</p> : null}
@@ -91,6 +91,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable }:
       {state.readiness ? <p className="mt-3 text-sm text-muted-foreground" role="status">Your ERP account and company are connected. Procurement transaction screens will open as their live workflows are verified. No demo transactions are shown in live mode.</p> : null}
     </div>
   </main>;
+  // The shared header remains available for recovery; no business routes are rendered.
+  return blockedShell && state.error ? blockedShell(blocked) : blocked;
 }
 
 /** Keeps the existing shell/header available while a saved label needs selection. */
