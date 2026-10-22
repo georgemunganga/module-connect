@@ -44,6 +44,8 @@ async function fixture(page: Page, options: { saved?: unknown; ambiguous?: boole
   return { calls, release, choose: (id: string) => { chosen = id; }, created: () => created };
 }
 test("legacy HRM label is persisted as its same-company authorized ID before all Procurement reads and create/reload", async ({ page }) => {
+  // Includes a cold application load and multiple full navigations plus a save/reload.
+  test.setTimeout(90_000);
   const state = await fixture(page);
   await page.goto("/procurement/workspace/vendors");
   await expect(page.getByRole("heading", { name: "Checking your branch" })).toBeVisible();
