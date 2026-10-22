@@ -45,9 +45,15 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
+  const overviewPath = location.pathname === "/" || location.pathname === "/analytics";
   const configurationSettingsPath = ["/settings/reference-data", "/settings/buying-rules"]
     .includes(location.pathname);
-  if (state.readiness && ((vendorPath && state.readiness.capabilities.vendorDraft)
+  if (state.readiness && ((overviewPath && [
+    ["procurement-request-read", "requestDraft"], ["procurement-po-read", "orderDraft"],
+    ["procurement-plan-read", "planningDraft"], ["procurement-contract-read", "contractDraft"],
+  ].some(([permission, capability]) => state.readiness!.permissions.includes(permission)
+    && state.readiness!.capabilities[capability as keyof ProcurementReadiness["capabilities"]] === true))
+    || (vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
     || (approvalPath && state.readiness.capabilities.approvals)

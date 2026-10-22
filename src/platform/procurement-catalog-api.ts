@@ -22,9 +22,10 @@ function validPrice(value: unknown): value is PublishedCatalogPrice {
     && typeof value.publishedVersion === "number" && value.publishedVersion > 0;
 }
 
-export async function listPublishedCatalog(companyId: string, search = "", signal?: AbortSignal): Promise<PublishedCatalogPage> {
+export async function listPublishedCatalog(companyId: string, search = "", signal?: AbortSignal, page = 1): Promise<PublishedCatalogPage> {
   if (!guid.test(companyId)) throw new Error("Choose an ERP company before searching the catalog.");
-  const query = new URLSearchParams({ page: "1", pageSize: "25" });
+  if (!Number.isSafeInteger(page) || page < 1) throw new Error("Choose a valid catalog page.");
+  const query = new URLSearchParams({ page: String(page), pageSize: "25" });
   if (search.trim()) query.set("search", search.trim());
   let response: Response;
   try {

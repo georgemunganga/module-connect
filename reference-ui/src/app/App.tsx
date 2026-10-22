@@ -19,6 +19,7 @@ import { LiveVendorCreditList, LiveVendorCreditDetail, LiveVendorCreditEditor } 
 import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
 import { LiveBudgets } from "../features/LiveBudgets";
+import { LiveOverview } from "../features/LiveOverview";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -84,7 +85,7 @@ export function App() {
         <ProcurementLiveGate unavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<PendingLiveWorkflow />} /></Route></Routes>}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={isProcurementLiveMode ? <LiveOverview /> : <Dashboard />} />
             <Route
               path="/approvals"
               element={isProcurementLiveMode ? <LiveApprovalQueue /> : <RecordList kind="requests" approval />}
@@ -218,11 +219,8 @@ export function App() {
             />
             <Route
               path="/analytics"
-              element={
-                <div className="p-5 sm:p-8">
-                  <Analytics />
-                </div>
-              }
+              element={isProcurementLiveMode ? <LiveOverview analytics />
+                : <div className="p-5 sm:p-8"><Analytics /></div>}
             />
             <Route
               path="/inbox"

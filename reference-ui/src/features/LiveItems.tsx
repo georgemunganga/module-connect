@@ -13,6 +13,7 @@ import {
   type CatalogPrice, type ItemDetail, type ItemDraft, type ItemPage,
 } from "../../../src/platform/procurement-items-api";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
+import { LivePublishedCatalog } from "./LivePublishedCatalog";
 
 const initial: ItemDraft = {
   code: "", name: "", kind: "Goods", categoryCode: "", unitCode: "each",
@@ -28,8 +29,13 @@ function companyId() {
 }
 
 export function LiveItemList() {
-  const company = companyId();
   const canManage = useLiveReadiness()?.permissions.includes("procurement-item-manage") === true;
+  return canManage ? <ManagedItemList /> : <LivePublishedCatalog />;
+}
+
+function ManagedItemList() {
+  const company = companyId();
+  const canManage = true;
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -60,6 +66,8 @@ export function LiveItemList() {
 
 export function LiveItemEditor() {
   const { id } = useParams(); const readiness = useLiveReadiness(); const { selection } = useErpShell();
+  if (!readiness?.permissions.includes("procurement-item-manage"))
+    return <div className="p-5 sm:p-8" role="alert">Item changes are unavailable for your account. <Link to="/items">Browse approved items</Link></div>;
   return <LiveItemEditorBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.workerId, selection.entityId, selection.branch, id ?? "new"].join(":")} />;
 }
 function LiveItemEditorBody() {
@@ -132,6 +140,11 @@ function LiveItemEditorBody() {
 }
 
 export function LiveItemDetail() {
+  const canManage = useLiveReadiness()?.permissions.includes("procurement-item-manage") === true;
+  return canManage ? <ManagedItemDetail /> : <div className="p-5 sm:p-8" role="alert">Item management details are unavailable for your account. <Link className="text-primary" to="/items">Browse approved items</Link></div>;
+}
+
+function ManagedItemDetail() {
   const { id } = useParams(); const readiness = useLiveReadiness(); const { selection } = useErpShell();
   return <LiveItemDetailBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.workerId, selection.entityId, selection.branch, id].join(":")} />;
 }
