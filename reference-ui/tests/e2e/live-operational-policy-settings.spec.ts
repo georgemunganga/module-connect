@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const company = "11111111-1111-4111-8111-111111111111";
 const worker = "22222222-2222-4222-8222-222222222222";
 const capabilities = { configurationDraft: true };
-type Options = { key: "INVOICE_MATCHING" | "SOURCING" | "RECEIVING"; permissions: string[]; schema?: boolean; lostCreate?: boolean };
+type Options = { key: "INVOICE_MATCHING" | "SOURCING" | "RECEIVING"; permissions: string[]; schema?: boolean; lostCreate?: boolean; categoryPages?: boolean };
 
 async function fixture(page: Page, options: Options) {
   let creates = 0;
@@ -20,10 +20,18 @@ async function fixture(page: Page, options: Options) {
       permissions: ["procurement-access", ...options.permissions], company: { id: company, code: "TEST", name: "Company", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities });
     const base = "/api/procurement/v1/configuration/policies";
-    if (path.startsWith(`${base}/lookups/receiving/`)) return options.schema === false
-      ? json({ code: "store-unavailable", message: "Current receiving names are unavailable." }, 503)
-      : json({ kind: path.split("/").at(-1), companyId: company, items: [], total: 0, offset: 0, limit: 25,
-        nextOffset: null, isAuthority: false, canAcceptDelivery: false });
+    if (path.startsWith(`${base}/lookups/receiving/`)) {
+      if (options.schema === false) return json({ code: "store-unavailable", message: "Current receiving names are unavailable." }, 503);
+      const kind = path.split("/").at(-1), offset = Number(url.searchParams.get("offset") ?? "0");
+      const firstPage = options.categoryPages && kind === "categories" && offset === 0;
+      const laterPage = options.categoryPages && kind === "categories" && offset === 25;
+      return json({ kind, companyId: company,
+        items: firstPage ? Array.from({ length: 25 }, (_, index) => ({ id: `${String(index + 1).padStart(8, "0")}-1111-4111-8111-111111111111`,
+          displayName: `Category ${index + 1}`, code: `C${index + 1}`, principalId: null }))
+          : laterPage ? [{ id: "99999999-9999-4999-8999-999999999999", displayName: "Extra category", code: "EXTRA", principalId: null }] : [],
+        total: options.categoryPages && kind === "categories" ? 26 : 0, offset, limit: 25,
+        nextOffset: firstPage ? 25 : null, isAuthority: false, canAcceptDelivery: false });
+    }
     if (path === `${base}/lookups/sourcing-reviewers`) return options.schema === false
       ? json({ code: "store-unavailable", message: "Reviewer setup unavailable." }, 503)
       : json({ items: [], total: 0, offset: 0, limit: 25, nextOffset: null, isAuthority: false, configurationVersion: 1 });
@@ -85,4 +93,13 @@ test("receiving settings keep unavailable canonical names read-only", async ({ p
   await page.goto("/procurement/workspace/settings/modules/purchase-receives/preferences");
   await expect(page.getByText("Receiving configuration is unavailable.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add draft" })).toHaveCount(0);
+});
+
+test("receiving category picker reaches categories after the first page", async ({ page }) => {
+  await fixture(page, { key: "RECEIVING", permissions: ["procurement-configuration-read", "procurement-configuration-edit"], categoryPages: true });
+  await page.goto("/procurement/workspace/settings/modules/purchase-receives/preferences");
+  await page.getByRole("button", { name: "Add draft" }).click();
+  await page.getByRole("button", { name: "More categories" }).click();
+  await page.getByLabel("Purchase category", { exact: true }).selectOption("EXTRA");
+  await expect(page.getByLabel("Purchase category", { exact: true })).toHaveValue("EXTRA");
 });
