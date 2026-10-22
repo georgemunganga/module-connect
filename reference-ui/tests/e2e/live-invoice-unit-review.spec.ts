@@ -74,7 +74,7 @@ test("purpose reviewer sees pinned original and attests explicitly without broad
       mappingVersionId: mapping, mappingRevision: 1, branchId: branch, openedAt: "2026-10-22T00:00:00Z", ...flags }],
       total: 1, page: 1, pageSize: 20, availabilityMeaning: "CurrentMappingAssignmentsOnly", canPostToFinance: false }); return true; }
     if (path === `/api/procurement/v1/invoice-unit-reviews/${review}`) { await json({ reviewId: review, invoiceId: invoice,
-      invoiceVersion: 2, mappingVersionId: mapping, mappingRevision: 1, coreCaseId: caseId, caseVersion: 1,
+      invoiceVersion: 2, mappingVersionId: mapping, mappingRevision: 1, coreCaseId: caseId, caseVersion: votes ? 2 : 1,
       caseState: votes ? "Approved" : "Pending", reviewState: votes ? "Verified" : "Pending", currentMapping: true, originalDigestCurrent: true,
       original: { invoiceNumber: "INV-1", invoiceDate: "2026-10-20", currencyCode: "ZMW", netAmount: "10", taxAmount: "0", grossAmount: "10",
         lines: [{ id: line, lineNumber: 1, description: "Service", quantity: "1", unitPrice: "10", taxAmount: "0" }] }, blockers: [],
