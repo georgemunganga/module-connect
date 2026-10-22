@@ -6,9 +6,9 @@ import { useErpShell } from "../lib/erpShell";
 import { readPendingInvoiceMatching, claimPendingInvoiceMatching, clearPendingInvoiceMatching } from "../lib/invoice-matching-command-memory";
 import { listInvoiceDocuments, type InvoiceDocument } from "../../../src/platform/procurement-invoices-api";
 import type { InvoiceFinanceReadiness } from "../../../src/platform/procurement-invoice-review-api";
-import { invoiceMappingCommand, invoiceCompareCommand, listInvoiceSources, listInvoiceAcceptances, sendInvoiceMatching, recoverInvoiceMatching,
+import { invoiceMappingCommand, invoiceCompareCommand, invoiceMatchingRecovery, listInvoiceSources, listInvoiceAcceptances, sendInvoiceMatching, recoverInvoiceMatching,
   InvoiceMatchingError, type InvoiceSource, type InvoiceSourcePage, type InvoiceAcceptance, type InvoiceAcceptancePage, type InvoiceMatchingCommand,
-  type InvoiceMatchingReply } from "../../../src/platform/procurement-invoice-matching-api";
+  type InvoiceMatchingReply, type InvoiceMatchingRecovery } from "../../../src/platform/procurement-invoice-matching-api";
 
 type LinkDraft = { source: InvoiceSource; policy: string; acceptance: InvoiceAcceptance | null; unit: string; document: string; reference: string };
 const causeText = (cause: unknown) => cause instanceof Error ? cause.message : "The invoice action was not confirmed.";
@@ -31,7 +31,7 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
   const [sourcePage, setSourcePage] = useState(1), [search, setSearch] = useState(""), [query, setQuery] = useState("");
   const [acceptances, setAcceptances] = useState<InvoiceAcceptancePage | null>(null), [acceptancePage, setAcceptancePage] = useState(1), [acceptanceLoading, setAcceptanceLoading] = useState(false);
   const [documents, setDocuments] = useState<InvoiceDocument[]>([]), [reason, setReason] = useState("");
-  const alive = useRef(true); useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const alive = useRef(true), operationInFlight = useRef(false); useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const selected = drafts[activeLine];
   useEffect(() => {
     const abort = new AbortController(); setSources(null); setSourceLoading(false);
@@ -77,8 +77,13 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
     setDrafts((all) => ({ ...all, [activeLine]: { source, policy: sources.policyVersionId, acceptance: null, unit: "", document: "", reference: "" } }));
   }
   async function execute(command: InvoiceMatchingCommand) {
-    if (busy || commandBlocked) return;
-    if (!claimPendingInvoiceMatching(scopeKey, command)) {
+    if (operationInFlight.current || busy || commandBlocked) return;
+    operationInFlight.current = true;
+    let locator: InvoiceMatchingRecovery;
+    try { locator = invoiceMatchingRecovery(command); }
+    catch (cause) { operationInFlight.current = false; setError(causeText(cause)); return; }
+    if (!claimPendingInvoiceMatching(scopeKey, locator)) {
+      operationInFlight.current = false;
       setPendingState(readPendingInvoiceMatching(scopeKey));
       setError("The saved action cannot be checked in this browser tab. Open the invoice again before making another change.");
       return;
@@ -86,17 +91,17 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
     setPendingState(readPendingInvoiceMatching(scopeKey)); setBusy(true); setError("");
     try {
       const result = await sendInvoiceMatching(company, command);
-      clearPendingInvoiceMatching(scopeKey, command);
+      clearPendingInvoiceMatching(scopeKey, locator);
       if (alive.current) { setPendingState(readPendingInvoiceMatching(scopeKey)); refresh(outcomeText(result)); }
     } catch (cause) {
       // Only a definite validation rejection can release a command marker.
       // Scope, conflict and transport failures may leave a server receipt.
-      if (cause instanceof InvoiceMatchingError && [400, 422].includes(cause.status)) clearPendingInvoiceMatching(scopeKey, command);
+      if (cause instanceof InvoiceMatchingError && [400, 422].includes(cause.status)) clearPendingInvoiceMatching(scopeKey, locator);
       if (alive.current) {
         setPendingState(readPendingInvoiceMatching(scopeKey)); setError(causeText(cause));
         setDrafts({}); setSources(null); setAcceptances(null); setEditing(false);
       }
-    } finally { if (alive.current) setBusy(false); }
+    } finally { operationInFlight.current = false; if (alive.current) setBusy(false); }
   }
   function save(event: FormEvent) {
     event.preventDefault();
@@ -121,10 +126,11 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
     } catch (cause) { setError(causeText(cause)); }
   }
   async function recover() {
-    if (!uncertain || busy) return; setBusy(true); setError("");
+    if (!uncertain || busy || operationInFlight.current) return;
+    operationInFlight.current = true; setBusy(true); setError("");
     try { const result = await recoverInvoiceMatching(company, uncertain); clearPendingInvoiceMatching(scopeKey, uncertain); if (alive.current) { setPendingState(readPendingInvoiceMatching(scopeKey)); refresh(`Saved result found. ${outcomeText(result)}`); } }
     catch (cause) { if (alive.current) setError(causeText(cause)); }
-    finally { if (alive.current) setBusy(false); }
+    finally { operationInFlight.current = false; if (alive.current) setBusy(false); }
   }
   if (!canSelect && !context.permissions.includes("procurement-invoice-capture")) return null;
   return <Panel title="Invoice line links and checks"><div className="space-y-4 p-5">
