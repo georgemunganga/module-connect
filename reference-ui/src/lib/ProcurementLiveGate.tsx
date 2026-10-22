@@ -46,8 +46,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
   const overviewPath = location.pathname === "/" || location.pathname === "/analytics";
-  const configurationSettingsPath = ["/settings/reference-data", "/settings/buying-rules"]
-    .includes(location.pathname);
+  const configurationSettingsPath = /^\/settings(?:\/|$)/.test(location.pathname);
   if (state.readiness && ((overviewPath && [
     ["procurement-request-read", "requestDraft"], ["procurement-po-read", "orderDraft"],
     ["procurement-plan-read", "planningDraft"], ["procurement-contract-read", "contractDraft"],
@@ -64,7 +63,7 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && state.readiness.capabilities.orderDraft)
     || (budgetPath && state.readiness.capabilities.requestDraft)
-    || (configurationSettingsPath && state.readiness.capabilities.configurationDraft)))
+    || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
     return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{children}</LiveReadiness.Provider>;
   if (state.readiness && unavailable)
     return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{unavailable}</LiveReadiness.Provider>;

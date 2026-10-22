@@ -247,7 +247,7 @@ export function AppShell() {
                 <a href="/core/workspace/settings/organization" className="mt-3 block text-sm text-blue-500">
                   Organization profile
                 </a>
-                <Link to={isProcurementLiveMode ? "/settings/reference-data" : "/settings"} className="mt-3 block text-sm text-blue-500">Procurement settings</Link>
+                <Link to="/settings" className="mt-3 block text-sm text-blue-500">Procurement settings</Link>
               </div>
             )}
           </div>
@@ -331,7 +331,7 @@ export function AppShell() {
         </nav>
         <div className={`border-t border-rail-active p-3 ${compact ? "lg:px-2" : ""}`}>
           <Link
-            to={isProcurementLiveMode ? "/settings/reference-data" : "/settings"}
+            to="/settings"
             title="Settings"
             className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-rail-muted hover:bg-rail-active hover:text-rail-foreground ${compact ? "lg:justify-center lg:px-2" : ""}`}
           >

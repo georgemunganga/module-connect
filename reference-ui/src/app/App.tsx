@@ -32,6 +32,7 @@ import { Budgets, Analytics, PayablesInbox } from "../features/Insights";
 import { BatchPayments } from "../features/BatchPayments";
 import { BatchPaymentEditor } from "../features/BatchPaymentEditor";
 import { Settings } from "../features/Settings";
+import { LiveSettingsShell } from "../features/LiveSettingsShell";
 import { modules, type ModuleKey } from "../data/modules";
 
 function EditorRoute({ kind }: { kind: Exclude<ModuleKey, "rfqs"> }) {
@@ -262,7 +263,7 @@ export function App() {
               }
             />
           </Route>
-          <Route path="/settings/*" element={<Settings />} />
+          <Route path="/settings/*" element={isProcurementLiveMode ? <LiveSettingsShell /> : <Settings />} />
         </Routes>
         </ProcurementLiveGate>
         </ErpShellProvider>
