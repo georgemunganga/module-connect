@@ -47,3 +47,19 @@ When the UI already knows the source maker/version, a decision receipt or recove
 Newly authored verification covers canonical current source identity3, rejecting a legacy2 source substituted into this new route, partial/invalid metadata, pending/terminal evidence combinations, wrong-maker/source receipts, missing known receipt metadata, old wire1 compatibility and rejecting wire3 substitutions. A new mocked browser case retains the interrupted open through reload and conflicting GET recovery without a second POST; the existing workerless purpose-reviewer case now includes the actual additive metadata. These additions, including TypeScript/build/browser checks, have **not run** while the current release owns the CPU slot.
 
 Backend source contract checked against `b6d62c7` on `codex/procurement-unit-review-core-principal`: the new four-table review route strictly retains source3, terminal evidence3 and receipt envelope1. Its separate legacy2 consumer does not make a source2 response valid for this new route. Seventeen focused API unit cases and one additional mocked browser scenario are authored for this alignment, with the existing workerless happy path updated to actual metadata. All remain unexecuted source evidence pending a scheduled UI gate.
+
+## Post-hotfix integration checkpoint
+
+Published UI main `8b98080` is normally merged at `8d1a265`. This retains the deployed legacy branch-name canonicalization, blocked-scope recovery and verified selected-context fallback. No release build or runtime proof from the hotfix is attributed to the future P23 changes.
+
+Read-only source comparison against integrated ERP `dbf5107` confirms the actual reviewer lookup path, bounded paging and Core-principal fields; policy document schema1; and review receipt envelope1 with additive source identity3 and terminal evidence3. The effective-policy endpoint checks both operational identity and P23 schema readiness before reporting `MissingPolicy`, `AmbiguousPolicy` or `Valid`; the UI does not infer execution or document availability from policy existence. No additional DTO mismatch was found in this comparison.
+
+Remaining integration acceptance, to run after the serialized backend gate:
+
+- Run the authored policy codec, policy API, identity receipt, command journal and dispatch unit tests, then TypeScript and a live staged build with supported Node22.
+- Run the existing policy-settings and original-unit-review browser suites, including null-worker Core users, absent permissions, unavailable schema, actual source3 metadata, exact receipt CAS and interrupted command recovery. Retain failed attempts; do not retry writes automatically.
+- Prove the published policy and an invoice's actual original document/mapping lead to the current named Core assignment, using the genuine P23 PostgreSQL/API fixture. A lookup eligibility hint alone is not this proof.
+- Verify independent publishing, maker/reviewer alias denials, purpose-scoped document access, stale assignment/mapping denial and actor-owned historical receipt recovery against the backend.
+- Install P23 only through its separate reviewed migration/release gate; confirm actual feature flags and document services before enabling execution. Invoice approval, AP posting and payment readiness remain separate contracts.
+
+No Node, SDK, browser or build process was run for this merge/source-review checkpoint.
