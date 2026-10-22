@@ -110,7 +110,7 @@ export async function updateRecurringPurchase(company: string, id: string, versi
   const issue = validateRecurringPurchase(draft); if (issue) throw new RecurringPurchaseError(422, issue);
   if (!guid.test(id) || !Number.isSafeInteger(version) || version < 1 || !Number.isSafeInteger(version + 1)) throw new RecurringPurchaseError(422, "Refresh the saved purchase.");
   const saved = parseRow(await request(company, `/${id}`, { method: "PUT", body: JSON.stringify({ version, draft: ownedDraft(draft) }) }));
-  if (saved.id !== id || (saved.version !== version && saved.version !== version + 1)
+  if (saved.id !== id || saved.version !== version + 1
     || saved.status !== "Draft" || !matchesDraft(saved, draft))
     throw new RecurringPurchaseError(0, "The update was not confirmed. Review the saved purchase.");
   return saved;
