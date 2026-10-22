@@ -153,7 +153,7 @@ test("read-only invoice user cannot start intake", async ({ page }) => {
   await page.goto("/procurement/workspace/bills");
   await expect(page.getByRole("button", { name: "Record invoice" })).toHaveCount(0);
   await page.goto("/procurement/workspace/bills/new");
-  await expect(page.getByText("You do not have access to record invoices")).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
 });
 
 
