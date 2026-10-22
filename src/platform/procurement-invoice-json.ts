@@ -1,10 +1,12 @@
 import { invoiceDecimal } from "./procurement-invoice-exact";
 
-const financial = new Set(["quantity", "unitPrice", "netAmount", "taxAmount", "grossAmount"]);
+const financial = new Map<string, (value: string) => string>(["quantity", "unitPrice", "netAmount", "taxAmount", "grossAmount"].map(key => [key, invoiceDecimal] as const));
 /** Proper bounded JSON token traversal. Only known original financial values become strings
  * BEFORE JSON.parse can round numeric lexemes; strings (including escaped money-like text)
  * are never searched/replaced. Metadata numbers keep their ordinary JSON types. */
-export function parseInvoiceOriginalJson(text: string): unknown {
+export function parseInvoiceOriginalJson(text: string): unknown { return parseFinancialJson(text, financial); }
+/** Shared lexer configured by each owner contract; no change to invoice's original-key defaults. */
+export function parseFinancialJson(text: string, financial: ReadonlyMap<string, (value: string) => string>): unknown {
   const maxBytes = 2 * 1024 * 1024;
   if (text.length > maxBytes || new TextEncoder().encode(text).byteLength > maxBytes) throw new Error("Invoice response is too large.");
   let at = 0, nodes = 0;
@@ -29,7 +31,7 @@ export function parseInvoiceOriginalJson(text: string): unknown {
     space();
     if (text[at] === '"') {
       const token = string();
-      return financial.has(key ?? "") ? JSON.stringify(invoiceDecimal(token.value)) : token.raw;
+      return financial.has(key ?? "") ? JSON.stringify(financial.get(key ?? "")!(token.value)) : token.raw;
     }
     if (text[at] === "{" || text[at] === "[") {
       if (financial.has(key ?? "")) return invalid();
@@ -52,7 +54,7 @@ export function parseInvoiceOriginalJson(text: string): unknown {
     numeric.lastIndex = at; const number = numeric.exec(text);
     if (number) {
       at = numeric.lastIndex;
-      return financial.has(key ?? "") ? JSON.stringify(invoiceDecimal(number[0])) : number[0];
+      return financial.has(key ?? "") ? JSON.stringify(financial.get(key ?? "")!(number[0])) : number[0];
     }
     if (financial.has(key ?? "")) return invalid();
     for (const literal of ["true", "false", "null"]) if (text.startsWith(literal, at)) { at += literal.length; return literal; }

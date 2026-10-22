@@ -1,6 +1,10 @@
 /** Invoice originals stay decimal text. BigInt is used only for exact local previews;
  * the backend remains authoritative and may reject totals that do not fit its schema. */
-export function invoiceDecimal(value: unknown): string {
+export function invoiceDecimal(value: unknown): string { return boundedNonnegativeDecimal(value, 18, 4); }
+/** Bounded exact source projections can retain8dp; original invoice defaults remain18,4. */
+export function boundedNonnegativeDecimal(value: unknown, precision: number, allowedScale: number): string {
+  if (!Number.isInteger(precision) || !Number.isInteger(allowedScale) || precision < 1 || precision > 38
+    || allowedScale < 0 || allowedScale > 8 || allowedScale >= precision) throw new Error("Unsupported exact decimal limits.");
   if (typeof value !== "string" || value.length > 128) throw new Error("Use exact invoice amounts with up to four decimal places.");
   let text = value.trim();
   if (text.startsWith(".")) text = "0" + text;
@@ -16,8 +20,8 @@ export function invoiceDecimal(value: unknown): string {
   while (scale > 0 && coefficient % 10n === 0n) { coefficient /= 10n; scale--; }
   if (scale < 0) { coefficient *= 10n ** BigInt(-scale); scale = 0; }
   const digits = coefficient.toString();
-  if (scale > 4 || Math.max(1, digits.length - scale) > 14)
-    throw new Error("Invoice amounts must fit 18 digits with up to four decimal places, without rounding.");
+  if (scale > allowedScale || Math.max(1, digits.length - scale) > precision - allowedScale)
+    throw new Error(precision === 18 && allowedScale === 4 ? "Invoice amounts must fit 18 digits with up to four decimal places, without rounding." : "The source amount exceeds its exact decimal limits, without rounding.");
   return decimalText(coefficient, scale);
 }
 function decimalText(coefficient: bigint, scale: number): string {
