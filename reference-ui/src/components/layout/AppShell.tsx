@@ -36,11 +36,11 @@ const procurement = [
   ["/rfqs", "Request for Quotes"],
   ["/purchase-orders", "Purchase Orders"],
   ["/purchase-receives", "Purchase Receives"],
+  ["/recurring-bills", "Recurring Purchases"],
 ];
 const payables = [
   ["/inbox", "Inbox"],
   ["/bills", "Bills"],
-  ["/recurring-bills", "Recurring Bills"],
   ["/batch-payments", "Batch Payments"],
   ["/payments", "Payments Made"],
   ["/vendor-credits", "Vendor Credits"],
