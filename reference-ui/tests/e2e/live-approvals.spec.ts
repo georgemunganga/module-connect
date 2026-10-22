@@ -365,14 +365,18 @@ test("unknown-response support does not expose a decision or retry without curre
 async function assertRecoveryInWorkspace(page: Page) {
   const button = page.getByRole("button", { name: "Check saved approval result", exact: true });
   await expect(button).toBeVisible(); await expect(button).toBeEnabled();
-  const box = await button.boundingBox();
-  expect(box).not.toBeNull();
-  const sidebar = await page.getByRole("complementary", { name: "Main navigation" }).boundingBox();
-  if (sidebar && box) expect(box.x).toBeGreaterThanOrEqual(sidebar.x + sidebar.width);
-  expect(await button.evaluate(element => {
-    const box = element.getBoundingClientRect();
-    return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
-  })).toBe(true);
+  // Existing ERP branding deliberately leaves a short preloader over otherwise
+  // rendered controls. Wait for actual geometry/hit readiness, never force it.
+  await expect.poll(async () => {
+    const box = await button.boundingBox();
+    const sidebar = await page.getByRole("complementary", { name: "Main navigation" }).boundingBox();
+    const hitTarget = await button.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    });
+    return { hasGeometry: box !== null, clearsSidebar: !!box && (!sidebar || box.x >= sidebar.x + sidebar.width), hitTarget };
+  }, { timeout: 10_000, message: "Recovery control must clear the real sidebar and receive the actual pointer target" })
+    .toEqual({ hasGeometry: true, clearsSidebar: true, hitTarget: true });
 }
 
 for (const operation of ["Open", "Decide"] as const) {
