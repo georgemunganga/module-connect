@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
+import { LiveInvoiceUnitReviewSettings } from "./LiveInvoiceUnitReviewSettings";
 import { Badge, Button, EmptyState, Field, Input, Panel, Select } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
@@ -18,10 +20,19 @@ type PendingAction = { item: PolicyPage["items"][number]; action: "review" | "pu
 export function LiveInvoiceMatchingSettings() {
   const readiness = useLiveReadiness();
   const { selection } = useErpShell();
+  const [search, setSearch] = useSearchParams();
+  const unitReview = search.get("rule") === "unit-review";
   if (!readiness || selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
-  return <InvoiceMatchingRecord key={[readiness.tenantId, readiness.legalEntityId,
-    selection.branch ?? "", readiness.principalId].join(":")} />;
+  return <div className="space-y-5"><div role="tablist" aria-label="Bill checking preferences" className="flex gap-1 overflow-x-auto border-b border-border">
+    {[{ selected: !unitReview, label: "Invoice matching" }, { selected: unitReview, label: "Bill review rules" }].map((tab, index) =>
+      <button key={tab.label} type="button" role="tab" aria-selected={tab.selected} aria-controls="bill-checking-panel"
+        className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm ${tab.selected ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground"}`}
+        onClick={() => { const next = new URLSearchParams(search); if (index === 1) next.set("rule", "unit-review"); else next.delete("rule"); setSearch(next); }}>{tab.label}</button>)}
+  </div><div role="tabpanel" id="bill-checking-panel" aria-label={unitReview ? "Bill review rules" : "Invoice matching"}>
+    {unitReview ? <LiveInvoiceUnitReviewSettings /> : <InvoiceMatchingRecord key={[readiness.tenantId, readiness.legalEntityId,
+      selection.branch ?? "", readiness.principalId].join(":")} />}
+  </div></div>;
 }
 
 function InvoiceMatchingRecord() {

@@ -7,7 +7,9 @@ export type UnitReviewReadiness = { invoiceId: string; invoiceVersion: number; m
 export type UnitReviewTask = { reviewId: string; invoiceId: string; mappingVersionId: string; mappingRevision: number;
   branchId: string | null; openedAt: string };
 export type UnitReviewPage = { items: UnitReviewTask[]; total: number; page: number; pageSize: number };
-export type UnitReviewDetail = { reviewId: string; invoiceId: string; invoiceVersion: number; mappingVersionId: string; mappingRevision: number;
+/** Additive retained-source metadata. Absent on older wire-1 servers; never authority. */
+export type UnitReviewIdentityMetadata = { makerPrincipalId?: string; identitySchemaVersion?: 3; evidenceSchemaVersion?: 3 | null };
+export type UnitReviewDetail = UnitReviewIdentityMetadata & { reviewId: string; invoiceId: string; invoiceVersion: number; mappingVersionId: string; mappingRevision: number;
   coreCaseId: string; caseVersion: number; caseState: "Pending" | "Approved" | "Returned" | "Rejected";
   reviewState: "Pending" | "Verified" | "Returned" | "Rejected"; currentMapping: boolean; originalDigestCurrent: boolean;
   original: null | { invoiceNumber: string; invoiceDate: string; currencyCode: string; netAmount: string; taxAmount: string; grossAmount: string;
@@ -17,7 +19,7 @@ export type UnitReviewDetail = { reviewId: string; invoiceId: string; invoiceVer
   actionCandidates: UnitReviewAction[] };
 export type PinnedReviewDocument = { documentId: string; versionId: string; versionNumber: number; fileName: string; mediaType: string;
   sizeBytes: number; sha256: string; scanState: string; canDownload: boolean };
-export type UnitReviewReceipt = { schemaVersion: 1; invoiceId: string; reviewId: string; coreCaseId: string; commandKey: string;
+export type UnitReviewReceipt = UnitReviewIdentityMetadata & { schemaVersion: 1; invoiceId: string; reviewId: string; coreCaseId: string; commandKey: string;
   operation: "Open" | "Decision"; invoiceVersion: number; caseVersion: number; caseState: UnitReviewDetail["caseState"];
   reviewState: UnitReviewDetail["reviewState"]; decisionId: string | null; outcomeId: string | null; completedAt: string };
 export class UnitReviewError extends Error { constructor(readonly status: number, message: string) { super(message); } }
@@ -47,6 +49,17 @@ async function call(company: string, path: string, init: RequestInit = {}, downl
 }
 const flags = (v: Record<string, unknown>) => v.isInvoiceApproval === false && v.canPostToFinance === false;
 const textList = (v: unknown): v is string[] => Array.isArray(v) && v.every((item) => typeof item === "string");
+function retainedIdentity(x: Record<string, unknown>): boolean {
+  const fields = ["makerPrincipalId", "identitySchemaVersion", "evidenceSchemaVersion"];
+  if (fields.every((name) => !Object.prototype.hasOwnProperty.call(x, name))) return true;
+  // Never reinterpret retained source/evidence version 3 as wire envelope 3.
+  // A real Core principal is required whenever the additive metadata is present.
+  if (!id(x.makerPrincipalId) || x.makerPrincipalId !== x.makerPrincipalId.toLowerCase()
+    || x.identitySchemaVersion !== 3) return false;
+  return x.reviewState === "Pending" ? x.evidenceSchemaVersion === null || x.evidenceSchemaVersion === undefined
+    : x.evidenceSchemaVersion === 3;
+}
+
 export async function getUnitReviewReadiness(company: string, invoice: string, signal?: AbortSignal): Promise<UnitReviewReadiness> {
   if (!id(invoice)) throw invalid();
   const x = await call(company, `/invoices/${invoice}/unit-review-readiness`, { signal });
@@ -73,7 +86,7 @@ export async function getUnitReviewDetail(company: string, review: string, signa
     || !["Pending", "Verified", "Returned", "Rejected"].includes(String(x.reviewState))
     || typeof x.currentMapping !== "boolean" || typeof x.originalDigestCurrent !== "boolean" || !textList(x.blockers)
     || !Array.isArray(x.assignments) || !Array.isArray(x.originalDocumentLines) || !Array.isArray(x.actionCandidates)
-    || x.attestation !== "OriginalDocumentUnitsConfirmed" || x.actionCandidateMeaning !== "CurrentAssignmentOnlyRevalidatedByCommand" || !flags(x)) throw invalid();
+    || !retainedIdentity(x) || x.attestation !== "OriginalDocumentUnitsConfirmed" || x.actionCandidateMeaning !== "CurrentAssignmentOnlyRevalidatedByCommand" || !flags(x)) throw invalid();
   if (x.original === null) { if (x.originalDigestCurrent || x.actionCandidates.length) throw invalid(); }
   else {
     const o = x.original;
@@ -112,7 +125,7 @@ function receipt(x: unknown, key: string, operation: UnitReviewReceipt["operatio
     || !["Pending", "Approved", "Returned", "Rejected"].includes(String(x.caseState))
     || !["Pending", "Verified", "Returned", "Rejected"].includes(String(x.reviewState))
     || !(x.decisionId === null || id(x.decisionId)) || !(x.outcomeId === null || id(x.outcomeId))
-    || typeof x.completedAt !== "string" || x.recordedHistoricalResult !== true || !flags(x)
+    || !retainedIdentity(x) || typeof x.completedAt !== "string" || x.recordedHistoricalResult !== true || !flags(x)
     || invoice && x.invoiceId !== invoice || review && x.reviewId !== review) throw invalid();
   const pending = x.caseState === "Pending" && x.reviewState === "Pending" && x.outcomeId === null;
   const approved = x.caseState === "Approved" && x.reviewState === "Verified" && id(x.outcomeId);
@@ -123,11 +136,14 @@ function receipt(x: unknown, key: string, operation: UnitReviewReceipt["operatio
     || operation === "Decision" && !id(x.decisionId)) throw invalid();
   return x as unknown as UnitReviewReceipt;
 }
-export async function openUnitReview(company: string, invoice: string, version: number, mappingRevision: number, reason: string | null, key: string) {
+export async function openUnitReview(company: string, invoice: string, version: number, mappingRevision: number, reason: string | null, key: string, expectedMakerPrincipalId?: string) {
+  if (expectedMakerPrincipalId !== undefined && !id(expectedMakerPrincipalId)) throw invalid();
   if (!id(invoice) || !id(key) || !pos(version) || !count(mappingRevision) || reason !== null && reason.length > 2000) throw invalid();
   const result = receipt(await call(company, `/invoices/${invoice}/unit-reviews`, { method: "POST", headers: { "Idempotency-Key": key },
     body: JSON.stringify({ invoiceVersion: version, mappingRevision, reason }) }), key, "Open", invoice);
-  if (result.invoiceVersion !== version || result.caseVersion !== 1) throw invalid();
+  if (result.invoiceVersion !== version || result.caseVersion !== 1
+    || expectedMakerPrincipalId !== undefined && result.makerPrincipalId !== undefined
+      && result.makerPrincipalId !== expectedMakerPrincipalId) throw invalid();
   return result;
 }
 export async function decideUnitReview(company: string, detail: UnitReviewDetail, assignmentId: string, assignmentVersion: number,
@@ -141,11 +157,18 @@ export async function decideUnitReview(company: string, detail: UnitReviewDetail
     method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ invoiceVersion: detail.invoiceVersion,
       caseVersion: detail.caseVersion, assignmentVersion, action, reason, attestation: action === "Approve" ? "OriginalDocumentUnitsConfirmed" : null })
   }), key, "Decision", detail.invoiceId, detail.reviewId);
+  if (detail.makerPrincipalId !== undefined && (result.makerPrincipalId !== detail.makerPrincipalId
+    || result.identitySchemaVersion !== detail.identitySchemaVersion)) throw invalid();
   if (result.invoiceVersion !== detail.invoiceVersion || result.coreCaseId !== detail.coreCaseId
     || result.caseVersion !== detail.caseVersion + 1) throw invalid();
   return result;
 }
-export async function recoverUnitReview(company: string, review: string, key: string, operation: UnitReviewReceipt["operation"], invoice: string) {
-  if (![review, key, invoice].every(id)) throw invalid();
-  return receipt(await call(company, `/invoice-unit-reviews/${review}/commands/${key}`), key, operation, invoice, review);
+export async function recoverUnitReview(company: string, review: string, key: string, operation: UnitReviewReceipt["operation"], invoice: string,
+  expectedMakerPrincipalId?: string, expectedIdentitySchemaVersion?: 3) {
+  if (![review, key, invoice].every(id) || expectedMakerPrincipalId !== undefined && !id(expectedMakerPrincipalId)) throw invalid();
+  const result = receipt(await call(company, `/invoice-unit-reviews/${review}/commands/${key}`), key, operation, invoice, review);
+  if (expectedMakerPrincipalId !== undefined && (result.makerPrincipalId !== undefined || expectedIdentitySchemaVersion !== undefined)
+    && result.makerPrincipalId !== expectedMakerPrincipalId
+    || expectedIdentitySchemaVersion !== undefined && result.identitySchemaVersion !== expectedIdentitySchemaVersion) throw invalid();
+  return result;
 }

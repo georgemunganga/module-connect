@@ -124,7 +124,7 @@ function Detail({ reviewId }: { reviewId: string }) {
     operationInFlight.current = true;
     setBusy(true); setError("");
     try {
-      const result = await recoverUnitReview(context.legalEntityId, reviewId, marker.key, "Decision", marker.invoiceId);
+      const result = await recoverUnitReview(context.legalEntityId, reviewId, marker.key, "Decision", marker.invoiceId, data?.makerPrincipalId, data?.identitySchemaVersion);
       clearUnitReviewPending(scope, marker);
       if (alive.current) { setPending(readUnitReviewPending(scope)); setData(null); setDocuments(null);
         setNotice(`Saved decision found: ${result.reviewState}. This does not approve the invoice.`);
