@@ -6,7 +6,7 @@ const stageId = "77777777-7777-4777-8777-777777777777", decisionId = "88888888-8
 const lineId = "99999999-9999-4999-8999-999999999999";
 const root = "/procurement/workspace";
 test.setTimeout(90_000);
-async function mockErp(page: Page, options: { principalOnly?: boolean; enabled?: boolean; empty?: boolean; read?: boolean; decide?: boolean; loseResponse?: boolean; stale?: boolean; unopened?: boolean; pages?: boolean; pendingRelease?: boolean; finance?: boolean; fundingBlocked?: boolean; openingQueue?: boolean } = {}) {
+async function mockErp(page: Page, options: { uncertainStatus?: number; principalOnly?: boolean; enabled?: boolean; empty?: boolean; read?: boolean; decide?: boolean; loseResponse?: boolean; stale?: boolean; unopened?: boolean; pages?: boolean; pendingRelease?: boolean; finance?: boolean; fundingBlocked?: boolean; openingQueue?: boolean } = {}) {
   let state = options.pendingRelease || options.finance ? "Returned" : "Pending", requestState = options.finance ? "ReturnPendingFinanceRelease" : "Submitted", caseVersion = 2, requestVersion = 5, opened = !options.unopened;
   let lost = false, stale = options.stale, approvalReads = 0, releaseConfirmed = false;
   const decisions: Array<Record<string, unknown>> = [];
@@ -73,7 +73,7 @@ async function mockErp(page: Page, options: { principalOnly?: boolean; enabled?:
       const receipt = { requestId, requestVersion, requestState, releaseRequestId: stageId, confirmationId: decisionId,
         financeReleaseState: "Confirmed", evidenceMode: "ApprovedManualEvidence" };
       receipts.set(key, receipt);
-      if (options.loseResponse && !lost) { lost = true; return route.abort("failed"); }
+      if ((options.loseResponse || options.uncertainStatus) && !lost) { lost = true; return options.uncertainStatus ? json({ message: "Proxy did not confirm the result." }, options.uncertainStatus) : route.abort("failed"); }
       return json(receipt);
     }
     const opening = url.pathname === `/api/procurement/v1/requests/${requestId}/approval-cases`;
@@ -97,7 +97,7 @@ async function mockErp(page: Page, options: { principalOnly?: boolean; enabled?:
       const receipt = { caseId, requestId, submittedVersion: 4, requestVersion, caseVersion, state, requestState, approvalState: state,
         ...(opening ? {} : { assignmentId, assignmentVersion: 2, decisionId }) };
       receipts.set(key, receipt);
-      if (options.loseResponse && !lost) { lost = true; return route.abort("failed"); }
+      if ((options.loseResponse || options.uncertainStatus) && !lost) { lost = true; return options.uncertainStatus ? json({ message: "Proxy did not confirm the result." }, options.uncertainStatus) : route.abort("failed"); }
       return json(receipt, opening ? 201 : 200);
     }
     return json({ message: "Not found" }, 404);
@@ -302,4 +302,47 @@ test("principal-only opening queue retains the existing request approval route",
   await page.getByRole("button", { name: "Start approvals for PR-101", exact: true }).click();
   await expect(page.getByText("Approvals started for PR-101. The assigned people can now review it.", { exact: true })).toBeVisible();
   expect(state.keys).toHaveLength(1);
+});
+
+for (const status of [408, 429, 499]) {
+  test(`uncertain HTTP${status} retries only the frozen principal decision`, async ({ page }) => {
+    const state = await mockErp(page, { principalOnly: true, uncertainStatus: status });
+    await page.goto(`${root}/approvals/${caseId}`);
+    await page.getByRole("button", { name: "Return for changes", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Reason", { exact: true }).fill("Correct the requested items");
+    await dialog.getByRole("button", { name: "Confirm decision", exact: true }).click();
+    await expect(dialog.getByRole("button", { name: "Retry same decision", exact: true })).toBeEnabled();
+    await expect(dialog.getByLabel("Reason", { exact: true })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+    expect(state.keys).toHaveLength(1);
+    expect(state.decisions).toHaveLength(1);
+    await dialog.getByRole("button", { name: "Retry same decision", exact: true }).click();
+    await expect(page.getByText("Request returned. Editing will open after Finance confirms the funds are released.", { exact: true })).toBeVisible();
+    expect(state.keys).toHaveLength(2);
+    expect(state.keys[1]).toEqual(state.keys[0]);
+    expect(state.decisions).toHaveLength(1);
+  });
+  test(`uncertain HTTP${status} keeps request opening key and payload`, async ({ page }) => {
+    const state = await mockErp(page, { principalOnly: true, unopened: true, uncertainStatus: status });
+    await page.goto(`${root}/requests/${requestId}`);
+    await page.getByRole("button", { name: "Start approvals", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Retry starting approvals", exact: true })).toBeEnabled();
+    expect(state.keys).toHaveLength(1);
+    await page.getByRole("button", { name: "Retry starting approvals", exact: true }).click();
+    await expect(page.getByText("Submission 4 · Pending", { exact: true })).toBeVisible();
+    expect(state.keys).toHaveLength(2);
+    expect(state.keys[1]).toEqual(state.keys[0]);
+  });
+}
+
+test("unknown-response support does not expose a decision or retry without current action permission", async ({ page }) => {
+  const state = await mockErp(page, { principalOnly: true, decide: false, uncertainStatus: 408 });
+  await page.goto(`${root}/approvals/${caseId}`);
+  await expect(page.getByRole("heading", { name: "PR-101", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Return for changes", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry same decision", exact: true })).toHaveCount(0);
+  expect(state.keys).toHaveLength(0);
+  expect(state.decisions).toHaveLength(0);
 });

@@ -1,3 +1,4 @@
+import { definiteRequestApprovalRejection } from "../lib/request-approval-recovery";
 import { requestApprovalsAvailable } from "../lib/request-approval-availability";
 import { useEffect, useState } from "react";
 import { Button, Panel } from "../components/ui";
@@ -34,7 +35,7 @@ export function ApprovalOpeningPanel() {
       setData(await listApprovalOpeningQueue(company, offset));
     } catch (cause) {
       setError(message(cause));
-      if (cause instanceof ApprovalApiError && cause.status >= 400 && cause.status < 500) {
+      if (cause instanceof ApprovalApiError && definiteRequestApprovalRejection(cause.status)) {
         setIntent(null);
         if (cause.status === 409) {
           try { setData(await listApprovalOpeningQueue(company, offset)); } catch { setData(null); }
