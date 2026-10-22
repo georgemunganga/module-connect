@@ -28,7 +28,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId,
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId: null,
       permissions: options.permissions ?? ["procurement-access", "procurement-request-read", "procurement-request-create", "procurement-request-edit", "procurement-request-submit",
         ...(options.policyReviewer ? ["procurement-policy-evaluate", "procurement-request-return"] : [])],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
@@ -148,10 +148,10 @@ test("request reader cannot open create or edit controls or send a draft write",
   await expect(page.getByRole("heading", { name: "Office chairs" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Edit request" })).toHaveCount(0);
   await page.goto("/procurement/workspace/requests/new");
-  await expect(page.getByRole("alert")).toContainText("do not have access to create a request");
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
   await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
   await page.goto(`/procurement/workspace/requests/${requestId}/edit`);
-  await expect(page.getByRole("alert")).toContainText("do not have access to edit this request");
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
   await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
