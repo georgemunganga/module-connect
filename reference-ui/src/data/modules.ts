@@ -55,12 +55,12 @@ export const modules: Record<ModuleKey, ModuleConfig> = {
   },
   "recurring-bills": {
     key: "recurring-bills",
-    title: "Recurring Bills",
-    singular: "Recurring Bill",
-    prefix: "RB",
+    title: "Recurring Purchases",
+    singular: "Recurring Purchase",
+    prefix: "RPC",
     reference: "18_recurring_bills.png",
     editorReference: "19_new_recurring_bill.png",
-    description: "Create repeatable bill schedules.",
+    description: "Plan purchases that repeat. Finance owns bills and payments.",
   },
   payments: {
     key: "payments",
