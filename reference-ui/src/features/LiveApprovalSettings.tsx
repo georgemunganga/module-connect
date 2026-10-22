@@ -1,3 +1,4 @@
+import { isDefiniteHttpRejection } from "../lib/http-write-outcome";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Badge, Button, EmptyState, Field, Input, Modal, Panel, Select, Switch, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
@@ -106,7 +107,7 @@ function ApprovalLimits({ initialAction, pendingKey }: { initialAction: Authorit
     } catch (cause) {
       if (!mounted.current) return;
       setError(message(cause));
-      if (!(cause instanceof AuthorityApiError) || cause.status === 0 || cause.status === 409 || cause.status >= 500) setUncertain(true);
+      if (!(cause instanceof AuthorityApiError) || cause.status === 409 || !isDefiniteHttpRejection(cause.status)) setUncertain(true);
       if (cause instanceof AuthorityApiError && [403, 404].includes(cause.status)) {
         // The automatic list refresh clears its own loading error. Keep the command
         // failure visible until the user acknowledges it or starts another action.
@@ -207,7 +208,7 @@ function AuthorityForm({ company, currency, createAction, pendingKey, record, se
       }
       if (alive.current) { setError(message(cause));
         if ((!existing && (!knownValidation || readAuthorityCreateGuard(pendingKey) !== "clear"))
-          || (existing && (!(cause instanceof AuthorityApiError) || cause.status === 0 || cause.status === 409 || cause.status >= 500))) {
+          || (existing && (!(cause instanceof AuthorityApiError) || cause.status === 409 || !isDefiniteHttpRejection(cause.status)))) {
           setUncertain(true); onUnconfirmed();
         }
       }
