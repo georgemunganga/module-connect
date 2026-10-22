@@ -7,7 +7,7 @@ import { claimUnitReviewPending, clearUnitReviewPending, readUnitReviewPending, 
 import { getUnitReviewReadiness, openUnitReview, recoverUnitReview, UnitReviewError, type UnitReviewReadiness } from "../../../src/platform/procurement-invoice-unit-review-api";
 
 const message = (cause: unknown) => cause instanceof Error ? cause.message : "Original invoice review is unavailable.";
-const blockerText = (code: string) => code === "OriginalUnitReviewAlreadyOpen" ? "A review has already started for these invoice links."
+const blockerText = (code: string) => (code === "OriginalUnitReviewAlreadyOpened" || code === "OriginalUnitReviewAlreadyOpen") ? "A review has already started for these invoice links."
   : code === "OriginalUnitReviewExecutionDisabled" ? "Original document review is not available for this company yet."
     : "The invoice links or original document need another check before review can start.";
 /** Maker entry in the existing bill detail. Opening creates a review case, not invoice approval. */

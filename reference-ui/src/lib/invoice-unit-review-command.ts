@@ -27,7 +27,8 @@ export function claimUnitReviewPending(scope: string, value: UnitReviewPending):
 }
 export function clearUnitReviewPending(scope: string, value: UnitReviewPending): boolean {
   const current = readUnitReviewPending(scope);
-  if (!current.pending || current.pending.key !== value.key || current.pending.operation !== value.operation) return false;
+  if (!current.pending || current.pending.key !== value.key || current.pending.operation !== value.operation
+    || current.pending.invoiceId !== value.invoiceId || current.pending.reviewId !== value.reviewId) return false;
   try { sessionStorage.removeItem(prefix + scope); return sessionStorage.getItem(prefix + scope) === null; }
   catch { return false; }
 }

@@ -17,8 +17,10 @@ export function ownedPolicySettings(key: string): { path: string; label: string 
   switch (key) {
     case "SOURCING": return { path: "/settings/modules/request-for-quotes/approvals", label: "Sourcing settings" };
     case "RECEIVING": return { path: "/settings/modules/purchase-receives/preferences", label: "Receiving settings" };
-    case "INVOICE_MATCHING": case "INVOICE_UNIT_REVIEW":
+    case "INVOICE_MATCHING":
       return { path: "/settings/modules/bills/preferences", label: "Invoice check settings" };
+    case "INVOICE_UNIT_REVIEW":
+      return { path: "/settings/modules/bills/preferences?rule=unit-review", label: "Bill review rules" };
     default: return { path: "/settings", label: "Procurement settings" };
   }
 }

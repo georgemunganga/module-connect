@@ -80,7 +80,7 @@ function validSummary(value: unknown): boolean {
     && typeof value.version === "number" && typeof value.effectiveFrom === "string";
 }
 
-export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "SOURCING" | "RECEIVING"): Promise<PolicyPage> {
+export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "SOURCING" | "RECEIVING"): Promise<PolicyPage> {
   const body = await call(companyId, `?page=1&pageSize=100${key ? `&key=${key}` : ""}`, { signal });
   if (!object(body) || !Array.isArray(body.items) || !body.items.every(validSummary)
     || typeof body.total !== "number" || typeof body.page !== "number"
@@ -141,7 +141,7 @@ export async function decidePolicy(companyId: string, id: string, version: numbe
     throw new PolicyActionError("ERP did not confirm the policy decision. Check saved rules before retrying.", 0);
   return body;
 }
-export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING"):
+export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW"):
   Promise<{ status: string; isAuthority: false; policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null }> {
   const body = await call(companyId, `/effective?key=${key}`);
   if (!object(body) || typeof body.status !== "string" || body.isAuthority !== false)
@@ -234,4 +234,31 @@ export async function retirePolicyDraft(companyId: string, record: PolicyPage["i
     || body.version !== record.version + 1)
     throw new PolicyActionError("Retirement was not confirmed. Check the saved rules before making another change.", 0);
   return body;
+}
+
+/** Current Core accounts. Eligibility is a lookup hint, never permission or approval authority. */
+export type UnitReviewerPage = { items: Array<{ principalId: string; displayName: string; canReviewOriginalUnits: boolean }>;
+  candidateTotal: number; offset: number; limit: 25; isAuthority: false };
+export async function lookupUnitReviewers(company: string, search: string, offset: number, signal?: AbortSignal): Promise<UnitReviewerPage> {
+  if (search.trim().length > 100 || !Number.isSafeInteger(offset) || offset < 0 || offset > 100000)
+    throw new Error("Use a bounded reviewer name search.");
+  const body = await call(company, `/lookups/invoice-unit-reviewers?${new URLSearchParams({ search: search.trim(), offset: String(offset), limit: "25" })}`, { signal });
+  if (!object(body) || !Array.isArray(body.items) || body.items.length > 25 || body.isAuthority !== false
+    || body.offset !== offset || body.limit !== 25 || !Number.isSafeInteger(body.candidateTotal) || Number(body.candidateTotal) < 0
+    || body.items.some(row => !object(row) || !canonicalId(row.principalId) || typeof row.displayName !== "string" || !row.displayName.trim()
+      || typeof row.canReviewOriginalUnits !== "boolean")
+    || new Set(body.items.map(row => object(row) ? row.principalId : "")).size !== body.items.length
+    || body.items.length > Math.max(0, Number(body.candidateTotal) - offset))
+    throw new PolicyActionError("Current reviewer names could not be confirmed. Saved selections have not changed.", 0);
+  return body as UnitReviewerPage;
+}
+export async function validateUnitReviewPolicy(company: string, rulesJson: string): Promise<{ isValid: boolean; issues: string[]; reviewConfigurationComplete: boolean; reviewIssues: string[] }> {
+  const body = await call(company, "/validate", { method: "POST", body: JSON.stringify({ rulesJson }) });
+  if (!object(body) || typeof body.isValid !== "boolean" || typeof body.reviewConfigurationComplete !== "boolean"
+    || !Array.isArray(body.issues) || body.issues.some(issue => typeof issue !== "string")
+    || !Array.isArray(body.reviewIssues) || body.reviewIssues.some(issue => typeof issue !== "string")
+    || body.canPublish !== false || body.isAuthority !== false
+    || body.isValid !== (body.issues.length === 0) || body.reviewConfigurationComplete !== (body.reviewIssues.length === 0))
+    throw new PolicyActionError("The saved review rule check could not be confirmed.", 0);
+  return body as { isValid: boolean; issues: string[]; reviewConfigurationComplete: boolean; reviewIssues: string[] };
 }

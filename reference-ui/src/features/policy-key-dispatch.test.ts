@@ -18,7 +18,7 @@ describe("policy editor ownership", () => {
     expect(ownedPolicySettings("SOURCING").path).toBe("/settings/modules/request-for-quotes/approvals");
     expect(ownedPolicySettings("RECEIVING").path).toBe("/settings/modules/purchase-receives/preferences");
     expect(ownedPolicySettings("INVOICE_MATCHING").path).toBe("/settings/modules/bills/preferences");
-    expect(ownedPolicySettings("INVOICE_UNIT_REVIEW").path).toBe("/settings/modules/bills/preferences");
+    expect(ownedPolicySettings("INVOICE_UNIT_REVIEW").path).toBe("/settings/modules/bills/preferences?rule=unit-review");
     expect(ownedPolicySettings("FUTURE_POLICY").path).toBe("/settings");
   });
 });

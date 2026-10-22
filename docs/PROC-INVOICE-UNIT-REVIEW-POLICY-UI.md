@@ -1,0 +1,37 @@
+# Original bill unit review policy UI
+
+Status: source implementation, pending serialized TypeScript, unit, build and browser verification. No deployment or actual P23 workflow completion is claimed.
+
+Backend source contract reviewed: ERP `8a89ba6` in `codex/procurement-unit-review-core-principal`. UI baseline: `f33a631`, retaining the established shared ERP controls and existing vendor/Procurement UI.
+
+## Ownership and route
+
+Bills → Settings → Preferences now has two inner tabs: **Invoice matching** (existing editor) and **Bill review rules** (`?rule=unit-review`). `INVOICE_UNIT_REVIEW` policy links select the latter. There is no new module, sidebar entry, Core user master or employee dependency.
+
+The typed review policy is the existing schema 1 `InvoiceUnitReview` document with ordered `stages`, each containing `code`, explicit `mode: One|All`, and canonical Core `principals`. An empty unfinished draft is allowed. No stage, decision strategy or reviewer is silently selected. Sending for review requires a complete saved definition; backend validation rechecks current identities and permissions. Unsupported saved fields/formats remain read-only.
+
+The reviewer selector calls only the actual bounded `configuration/policies/lookups/invoice-unit-reviewers` contract. It displays actual Core names and eligibility hints; `canReviewOriginalUnits` never grants access. Employee IDs are not required or fabricated. Saved identities whose names are not in the current bounded search remain explicitly selected as “Saved reviewer”; opening an editor never drops or replaces them.
+
+## Workflow and access
+
+The UI reuses owning policy list/detail, validate, create, versioned update, submit-review, publish and return APIs. Only actual server permissions enable configuration reads/edits/approval actions; role names do not create authority. A successful effective-policy read confirms the required schema is available even if no policy is published; unavailable schema permits read-only inspection. Execution capability remains independent from policy configuration.
+
+Publishing requires the server's current permission, independent-actor and policy-version checks. Current policy DTOs do not expose original creator identity, so the UI does not invent creator information or claim to establish independence. Rejected publication remains pending and cannot be automatically repeated.
+
+A session marker scoped to tenant/company/branch/Core principal/policy key is persisted before a consequential command. Failed storage prevents the write. Only a validated persisted response or definite pre-write 400/422 clears it. Unknown/malformed responses and unrecognized statuses, including 408/429/499, retain it across reload/context changes. No unmount or context switch clears another actor's marker.
+
+## Existing review commands
+
+Original review owner/tasks already use the real Core `principalId` and optional employee projection. Mocked review journeys now explicitly use `workerId: null`. Historical command receipt **wire schema remains 1** with existing invoice/review/key, decision/outcome/state combinations and exact CAS checks. Internal retained source identity schema 3 and outcome evidence schema 3 are separate backend contracts, not substituted for the wire receipt version. No absent owner/source metadata is fabricated. Backend owns source/actor/evidence verification.
+
+Pending-command clearing additionally requires the same invoice and review IDs. The actual already-opened blocker code is recognized. No business authorization or receipt validation was weakened.
+
+## Verification authored
+
+- Strict codec tests: empty drafts, canonical principals, malformed/duplicate fields, unknown schema fields, limits, real UTC dates.
+- Actual contract parser tests: bounded Core reviewer names/eligibility, missing/malformed fields, owner validation flags.
+- Journal tests: wrong invoice/review/key cannot unlock; another principal/company/branch cannot clear the marker.
+- Mocked browser cases: system-only reader/editor, existing matching tab, named reviewer create/reload/edit/submit, publish/return, unavailable schema, unknown 408/429/499, malformed persisted receipt, rejected storage, unfinished draft, server self-publication denial.
+- Existing unit-review browser journeys retain their receipt/CAS/document tests with workerless system principals.
+
+These tests are authored, not executed proof. Actual PostgreSQL P23 installation, system-only Core review execution, deployment and production smoke checks remain separate release gates owned by ERP.
