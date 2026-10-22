@@ -23,3 +23,24 @@ Denied, malformed, foreign or failed context reads show no fallback names. Authe
 - Unit tests: selected-only projection, optional employee independence, malformed/foreign contexts, captured headers/no-store, failed responses and invalid selected IDs.
 - Browser tests: custom Procurement role with denied Core list access sees actual selected names and no switch action; extra context companies do not become choices; invalid/denied context remains unavailable; Core-authorized full choices remain; late prior-authentication response cannot restore old display.
 - Existing Core list authority and all Procurement record permissions remain authoritative. No backend or production changes were made.
+
+## Explicit company-workspace recovery
+
+A Core administration lookup403 does not imply Procurement denial. If a saved legacy branch name
+needs a new selection and the separately validated current Procurement context explicitly returns
+`branch: null`, the existing header offers **Use [verified company] workspace**. The user must click
+this action before the existing `selectEntity` persists the company-only choice. There is no
+automatic clearing, inferred company, first-branch choice or broad Core master access. A non-null
+verified branch retains its existing explicit branch-selection button. Unverified/mismatched context
+never supplies either choice.
+
+Readiness errors also retain the existing header through a dedicated blocked-content shell wrapper.
+Only the gate's error state is placed in its outlet; no protected business children, readiness or
+transaction permissions are manufactured. This corrects the existing negative browser expectation
+that an authenticated denied context can still open the header to inspect recovery choices.
+
+Three added browser scenarios cover explicit company/null and branch recovery after Core403 with
+a saved legacy name, no metadata/vendor calls before selection, and a mismatched company that
+never clears the original selection or exposes a recovery action. The previous five context-picker
+scenarios remain, including late pre-sign-out response rejection. Source-only checkpoint: these
+checks and TypeScript/build are pending while the backend SDK owns the CPU slot.

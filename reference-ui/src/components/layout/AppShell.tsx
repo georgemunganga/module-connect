@@ -145,6 +145,7 @@ export function AppShell() {
               {verifiedContext.branch && (procurementScopeStatus === "selection-required"
                 ? <button type="button" className="rounded px-2 py-2 text-left text-sm hover:bg-secondary" onClick={() => selectBranch(verifiedContext.branch!.id, verifiedContext.company.id)}>Use {verifiedContext.branch.name}</button>
                 : <p className="text-sm text-muted-foreground">{verifiedContext.branch.name}</p>)}
+              {verifiedContext.branch === null && procurementScopeStatus === "selection-required" && <button type="button" className="rounded px-2 py-2 text-left text-sm hover:bg-secondary" onClick={() => selectEntity(verifiedContext.company.id)}>Use {verifiedContext.company.name} workspace</button>}
               <p className="pt-2 text-xs text-muted-foreground">Current workspace. Organisation switching is not available for this account.</p>
             </div> : <p className="px-2 py-2 text-xs text-muted-foreground">Organisation choices are not available for this account.</p>}
           </div>}
