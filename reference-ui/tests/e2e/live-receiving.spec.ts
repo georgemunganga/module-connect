@@ -3,22 +3,22 @@ const company = "11111111-1111-4111-8111-111111111111", branch = "22222222-2222-
 const id = "44444444-4444-4444-8444-444444444444", denied = "55555555-5555-4555-8555-555555555555", line = "66666666-6666-4666-8666-666666666666", order = "77777777-7777-4777-8777-777777777777", issued = "88888888-8888-4888-8888-888888888888";
 const root = "/procurement/workspace/purchase-receives", api = "/api/procurement/v1";
 test.setTimeout(120_000);
-type Options = { enabled?: boolean; role?: "receiver" | "inspector" | "owner"; action?: "Record" | "Inspect" | "Accept" | "Certify"; unknown?: boolean; stale?: boolean; legacy?: boolean; lost?: boolean; createLost?: boolean; denied?: number; cancelledService?: boolean; partialSourceVersion?: number };
+type Options = { enabled?: boolean; role?: "receiver" | "inspector" | "owner" | "reader"; action?: "Record" | "Inspect" | "Accept" | "Certify"; unknown?: boolean; stale?: boolean; legacy?: boolean; lost?: boolean; createLost?: boolean; denied?: number; cancelledService?: boolean; partialSourceVersion?: number; optimisticDraftActions?: boolean };
 async function mock(page: Page, options: Options = {}) {
   const role = options.role ?? "receiver", action = options.action ?? "Record";
   const writes: { path: string; body: string; key: string }[] = [], reads: string[] = [], unexpected: string[] = [];
   let changed = false;
-  const permissions = role === "inspector" ? ["procurement-receipt-inspect"] : role === "owner" ? ["procurement-service-certify"]
+  const permissions = role === "inspector" ? ["procurement-receipt-inspect"] : role === "owner" ? ["procurement-service-certify"] : role === "reader" ? ["procurement-receipt-view"]
     : ["procurement-receipt-view", "procurement-receipt-create", "procurement-receipt-edit", "procurement-receipt-record", "procurement-receipt-accept", "procurement-service-certify"];
   const labels = { orderNumber: "PO-ISSUED", supplierDisplayName: "Retained vendor", description: "Issued delivery line", unitCode: "EA", currencyCode: "ZMW", branchRef: branch, issuedVersionId: issued };
   const capacity = { verified: !options.unknown && !options.legacy, orderRemainingQuantity: options.unknown ? null : "2", physicalRemainingQuantity: null, acceptableQuantity: action === "Accept" && !options.unknown ? "2" : null, blocker: options.unknown ? "ReceivingLegacyAcceptanceReconciliationRequired" : null };
   const candidate = () => [{ action, candidate: !options.unknown && !options.legacy && !changed, blocker: options.unknown ? "ReceivingLegacyAcceptanceReconciliationRequired" : null }];
   function receipt(task = false) { return { id, number: "GRN-LIVE", version: changed ? 3 : 2, executionVersion: options.legacy ? 0 : 1, status: changed ? "Recorded" : action === "Record" ? "Draft" : "Held", purchaseOrderId: order, issuedVersionId: issued, siteRef: branch, receivedAt: "2026-10-20T12:00:00.123Z", recordedAt: action === "Record" && !changed ? null : "2026-10-20T12:30:00Z", physicalEvidenceRecorded: action !== "Record" || changed, matchingAuthorityAvailable: false,
-    ...(task ? {} : { notes: "Internal delivery notes", deliveryNoteRef: "DEL-1" }), readPurpose: task ? "AssignedInspection" : "Receipt", draftActionCandidates: [],
+    ...(task ? {} : { notes: "Internal delivery notes", deliveryNoteRef: "DEL-1" }), readPurpose: task ? "AssignedInspection" : "Receipt", draftActionCandidates: options.optimisticDraftActions ? [{ action: "EditDraft", candidate: true, blocker: null }, { action: "CancelDraft", candidate: true, blocker: null }] : [],
     lines: [{ id: line, version: 7, purchaseOrderLineId: line, sourceVersion: 9, receivedQuantity: "3.1250", initiallyRejectedQuantity: "0.1250", rejectedQuantity: "0.1250", acceptedQuantity: "0", unacceptedHeldQuantity: options.legacy ? null : "3.0000", status: "Held", inspection: null }],
     lineReadiness: [{ lineId: line, sourceVersion: 9, labels, capacity, actionCandidates: candidate(), effects: [] }] }; }
   function service(task = false) { return { id, version: 4, status: options.cancelledService ? "Cancelled" : "PendingCertification", executionVersion: 1, purchaseOrderLineId: line, sourcePurchaseOrderId: order, issuedBindingId: issued, sourceVersion: options.partialSourceVersion ?? 9, periodFrom: "2026-10-01", periodTo: "2026-10-20", deliverableRef: "MILESTONE-1", intendedQuantity: "0.5000", acceptedQuantity: "0", acceptedNetAmount: "0", currentAcceptedQuantity: "0", currentAcceptedNetAmount: "0", isCertifiedRecord: false, matchingAuthorityAvailable: false,
-    ...(task ? {} : { notes: "n".repeat(1500), cancellationReason: options.cancelledService ? "Service no longer required" : null }), labels, capacity, actionCandidates: options.cancelledService ? [] : candidate(), draftActionCandidates: [], effects: [], readPurpose: task ? "AssignedServiceCertification" : "Receipt" }; }
+    ...(task ? {} : { notes: "n".repeat(1500), cancellationReason: options.cancelledService ? "Service no longer required" : null }), labels, capacity, actionCandidates: options.cancelledService ? [] : candidate(), draftActionCandidates: options.optimisticDraftActions ? [{ action: "EditDraft", candidate: true, blocker: null }, { action: "CancelDraft", candidate: true, blocker: null }] : [], effects: [], readPurpose: task ? "AssignedServiceCertification" : "Receipt" }; }
   await page.addInitScript(({ entityId, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })), { entityId: company, branch });
   await page.route("**/api/**", async (route) => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
@@ -62,6 +62,28 @@ async function confirm(page: Page, name: string, quantity?: string) {
 test("capability false keeps receiving live routes closed without demo or receiving API reads", async ({ page }) => {
   const evidence = await mock(page, { enabled: false }); await page.goto(root);
   await expect(page.getByText("no sample transactions are shown here.", { exact: false })).toBeVisible(); expect(evidence.reads).toEqual([]); expect(evidence.writes).toHaveLength(0);
+});
+test("delivery reader sees no write actions even when a detail response offers optimistic candidates", async ({ page }) => {
+  const evidence = await mock(page, { role: "reader", action: "Record", optimisticDraftActions: true });
+  await page.goto(root); await expect(page.getByRole("link", { name: "Add delivery" })).toHaveCount(0);
+  await page.goto(`${root}/${id}`);
+  await expect(page.getByRole("heading", { name: "GRN-LIVE" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record arrival" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cancel draft" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Edit delivery draft" })).toHaveCount(0);
+  await page.goto(`${root}/${id}?kind=service`);
+  await expect(page.getByRole("button", { name: "Cancel draft" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Edit delivery draft" })).toHaveCount(0);
+  expect(evidence.writes).toHaveLength(0);
+});
+test("delivery reader cannot inspect, accept or certify from optimistic details", async ({ page }) => {
+  const evidence = await mock(page, { role: "reader", action: "Accept" });
+  await page.goto(`${root}/${id}`);
+  await expect(page.getByRole("heading", { name: "GRN-LIVE" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept goods" })).toHaveCount(0);
+  await page.goto(`${root}/${id}?kind=service`);
+  await expect(page.getByRole("button", { name: "Confirm service" })).toHaveCount(0);
+  expect(evidence.writes).toHaveLength(0);
 });
 test("goods draft preserves physical overdelivery and exact rejection without an inferred acceptance maximum", async ({ page }) => {
   const evidence = await mock(page); await page.goto(root + "/new");

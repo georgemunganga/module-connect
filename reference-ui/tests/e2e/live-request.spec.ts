@@ -14,8 +14,8 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "requestDraft"]));
 type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean; oldEditContract?: boolean; missingCatalogExact?: boolean } = {}) {
-  let record: RecordValue | null = null;
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean; oldEditContract?: boolean; missingCatalogExact?: boolean; permissions?: string[]; seedDraft?: boolean } = {}) {
+  let record: RecordValue | null = options.seedDraft ? { id: requestId, number: "PR-001", version: 1, purpose: "Office chairs", status: "Draft", currencyCode: "ZMW", createdAt: "2026-10-18T00:00:00Z", lines: [{ id: lineId, lineNumber: 1, approvalStatus: "Pending", description: "Office chair", unitCode: "each", requestedQuantity: 1, estimatedUnitPrice: 250 }] } : null;
   let policyChecked = false;
   let policyBlocked = Boolean(options.blockedPolicy);
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
@@ -29,7 +29,8 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId,
-      permissions: options.policyReviewer ? ["procurement-policy-evaluate", "procurement-request-return"] : [],
+      permissions: options.permissions ?? ["procurement-access", "procurement-request-read", "procurement-request-create", "procurement-request-edit",
+        ...(options.policyReviewer ? ["procurement-policy-evaluate", "procurement-request-return"] : [])],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/catalog") return json({ items: [{
@@ -136,6 +137,24 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
 }
+
+test("request reader cannot open create or edit controls or send a draft write", async ({ page }) => {
+  const writes: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("/api/procurement/v1/requests") && request.method() !== "GET") writes.push(request.method()); });
+  await mockErp(page, { permissions: ["procurement-access", "procurement-request-read"], seedDraft: true });
+  await page.goto("/procurement/workspace/requests");
+  await expect(page.getByRole("link", { name: "New request" })).toHaveCount(0);
+  await page.goto(`/procurement/workspace/requests/${requestId}`);
+  await expect(page.getByRole("heading", { name: "Office chairs" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit request" })).toHaveCount(0);
+  await page.goto("/procurement/workspace/requests/new");
+  await expect(page.getByRole("alert")).toContainText("do not have access to create a request");
+  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+  await page.goto(`/procurement/workspace/requests/${requestId}/edit`);
+  await expect(page.getByRole("alert")).toContainText("do not have access to edit this request");
+  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
 
 test("employee selects a published catalog price and saves its reference on the request", async ({ page }) => {
   await mockErp(page);

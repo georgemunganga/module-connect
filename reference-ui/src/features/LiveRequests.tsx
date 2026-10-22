@@ -42,6 +42,7 @@ function context() {
 export function LiveRequestList() {
   const readiness = context();
   const { legalEntityId } = readiness;
+  const canCreate = !readiness.adminViewOnly && readiness.permissions.includes("procurement-request-create");
   const canCheckPolicy = readiness.permissions.includes("procurement-policy-evaluate");
   const canReturnRequest = readiness.permissions.includes("procurement-request-return");
   const [offset, setOffset] = useState(0);
@@ -109,12 +110,12 @@ export function LiveRequestList() {
     finally { setReviewLoading(false); }
   }
   return <div className="p-5 sm:p-8">
-    <PageHeader title="My Requests" subtitle="Save a request, then send it for policy and budget review." actions={!readiness.adminViewOnly ? <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined} />
+    <PageHeader title="My Requests" subtitle="Save a request, then send it for policy and budget review." actions={canCreate ? <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined} />
     <Panel><div className="p-5">{error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading requests…</p> : data?.records.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Request</th><th>Purpose</th><th>Lines</th><th>Needed by</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>{data.records.map((record) => <tr key={record.id}><td>{record.number}</td><td><Link to={`/requests/${record.id}`} className="font-medium text-primary hover:underline">{record.purpose}</Link></td><td>{record.lineCount}</td><td>{record.neededBy || "—"}</td><td><Badge>{record.status}</Badge></td><td><Link to={`/requests/${record.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="What do you need to buy?" description="Start with a draft request for goods or services." action={!readiness.adminViewOnly ? <Link to="/requests/new"><Button>New request</Button></Link> : undefined} />}
+      </RecordTable></div> : <EmptyState title="What do you need to buy?" description="Start with a draft request for goods or services." action={canCreate ? <Link to="/requests/new"><Button>New request</Button></Link> : undefined} />}
       {data && data.count > data.limit && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - data.limit))}>Previous</Button><span>{offset + 1}–{Math.min(offset + data.limit, data.count)} of {data.count}</span><Button variant="secondary" disabled={offset + data.limit >= data.count} onClick={() => setOffset(offset + data.limit)}>Next</Button></div>}
     </div></Panel>
     {canCheckPolicy && <Panel title="Buying-rule checks and issues" className="mt-5"><div className="p-5">
@@ -155,7 +156,8 @@ export function LiveRequestList() {
 export function LiveRequestEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, defaultCurrencyCode } = context();
+  const { legalEntityId, defaultCurrencyCode, permissions, adminViewOnly } = context();
+  const canWrite = !adminViewOnly && permissions.includes(id ? "procurement-request-edit" : "procurement-request-create");
   const [draft, setDraft] = useState<RequestDraft>(() => ({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }));
   const [version, setVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(Boolean(id));
@@ -175,6 +177,7 @@ export function LiveRequestEditor() {
   useEffect(() => {
     const controller = new AbortController();
     setCatalogPrices([]); setCatalogLoading(true); setCatalogError("");
+    if (!canWrite) { setCatalogLoading(false); return () => controller.abort(); }
     const timer = window.setTimeout(() => {
       listPublishedCatalog(legalEntityId, catalogSearch, controller.signal)
         .then((page) => { if (!controller.signal.aborted) setCatalogPrices(page.items); })
@@ -182,9 +185,10 @@ export function LiveRequestEditor() {
         .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false); });
     }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [legalEntityId, catalogSearch]);
+  }, [legalEntityId, catalogSearch, canWrite]);
   useEffect(() => {
     setVersion(null); setLoadedContext(null); setSaving(false); setError("");
+    if (!canWrite) { setLoading(false); return; }
     if (!id) { setLoading(false); setDraft({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }); return; }
     const controller = new AbortController();
     setLoading(true); setError("");
@@ -195,7 +199,7 @@ export function LiveRequestEditor() {
     }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [legalEntityId, defaultCurrencyCode, id]);
+  }, [legalEntityId, defaultCurrencyCode, id, canWrite]);
   const field = (key: keyof RequestDraft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   const lineField = (index: number, key: keyof RequestLineDraft, value: string | number | null) => setDraft((current) => ({ ...current, lines: current.lines.map((line, at) => at === index ? { ...line, [key]: value } : line) }));
   function addCatalogPrice(price: PublishedCatalogPrice) {
@@ -219,7 +223,7 @@ export function LiveRequestEditor() {
   try { total = requestBaseAmount(draft.lines); } catch { /* Incomplete input has no asserted estimate. */ }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saving || saveBlock) return;
+    if (!canWrite || saving || saveBlock) return;
     if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the list."); return; }
     const savingContext = editorContext;
     const savingGeneration = editorGeneration.current;
@@ -239,7 +243,7 @@ export function LiveRequestEditor() {
   }
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit request" : "New request"} subtitle="Save a draft for the company shown in the top bar. No budget is reserved yet." />
-    {loading ? <p role="status">Loading request…</p> : id && (version === null || loadedContext !== editorContext)
+    {!canWrite ? <p role="alert">You do not have access to {id ? "edit this request" : "create a request"}.</p> : loading ? <p role="status">Loading request…</p> : id && (version === null || loadedContext !== editorContext)
       ? <p role="alert">{error || "This draft is unavailable. Return to the list."}</p>
       : <form className="max-w-6xl space-y-5" onSubmit={save}>
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current request before retrying.</span>}</p>}
@@ -286,7 +290,7 @@ export function LiveRequestEditor() {
 
 export function LiveRequestDetail() {
   const { id } = useParams();
-  const { legalEntityId, adminViewOnly } = context();
+  const { legalEntityId, adminViewOnly, permissions } = context();
   const navigate = useNavigate();
   const [record, setRecord] = useState<RequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -347,7 +351,7 @@ export function LiveRequestDetail() {
   const approvalLocked = record.status === "ReturnPendingFinanceRelease" || (record.status !== "ReturnedForChanges"
     && (Boolean(record.approvalInstanceRef) || ["Pending", "Returned", "ReturnPendingFinanceRelease"].includes(record.approvalState || "")));
   return <div className="p-5 sm:p-8">
-    <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{!adminViewOnly && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
+    <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{!adminViewOnly && permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     {record.status === "Submitted" && !waitingForRelease && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">
       <p>Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>

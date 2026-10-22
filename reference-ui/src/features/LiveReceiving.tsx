@@ -85,6 +85,12 @@ function ReceivingDetail({ id, kind, purpose, scopeKey, backPath, returnQuery }:
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const permission = service && task ? "procurement-service-certify" : !service && task ? "procurement-receipt-inspect" : "procurement-receipt-view";
   const allowed = context.permissions.includes(permission) && (!task || (service ? context.capabilities.receivingServices : context.capabilities.receivingInspection));
+  const canPerform = (operation: ReceivingOperation) => context.permissions.includes(
+    operation === "ReceivingRecord" ? "procurement-receipt-record"
+      : operation === "ReceivingInspect" ? "procurement-receipt-inspect"
+      : operation === "ReceivingAccept" ? "procurement-receipt-accept"
+      : operation === "ServiceCertify" ? "procurement-service-certify"
+      : "procurement-receipt-edit");
   useEffect(() => {
     const controller = new AbortController(); setReceipt(null); setRecord(null); setError(""); setLoading(true);
     if (!allowed) { setLoading(false); return () => controller.abort(); }
@@ -94,9 +100,9 @@ function ReceivingDetail({ id, kind, purpose, scopeKey, backPath, returnQuery }:
     return () => controller.abort();
   }, [company, id, service, task, allowed, revision]);
   const orderId = receipt?.purchaseOrderId ?? record?.sourcePurchaseOrderId;
-  const open = (item: Action) => { setActionError(""); setAction(item); setQuantity(item.quantity ?? ""); setEvidence(""); setReason(""); setVerified(false); };
+  const open = (item: Action) => { if (!canPerform(item.operation)) return; setActionError(""); setAction(item); setQuantity(item.quantity ?? ""); setEvidence(""); setReason(""); setVerified(false); };
   async function confirm(event: FormEvent) {
-    event.preventDefault(); if (!alive.current || busyRef.current || !allowed || !action || !orderId || uncertain || busy || !verified) return;
+    event.preventDefault(); if (!alive.current || busyRef.current || !allowed || !action || !canPerform(action.operation) || !orderId || uncertain || busy || !verified) return;
     let body: string;
     try {
       const cancellation = action.operation === "ReceivingCancel" || action.operation === "ServiceCancel";
@@ -125,7 +131,7 @@ function ReceivingDetail({ id, kind, purpose, scopeKey, backPath, returnQuery }:
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
   const candidates = (items: ReceivingCandidate[] | undefined, create: (item: ReceivingCandidate) => Action | null) => items?.map((item) => {
-    const next = create(item); return next ? <div key={item.action}><Button disabled={!item.candidate || !!uncertain || busy} variant="secondary" onClick={() => open(next)}>{next.label}</Button>{item.blocker && <p className="mt-2 text-sm text-muted-foreground">{blockerText(item.blocker)}</p>}</div> : null;
+    const next = create(item); return next && canPerform(next.operation) ? <div key={item.action}><Button disabled={!item.candidate || !!uncertain || busy} variant="secondary" onClick={() => open(next)}>{next.label}</Button>{item.blocker && <p className="mt-2 text-sm text-muted-foreground">{blockerText(item.blocker)}</p>}</div> : null;
   });
   const draftActions = receipt?.draftActionCandidates ?? record?.draftActionCandidates ?? [];
   const effects = receipt?.lineReadiness.flatMap((line) => line.effects ?? []) ?? record?.effects ?? [];
@@ -146,12 +152,12 @@ function ReceivingDetail({ id, kind, purpose, scopeKey, backPath, returnQuery }:
             : item.action === "Accept" && context.capabilities.receivingGoods ? { operation: "ReceivingAccept", label: "Accept goods", lineId: line.id, version: line.version, sourceVersion: line.sourceVersion } : null)}</div>
           {ready?.effects?.map((effect) => <p key={effect.id} className="text-sm">{effect.kind} · {effect.quantity} · {effect.netAmount} · {effect.evidenceReference}</p>)}
         </div></Panel>; })}
-        {!task && context.capabilities.receivingGoods && receipt.lineReadiness.length > 0 && receipt.lineReadiness.every((line) => line.actionCandidates.some((item) => item.action === "Record" && item.candidate)) && <Button disabled={busy || !!uncertain} onClick={() => open({ operation: "ReceivingRecord", label: "Record arrival", version: receipt.version })}>Record arrival</Button>}
+        {!task && context.capabilities.receivingGoods && canPerform("ReceivingRecord") && receipt.lineReadiness.length > 0 && receipt.lineReadiness.every((line) => line.actionCandidates.some((item) => item.action === "Record" && item.candidate)) && <Button disabled={busy || !!uncertain} onClick={() => open({ operation: "ReceivingRecord", label: "Record arrival", version: receipt.version })}>Record arrival</Button>}
       </> : record ? <Panel title="Service details"><div className="space-y-4 p-5"><Badge>{record.status}</Badge><p>{record.labels?.description ?? record.deliverableRef}</p><p>{record.periodFrom} – {record.periodTo}</p><p>Deliverable: {record.deliverableRef}</p>{!task && record.notes && <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">Notes: {record.notes}</p>}{!task && record.cancellationReason && <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">Cancellation reason: {record.cancellationReason}</p>}<p>Intended quantity: {record.intendedQuantity ?? "Already certified"}</p><p>Accepted quantity: {record.acceptedQuantity} · Accepted value: {record.labels?.currencyCode ?? ""} {record.acceptedNetAmount}</p><p>{record.capacity.verified ? `Remaining authorized quantity: ${record.capacity.orderRemainingQuantity}` : "Acceptance capacity needs verification."}</p>
         {context.capabilities.receivingServices && candidates(record.actionCandidates, (item) => item.action === "Certify" ? { operation: "ServiceCertify", label: "Confirm service", version: record.version, sourceVersion: record.sourceVersion, quantity: record.intendedQuantity ?? undefined } : null)}
         {record.effects?.map((effect) => <p key={effect.id} className="text-sm">{effect.kind} · {effect.quantity} · {effect.netAmount} · {effect.evidenceReference}</p>)}
       </div></Panel> : null}
-      {!task && draftActions.some((item) => item.action === "EditDraft" && item.candidate) && !uncertain && <Link className="text-sm text-primary hover:underline" to={`${base}/${id}/edit?kind=${kind}${returnQuery}`}>Edit delivery draft</Link>}
+      {!task && canPerform("ReceivingCancel") && draftActions.some((item) => item.action === "EditDraft" && item.candidate) && !uncertain && <Link className="text-sm text-primary hover:underline" to={`${base}/${id}/edit?kind=${kind}${returnQuery}`}>Edit delivery draft</Link>}
       {candidates(draftActions, (item) => item.action === "CancelDraft" ? { operation: service ? "ServiceCancel" : "ReceivingCancel", label: "Cancel draft", version: (record ?? receipt)!.version } : null)}
       </div>{activeTab === "overview" && (receipt || record) && <DetailSection title="Record Activity"><ReceivingActivity effects={effects} recordedAt={receipt?.recordedAt} /><p className="mt-4 text-xs text-muted-foreground">Recorded delivery and acceptance evidence. A complete audit export is not connected here.</p></DetailSection>}</div>
       {(receipt || record) && activeTab === "related" && <div className="pt-5"><ReceivingRelated orderId={orderId} orderNumber={sourceOrderNumber} canReadOrder={context.permissions.includes("procurement-po-read")} allowBillAction={!task} /></div>}
