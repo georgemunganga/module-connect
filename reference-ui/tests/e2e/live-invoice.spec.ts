@@ -282,7 +282,7 @@ test("read-only user never receives edit or cancellation actions", async ({ page
   await expect(page.getByRole("link", { name: "Edit invoice", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cancel invoice", exact: true })).toHaveCount(0);
   await page.goto(`/procurement/workspace/bills/${invoiceId}/edit`);
-  await expect(page.getByText("You do not have access to record invoices", { exact: false })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
   expect(setup.mutations).toEqual([]);
 });
 
