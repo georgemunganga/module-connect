@@ -9,12 +9,13 @@ type Context = { principalId: string; workerId: null; permissions: string[]; rol
   company: { name: string; code: string }; branch?: { name: string } | null };
 type Manifest = { fixtureKind: string; production: false; transport: "unix"; socketPath: string; noTcpListener: true;
   baseUrl: string; tenantId: string; companyId: string; branchId: string; currencyCode: string; authenticationHeader: string;
-  scannerMode: string; noReviewEffectsSeeded: true; actors: Record<Actor, { principalId: string; branchId: string; context: Context }>;
+  scannerMode: string; noReviewEffectsSeeded: true; revocationVerifiedBeforeBrowser: true; actors: Record<Actor, { principalId: string; branchId: string; context: Context }>;
   original: { invoiceId: string; invoiceVersion: number; mappingVersionId: string; mappingRevision: number;
     documentVersionId: string; documentSha256: string } };
 type Traffic = { origin: "browser" | "verification"; actor: Actor; method: string; path: string;
   status: number; body: string | null; key?: string; response: string };
 const root = "/api/procurement/v1", workspace = "/procurement/workspace";
+test.use({ trace: "on", screenshot: "only-on-failure" });
 const guid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 function manifest(): Manifest {
   const file = process.env.PROCUREMENT_APPROVAL_BROWSER_MANIFEST;
@@ -26,7 +27,7 @@ function manifest(): Manifest {
     || value.transport !== "unix" || value.socketPath !== "/procurement-browser/probe.sock" || value.noTcpListener !== true
     || url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port || url.pathname !== "/" || url.username || url.password || url.search || url.hash
     || value.authenticationHeader !== "X-Probe-User" || value.currencyCode !== "ZMW"
-    || value.scannerMode !== "synthetic-known-bytes" || value.noReviewEffectsSeeded !== true
+    || value.scannerMode !== "synthetic-known-bytes" || value.noReviewEffectsSeeded !== true || value.revocationVerifiedBeforeBrowser !== true
     || ![value.companyId, value.branchId, value.original?.invoiceId, value.original?.mappingVersionId, value.original?.documentVersionId].every(id => guid.test(id))
     || !/^[a-f0-9]{64}$/.test(value.original.documentSha256)) throw new Error("Unverified original-unit fixture contract.");
   for (const name of ["maker", "reviewer", "unassigned", "otherBranch", "revoked"] as Actor[]) {

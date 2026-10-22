@@ -18,8 +18,19 @@ actor-owned receipts. Reload remains terminal. Traffic is retained in a0600 file
 production authentication, Finance matching qualification, AP or payments are certified.
 
 After Playwright is terminal, stop only the exact private fixture so its mandatory fresh owning
-completion reloads real Core/source3/outcome3/wire1/document pins and receipt counts. It separately
-revokes the current reviewer grant and checks actual mapped denial/no effects; this is not a live
-mid-browser revocation claim. Preserve failures; do not retry or create replacement records.
+completion reloads real Core/source3/outcome3/wire1/document pins and receipt counts. Completion is DB-only after the listener stops. During preparation a separate actual Core actor
+is checked with its grant (tasks200), its stored action is revoked, then tasks403 and unchanged
+review effects are checked. The manifest must mark `revocationVerifiedBeforeBrowser=true`; the
+browser also checks this revoked actor is denied. The named reviewer stays granted for the UI.
+No mid-browser or post-browser revocation is claimed. Preserve failures; do not retry or create replacement records.
 
 This test is authored only. No Node, browser, SDK, PostgreSQL or scanner job was run during authoring.
+
+Target only this fixture-compatible spec, after the separate staged build:
+
+```sh
+./node_modules/.bin/playwright test tests/backend-browser/unit-reviews.spec.ts --config playwright.backend.config.ts --workers=1 --retries=0 --max-failures=1
+```
+
+Passing and failing traces are retained. They supplement, rather than replace, the source-bound
+publication manifest and fresh owning completion proof.
