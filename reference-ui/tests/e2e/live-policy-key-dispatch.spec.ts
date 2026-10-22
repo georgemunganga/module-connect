@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 const company = "11111111-1111-4111-8111-111111111111";
 const worker = "22222222-2222-4222-8222-222222222222";
+const capabilities = {
+  vendorDraft: false, itemDraft: false, requestDraft: false, approvals: false,
+  sourcing: false, contracts: false, orders: false, receiving: false,
+  invoiceValidation: false, financeHandoff: false, supplierPortal: false,
+  planningDraft: false, configurationDraft: true, contractDraft: false, sourcingDraft: false,
+};
 const keys = ["SOURCING", "RECEIVING", "INVOICE_MATCHING", "INVOICE_UNIT_REVIEW", "FUTURE_POLICY", "PURCHASE_REQUEST", "PURCHASE_ORDER"];
 const labels = ["Sourcing publication", "Receiving and service acceptance", "Invoice matching", "Original invoice unit review", "Other policy (FUTURE_POLICY)"];
 const id = (index: number) => `33333333-3333-4333-8333-${String(index + 1).padStart(12, "0")}`;
@@ -30,7 +36,7 @@ async function fixture(page: Page, detailKeyOverride?: string) {
     if (path === "/api/procurement/v1/context") return json({ tenantId: "test", legalEntityId: company, workerId: worker,
       permissions: ["procurement-access", "procurement-configuration-read", "procurement-configuration-edit", "procurement-configuration-approve"],
       company: { id: company, code: "TEST", name: "Test company", currencyCode: "ZMW" } });
-    if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities: { configurationDraft: true } });
+    if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities });
     const base = "/api/procurement/v1/configuration/policies";
     if (path.startsWith(base)) {
       if (method !== "GET") writes.push(`${method} ${path}`); else reads.push(path);
