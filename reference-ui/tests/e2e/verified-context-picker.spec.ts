@@ -6,9 +6,9 @@ const principal = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
   "orders", "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft"]
   .map(key => [key, key === "vendorDraft"]));
-async function fixture(page: Page, options: { admin?: boolean; wrongCompany?: boolean; denyContext?: boolean } = {}) {
-  const writes: string[] = [], contexts: Array<Record<string, string>> = [];
-  await page.addInitScript(value => localStorage.setItem("erp.shell.state.v1", JSON.stringify(value)), { entityId: company, branch });
+async function fixture(page: Page, options: { admin?: boolean; wrongCompany?: boolean; denyContext?: boolean; legacy?: boolean; companyWide?: boolean } = {}) {
+  const writes: string[] = [], businessReads: string[] = [], contexts: Array<Record<string, string>> = [];
+  await page.addInitScript(value => localStorage.setItem("erp.shell.state.v1", JSON.stringify(value)), { entityId: company, branch: options.legacy ? "Saved old branch" : branch });
   await page.route("**/api/**", route => {
     const request = route.request(), path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -31,14 +31,14 @@ async function fixture(page: Page, options: { admin?: boolean; wrongCompany?: bo
       return json({ tenantId: "test", principalId: principal, legalEntityId: id, workerId: null,
         permissions: ["procurement-access", "procurement-vendor-read"],
         company: { id, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" },
-        branch: { id: branch, code: "MAIN", name: "Lusaka (Main)" },
+        branch: options.companyWide ? null : { id: branch, code: "MAIN", name: "Lusaka (Main)" },
         allowedCompanies: [{ id: otherCompany, code: "OTHER", name: "Other company" }] });
     }
-    if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities });
-    if (path === "/api/procurement/v1/vendors") return json({ items: [], total: 0, page: 1, pageSize: 25 });
+    if (path === "/api/procurement/v1/meta") { businessReads.push(path); return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities }); }
+    if (path === "/api/procurement/v1/vendors") { businessReads.push(path); return json({ items: [], total: 0, page: 1, pageSize: 25 }); }
     return json({ message: "Not found" }, 404);
   });
-  return { writes, contexts };
+  return { writes, contexts, businessReads };
 }
 test("Procurement-only user sees verified selected names without invented switch choices", async ({ page }) => {
   const state = await fixture(page);
@@ -65,6 +65,7 @@ for (const options of [{ wrongCompany: true }, { denyContext: true }]) {
     await expect(page.getByLabel("Verified current organisation", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Organisation choices are not available for this account.")).toBeVisible();
     expect(state.writes).toEqual([]);
+    expect(state.businessReads).toEqual([]);
   });
 }
 test("Core-authorized user retains the full existing company choices", async ({ page }) => {
@@ -109,4 +110,36 @@ test("late pre-sign-out context cannot restore the previous organisation display
   await expect(page.getByRole("button", { name: "Organisation context", exact: true })).not.toContainText("Previous account");
   await page.getByRole("button", { name: "Organisation context", exact: true }).click();
   await expect(page.getByLabel("Verified current organisation", { exact: true })).toHaveCount(0);
+});
+
+for (const companyWide of [true, false]) {
+  test(`legacy branch with Core403 needs explicit verified ${companyWide ? "company" : "branch"} recovery before business reads`, async ({ page }) => {
+    const state = await fixture(page, { legacy: true, companyWide });
+    await page.goto("/procurement/workspace/vendors");
+    await expect(page.getByRole("heading", { name: "Choose your branch" })).toBeVisible();
+    await page.getByRole("button", { name: "Organisation context", exact: true }).click();
+    const action = page.getByRole("button", { name: companyWide ? "Use Amizo Power workspace" : "Use Lusaka (Main)", exact: true });
+    await expect(action).toBeVisible();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("erp.shell.state.v1")!).branch)).toBe("Saved old branch");
+    expect(state.businessReads).toEqual([]);
+    expect(state.contexts.length).toBeGreaterThan(0);
+    expect(state.contexts.every(headers => headers["x-shell-entity"] === company && !headers["x-shell-location"])).toBe(true);
+    await action.click();
+    await expect(page.getByText("Every purchase starts with a vendor")).toBeVisible();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("erp.shell.state.v1")!).branch)).toBe(companyWide ? "" : branch);
+    expect(state.businessReads).toContain("/api/procurement/v1/vendors");
+    expect(state.writes).toEqual([]);
+  });
+}
+
+test("unverified company-wide context cannot clear a legacy branch or start business reads", async ({ page }) => {
+  const state = await fixture(page, { legacy: true, companyWide: true, wrongCompany: true });
+  await page.goto("/procurement/workspace/vendors");
+  await expect(page.getByRole("heading", { name: "Choose your branch" })).toBeVisible();
+  await page.getByRole("button", { name: "Organisation context", exact: true }).click();
+  await expect(page.getByText("Organisation choices are not available for this account.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use Amizo Power workspace", exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("erp.shell.state.v1")!).branch)).toBe("Saved old branch");
+  expect(state.businessReads).toEqual([]);
+  expect(state.writes).toEqual([]);
 });

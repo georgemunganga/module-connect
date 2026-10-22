@@ -86,7 +86,7 @@ export function App() {
     <BrowserRouter basename="/procurement/workspace">
       <AppProvider>
         <ErpShellProvider>
-        <ProcurementLiveGate scopeUnavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<ProcurementScopeSelectionState />} /></Route></Routes>} unavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<PendingLiveWorkflow />} /></Route></Routes>}>
+        <ProcurementLiveGate blockedShell={content => <Routes><Route element={<AppShell />}><Route path="*" element={content} /></Route></Routes>} scopeUnavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<ProcurementScopeSelectionState />} /></Route></Routes>} unavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<PendingLiveWorkflow />} /></Route></Routes>}>
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={isProcurementLiveMode ? <LiveOverview /> : <Dashboard />} />
