@@ -47,6 +47,7 @@ export function parseMatchPolicy(json: string, currency: string): MatchForm | nu
     const doc: unknown = JSON.parse(json);
     if (!own(doc) || !exactly(doc, ["schemaVersion", "transactionType", "currencyCode", "moneyScale", "rounding", "rules"])
       || doc.schemaVersion !== 1 || doc.transactionType !== "InvoiceMatching" || doc.currencyCode !== currency
+      || typeof doc.moneyScale !== "number" || !Number.isInteger(doc.moneyScale)
       || !Array.isArray(doc.rules)) return null;
     const rows = doc.rules.map((item: unknown) => {
       if (!own(item) || !exactly(item, ["categoryCode", "method", "acceptanceKind", "quantity", "unitPrice", "tax", "total"]))

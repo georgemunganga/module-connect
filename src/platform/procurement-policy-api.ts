@@ -173,8 +173,44 @@ export async function lookupSelectedSourcingReviewers(companyId: string, princip
   if (!principalIds.length || principalIds.length > 25 || principalIds.some(id => !canonicalId(id)) || new Set(principalIds).size !== principalIds.length)
     throw new Error("Choose a bounded set of saved reviewers.");
   const page = reviewerPage(await call(companyId, `/lookups/sourcing-reviewers?${new URLSearchParams({ principalIds: principalIds.join(","), search: "", offset: "0", limit: "25" })}`, { signal }), 0);
-  if (page.nextOffset !== null || page.total !== page.items.length || page.items.some(item => !principalIds.includes(item.principalId)))
+  if (page.nextOffset !== null || page.total !== page.items.length || page.items.length !== principalIds.length
+    || page.items.some(item => !principalIds.includes(item.principalId)))
     throw new Error("Reviewer names are unavailable. Selected people have not changed.");
+  return page;
+}
+
+export type ReceivingLookupKind = "people" | "sites" | "categories";
+export type ReceivingLookupPage = { kind: ReceivingLookupKind; companyId: string;
+  items: Array<{ id: string; displayName: string; code: string | null; principalId: string | null }>;
+  total: number; offset: number; limit: number; nextOffset: number | null;
+  isAuthority: false; canAcceptDelivery: false };
+function receivingLookupPage(value: unknown, kind: ReceivingLookupKind, company: string, offset: number): ReceivingLookupPage {
+  if (!object(value) || value.kind !== kind || value.companyId !== company || value.isAuthority !== false
+    || value.canAcceptDelivery !== false || !Array.isArray(value.items) || value.items.length > 25
+    || !Number.isInteger(value.total) || Number(value.total) < 0 || value.offset !== offset || value.limit !== 25
+    || value.nextOffset !== null && (!Number.isInteger(value.nextOffset) || Number(value.nextOffset) <= offset)
+    || value.items.some(item => !object(item) || !canonicalId(item.id) || typeof item.displayName !== "string"
+      || item.code !== null && typeof item.code !== "string"
+      || item.principalId !== null && !canonicalId(item.principalId)))
+    throw new PolicyActionError("Current receiving names are unavailable. Selections have not changed.", 0);
+  return value as ReceivingLookupPage;
+}
+export async function lookupReceivingReferences(company: string, kind: ReceivingLookupKind,
+  search: string, offset: number, signal?: AbortSignal): Promise<ReceivingLookupPage> {
+  if (search.trim().length > 100 || !Number.isInteger(offset) || offset < 0 || offset > 100000)
+    throw new Error("Use a shorter search and a valid page.");
+  return receivingLookupPage(await call(company, `/lookups/receiving/${kind}?${new URLSearchParams({
+    search: search.trim(), offset: String(offset), limit: "25" })}`, { signal }), kind, company, offset);
+}
+export async function lookupSelectedReceivingReferences(company: string, kind: ReceivingLookupKind,
+  ids: readonly string[], signal?: AbortSignal): Promise<ReceivingLookupPage> {
+  if (!ids.length || ids.length > 25 || ids.some(id => !canonicalId(id)) || new Set(ids).size !== ids.length)
+    throw new Error("Choose up to 25 distinct saved receiving references.");
+  const page = receivingLookupPage(await call(company, `/lookups/receiving/${kind}?${new URLSearchParams({
+    ids: ids.join(","), search: "", offset: "0", limit: "25" })}`, { signal }), kind, company, 0);
+  if (page.total !== page.items.length || page.items.length !== ids.length || page.nextOffset !== null
+    || page.items.some(item => !ids.includes(item.id)))
+    throw new PolicyActionError("Saved receiving names are unavailable. Selections have not changed.", 0);
   return page;
 }
 

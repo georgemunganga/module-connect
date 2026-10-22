@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const company = "11111111-1111-4111-8111-111111111111";
 const worker = "22222222-2222-4222-8222-222222222222";
 const capabilities = { configurationDraft: true };
-type Options = { key: "INVOICE_MATCHING" | "SOURCING"; permissions: string[]; schema?: boolean; lostCreate?: boolean };
+type Options = { key: "INVOICE_MATCHING" | "SOURCING" | "RECEIVING"; permissions: string[]; schema?: boolean; lostCreate?: boolean };
 
 async function fixture(page: Page, options: Options) {
   let creates = 0;
@@ -20,6 +20,10 @@ async function fixture(page: Page, options: Options) {
       permissions: ["procurement-access", ...options.permissions], company: { id: company, code: "TEST", name: "Company", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities });
     const base = "/api/procurement/v1/configuration/policies";
+    if (path.startsWith(`${base}/lookups/receiving/`)) return options.schema === false
+      ? json({ code: "store-unavailable", message: "Current receiving names are unavailable." }, 503)
+      : json({ kind: path.split("/").at(-1), companyId: company, items: [], total: 0, offset: 0, limit: 25,
+        nextOffset: null, isAuthority: false, canAcceptDelivery: false });
     if (path === `${base}/lookups/sourcing-reviewers`) return options.schema === false
       ? json({ code: "store-unavailable", message: "Reviewer setup unavailable." }, 503)
       : json({ items: [], total: 0, offset: 0, limit: 25, nextOffset: null, isAuthority: false, configurationVersion: 1 });
@@ -73,5 +77,12 @@ test("RFQ settings keep unavailable reviewer setup read-only", async ({ page }) 
   await fixture(page, { key: "SOURCING", permissions: ["procurement-configuration-read", "procurement-configuration-edit"], schema: false });
   await page.goto("/procurement/workspace/settings/modules/request-for-quotes/approvals");
   await expect(page.getByText("Named reviewer setup is unavailable.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add draft" })).toHaveCount(0);
+});
+
+test("receiving settings keep unavailable canonical names read-only", async ({ page }) => {
+  await fixture(page, { key: "RECEIVING", permissions: ["procurement-configuration-read", "procurement-configuration-edit"], schema: false });
+  await page.goto("/procurement/workspace/settings/modules/purchase-receives/preferences");
+  await expect(page.getByText("Receiving configuration is unavailable.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add draft" })).toHaveCount(0);
 });

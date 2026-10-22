@@ -54,8 +54,8 @@ export function serializeSourcingPolicy(currency: string, rows: SourcingRow[]): 
     const ruleCode = row.code.trim().toUpperCase();
     const categories = splitCodes(row.categoryCodes);
     if (!code.test(ruleCode) || seen.has(ruleCode) || categories.some(value => !code.test(value))
-      || row.companyWide !== true || row.requirementsPackRequired === null
-      || row.evaluationCriteriaRequired === null || row.closingDateRequired === null
+      || row.companyWide !== true || typeof row.requirementsPackRequired !== "boolean"
+      || typeof row.evaluationCriteriaRequired !== "boolean" || typeof row.closingDateRequired !== "boolean"
       || row.stages.length < 1 || row.stages.length > 20
       || row.purchaseType && !["GOODS", "SERVICES", "ASSETS", "SUBSCRIPTIONS"].includes(row.purchaseType))
       throw new Error("Complete the sourcing rule, company scope and all publication controls.");
