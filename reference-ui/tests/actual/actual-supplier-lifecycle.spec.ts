@@ -31,14 +31,14 @@ async function contextIs(page: Page, principalId: string) {
 }
 
 // No route interception or Procurement response mocks: all transitions use existing UI and real handlers.
-test("actual system-only maker and independent reviewer retain the supplier lifecycle", async ({ page, browser }, testInfo) => {
+test("actual system-only maker and independent reviewer retain the supplier lifecycle", async ({ page, browser }) => {
   test.setTimeout(240000);
   const f = lifecycleFixture(), name = `SUPPLIER-LIFECYCLE-${Date.now()}`;
   await actualShell(page); await contextIs(page, f.actorId);
   // Separate browser storage/session and actual Core principal; never mutate the application's login state.
   const reviewerContext = await browser.newContext({ baseURL: "http://127.0.0.1:3027",
     extraHTTPHeaders: { "X-Crud-Browser-Actor": "systemReviewer" } });
-  await reviewerContext.tracing.start({ screenshots: true, snapshots: true, sources: true });
+  // The configured Playwright fixture already traces every browser context.
   const reviewer = await reviewerContext.newPage(); await actualShell(reviewer);
   try {
     await contextIs(reviewer, f.reviewer.principalId);
@@ -97,8 +97,6 @@ test("actual system-only maker and independent reviewer retain the supplier life
     ]);
     for (const row of retained.decisions) expect(row).toMatchObject({ tenant_id: f.tenantId, legal_entity_id: f.companyId, supplier_id: id });
   } finally {
-    const trace = testInfo.outputPath("system-reviewer-trace.zip");
-    await reviewerContext.tracing.stop({ path: trace }); await testInfo.attach("system-reviewer-trace", { path: trace, contentType: "application/zip" });
     await reviewerContext.close();
   }
 });
