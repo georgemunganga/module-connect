@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Badge, Button, Field, Input, Select } from "../components/ui";
 import { lookupReceivingReferences, lookupSelectedReceivingReferences,
-  type ReceivingLookupKind, type ReceivingLookupPage } from "../../../src/platform/procurement-policy-api";
+  type ReceivingLookupPage } from "../../../src/platform/procurement-policy-api";
 
 /** Purpose-scoped Core names; stored policy keeps the owner IDs, never display text. */
 export function ReceivingReferencePicker({ company, kind, label, selected, onChange, disabled }: {
@@ -52,22 +52,25 @@ export function ReceivingReferencePicker({ company, kind, label, selected, onCha
 export function ReceivingCategoryPicker({ company, value, onChange, disabled }: {
   company: string; value: string; onChange: (code: string) => void; disabled?: boolean;
 }) {
-  const [search, setSearch] = useState(""), [page, setPage] = useState<ReceivingLookupPage | null>(null);
+  const [search, setSearch] = useState(""), [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<ReceivingLookupPage | null>(null);
   const [error, setError] = useState(""), [loading, setLoading] = useState(true);
   useEffect(() => {
     const abort = new AbortController(); setPage(null); setLoading(true); setError("");
-    const timer = setTimeout(() => lookupReceivingReferences(company, "categories", search, 0, abort.signal)
+    const timer = setTimeout(() => lookupReceivingReferences(company, "categories", search, offset, abort.signal)
       .then(result => { if (!abort.signal.aborted) setPage(result); })
       .catch(cause => { if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : "Categories are unavailable."); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); }), 200);
     return () => { clearTimeout(timer); abort.abort(); };
-  }, [company, search]);
-  return <div className="space-y-2"><Field label="Find purchase category"><Input maxLength={100} disabled={disabled} value={search} onChange={event => setSearch(event.target.value)} /></Field>
+  }, [company, search, offset]);
+  return <div className="space-y-2"><Field label="Find purchase category"><Input maxLength={100} disabled={disabled} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} /></Field>
     <Field label="Purchase category"><Select required disabled={disabled || loading || !!error} value={value} onChange={event => onChange(event.target.value)}>
       <option value="">{loading ? "Loading categories…" : "Choose category"}</option>
       {value && !page?.items.some(item => item.code === value) && <option value={value}>{value} · saved selection</option>}
       {page?.items.filter(item => item.code).map(item => <option key={item.id} value={item.code!}>{item.displayName} · {item.code}</option>)}</Select></Field>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {value && <p className="text-xs text-muted-foreground">Saved category code: {value}. ERP checks that it is still valid before saving.</p>}
+    <div className="flex gap-2"><Button variant="secondary" disabled={disabled || loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous categories</Button>
+      <Button variant="secondary" disabled={disabled || loading || page?.nextOffset == null} onClick={() => setOffset(page!.nextOffset!)}>More categories</Button></div>
   </div>;
 }
