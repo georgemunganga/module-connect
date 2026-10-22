@@ -6,7 +6,7 @@ const stageId = "77777777-7777-4777-8777-777777777777", decisionId = "88888888-8
 const lineId = "99999999-9999-4999-8999-999999999999";
 const root = "/procurement/workspace";
 test.setTimeout(90_000);
-async function mockErp(page: Page, options: { enabled?: boolean; empty?: boolean; read?: boolean; decide?: boolean; loseResponse?: boolean; stale?: boolean; unopened?: boolean; pages?: boolean; pendingRelease?: boolean; finance?: boolean; fundingBlocked?: boolean; openingQueue?: boolean } = {}) {
+async function mockErp(page: Page, options: { principalOnly?: boolean; enabled?: boolean; empty?: boolean; read?: boolean; decide?: boolean; loseResponse?: boolean; stale?: boolean; unopened?: boolean; pages?: boolean; pendingRelease?: boolean; finance?: boolean; fundingBlocked?: boolean; openingQueue?: boolean } = {}) {
   let state = options.pendingRelease || options.finance ? "Returned" : "Pending", requestState = options.finance ? "ReturnPendingFinanceRelease" : "Submitted", caseVersion = 2, requestVersion = 5, opened = !options.unopened;
   let lost = false, stale = options.stale, approvalReads = 0, releaseConfirmed = false;
   const decisions: Array<Record<string, unknown>> = [];
@@ -16,12 +16,13 @@ async function mockErp(page: Page, options: { enabled?: boolean; empty?: boolean
     ...(options.finance ? ["procurement-budget-check"] : []), ...(options.read === false ? [] : ["procurement-approval-read"]), ...(options.decide === false ? [] : ["procurement-approval-decide"])];
   const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders", "orderDraft",
     "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft"]
-    .map((key) => [key, key === "requestDraft" || key === "approvals" && options.enabled !== false]));
+    .map((key) => [key, key === "requestDraft" || key === "approvals" && !options.principalOnly && options.enabled !== false]));
+  if (options.principalOnly) capabilities.principalApprovals = options.enabled !== false;
   const detail = () => ({ caseId, requestId, requestNumber: "PR-101", purpose: "Office laptops", currencyCode: "ZMW", amount: 250,
     amountBasis: "EstimatedLineBase", state, requestState, requestVersion, caseVersion, submittedVersion: 4, openedAt: "2026-10-20T10:00:00Z",
     completedAt: state === "Pending" ? null : "2026-10-20T11:00:00Z", requestSnapshot: { lines: [{ id: lineId, description: "Laptop", quantity: "2", unitPrice: "125" }] },
     stages: [{ id: stageId, sequence: 1, code: "Manager review", state: state === "Pending" ? "Active" : state, mode: "Any", requiredApprovals: 1,
-      assignments: [{ id: assignmentId, principalId: "manager", state, version: state === "Pending" ? 1 : 2, isMine: true,
+      assignments: [{ id: assignmentId, principalId: options.principalOnly ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" : "manager", state, version: state === "Pending" ? 1 : 2, isMine: true,
         allowedActions: state === "Pending" ? options.fundingBlocked ? ["Reject", "Return"] : ["Approve", "Reject", "Return"] : [] }] }], decisions, blockers: options.fundingBlocked ? ["FinanceReservationNotConfirmed"] : [] });
   await page.addInitScript(({ entityId, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })), { entityId: company, branch });
   await page.route("**/api/**", async (route) => {
@@ -29,12 +30,12 @@ async function mockErp(page: Page, options: { enabled?: boolean; empty?: boolean
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (url.pathname.startsWith("/api/procurement/v1/") && (req.headers()["x-shell-entity"] !== company || req.headers()["x-shell-location"] !== branch))
       return json({ message: "Company and branch headers are required." }, 403);
-    if (url.pathname === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Manager", roles: ["procurement_manager"] } });
+    if (url.pathname === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Manager", roles: options.principalOnly ? [] : ["procurement_manager"] } });
     if (url.pathname === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: worker, permissions,
+    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: options.principalOnly ? null : worker, permissions,
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities });
     if (url.pathname === "/api/procurement/v1/requests/approval-opening-queue") return json({
@@ -91,7 +92,7 @@ async function mockErp(page: Page, options: { enabled?: boolean; empty?: boolean
         state = input.action === "Approve" ? "Approved" : input.action === "Reject" ? "Rejected" : "Returned";
         requestState = input.action === "Return" ? "ReturnPendingFinanceRelease" : state;
         caseVersion++; requestVersion++;
-        decisions.push({ id: decisionId, assignmentId, actorSubjectId: "manager", action: input.action, reason: input.reason, decidedAt: "2026-10-20T11:00:00Z" });
+        decisions.push({ id: decisionId, assignmentId, actorSubjectId: options.principalOnly ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" : "manager", action: input.action, reason: input.reason, decidedAt: "2026-10-20T11:00:00Z" });
       } else { opened = true; requestVersion++; }
       const receipt = { caseId, requestId, submittedVersion: 4, requestVersion, caseVersion, state, requestState, approvalState: state,
         ...(opening ? {} : { assignmentId, assignmentVersion: 2, decisionId }) };
@@ -265,4 +266,40 @@ test("a Procurement opener starts another request without assigned-queue access 
   expect(evidence.keys).toHaveLength(2);
   expect(evidence.keys[0]).toEqual(evidence.keys[1]);
   expect(evidence.reads()).toBe(0);
+});
+
+// Controlled wire compatibility only; actual finite-role/PG approval acceptance is a separate gate.
+test("workerless Core user can read and decide a principal-only request approval", async ({ page }) => {
+  const state = await mockErp(page, { principalOnly: true });
+  await page.goto(`${root}/approvals`);
+  await page.getByRole("link", { name: "Review request" }).click();
+  await expect(page.getByRole("heading", { name: "PR-101", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm decision" }).click();
+  await expect(page.getByText("Decision saved. Approved.", { exact: true })).toBeVisible();
+  expect(state.keys).toHaveLength(1);
+  expect(state.decisions).toHaveLength(1);
+});
+test("principal-only request detail uses existing opening wire without employee linkage", async ({ page }) => {
+  const state = await mockErp(page, { principalOnly: true, unopened: true });
+  await page.goto(`${root}/requests/${requestId}`);
+  await page.getByRole("button", { name: "Start approvals", exact: true }).click();
+  await expect(page.getByText("Submission 4 · Pending", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start approvals", exact: true })).toHaveCount(0);
+  expect(state.keys).toHaveLength(1);
+});
+test("principal availability does not grant a missing decision permission", async ({ page }) => {
+  const state = await mockErp(page, { principalOnly: true, decide: false });
+  await page.goto(`${root}/approvals/${caseId}`);
+  await expect(page.getByRole("heading", { name: "PR-101", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+  expect(state.keys).toHaveLength(0);
+});
+
+test("principal-only opening queue retains the existing request approval route", async ({ page }) => {
+  const state = await mockErp(page, { principalOnly: true, unopened: true, openingQueue: true });
+  await page.goto(`${root}/approvals`);
+  await page.getByRole("button", { name: "Start approvals for PR-101", exact: true }).click();
+  await expect(page.getByText("Approvals started for PR-101. The assigned people can now review it.", { exact: true })).toBeVisible();
+  expect(state.keys).toHaveLength(1);
 });

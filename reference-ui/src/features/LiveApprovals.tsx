@@ -1,3 +1,4 @@
+import { requestApprovalsAvailable } from "../lib/request-approval-availability";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
@@ -20,7 +21,7 @@ function useApprovalContext() {
 }
 export function LiveApprovalQueue() {
   const context = useApprovalContext();
-  const requests = context.capabilities.approvals && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
+  const requests = requestApprovalsAvailable(context.capabilities) && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
   const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
   const units = context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
   const available = ([requests && "requests", orders && "orders", units && "units"].filter(Boolean) as ("requests" | "orders" | "units")[]);
@@ -128,19 +129,20 @@ export function LiveApprovalDetail() {
 
 export function RequestApprovalPanel({ requestId, version, status, onChanged }: { requestId: string; version: number; status: string; onChanged: () => Promise<void> }) {
   const { legalEntityId, permissions, capabilities } = useApprovalContext();
+  const requestApprovalAvailable = requestApprovalsAvailable(capabilities);
   const [history, setHistory] = useState<ApprovalHistory | null>(null), [error, setError] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [command, setCommand] = useState<{ key: string; version: number } | null>(null);
   const [opened, setOpened] = useState(false);
   useEffect(() => {
-    if (!capabilities.approvals) return;
+    if (!requestApprovalAvailable) return;
     const abort = new AbortController(); setLoading(true); setHistory(null); setError(""); setCommand(null); setOpened(false);
     getApprovalHistory(legalEntityId, requestId, abort.signal).then((result) => { if (!abort.signal.aborted) setHistory(result); })
       .catch((cause: unknown) => { if (!abort.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
-  }, [legalEntityId, requestId, capabilities.approvals]);
-  if (!capabilities.approvals) return null;
+  }, [legalEntityId, requestId, requestApprovalAvailable]);
+  if (!requestApprovalAvailable) return null;
   async function open() {
     const intent = command ?? { key: crypto.randomUUID(), version }; setCommand(intent); setBusy(true); setError("");
     try { await openApproval(legalEntityId, requestId, intent.version, intent.key); setOpened(true); setCommand(null);

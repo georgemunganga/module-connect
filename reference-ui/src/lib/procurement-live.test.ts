@@ -64,6 +64,20 @@ describe("Procurement system-user readiness", () => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { recurringPurchaseDraft: flag }));
     expect(result.capabilities.recurringPurchaseDraft).toBe(flag === true);
   });
+  it.each([undefined, false, true, "true", 1, null])("requires explicit separate principal approval availability (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { principalApprovals: flag }));
+    expect(result.capabilities.principalApprovals).toBe(flag === true);
+    expect(result.capabilities.approvals).toBe(false);
+    expect(result.capabilities.orders).toBe(false);
+    expect(result.capabilities.receiving).toBe(false);
+    expect(result.capabilities.financeHandoff).toBe(false);
+    expect(result.workerId).toBeNull();
+  });
+  it("keeps old API principal approvals disabled without replacing legacy availability", async () => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { approvals: true }));
+    expect(result.capabilities.principalApprovals).toBe(false);
+    expect(result.capabilities.approvals).toBe(true);
+  });
   it("does not infer worker-based availability over the server's actual capabilities", async () => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { orders: true, approvals: true }));
     expect(result.capabilities.orders).toBe(true);
