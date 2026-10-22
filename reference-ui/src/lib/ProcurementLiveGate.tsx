@@ -32,8 +32,6 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   }, [selection.entityId, selection.branch,authEpoch,readinessKey]);
 
   if (!liveMode) return <>{children}</>;
-  if (state.readiness?.adminViewOnly && /\/(?:new|edit)\/?$/.test(location.pathname) && unavailable)
-    return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{unavailable}</LiveReadiness.Provider>;
   const vendorPath = /^\/vendors(?:\/|$)/.test(location.pathname);
   const itemPath = /^\/items(?:\/|$)/.test(location.pathname);
   const approvalPath = /^\/approvals(?:\/|$)/.test(location.pathname);
@@ -48,6 +46,19 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
   const overviewPath = location.pathname === "/" || location.pathname === "/analytics";
   const configurationSettingsPath = /^\/settings(?:\/|$)/.test(location.pathname);
+  const newRecord = /\/new\/?$/.test(location.pathname);
+  const editRecord = /\/[^/]+\/edit\/?$/.test(location.pathname);
+  const permission = state.readiness?.permissions ?? [];
+  const permits = (read: string, create: string, edit: string) => permission.includes(newRecord ? create : editRecord ? edit : read);
+  const deniedCrud = vendorPath && !permits("procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit")
+    || itemPath && !(newRecord || editRecord ? permission.includes("procurement-item-manage") : permission.some(value => ["procurement-item-read", "procurement-item-manage"].includes(value)))
+    || requestPath && !permits("procurement-request-read", "procurement-request-create", "procurement-request-edit")
+    || contractPath && !permits("procurement-contract-read", "procurement-contract-create", "procurement-contract-edit")
+    || planPath && !permits("procurement-plan-read", "procurement-plan-create", "procurement-plan-edit")
+    || invoicePath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
+    || creditPath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"));
+  if (state.readiness && deniedCrud)
+    return <LiveReadiness.Provider value={state.readiness}><div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div></LiveReadiness.Provider>;
   if (state.readiness && ((overviewPath && [
     ["procurement-request-read", "requestDraft"], ["procurement-po-read", "orderDraft"],
     ["procurement-plan-read", "planningDraft"], ["procurement-contract-read", "contractDraft"],
@@ -68,9 +79,9 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
     || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
-    return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{children}</LiveReadiness.Provider>;
+    return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
   if (state.readiness && unavailable)
-    return <LiveReadiness.Provider value={state.readiness}><AdminViewNotice readiness={state.readiness} />{unavailable}</LiveReadiness.Provider>;
+    return <LiveReadiness.Provider value={state.readiness}>{unavailable}</LiveReadiness.Provider>;
   return <main className="flex min-h-dvh items-center justify-center bg-background px-5 text-foreground">
     <div className="w-full max-w-lg">
       <h1 className="text-2xl font-semibold">Procurement</h1>
@@ -79,8 +90,4 @@ export function ProcurementLiveGate({ children, unavailable }: { children: React
       {state.readiness ? <p className="mt-3 text-sm text-muted-foreground" role="status">Your ERP account and company are connected. Procurement transaction screens will open as their live workflows are verified. No demo transactions are shown in live mode.</p> : null}
     </div>
   </main>;
-}
-
-function AdminViewNotice({ readiness }: { readiness: ProcurementReadiness }) {
-  return readiness.adminViewOnly ? <p role="status" className="border-b border-border bg-background px-5 py-3 text-sm text-muted-foreground">Administrator view. Purchasing and approval actions require an active employee account.</p> : null;
 }

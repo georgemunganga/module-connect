@@ -21,7 +21,7 @@ async function fixture(page: Page, mode: "normal"|"legacy"|"stale"|"lost"|"item-
     if(path==="/api/hrm/admin/legal-entities")return json({items:[{id:company,code:"TEST",registeredName:"Synthetic company"}]});
     if(path==="/api/hrm/admin/locations")return json({items:[]});
     if(path==="/api/hrm/shell/")return json({assignedLocationIds:[],confined:false});
-    if(path==="/api/procurement/v1/context")return json({tenantId:"synthetic",legalEntityId:company,workerId:worker,
+    if(path==="/api/procurement/v1/context")return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",tenantId:"synthetic",legalEntityId:company,workerId:worker,
       permissions:["procurement-access","procurement-item-manage"],company:{id:company,code:"TEST",name:"Synthetic company",currencyCode:"ZMW"}});
     if(path==="/api/procurement/v1/meta")return json({tenantId:"synthetic",legalEntityId:company,schemaReady:true,capabilities});
     if(path==="/api/procurement/v1/vendors")return json({items:[{id:vendor,number:"VEN-1",displayName:"Actual selected vendor",legalName:"Vendor",countryCode:"ZM",status:"Active",isOrderable:true,version:1,createdAt:"2026-10-22T00:00:00Z"}],total:1,page:1,pageSize:100});

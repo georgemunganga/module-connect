@@ -18,7 +18,7 @@ export function LiveApprovalSettings({ initialAction = "PurchaseRequest.Approve"
   if (!context) throw new Error("Approval settings require ERP context.");
   const { selection } = useErpShell();
   if (selection.entityId && selection.entityId !== context.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  const scopeKey = [context.tenantId, context.legalEntityId, selection.branch ?? "", context.workerId ?? "admin", initialAction].join(":");
+  const scopeKey = [context.tenantId, context.legalEntityId, selection.branch ?? "", context.principalId, initialAction].join(":");
   return <div className="space-y-5">
     <p className="text-sm text-muted-foreground">Set who can approve in <Link className="font-semibold text-primary" to="/settings/buying-rules">Buying rules</Link>. Set each named person's maximum amount below.</p>
     <ApprovalLimits key={scopeKey} initialAction={initialAction} pendingKey={`procurement.authority.create.unconfirmed.v1:${scopeKey}`} />
@@ -56,9 +56,9 @@ function Lookup({ company, action, kind, label, value, selectedLabel, onChange }
 function ApprovalLimits({ initialAction, pendingKey }: { initialAction: AuthoritySpendAction; pendingKey: string }) {
   const context = useLiveReadiness()!; const company = context.legalEntityId;
   const canRead = context.permissions.includes("procurement-authority-read");
-  const canConfigure = !context.adminViewOnly && context.permissions.includes("procurement-authority-configure");
-  const canReview = !context.adminViewOnly && context.permissions.includes("procurement-authority-review");
-  const canRevoke = !context.adminViewOnly && context.permissions.includes("procurement-authority-revoke");
+  const canConfigure = context.permissions.includes("procurement-authority-configure");
+  const canReview = context.permissions.includes("procurement-authority-review");
+  const canRevoke = context.permissions.includes("procurement-authority-revoke");
   const spendAction = initialAction;
   const [data, setData] = useState<AuthorityPage | null>(null), [page, setPage] = useState(1), [state, setState] = useState("");
   const [revision, setRevision] = useState(0), [loading, setLoading] = useState(true), [error, setError] = useState(""), [notice, setNotice] = useState("");

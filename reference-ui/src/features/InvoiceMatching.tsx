@@ -21,7 +21,7 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
   const context = useLiveReadiness()!, { selection } = useErpShell(), company = context.legalEntityId;
   const canSelect = context.permissions.includes("procurement-invoice-read") && context.permissions.includes("procurement-invoice-match");
   const canMap = canSelect && context.permissions.includes("procurement-invoice-capture");
-  const scopeKey = JSON.stringify([context.tenantId, company, selection.entityId, selection.branch, context.workerId, invoiceId]);
+  const scopeKey = JSON.stringify([context.tenantId, company, selection.entityId, selection.branch, context.principalId, invoiceId]);
   const [pendingState, setPendingState] = useState(() => readPendingInvoiceMatching(scopeKey));
   const uncertain = pendingState.command;
   const commandBlocked = pendingState.blocked;

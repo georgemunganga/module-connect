@@ -16,7 +16,7 @@ export async function fullVendorMock(page:Page,options:{edit?:boolean;denyEdit?:
     if(path==="/api/hrm/admin/legal-entities")return json({items:[{id:company,code:"TEST",registeredName:"Synthetic Company"}]});
     if(path==="/api/hrm/admin/locations")return json({items:[]});
     if(path==="/api/hrm/shell/")return json({assignedLocationIds:[],confined:false});
-    if(path==="/api/procurement/v1/context")return json({tenantId:"mock",legalEntityId:company,workerId:worker,permissions:["procurement-access","procurement-vendor-read","procurement-vendor-create","procurement-vendor-edit"],company:{id:company,name:"Synthetic Company",code:"TEST",currencyCode:"ZMW"}});
+    if(path==="/api/procurement/v1/context")return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",tenantId:"mock",legalEntityId:company,workerId:worker,permissions:["procurement-access","procurement-vendor-read","procurement-vendor-create","procurement-vendor-edit"],company:{id:company,name:"Synthetic Company",code:"TEST",currencyCode:"ZMW"}});
     if(path==="/api/procurement/v1/meta")return json({schemaReady:true,tenantId:"mock",legalEntityId:company,capabilities});
     if(method!=="GET"&&path.startsWith("/api/procurement/"))writes.push({method,path,body:request.postDataJSON()});
     if(path==="/api/procurement/v1/vendors"&&method==="GET")return json({items:[saved],total:1,page:1,pageSize:25});

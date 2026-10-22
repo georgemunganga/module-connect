@@ -22,7 +22,7 @@ export function LiveApprovalQueue() {
   const context = useApprovalContext();
   const requests = context.capabilities.approvals && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
   const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
-  const units = !context.adminViewOnly && context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
+  const units = context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
   const available = ([requests && "requests", orders && "orders", units && "units"].filter(Boolean) as ("requests" | "orders" | "units")[]);
   const [type, setType] = useState<"requests" | "orders" | "units">(() => available[0] ?? "requests");
   const selected = available.includes(type) ? type : available[0];

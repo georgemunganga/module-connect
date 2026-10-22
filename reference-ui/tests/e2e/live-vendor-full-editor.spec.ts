@@ -26,7 +26,7 @@ test("record navigation denial clears old vendor form and cannot submit its stal
 });
 test("company context denial clears the old editable form and produces no mutation",async({page})=>{
   const state=await fullVendorMock(page);await page.goto(`/procurement/workspace/vendors/${vendor}/edit`);await page.getByLabel("Display name",{exact:true}).fill("Old company edits");
-  await page.route("**/api/procurement/v1/context",route=>route.fulfill({status:403,contentType:"application/json",body:JSON.stringify({message:"No access to selected company"})}));
+  await page.route("**/api/procurement/v1/context",route=>route.fulfill({status:403,contentType:"application/json",body:JSON.stringify({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",message:"No access to selected company"})}));
   await page.evaluate(()=>localStorage.setItem("erp.shell.state.v1",JSON.stringify({entityId:"88888888-8888-4888-8888-888888888888"})));await page.reload();await expect(page.getByRole("button",{name:"Save vendor details",exact:true})).toHaveCount(0);await expect(page.getByRole("textbox",{name:"Display name",exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(0);
 });
 
@@ -48,7 +48,7 @@ test("late create response cannot navigate after company context is denied",asyn
   await fullVendorMock(page);let release!:()=>void;let entered!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});const started=new Promise<void>(resolve=>{entered=resolve;});let writes=0;
   await page.route("**/api/procurement/v1/vendors",async route=>{if(route.request().method()!=="POST")return route.fallback();writes++;entered();await held;await route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({id:vendor,version:1,number:"VEN-1",possibleDuplicate:false})});});
   await page.goto("/procurement/workspace/vendors/new");await page.getByLabel("Company name",{exact:true}).fill("Old company supplier");await page.getByLabel("Display name",{exact:true}).fill("Old company supplier");await page.getByRole("button",{name:"Save draft",exact:true}).click();await started;
-  await page.route("**/api/procurement/v1/context",route=>route.fulfill({status:403,contentType:"application/json",body:JSON.stringify({message:"No access to selected company"})}));
+  await page.route("**/api/procurement/v1/context",route=>route.fulfill({status:403,contentType:"application/json",body:JSON.stringify({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",message:"No access to selected company"})}));
   await page.evaluate(()=>{const key="erp.shell.state.v1";const value=JSON.stringify({entityId:"88888888-8888-4888-8888-888888888888"});localStorage.setItem(key,value);window.dispatchEvent(new StorageEvent("storage",{key,newValue:value}));});await expect(page.getByRole("textbox",{name:"Display name",exact:true})).toHaveCount(0);await expect(page.getByRole("alert")).toBeVisible();
   const response=page.waitForResponse(value=>value.request().method()==="POST"&&new URL(value.url()).pathname.endsWith("/vendors"));release();await (await response).finished();await expect(page.waitForURL(new RegExp(`/vendors/${vendor}$`),{timeout:1000})).rejects.toThrow();expect(writes).toBe(1);
 });

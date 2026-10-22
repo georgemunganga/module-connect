@@ -8,6 +8,7 @@ export type ProcurementCapability =
 export type ProcurementReadiness = {
   tenantId: string;
   legalEntityId: string;
+  principalId: string;
   workerId: string | null;
   adminViewOnly?: boolean;
   defaultCurrencyCode: string;
@@ -70,15 +71,16 @@ export async function fetchProcurementReadiness(
   let context: unknown;
   try { context = await contextResponse.json(); }
   catch { throw new ProcurementLiveError("invalid-response"); }
-  const adminViewOnly = object(context) && context.adminViewOnly === true && context.workerId === null
-    && Array.isArray(authBody.user.roles) && authBody.user.roles.includes("erp_admin");
   if (!object(context) || !guid.test(String(context.legalEntityId))
-    || (!guid.test(String(context.workerId)) && !adminViewOnly)
-    || (context.adminViewOnly === true && !adminViewOnly)
-    || typeof context.tenantId !== "string" || !object(context.company)
+    || !guid.test(String(context.principalId)) || context.principalId === "00000000-0000-0000-0000-000000000000"
+    || !(context.workerId === null || guid.test(String(context.workerId)))
+    || typeof context.tenantId !== "string" || !context.tenantId.trim() || !object(context.company)
     || context.company.id !== context.legalEntityId
+    || selection.entityId && selection.entityId !== context.legalEntityId
     || typeof context.company.currencyCode !== "string"
-    || !/^[a-z]{3}$/i.test(context.company.currencyCode))
+    || !/^[a-z]{3}$/i.test(context.company.currencyCode)
+    || !Array.isArray(context.permissions) || !context.permissions.every(permission => typeof permission === "string")
+    || !context.permissions.includes("procurement-access"))
     throw new ProcurementLiveError("invalid-response");
 
   let metaResponse: Response;
@@ -98,14 +100,12 @@ export async function fetchProcurementReadiness(
   return {
     tenantId: context.tenantId,
     legalEntityId: context.legalEntityId as string,
+    principalId: context.principalId as string,
     workerId: context.workerId as string | null,
-    adminViewOnly,
+    adminViewOnly: false,
     defaultCurrencyCode: (context.company.currencyCode as string).toUpperCase(),
     schemaReady: true,
-    permissions: Array.isArray(context.permissions)
-      ? context.permissions.filter((permission): permission is string => typeof permission === "string"
-        && (!adminViewOnly || permission === "procurement-access" || permission.endsWith("-read")
-          || permission === "procurement-receipt-view")) : [],
+    permissions: [...new Set(context.permissions as string[])],
     capabilities: Object.fromEntries(capabilityKeys.map((key) =>
       [key, optionalCapability(key)
         ? resolvedCapabilities[key] === true : resolvedCapabilities[key]])) as Record<ProcurementCapability, boolean>,

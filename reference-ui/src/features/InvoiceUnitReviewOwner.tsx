@@ -13,8 +13,8 @@ const blockerText = (code: string) => code === "OriginalUnitReviewAlreadyOpen" ?
 /** Maker entry in the existing bill detail. Opening creates a review case, not invoice approval. */
 export function InvoiceUnitReviewOwner({ invoiceId, invoiceVersion }: { invoiceId: string; invoiceVersion: number }) {
   const context = useLiveReadiness()!, { selection } = useErpShell();
-  const scope = JSON.stringify([context.tenantId, context.legalEntityId, selection.entityId ?? "", selection.branch ?? "", context.workerId, invoiceId, "Open"]);
-  const canOpen = !context.adminViewOnly && context.capabilities.invoiceOriginalUnitReview
+  const scope = JSON.stringify([context.tenantId, context.legalEntityId, selection.entityId ?? "", selection.branch ?? "", context.principalId, invoiceId, "Open"]);
+  const canOpen = context.capabilities.invoiceOriginalUnitReview
     && context.permissions.includes("procurement-invoice-unit-review-request") && context.permissions.includes("procurement-invoice-read");
   const [readiness, setReadiness] = useState<UnitReviewReadiness | null>(null);
   const [pending, setPending] = useState(() => readUnitReviewPending(scope));

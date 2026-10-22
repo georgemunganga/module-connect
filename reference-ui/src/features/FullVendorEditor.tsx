@@ -14,7 +14,7 @@ export function FullVendorEditor() {
   const readiness=useLiveReadiness(); const {selection}=useErpShell(); const {id}=useParams();
   if (!readiness) return <p role="alert">Choose a company before opening vendors.</p>;
   if (selection.entityId && selection.entityId!==readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <VendorEditorSession key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${id ?? "new"}`} id={id} />;
+  return <VendorEditorSession key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id ?? "new"}`} id={id} />;
 }
 function VendorEditorSession({id}:{id?:string}) {
   const readiness=useLiveReadiness()!; const company=readiness.legalEntityId; const navigate=useNavigate();
@@ -24,7 +24,7 @@ function VendorEditorSession({id}:{id?:string}) {
   const [dirty,setDirty]=useState<Set<string>>(()=>new Set()); const alive=useRef(true);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   useEffect(()=>{if(!id)return;const abort=new AbortController();getVendorDraft(company,id,abort.signal).then(value=>{if(abort.signal.aborted)return;setModel(readVendorModel(value,readiness.defaultCurrencyCode));setDetail(value);}).catch(cause=>{if(!abort.signal.aborted)setError(errorText(cause));}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});return()=>abort.abort();},[company,id,readiness.defaultCurrencyCode]);
-  const permitted=!readiness.adminViewOnly && readiness.permissions.includes(id ? "procurement-vendor-edit" : "procurement-vendor-create");
+  const permitted=readiness.permissions.includes(id ? "procurement-vendor-edit" : "procurement-vendor-create");
   const editable=!id || Boolean(detail && ["Draft","More Information Required"].includes(detail.status));
   const disabled=!permitted || !editable || busy || blocked || loading || Boolean(id&&!detail);
   function change(value:VendorEditorModel,key:string){setModel(value);setDirty(current=>new Set(current).add(key));setSaved("");}

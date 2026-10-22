@@ -18,7 +18,7 @@ export function LiveReceivingEditor() {
   const branch = procurementScopeHeaders(context.legalEntityId)["X-Shell-Location"] ?? "";
   const kind = search.get("kind") === "service" ? "service" : "goods";
   const back = receivingVendorContext(search, context.permissions.includes("procurement-vendor-read"));
-  return <ReceivingEditor backPath={back.path} returnQuery={back.query} key={`${context.tenantId}:${context.legalEntityId}:${branch}:${context.workerId}:${id ?? "new"}:${kind}`} id={id} kind={kind} scopeKey={`${context.tenantId}:${context.legalEntityId}:${branch}:${context.workerId}:${kind}:${id ?? "new"}`} />;
+  return <ReceivingEditor backPath={back.path} returnQuery={back.query} key={`${context.tenantId}:${context.legalEntityId}:${branch}:${context.principalId}:${id ?? "new"}:${kind}`} id={id} kind={kind} scopeKey={`${context.tenantId}:${context.legalEntityId}:${branch}:${context.principalId}:${kind}:${id ?? "new"}`} />;
 }
 function ReceivingEditor({ id, kind, scopeKey, backPath, returnQuery }: { id?: string; kind: string; scopeKey: string; backPath: string; returnQuery: string }) {
   const context = useLiveReadiness()!, company = context.legalEntityId, service = kind === "service", navigate = useNavigate();

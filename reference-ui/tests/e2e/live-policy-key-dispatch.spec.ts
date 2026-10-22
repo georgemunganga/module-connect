@@ -33,7 +33,7 @@ async function fixture(page: Page, detailKeyOverride?: string) {
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "TEST", registeredName: "Test company" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "test", legalEntityId: company, workerId: worker,
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "test", legalEntityId: company, workerId: worker,
       permissions: ["procurement-access", "procurement-configuration-read", "procurement-configuration-edit", "procurement-configuration-approve"],
       company: { id: company, code: "TEST", name: "Test company", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities });

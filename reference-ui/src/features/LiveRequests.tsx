@@ -42,7 +42,7 @@ function context() {
 export function LiveRequestList() {
   const readiness = context();
   const { legalEntityId } = readiness;
-  const canCreate = !readiness.adminViewOnly && readiness.permissions.includes("procurement-request-create");
+  const canCreate = readiness.permissions.includes("procurement-request-create");
   const canCheckPolicy = readiness.permissions.includes("procurement-policy-evaluate");
   const canReturnRequest = readiness.permissions.includes("procurement-request-return");
   const [offset, setOffset] = useState(0);
@@ -156,8 +156,8 @@ export function LiveRequestList() {
 export function LiveRequestEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, defaultCurrencyCode, permissions, adminViewOnly } = context();
-  const canWrite = !adminViewOnly && permissions.includes(id ? "procurement-request-edit" : "procurement-request-create");
+  const { legalEntityId, defaultCurrencyCode, permissions } = context();
+  const canWrite = permissions.includes(id ? "procurement-request-edit" : "procurement-request-create");
   const [draft, setDraft] = useState<RequestDraft>(() => ({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }));
   const [version, setVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(Boolean(id));
@@ -290,7 +290,7 @@ export function LiveRequestEditor() {
 
 export function LiveRequestDetail() {
   const { id } = useParams();
-  const { legalEntityId, adminViewOnly, permissions } = context();
+  const { legalEntityId, permissions } = context();
   const navigate = useNavigate();
   const [record, setRecord] = useState<RequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -328,7 +328,7 @@ export function LiveRequestDetail() {
     return () => controller.abort();
   }, [legalEntityId, id, record?.status]);
   async function withdraw() {
-    if (adminViewOnly) return;
+    if (!permissions.includes("procurement-request-edit")) return;
     if (!record || (record.status === "Submitted" && !withdrawReason.trim())) return;
     setBusy(true); setError("");
     try { await withdrawOwnRequestDraft(legalEntityId, record.id, record.version, withdrawReason.trim() || undefined); navigate("/requests"); }
@@ -336,7 +336,7 @@ export function LiveRequestDetail() {
     finally { setBusy(false); }
   }
   async function submit() {
-    if (adminViewOnly) return;
+    if (!permissions.includes("procurement-request-submit")) return;
     if (!record) return;
     setBusy(true); setError("");
     try { setRecord(await submitOwnRequest(legalEntityId, record.id, record.version)); }
@@ -351,7 +351,7 @@ export function LiveRequestDetail() {
   const approvalLocked = record.status === "ReturnPendingFinanceRelease" || (record.status !== "ReturnedForChanges"
     && (Boolean(record.approvalInstanceRef) || ["Pending", "Returned", "ReturnPendingFinanceRelease"].includes(record.approvalState || "")));
   return <div className="p-5 sm:p-8">
-    <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{!adminViewOnly && permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
+    <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     {record.status === "Submitted" && !waitingForRelease && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">
       <p>Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>
@@ -363,8 +363,8 @@ export function LiveRequestDetail() {
     {record.status === "ReturnedForChanges" && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm"><p className="font-medium">Please update this request and send it again.</p><p className="mt-2">{record.returnReason || "Procurement asked for changes."}</p></div>}
     <Panel title="Requested lines"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th></tr></thead><tbody>{activeLines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.requestedQuantity}</td><td>{line.unitCode}</td><td>{record.currencyCode} {line.estimatedUnitPrice.toLocaleString()}</td></tr>)}</tbody></RecordTable></div></Panel>
     <div className="mt-5 grid gap-5 lg:grid-cols-2"><Panel title="Delivery"><p className="p-5 text-sm">{record.deliveryAddressText || "No delivery address added."}</p></Panel><Panel title="Note for approver"><p className="p-5 text-sm">{record.notesToApprover || "No note added."}</p></Panel></div>
-    {!adminViewOnly && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Panel title="Send for review" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Add a needed-by date to this request or every line before sending it. No budget is reserved by this step.</p><Button disabled={busy || !activeLines.length || (!record.neededBy && activeLines.some((line) => !line.neededBy))} onClick={() => void submit()}>Send for review</Button></div></Panel>}
-    {!adminViewOnly && !approvalLocked && (record.status === "Draft" || record.status === "Submitted" || record.status === "ReturnedForChanges") && <Panel title="Withdraw request" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason" hint={record.status === "Submitted" ? "Required once a request has been sent for review." : "Optional before review."}><Textarea rows={2} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || (record.status === "Submitted" && !withdrawReason.trim())} onClick={() => void withdraw()}>Withdraw request</Button></div></Panel>}
+    {permissions.includes("procurement-request-submit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Panel title="Send for review" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Add a needed-by date to this request or every line before sending it. No budget is reserved by this step.</p><Button disabled={busy || !activeLines.length || (!record.neededBy && activeLines.some((line) => !line.neededBy))} onClick={() => void submit()}>Send for review</Button></div></Panel>}
+    {permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "Submitted" || record.status === "ReturnedForChanges") && <Panel title="Withdraw request" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason" hint={record.status === "Submitted" ? "Required once a request has been sent for review." : "Optional before review."}><Textarea rows={2} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || (record.status === "Submitted" && !withdrawReason.trim())} onClick={() => void withdraw()}>Withdraw request</Button></div></Panel>}
     <RequestApprovalPanel requestId={record.id} version={record.version} status={waitingForRelease ? "ReturnPendingFinanceRelease" : record.status}
       onChanged={async () => { setRecord(await getOwnRequestDraft(legalEntityId, record.id)); }} />
     <Link to="/requests" className="mt-5 inline-block text-sm text-primary hover:underline">Back to my requests</Link>

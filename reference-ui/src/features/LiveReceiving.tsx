@@ -21,7 +21,7 @@ function target(row: ReceivingSummary, view: ReceivingView) {
 }
 export function LiveReceivingList() {
   const context = useLiveReadiness()!, branch = procurementScopeHeaders(context.legalEntityId)["X-Shell-Location"] ?? "";
-  return <ReceivingList key={`${context.tenantId}:${context.legalEntityId}:${branch}:${context.workerId}`} />;
+  return <ReceivingList key={`${context.tenantId}:${context.legalEntityId}:${branch}:${context.principalId}`} />;
 }
 function ReceivingList() {
   const context = useLiveReadiness()!, company = context.legalEntityId;
@@ -71,7 +71,7 @@ export function LiveReceivingDetail() {
   const kind = search.get("kind") === "service" ? "service" : "goods", purpose = search.get("purpose") ?? "receipts";
   const branch = procurementScopeHeaders(context.legalEntityId)["X-Shell-Location"] ?? "";
   const back = receivingVendorContext(search, context.permissions.includes("procurement-vendor-read"));
-  const scope = `${context.tenantId}:${context.legalEntityId}:${branch}:${context.workerId}:${kind}:${id}`;
+  const scope = `${context.tenantId}:${context.legalEntityId}:${branch}:${context.principalId}:${kind}:${id}`;
   return <ReceivingDetail key={`${scope}:${purpose}`} id={id} kind={kind} purpose={purpose} scopeKey={scope} backPath={back.path} returnQuery={back.query} />;
 }
 function ReceivingDetail({ id, kind, purpose, scopeKey, backPath, returnQuery }: { id: string; kind: string; purpose: string; scopeKey: string; backPath: string; returnQuery: string }) {

@@ -12,7 +12,7 @@ const message = (error: unknown) => error instanceof Error ? error.message : "Th
 function useCompany() { const value = useLiveReadiness(); if (!value) throw new Error("Choose an ERP company first."); return value; }
 function useCommandSlot(operation: string) {
   const company = useCompany(); const { selection } = useErpShell();
-  return JSON.stringify([company.tenantId, company.legalEntityId, company.workerId, selection.branch ?? "", operation]);
+  return JSON.stringify([company.tenantId, company.legalEntityId, company.principalId, selection.branch ?? "", operation]);
 }
 const detailLink = (id: string) => `/rfqs/${id}?source=approved`;
 function Pager({ page, total, size, change }: { page: number; total: number; size: number; change: (value: number) => void }) {

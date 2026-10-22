@@ -32,7 +32,7 @@ export function LiveOrderList() {
   if (selection.entityId && selection.entityId !== context.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
   return context.capabilities.orders
-    ? <LiveOrderExecutionList key={[context.tenantId, context.legalEntityId, selection.branch, context.workerId].join(":")} />
+    ? <LiveOrderExecutionList key={[context.tenantId, context.legalEntityId, selection.branch, context.principalId].join(":")} />
     : <LegacyOrderList />;
 }
 function LegacyOrderList() {
@@ -79,7 +79,7 @@ export function LiveOrderEditor() {
     return <p role="status">Checking the selected company…</p>;
   if (readiness.capabilities.orders) return <LiveOrderSourceEditor />;
   return <LiveOrderEditorRecord key={[readiness.tenantId, readiness.legalEntityId, selection.branch,
-    readiness.workerId ?? "admin", id ?? "new"].join(":")} />;
+    readiness.principalId, id ?? "new"].join(":")} />;
 }
 function LiveOrderEditorRecord() {
   const { id } = useParams();

@@ -22,14 +22,14 @@ export function LiveConfiguration() {
   if (selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
   return <LiveConfigurationRecord key={[readiness.tenantId, readiness.legalEntityId, selection.branch,
-    readiness.workerId ?? "admin"].join(":")} />;
+    readiness.principalId].join(":")} />;
 }
 function LiveConfigurationRecord() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Procurement settings require an ERP company.");
   const companyId = readiness.legalEntityId;
-  const canEdit = !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-edit");
-  const canApprove = !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-approve");
+  const canEdit = readiness.permissions.includes("procurement-configuration-edit");
+  const canApprove = readiness.permissions.includes("procurement-configuration-approve");
   const [kind, setKind] = useState<ReferenceKind>("categories");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ReferencePage | null>(null);

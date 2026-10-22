@@ -29,7 +29,7 @@ async function setup(page: Page, role: "maker" | "reviewer", onApi: (route: Rout
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "test", legalEntityId: company, workerId: worker,
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "test", legalEntityId: company, workerId: worker,
       permissions: role === "maker" ? ["procurement-access", "procurement-invoice-read", "procurement-invoice-unit-review-request"]
         : ["procurement-access", "procurement-invoice-unit-review"], company: { id: company, currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true,

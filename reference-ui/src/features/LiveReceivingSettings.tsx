@@ -20,7 +20,7 @@ export function LiveReceivingSettings() {
   if (!readiness || selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
   return <ReceivingRecord key={[readiness.tenantId, readiness.legalEntityId,
-    selection.branch ?? "", readiness.workerId ?? "admin"].join(":")} />;
+    selection.branch ?? "", readiness.principalId].join(":")} />;
 }
 function ReceivingRecord() {
   const readiness = useLiveReadiness(); const { selection } = useErpShell();
@@ -28,10 +28,10 @@ function ReceivingRecord() {
   const company = readiness.legalEntityId, currency = readiness.defaultCurrencyCode;
   const canRead = readiness.capabilities.configurationDraft === true
     && readiness.permissions.includes("procurement-configuration-read");
-  const canEdit = canRead && !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-edit");
-  const canApprove = canRead && !readiness.adminViewOnly && readiness.permissions.includes("procurement-configuration-approve");
+  const canEdit = canRead && readiness.permissions.includes("procurement-configuration-edit");
+  const canApprove = canRead && readiness.permissions.includes("procurement-configuration-approve");
   const marker = `procurement.policy.command.pending.v1:${[readiness.tenantId, company,
-    selection.branch ?? "", readiness.workerId ?? "admin", KEY].join(":")}`;
+    selection.branch ?? "", readiness.principalId, KEY].join(":")}`;
   const [guard, setGuard] = useState(() => readAuthorityCreateGuard(marker));
   const [schemaReady, setSchemaReady] = useState(false);
   const [page, setPage] = useState<PolicyPage | null>(null);

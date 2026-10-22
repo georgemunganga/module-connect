@@ -34,7 +34,7 @@ async function fixture(page: Page, delayDirectory = false) {
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "A", registeredName: "Company A" }, { id: otherCompanyId, code: "B", registeredName: "Company B" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "test", legalEntityId: selected, workerId: null, adminViewOnly: true,
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "test", legalEntityId: selected, workerId: null, adminViewOnly: true,
       company: { id: selected, code: selected === companyId ? "A" : "B", name: selected === companyId ? "Company A" : "Company B", currencyCode: "ZMW" }, permissions: ["procurement-access", "procurement-vendor-read"] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: selected, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/vendors") {

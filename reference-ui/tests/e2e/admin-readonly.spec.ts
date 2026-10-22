@@ -24,7 +24,7 @@ async function readonlyErp(page: Page) {
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId,
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId,
       workerId: null, adminViewOnly: true, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" },
       permissions: ["procurement-access", "procurement-request-read", "procurement-sourcing-read", "procurement-contract-read", "procurement-plan-read", "procurement-configuration-read"] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });

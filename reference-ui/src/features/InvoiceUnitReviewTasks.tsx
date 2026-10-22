@@ -18,10 +18,10 @@ function useContext() { const context = useLiveReadiness(); if (!context) throw 
 export function InvoiceUnitReviewQueue() {
   const context = useContext(), { selection } = useErpShell();
   if (selection.entityId && selection.entityId !== context.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <Queue key={JSON.stringify([context.tenantId, context.legalEntityId, selection.entityId ?? "", selection.branch ?? "", context.workerId, context.permissions, context.capabilities])} />;
+  return <Queue key={JSON.stringify([context.tenantId, context.legalEntityId, selection.entityId ?? "", selection.branch ?? "", context.principalId, context.permissions, context.capabilities])} />;
 }
 function Queue() {
-  const context = useContext(), canReview = !context.adminViewOnly && context.capabilities.invoiceOriginalUnitReview
+  const context = useContext(), canReview = context.capabilities.invoiceOriginalUnitReview
     && context.permissions.includes("procurement-invoice-unit-review");
   const [page, setPage] = useState(1), [revision, setRevision] = useState(0);
   const [data, setData] = useState<UnitReviewPage | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
@@ -52,15 +52,15 @@ export function InvoiceUnitReviewDetail() {
   const context = useContext(), { selection } = useErpShell(), { id } = useParams();
   if (selection.entityId && selection.entityId !== context.legalEntityId) return <p role="status">Checking the selected company…</p>;
   return <Detail key={JSON.stringify([context.tenantId, context.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
-    context.workerId, context.permissions, context.capabilities, id])} reviewId={id ?? ""} />;
+    context.principalId, context.permissions, context.capabilities, id])} reviewId={id ?? ""} />;
 }
 function Detail({ reviewId }: { reviewId: string }) {
   const context = useContext(), { selection } = useErpShell();
-  const eligible = !context.adminViewOnly && context.capabilities.invoiceOriginalUnitReview && (
+  const eligible = context.capabilities.invoiceOriginalUnitReview && (
     context.permissions.includes("procurement-invoice-unit-review")
     || context.permissions.includes("procurement-invoice-unit-review-request") && context.permissions.includes("procurement-invoice-read")
     || context.permissions.includes("procurement-invoice-unit-review-read") && context.permissions.includes("procurement-invoice-read"));
-  const scope = JSON.stringify([context.tenantId, context.legalEntityId, selection.entityId ?? "", selection.branch ?? "", context.workerId, reviewId, "Decision"]);
+  const scope = JSON.stringify([context.tenantId, context.legalEntityId, selection.entityId ?? "", selection.branch ?? "", context.principalId, reviewId, "Decision"]);
   const [data, setData] = useState<UnitReviewDetail | null>(null), [documents, setDocuments] = useState<PinnedReviewDocument[] | null>(null);
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");

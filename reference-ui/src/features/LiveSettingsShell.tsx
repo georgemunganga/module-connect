@@ -73,8 +73,8 @@ export function LiveSettingsShell() {
   else if (path === "/settings/reference-data" || path === "/settings/buying-rules")
     content = !canReadConfiguration ? <Notice title="Buying settings unavailable" detail="Your account cannot open these company buying settings, or their live configuration is not ready." />
       : path === "/settings/reference-data"
-        ? <LiveConfiguration key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}`} />
-        : <LivePolicies key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}`} />;
+        ? <LiveConfiguration key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}`} />
+        : <LivePolicies key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}`} />;
   else if (path.startsWith("/settings/modules/")) {
     const [, , , slug, tab = "preferences"] = path.split("/");
     const module = procurementModuleSlugs.has(slug) ? findModule(slug) : undefined;
@@ -86,7 +86,7 @@ export function LiveSettingsShell() {
           className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm ${item.slug === tab ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{item.title}</Link>)}
       </nav>
       {(slug === "purchase-requests" || slug === "purchase-orders") && tab === "approvals"
-        ? <LiveApprovalSettings key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${slug}`}
+        ? <LiveApprovalSettings key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${slug}`}
           initialAction={slug === "purchase-orders" ? "PurchaseOrder.Approve" : "PurchaseRequest.Approve"} />
         : slug === "bills" && tab === "preferences"
           ? <LiveInvoiceMatchingSettings />

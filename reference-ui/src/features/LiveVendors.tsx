@@ -92,7 +92,7 @@ export function LiveVendorDetail() {
   const { selection } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
-  return <LiveVendorRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${id}`} />;
+  return <LiveVendorRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id}`} />;
 }
 
 function VendorDirectory({ companyId, selectedId, canCreate }: { companyId: string; selectedId: string; canCreate: boolean }) {
@@ -129,7 +129,6 @@ function VendorDirectory({ companyId, selectedId, canCreate }: { companyId: stri
 }
 
 function LiveVendorRecord() {
-  const adminViewOnly = useLiveReadiness()?.adminViewOnly === true;
   const { id, tab } = useParams();
   const { legalEntityId, permissions } = useCompany();
   const navigate = useNavigate();
@@ -167,16 +166,16 @@ function LiveVendorRecord() {
     return () => controller.abort();
   }, [id, legalEntityId]);
   useEffect(() => {
-    if (adminViewOnly || !vendor?.canSuspend) return;
+    if (!vendor?.canSuspend) return;
     const controller = new AbortController();
     setOpenOrders(null); setOrdersError(""); setOrdersReviewed(false);
     getVendorOpenOrders(legalEntityId, vendor.id, controller.signal)
       .then(value => { if (!controller.signal.aborted) setOpenOrders(value); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setOrdersError(message(cause)); });
     return () => controller.abort();
-  }, [vendor?.canSuspend, vendor?.id, vendor?.version, legalEntityId, adminViewOnly]);
+  }, [vendor?.canSuspend, vendor?.id, vendor?.version, legalEntityId]);
   async function act(operation: () => Promise<unknown>): Promise<boolean> {
-    if (adminViewOnly || !mounted.current) return false;
+    if (!mounted.current) return false;
     setBusy(true); setError("");
     try { await operation(); if (!mounted.current) return false; reload(); return true; }
     catch (cause) { if (mounted.current) setError(message(cause)); return false; }
@@ -184,14 +183,14 @@ function LiveVendorRecord() {
   }
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading vendor…</div>;
   if (!vendor) return <div className="p-5 sm:p-8" role="alert">{error || "Vendor not found."}</div>;
-  const editable = !adminViewOnly && (vendor.status === "Draft" || vendor.status === "More Information Required");
+  const editable = permissions.includes("procurement-vendor-edit") && (vendor.status === "Draft" || vendor.status === "More Information Required");
   const qualificationDatesInvalid = Boolean(qualification.issuedOn && qualification.expiresOn
     && qualification.expiresOn < qualification.issuedOn);
   const activeTab = vendorDetailTabs.some(value => value.key === tab) ? tab! : "overview";
   const contactPerson = vendor.contacts?.find(row => row.isPrimary) ?? vendor.contacts?.[0];
   return <VendorDetailFrame title={vendor.displayName} status={vendor.status}
     subtitle={[vendor.number, vendor.legalName].filter(Boolean).join(" · ")}
-    directory={<VendorDirectory companyId={legalEntityId} selectedId={vendor.id} canCreate={!adminViewOnly && permissions.includes("procurement-vendor-create")} />}
+    directory={<VendorDirectory companyId={legalEntityId} selectedId={vendor.id} canCreate={permissions.includes("procurement-vendor-create")} />}
     actions={editable ? <Link to={`/vendors/${vendor.id}/edit`}><Button variant="secondary">Edit vendor</Button></Link> : undefined}
     activeTab={activeTab} onTabChange={value => navigate(value === "overview" ? `/vendors/${vendor.id}` : `/vendors/${vendor.id}/${value}`)}>
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
@@ -206,17 +205,17 @@ function LiveVendorRecord() {
     {vendor.status === "Submitted" && <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">Submitted for review{vendor.statusDecidedAt ? ` on ${new Date(vendor.statusDecidedAt).toLocaleDateString()}` : ""}. This vendor cannot receive new purchase orders yet.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""}</p>}
     {vendor.status === "More Information Required" && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">More information is needed before this vendor can be approved.{vendor.statusReason ? ` Reviewer note: ${vendor.statusReason}` : ""} Update the details below, then send the vendor for review again.</p>}
     {vendor.status === "Suspended" && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">This vendor is on hold and cannot receive new orders.{vendor.statusReason ? ` Reason: ${vendor.statusReason}` : ""} Existing orders remain available for review.</p>}
-    {!adminViewOnly && (vendor.canReturnForInformation || vendor.canApprove || vendor.canReject) && <Panel title="Review vendor" className="mb-5"><div className="space-y-3 p-5">
+    {(vendor.canReturnForInformation || vendor.canApprove || vendor.canReject) && <Panel title="Review vendor" className="mb-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Check the company details and documents, then record your decision. Finance verifies payment details separately.</p>
       <Field label="Reason for your decision"><Textarea rows={3} maxLength={1000} required value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
-      {!adminViewOnly && vendor.canApprove && <label className="flex items-center gap-3 text-sm"><Switch checked={duplicatesReviewed} onChange={(event) => setDuplicatesReviewed(event.target.checked)} />I checked for duplicate vendors</label>}
+      {vendor.canApprove && <label className="flex items-center gap-3 text-sm"><Switch checked={duplicatesReviewed} onChange={(event) => setDuplicatesReviewed(event.target.checked)} />I checked for duplicate vendors</label>}
       <div className="flex flex-wrap gap-2">
-        {!adminViewOnly && vendor.canApprove && <Button disabled={busy || !reviewReason.trim() || !duplicatesReviewed} onClick={() => { void act(() => approveVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim(), duplicatesReviewed)); }}>Approve vendor</Button>}
-        {!adminViewOnly && vendor.canReturnForInformation && <Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => returnVendorForInformation(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Send back for changes</Button>}
-        {!adminViewOnly && vendor.canReject && <Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => rejectVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Reject vendor</Button>}
+        {vendor.canApprove && <Button disabled={busy || !reviewReason.trim() || !duplicatesReviewed} onClick={() => { void act(() => approveVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim(), duplicatesReviewed)); }}>Approve vendor</Button>}
+        {vendor.canReturnForInformation && <Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => returnVendorForInformation(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Send back for changes</Button>}
+        {vendor.canReject && <Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => rejectVendor(legalEntityId, vendor.id, vendor.version, reviewReason.trim())); }}>Reject vendor</Button>}
       </div>
     </div></Panel>}
-    {!adminViewOnly && vendor.canSuspend && <Panel title="Place vendor on hold" className="mb-5"><div className="space-y-3 p-5">
+    {vendor.canSuspend && <Panel title="Place vendor on hold" className="mb-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Stop new orders while the vendor issue is reviewed. Existing orders stay in the system.</p>
       {ordersError && <p role="alert" className="text-sm text-red-700">{ordersError}</p>}
       {!openOrders && !ordersError && <p role="status" className="text-sm text-muted-foreground">Checking existing orders…</p>}
@@ -231,7 +230,7 @@ function LiveVendorRecord() {
         Place on hold
       </Button>
     </div></Panel>}
-    {!adminViewOnly && vendor.canReactivate && <Panel title="Return vendor to active" className="mb-5"><div className="space-y-3 p-5">
+    {vendor.canReactivate && <Panel title="Return vendor to active" className="mb-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Confirm the issue is resolved and check current vendor details, qualifications and payment verification before allowing new orders.</p>
       <Field label="How was the issue resolved?"><Textarea rows={3} maxLength={1000} value={reactivateReason} onChange={(event) => setReactivateReason(event.target.value)} /></Field>
       <label className="flex items-center gap-3 text-sm"><Switch checked={diligenceReviewed} onChange={(event) => setDiligenceReviewed(event.target.checked)} />I checked the current vendor details and qualifications</label>
@@ -258,7 +257,7 @@ function LiveVendorRecord() {
           <Button variant="secondary" disabled={busy} onClick={() => { setEditingQualificationId(row.id); setQualification({ qualificationType: row.qualificationType, issuer: row.issuer || "", referenceNumber: row.referenceNumber || "", issuedOn: row.issuedOn || "", expiresOn: row.expiresOn || "" }); }}>Edit</Button>
           <Button variant="secondary" disabled={busy} onClick={() => { setRemovingDetail({ kind: "qualification", id: row.id, label: row.qualificationType }); setRemovalReason(""); }}>Remove</Button>
         </>}
-        {!adminViewOnly && vendor.canReturnForInformation && row.reviewStatus === "Pending" && <span className="inline-flex gap-2"><Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => reviewVendorQualification(legalEntityId, vendor.id, row.id, vendor.version, "Verified", reviewReason.trim())); }}>Verify</Button><Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => reviewVendorQualification(legalEntityId, vendor.id, row.id, vendor.version, "Rejected", reviewReason.trim())); }}>Mark invalid</Button></span>}
+        {vendor.canReturnForInformation && row.reviewStatus === "Pending" && <span className="inline-flex gap-2"><Button variant="secondary" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => reviewVendorQualification(legalEntityId, vendor.id, row.id, vendor.version, "Verified", reviewReason.trim())); }}>Verify</Button><Button variant="danger" disabled={busy || !reviewReason.trim()} onClick={() => { void act(() => reviewVendorQualification(legalEntityId, vendor.id, row.id, vendor.version, "Rejected", reviewReason.trim())); }}>Mark invalid</Button></span>}
       </li>)}</ul>{!vendor.qualifications?.length && <p className="text-sm text-muted-foreground">{vendor.qualifications === undefined ? "Qualification details are unavailable for this account." : "No qualifications added yet."}</p>}
         {editable && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); if (qualificationDatesInvalid) return; const value = { ...qualification, issuedOn: qualification.issuedOn || null, expiresOn: qualification.expiresOn || null } as VendorQualificationDraft; void act(() => editingQualificationId ? updateVendorQualification(legalEntityId, vendor.id, editingQualificationId, vendor.version, value) : addVendorQualification(legalEntityId, vendor.id, vendor.version, value)).then((saved) => { if (saved) { setQualification({ qualificationType: "", issuer: "", referenceNumber: "", issuedOn: "", expiresOn: "" }); setEditingQualificationId(null); } }); }}>
           {editingQualificationId && <p className="font-medium">Edit qualification</p>}

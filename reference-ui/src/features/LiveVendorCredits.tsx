@@ -17,7 +17,7 @@ function useScope() { const scope = useLiveReadiness(); if (!scope) throw new Er
 function Scope({ children }: { children: ReactNode }) {
   const scope = useScope(), { selection } = useErpShell(), { id } = useParams();
   if (selection.entityId && selection.entityId !== scope.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <div key={`${scope.tenantId}:${scope.legalEntityId}:${selection.branch ?? ""}:${scope.workerId ?? "admin"}:${id ?? "new"}`}>{children}</div>;
+  return <div key={`${scope.tenantId}:${scope.legalEntityId}:${selection.branch ?? ""}:${scope.principalId}:${id ?? "new"}`}>{children}</div>;
 }
 function useAlive() { const alive = useRef(true); useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []); return alive; }
 const filterFields: ListFilterField[] = [{ key: "search", label: "Credit, bill or vendor", type: "text" }, { key: "status", label: "Status", type: "select", options: ["Draft", "Cancelled"] }];
@@ -50,7 +50,7 @@ function CreditList() {
     downloadCsv(`vendor-credits-${exportScope}-page-${page}.csv`, [shown.map(column => column.label), ...exported.map(row => shown.map(column =>
       safe(column.key === "number" ? row.creditNumber : column.key === "invoice" ? row.invoiceNumber : column.key === "vendor" ? row.supplierName : column.key === "amount" ? `${row.currencyCode} ${row.exactAmount}` : row.status)))]);
   }
-  const canCreate = !scope.adminViewOnly && scope.permissions.includes("procurement-invoice-capture") && scope.permissions.includes("procurement-invoice-read");
+  const canCreate = scope.permissions.includes("procurement-invoice-capture") && scope.permissions.includes("procurement-invoice-read");
   useEffect(() => {
     const abort = new AbortController(); setData(null); setSelected([]); setLoading(true); setError("");
     listVendorCredits(scope.legalEntityId, page, invoiceId, abort.signal, { search: filters.search, status: filters.status }).then(value => { if (!abort.signal.aborted) setData(value); })
@@ -88,7 +88,7 @@ function CreditEditor() {
   const [billId, setBillId] = useState(""), [billPage, setBillPage] = useState(1), [loading, setLoading] = useState(!!id), [error, setError] = useState("");
   const [draft, setDraft] = useState<VendorCreditDraft>({ creditNumber: "", amount: "", reason: "" }), [changeReason, setChangeReason] = useState("");
   const [busy, setBusy] = useState(false), [blocked, setBlocked] = useState<"stale" | "unknown" | null>(null);
-  const canWrite = !scope.adminViewOnly && scope.permissions.includes("procurement-invoice-capture") && scope.permissions.includes("procurement-invoice-read");
+  const canWrite = scope.permissions.includes("procurement-invoice-capture") && scope.permissions.includes("procurement-invoice-read");
   useEffect(() => {
     if (!id || !canWrite) return;
     const abort = new AbortController(); setLoading(true); setRecord(null);
@@ -150,7 +150,7 @@ function CreditDetail() {
     } catch (cause) { if (alive.current) { setError(errorText(cause)); setBlocked(true); } } finally { if (alive.current) setBusy(false); }
   }
   if (loading) return <p role="status">Loading credit…</p>; if (!record) return <p role="alert">{error || "Credit not found."}</p>;
-  const canWrite = !scope.adminViewOnly && scope.permissions.includes("procurement-invoice-capture") && scope.permissions.includes("procurement-invoice-read");
+  const canWrite = scope.permissions.includes("procurement-invoice-capture") && scope.permissions.includes("procurement-invoice-read");
   return <div className="-mx-5 -mt-5 min-h-[calc(100dvh-5rem)] bg-background sm:-mx-8 sm:-mt-8"><header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-4 sm:px-6"><div><Link className="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground" to="/vendor-credits"><ArrowLeft size={13} />Vendor Credits</Link><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold">{record.creditNumber}</h1><Badge>{record.status}</Badge></div></div>{canWrite && creditAllows(record, "Edit") && <Link to={`/vendor-credits/${record.id}/edit`}><Button variant="secondary">Edit draft</Button></Link>}</header>
     <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "related", label: "Related" }, { key: "comments", label: "Comments" }, { key: "history", label: "History" }]} active={tab} onChange={setTab} />
     <div className="space-y-5 p-4 sm:p-6">{error && <p role="alert">{error}<Button variant="secondary" onClick={() => window.location.reload()}>Refresh saved credit</Button></p>}
