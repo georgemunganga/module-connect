@@ -316,7 +316,7 @@ for (const status of [408, 429, 499]) {
     await page.getByLabel("Quantity", { exact: true }).fill("1");
     await page.getByLabel("Unit price", { exact: true }).fill("10");
     await page.getByRole("button", { name: "Record as received", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("not confirmed");
+    await expect(page.getByRole("alert").filter({ hasText: "The save outcome was not confirmed." })).toBeVisible();
     await expect(page.getByRole("button", { name: "Record as received", exact: true })).toBeDisabled();
     await expect(page.getByLabel("Invoice number")).toHaveValue("INV-TIMEOUT");
     expect(posts).toBe(1);
