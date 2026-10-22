@@ -26,7 +26,8 @@ export function serializeReceivingPolicy(currency: string, rows: ReceivingRow[])
     throw new Error("Choose a company currency and one to 64 receiving rules.");
   const classifications = new Set<string>(), codes = new Set<string>();
   const rules = rows.map(row => {
-    if (!text(row.code, 64) || !text(row.categoryCode, 64) || !text(row.purchaseType, 64)
+    if (!text(row.code, 64) || !text(row.categoryCode, 64)
+      || !["GOODS", "SERVICES", "ASSETS", "SUBSCRIPTIONS"].includes(row.purchaseType)
       || !["Goods", "Service"].includes(row.kind) || !ids(row.siteIds, true)
       || !ids(row.inspectorWorkerIds, false) || !ids(row.serviceOwnerWorkerIds, false)
       || !explicit(row.inspectionRequired) || !explicit(row.allowRequesterCertification)
