@@ -90,10 +90,10 @@ export async function getUnitReviewDetail(company: string, review: string, signa
   if ((!x.currentMapping || !x.originalDigestCurrent) && (x.assignments.length || x.actionCandidates.length)) throw invalid();
   return x as unknown as UnitReviewDetail;
 }
-export async function getPinnedReviewDocuments(company: string, review: string, signal?: AbortSignal): Promise<PinnedReviewDocument[]> {
-  if (!id(review)) throw invalid();
+export async function getPinnedReviewDocuments(company: string, review: string, invoice: string, signal?: AbortSignal): Promise<PinnedReviewDocument[]> {
+  if (!id(review) || !id(invoice)) throw invalid();
   const x = await call(company, `/invoice-unit-reviews/${review}/documents`, { signal });
-  if (!obj(x) || x.reviewId !== review || !id(x.invoiceId) || !Array.isArray(x.items)
+  if (!obj(x) || x.reviewId !== review || x.invoiceId !== invoice || !Array.isArray(x.items)
     || x.availabilityMeaning !== "PinnedOriginalDocumentVersionsOnly" || x.isUnitVerification !== false || x.canPostToFinance !== false
     || !x.items.every((d: unknown) => obj(d) && id(d.documentId) && id(d.versionId) && pos(d.versionNumber)
       && typeof d.fileName === "string" && typeof d.mediaType === "string" && pos(d.sizeBytes)
@@ -114,6 +114,13 @@ function receipt(x: unknown, key: string, operation: UnitReviewReceipt["operatio
     || !(x.decisionId === null || id(x.decisionId)) || !(x.outcomeId === null || id(x.outcomeId))
     || typeof x.completedAt !== "string" || x.recordedHistoricalResult !== true || !flags(x)
     || invoice && x.invoiceId !== invoice || review && x.reviewId !== review) throw invalid();
+  const pending = x.caseState === "Pending" && x.reviewState === "Pending" && x.outcomeId === null;
+  const approved = x.caseState === "Approved" && x.reviewState === "Verified" && id(x.outcomeId);
+  const returned = x.caseState === "Returned" && x.reviewState === "Returned" && id(x.outcomeId);
+  const rejected = x.caseState === "Rejected" && x.reviewState === "Rejected" && id(x.outcomeId);
+  if (!(pending || approved || returned || rejected)
+    || operation === "Open" && (!pending || x.decisionId !== null)
+    || operation === "Decision" && !id(x.decisionId)) throw invalid();
   return x as unknown as UnitReviewReceipt;
 }
 export async function openUnitReview(company: string, invoice: string, version: number, mappingRevision: number, reason: string | null, key: string) {

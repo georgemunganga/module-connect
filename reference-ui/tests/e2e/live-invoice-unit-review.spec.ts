@@ -102,7 +102,7 @@ test("purpose reviewer sees pinned original and attests explicitly without broad
   await expect(page.getByRole("button", { name: "Download original" })).toBeVisible();
   await page.getByRole("button", { name: "Confirm original units" }).click();
   await expect(page.getByRole("button", { name: "Confirm decision" })).toBeDisabled();
-  await page.getByRole("checkbox", { name: /I checked the original invoice document/ }).check();
+  await page.getByRole("switch", { name: /I checked the original invoice document/ }).click();
   await page.getByRole("button", { name: "Confirm decision" }).click();
   await expect(page.getByText(/Decision recorded: Verified/)).toBeVisible();
   expect(votes).toBe(1);
