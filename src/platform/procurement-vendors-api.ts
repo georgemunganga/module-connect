@@ -86,6 +86,9 @@ export type VendorOpenOrders = { supplierId: string; count: number;
     issuedAt?: string | null }> };
 
 export interface VendorDetail extends VendorSummary {
+  tradingName?: string | null; website?: string | null; companyIdType?: string | null;
+  taxIdentifierRef?: string | null; supplierType?: string | null;
+  attributes?: { id: string; kind: "CustomField" | "ReportingTag"; key: string; value?: string | null; version: number }[];
   canReturnForInformation?: boolean;
   canApprove?: boolean;
   canReject?: boolean;
@@ -182,65 +185,81 @@ export async function getVendorDraft(legalEntityId: string, id: string, signal?:
   return body as unknown as VendorDetail;
 }
 
-export async function addVendorContact(legalEntityId: string, id: string, version: number, contact: VendorContactDraft): Promise<void> {
+export type VendorChildReceipt = { id: string; version: number };
+function childReceipt(body: unknown): VendorChildReceipt {
+  if (!object(body) || !guid.test(String(body.id)) || !Number.isSafeInteger(body.version) || Number(body.version) < 1)
+    throw new VendorApiError(0, "The ERP did not confirm the saved vendor detail. Refresh before another change.");
+  return body as VendorChildReceipt;
+}
+
+export async function addVendorContact(legalEntityId: string, id: string, version: number, contact: VendorContactDraft): Promise<VendorChildReceipt> {
   if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/contacts`, { method: "POST", body: JSON.stringify({ version, contact }) });
+  const body = await request<unknown>(legalEntityId, `/${id}/contacts`, { method: "POST", body: JSON.stringify({ version, contact }) });
+  return childReceipt(body);
 }
 
 export async function updateVendorContact(legalEntityId: string, id: string, contactId: string,
-  version: number, contact: VendorContactDraft): Promise<void> {
+  version: number, contact: VendorContactDraft): Promise<VendorChildReceipt> {
   if (!guid.test(id) || !guid.test(contactId)) throw new VendorApiError(0, "The vendor contact reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/contacts/${contactId}`,
+  const body = await request<unknown>(legalEntityId, `/${id}/contacts/${contactId}`,
     { method: "PUT", body: JSON.stringify({ version, contact }) });
+  return childReceipt(body);
 }
 
 export async function removeVendorContact(legalEntityId: string, id: string, contactId: string,
-  version: number, reason: string): Promise<void> {
+  version: number, reason: string): Promise<VendorChildReceipt> {
   if (!guid.test(id) || !guid.test(contactId)) throw new VendorApiError(0, "The vendor contact reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/contacts/${contactId}/remove`,
+  const body = await request<unknown>(legalEntityId, `/${id}/contacts/${contactId}/remove`,
     { method: "POST", body: JSON.stringify({ version, reason }) });
+  return childReceipt(body);
 }
 
-export async function addVendorSite(legalEntityId: string, id: string, version: number, site: VendorSiteDraft): Promise<void> {
+export async function addVendorSite(legalEntityId: string, id: string, version: number, site: VendorSiteDraft): Promise<VendorChildReceipt> {
   if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/sites`, { method: "POST", body: JSON.stringify({ version, site }) });
+  const body = await request<unknown>(legalEntityId, `/${id}/sites`, { method: "POST", body: JSON.stringify({ version, site }) });
+  return childReceipt(body);
 }
 
 export async function updateVendorSite(legalEntityId: string, id: string, siteId: string,
-  version: number, site: VendorSiteDraft): Promise<void> {
+  version: number, site: VendorSiteDraft): Promise<VendorChildReceipt> {
   if (!guid.test(id) || !guid.test(siteId)) throw new VendorApiError(0, "The vendor address reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/sites/${siteId}`,
+  const body = await request<unknown>(legalEntityId, `/${id}/sites/${siteId}`,
     { method: "PUT", body: JSON.stringify({ version, site }) });
+  return childReceipt(body);
 }
 
 export async function removeVendorSite(legalEntityId: string, id: string, siteId: string,
-  version: number, reason: string): Promise<void> {
+  version: number, reason: string): Promise<VendorChildReceipt> {
   if (!guid.test(id) || !guid.test(siteId)) throw new VendorApiError(0, "The vendor address reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/sites/${siteId}/remove`,
+  const body = await request<unknown>(legalEntityId, `/${id}/sites/${siteId}/remove`,
     { method: "POST", body: JSON.stringify({ version, reason }) });
+  return childReceipt(body);
 }
 
 export async function addVendorQualification(legalEntityId: string, id: string, version: number,
-  qualification: VendorQualificationDraft): Promise<void> {
+  qualification: VendorQualificationDraft): Promise<VendorChildReceipt> {
   if (!guid.test(id)) throw new VendorApiError(0, "The vendor reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/qualifications`,
+  const body = await request<unknown>(legalEntityId, `/${id}/qualifications`,
     { method: "POST", body: JSON.stringify({ version, qualification }) });
+  return childReceipt(body);
 }
 
 export async function updateVendorQualification(legalEntityId: string, id: string, qualificationId: string,
-  version: number, qualification: VendorQualificationDraft): Promise<void> {
+  version: number, qualification: VendorQualificationDraft): Promise<VendorChildReceipt> {
   if (!guid.test(id) || !guid.test(qualificationId))
     throw new VendorApiError(0, "The vendor qualification reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/qualifications/${qualificationId}`,
+  const body = await request<unknown>(legalEntityId, `/${id}/qualifications/${qualificationId}`,
     { method: "PUT", body: JSON.stringify({ version, qualification }) });
+  return childReceipt(body);
 }
 
 export async function removeVendorQualification(legalEntityId: string, id: string, qualificationId: string,
-  version: number, reason: string): Promise<void> {
+  version: number, reason: string): Promise<VendorChildReceipt> {
   if (!guid.test(id) || !guid.test(qualificationId))
     throw new VendorApiError(0, "The vendor qualification reference is invalid.");
-  await request<unknown>(legalEntityId, `/${id}/qualifications/${qualificationId}/remove`,
+  const body = await request<unknown>(legalEntityId, `/${id}/qualifications/${qualificationId}/remove`,
     { method: "POST", body: JSON.stringify({ version, reason }) });
+  return childReceipt(body);
 }
 
 export async function createVendorDraft(legalEntityId: string, draft: VendorDraft): Promise<{ id: string; number: string; version: number; possibleDuplicate: boolean }> {

@@ -82,68 +82,7 @@ export function LiveVendorList() {
   </div>;
 }
 
-export function LiveVendorEditor() {
-  const { id } = useParams();
-  const editing = Boolean(id);
-  const navigate = useNavigate();
-  const { legalEntityId, defaultCurrencyCode } = useCompany();
-  const [draft, setDraft] = useState<VendorDraft>(() => ({ ...empty, currencyCode: defaultCurrencyCode }));
-  const [version, setVersion] = useState<number | null>(null);
-  const [loading, setLoading] = useState(editing);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    if (!id) { setDraft({ ...empty, currencyCode: defaultCurrencyCode }); return; }
-    const controller = new AbortController();
-    setLoading(true); setError("");
-    getVendorDraft(legalEntityId, id, controller.signal).then((detail) => {
-      setVersion(detail.version);
-      setDraft({ ...empty, legalName: detail.legalName, displayName: detail.displayName,
-        countryCode: detail.countryCode, registrationNumber: detail.registrationNumber,
-        categoryCode: detail.categoryCode,
-        currencyCode: detail.defaultCurrencyCode || defaultCurrencyCode,
-        paymentTermRef: detail.paymentTermRef, taxCategoryRef: detail.taxCategoryRef,
-        languageCode: detail.languageCode, remarks: detail.remarks,
-        isLocal: detail.isLocal ?? true, portalAccessRequested: detail.portalAccessState === "Requested" });
-    }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [id, legalEntityId, defaultCurrencyCode]);
-  const field = (key: keyof VendorDraft, value: string | boolean) => setDraft((current) => ({ ...current, [key]: value }));
-  async function save(event: FormEvent) {
-    event.preventDefault(); setError(""); setSaving(true);
-    try {
-      const result = editing && id && version !== null
-        ? await updateVendorDraft(legalEntityId, id, version, draft)
-        : await createVendorDraft(legalEntityId, draft);
-      navigate(`/vendors/${result.id}`, { state: { saved: true } });
-    } catch (cause) { setError(message(cause)); }
-    finally { setSaving(false); }
-  }
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={editing ? "Edit vendor" : "New vendor"} subtitle="Save a vendor draft. Approval and bank verification happen separately." />
-    {loading ? <p role="status">Loading vendor…</p> : <form onSubmit={save} className="max-w-4xl space-y-5">
-      {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("changed") && <span className="block">Your edits are still here. Open this vendor in another tab to compare before saving again.</span>}</p>}
-      <Panel title="Vendor details"><div className="grid gap-4 p-5 sm:grid-cols-2">
-        <Field label="Company name"><Input required maxLength={300} value={draft.legalName} onChange={(event) => field("legalName", event.target.value)} /></Field>
-        <Field label="Display name"><Input required maxLength={300} value={draft.displayName} onChange={(event) => field("displayName", event.target.value)} /></Field>
-        <Field label="Company ID"><Input maxLength={120} value={draft.registrationNumber ?? ""} onChange={(event) => field("registrationNumber", event.target.value)} /></Field>
-        <Field label="Vendor category"><Input maxLength={100} value={draft.categoryCode ?? ""} onChange={(event) => field("categoryCode", event.target.value)} /></Field>
-        <Field label="Country code" hint="Use a two-letter code, such as ZM."><Input required maxLength={2} value={draft.countryCode} onChange={(event) => field("countryCode", event.target.value.toUpperCase())} /></Field>
-      </div></Panel>
-      <Panel title="Other details"><div className="grid gap-4 p-5 sm:grid-cols-2">
-        <Field label="Currency"><Input maxLength={3} value={draft.currencyCode ?? ""} onChange={(event) => field("currencyCode", event.target.value.toUpperCase())} /></Field>
-        <Field label="Payment terms"><Input value={draft.paymentTermRef ?? ""} onChange={(event) => field("paymentTermRef", event.target.value)} /></Field>
-        <Field label="Tax category"><Input value={draft.taxCategoryRef ?? ""} onChange={(event) => field("taxCategoryRef", event.target.value)} /></Field>
-        <Field label="Language"><Input value={draft.languageCode ?? ""} onChange={(event) => field("languageCode", event.target.value)} /></Field>
-        <Field label="Location"><Select value={draft.isLocal ? "local" : "international"} onChange={(event) => field("isLocal", event.target.value === "local")}><option value="local">Local</option><option value="international">International</option></Select></Field>
-        <Field label="Portal access"><Select value={draft.portalAccessRequested ? "requested" : "none"} onChange={(event) => field("portalAccessRequested", event.target.value === "requested")}><option value="none">Not requested</option><option value="requested">Request access</option></Select></Field>
-        <Field label="Remarks" className="sm:col-span-2"><Textarea maxLength={4000} rows={3} value={draft.remarks ?? ""} onChange={(event) => field("remarks", event.target.value)} /></Field>
-      </div></Panel>
-      <div className="flex gap-3"><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save draft"}</Button><Link to={editing && id ? `/vendors/${id}` : "/vendors"}><Button variant="secondary">Cancel</Button></Link></div>
-    </form>}
-  </div>;
-}
+export { FullVendorEditor as LiveVendorEditor } from "./FullVendorEditor";
 
 /** Reset the complete live record on company/branch/employee-mapping/record changes. URL
  * tabs keep the same record; no browser-local catalog data is used as a fallback. */

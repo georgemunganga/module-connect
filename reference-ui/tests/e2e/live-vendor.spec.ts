@@ -16,7 +16,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     id: vendorId, number: "VEN-001", legalName: "Acme Zambia Ltd", displayName: "Acme",
     countryCode: "ZM", categoryCode: "OFFICE", status: options.adminDraft ? "Draft" : "Submitted", version: 3,
     isOrderable: false, canReturnForInformation: !options.approveOnly && !options.adminViewOnly, canApprove: !options.adminViewOnly, canReject: !options.adminViewOnly,
-    contacts: [{ id: "44444444-4444-4444-8444-444444444444", name: "Pat Supplier" }], sites: [],
+    attributes: [], contacts: [{ id: "44444444-4444-4444-8444-444444444444", name: "Pat Supplier" }], sites: [],
     qualifications: options.qualification ? [{ id: "66666666-6666-4666-8666-666666666666",
       qualificationType: "Tax clearance", expiresOn: "2027-12-31", reviewStatus: "Pending" }] : [],
   } : null;
@@ -47,7 +47,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       }
       if (request.method() === "POST") {
         const draft = request.postDataJSON();
-        vendor = { ...draft, id: vendorId, number: "VEN-001", status: "Draft", version: 1, isOrderable: false, defaultCurrencyCode: draft.currencyCode, contacts: [], sites: [], qualifications: [] };
+        vendor = { ...draft, id: vendorId, number: "VEN-001", status: "Draft", version: 1, isOrderable: false, defaultCurrencyCode: draft.currencyCode, contacts: [], sites: [], qualifications: [], attributes: [] };
         return json({ id: vendorId, number: "VEN-001", version: 1, possibleDuplicate: false }, 201);
       }
     }
@@ -65,7 +65,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       const { version, contact } = request.postDataJSON();
       if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
       vendor = { ...vendor, contacts: [...(vendor.contacts as unknown[]), { ...contact, id: "44444444-4444-4444-8444-444444444444" }], version: version + 1 };
-      return json({ id: vendorId, version: vendor.version }, 201);
+      return json({ id: "44444444-4444-4444-8444-444444444444", version: vendor.version }, 201);
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}/contacts/44444444-4444-4444-8444-444444444444` && vendor && request.method() === "PUT") {
       const { version, contact } = request.postDataJSON();
@@ -84,7 +84,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       const { version, site } = request.postDataJSON();
       if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
       vendor = { ...vendor, sites: [...(vendor.sites as unknown[]), { ...site, id: "55555555-5555-4555-8555-555555555555" }], version: version + 1 };
-      return json({ id: vendorId, version: vendor.version }, 201);
+      return json({ id: "55555555-5555-4555-8555-555555555555", version: vendor.version }, 201);
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}/sites/55555555-5555-4555-8555-555555555555` && vendor && request.method() === "PUT") {
       const { version, site } = request.postDataJSON();
@@ -221,7 +221,9 @@ test("vendor draft persists through the ERP API across refresh, edit and withdra
   await expect(page.getByText(/Tax clearance.*Expires 2027-12-31/)).toBeVisible();
   await page.getByRole("link", { name: "Edit vendor" }).click();
   await page.getByLabel("Display name").fill("Amizo Trading");
-  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Save vendor details", exact: true }).click();
+  await expect(page.getByRole("status").filter({hasText:"Vendor details saved"})).toBeVisible();
+  await page.getByRole("link", {name:"Cancel",exact:true}).click();
   await expect(page.getByRole("heading", { name: "Amizo Trading" })).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept("No longer needed"));
   await page.getByRole("button", { name: "Withdraw draft" }).click();
@@ -302,7 +304,7 @@ test("stale edit keeps entered values for comparison", async ({ page }) => {
   await page.getByRole("button", { name: "Save draft" }).click();
   await page.getByRole("link", { name: "Edit vendor" }).click();
   await page.getByLabel("Display name").fill("Unsaved change");
-  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Save vendor details", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("changed");
   await expect(page.getByLabel("Display name")).toHaveValue("Unsaved change");
 });

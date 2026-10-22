@@ -46,7 +46,9 @@ test("actual vendor create, reload, edit and withdrawal retain the owning record
   const created = await mutation(page, "POST", "/vendors", () => page.getByRole("button", { name: "Save draft", exact: true }).click()); const id = idOf(created);
   await expect(page.getByRole("heading", { name: `${prefix} Vendor`, exact: true })).toBeVisible(); await page.reload();
   await page.getByRole("link", { name: "Edit vendor", exact: true }).click(); await page.getByLabel("Display name", { exact: true }).fill(`${prefix} Vendor Revised`);
-  await mutation(page, "PUT", `/vendors/${id}`, () => page.getByRole("button", { name: "Save draft", exact: true }).click());
+  await mutation(page, "PUT", `/vendors/${id}`, () => page.getByRole("button", { name: "Save vendor details", exact: true }).click());
+  await expect(page.getByRole("status").filter({hasText:"Vendor details saved"})).toBeVisible();
+  await page.getByRole("link",{name:"Cancel",exact:true}).click();
   await expect(page.getByRole("heading", { name: `${prefix} Vendor Revised`, exact: true })).toBeVisible(); await page.reload();
   expect(owner("vendor", id).display_name).toBe(`${prefix} Vendor Revised`);
   page.once("dialog", dialog => dialog.accept("Browser retained withdrawal"));
