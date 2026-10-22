@@ -10,6 +10,8 @@ export type ProcurementReadiness = {
   legalEntityId: string;
   principalId: string;
   workerId: string | null;
+  /** Server effective branch; undefined means an older context did not expose it. */
+  effectiveBranchId?: string | null;
   adminViewOnly?: boolean;
   defaultCurrencyCode: string;
   schemaReady: boolean;
@@ -86,6 +88,20 @@ export async function fetchProcurementReadiness(
     || !context.permissions.includes("procurement-access"))
     throw new ProcurementLiveError("invalid-response");
 
+  let effectiveBranchId: string | null | undefined;
+  if (Object.prototype.hasOwnProperty.call(context, "branch")) {
+    if (context.branch === null) {
+      if (selection.branch) throw new ProcurementLiveError("invalid-response");
+      effectiveBranchId = null;
+    } else {
+      if (!object(context.branch) || !guid.test(String(context.branch.id))
+        || context.branch.id === "00000000-0000-0000-0000-000000000000"
+        || selection.branch && selection.branch !== context.branch.id)
+        throw new ProcurementLiveError("invalid-response");
+      effectiveBranchId = context.branch.id as string;
+    }
+  }
+
   let metaResponse: Response;
   try { metaResponse = await fetcher("/api/procurement/v1/meta", scoped); }
   catch { throw new ProcurementLiveError("unavailable"); }
@@ -105,6 +121,7 @@ export async function fetchProcurementReadiness(
     legalEntityId: context.legalEntityId as string,
     principalId: context.principalId as string,
     workerId: context.workerId as string | null,
+    effectiveBranchId,
     adminViewOnly: false,
     defaultCurrencyCode: (context.company.currencyCode as string).toUpperCase(),
     schemaReady: true,

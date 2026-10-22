@@ -6,10 +6,11 @@ const stageId = "77777777-7777-4777-8777-777777777777", decisionId = "88888888-8
 const lineId = "99999999-9999-4999-8999-999999999999";
 const root = "/procurement/workspace";
 test.setTimeout(90_000);
-async function mockErp(page: Page, options: { uncertainStatus?: number; principalOnly?: boolean; enabled?: boolean; empty?: boolean; read?: boolean; decide?: boolean; loseResponse?: boolean; stale?: boolean; unopened?: boolean; pages?: boolean; pendingRelease?: boolean; finance?: boolean; fundingBlocked?: boolean; openingQueue?: boolean } = {}) {
+async function mockErp(page: Page, options: { acknowledgementStatus?: number; malformedAcknowledgement?: boolean; missingBranch?: boolean; capabilityOffAfterLoss?: boolean; uncertainStatus?: number; principalOnly?: boolean; enabled?: boolean; empty?: boolean; read?: boolean; decide?: boolean; loseResponse?: boolean; stale?: boolean; unopened?: boolean; pages?: boolean; pendingRelease?: boolean; finance?: boolean; fundingBlocked?: boolean; openingQueue?: boolean } = {}) {
   let state = options.pendingRelease || options.finance ? "Returned" : "Pending", requestState = options.finance ? "ReturnPendingFinanceRelease" : "Submitted", caseVersion = 2, requestVersion = 5, opened = !options.unopened;
   let lost = false, stale = options.stale, approvalReads = 0, releaseConfirmed = false;
   const decisions: Array<Record<string, unknown>> = [];
+  const acknowledgementReads: string[] = [];
   const keys: Array<{ key: string; body: string }> = [];
   const receipts = new Map<string, Record<string, unknown>>();
   const permissions = ["procurement-access", "procurement-request-read", "procurement-request-create", "procurement-approval-open",
@@ -35,9 +36,21 @@ async function mockErp(page: Page, options: { uncertainStatus?: number; principa
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: options.principalOnly ? null : worker, permissions,
+    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: options.principalOnly ? null : worker, ...(options.missingBranch ? {} : { branch: { id: branch, code: "MAIN", name: "Main" } }), permissions,
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
-    if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities });
+    if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities: options.capabilityOffAfterLoss && lost ? { ...capabilities, approvals: false, principalApprovals: false } : capabilities });
+    const acknowledgement = url.pathname.match(/^\/api\/procurement\/v1\/requests\/([^/]+)\/approval-commands\/(Open|Decide)\/([^/]+)$/);
+    if (acknowledgement) {
+      acknowledgementReads.push(url.pathname);
+      expect(req.method()).toBe("GET"); expect(req.postData()).toBeNull();
+      if (options.acknowledgementStatus) return json({ message: "Saved result unavailable" }, options.acknowledgementStatus);
+      const [_, actualRequest, operation, key] = acknowledgement;
+      const result = receipts.get(key);
+      if (actualRequest !== requestId || !result) return json({}, 404);
+      return json({ acknowledgementSchemaVersion: 1, acknowledgement: "Completed", operation, commandKey: key,
+        requestId, caseId, assignmentId: operation === "Decide" ? assignmentId : null, completedAt: "2026-10-20T11:00:00Z",
+        result: options.malformedAcknowledgement ? { ...result, requestId: lineId } : result });
+    }
     if (url.pathname === "/api/procurement/v1/requests/approval-opening-queue") return json({
       records: options.openingQueue && !opened ? [{ requestId, requestNumber: "PR-101", purpose: "Office laptops", currencyCode: "ZMW", amount: 250,
         requestVersion, submittedAt: "2026-10-20T10:00:00Z" }] : [], count: options.openingQueue && !opened ? 1 : 0, limit: 25, offset: 0,
@@ -102,7 +115,7 @@ async function mockErp(page: Page, options: { uncertainStatus?: number; principa
     }
     return json({ message: "Not found" }, 404);
   });
-  return { keys, decisions, reads: () => approvalReads };
+  return { keys, decisions, acknowledgementReads, reads: () => approvalReads };
 }
 
 test("assigned approvals open scoped detail and require a reason for returns", async ({ page }) => {
@@ -135,18 +148,20 @@ test("a lost decision response retries the exact key and payload once", async ({
   expect(evidence.decisions).toHaveLength(1);
 });
 
-test("stale decisions refresh revisions before a new decision", async ({ page }) => {
+test("a409 is not proof that the original decision was absent", async ({ page }) => {
   const evidence = await mockErp(page, { stale: true });
   await page.goto(`${root}/approvals/${caseId}`);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await page.getByRole("button", { name: "Confirm decision" }).click();
-  await expect(page.getByRole("alert")).toContainText("Review the refreshed request");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await page.getByRole("button", { name: "Confirm decision" }).click();
-  await expect(page.getByRole("status")).toContainText("Decision saved");
-  expect(evidence.keys[0].key).not.toBe(evidence.keys[1].key);
-  expect(JSON.parse(evidence.keys[1].body).expectedCaseVersion).toBe(3);
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Another approver updated this request.");
+  await expect(page.getByRole("button", { name: "Retry same decision", exact: true })).toBeEnabled();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+  expect(evidence.keys).toHaveLength(1);
+  await page.reload();
+  await page.getByRole("button", { name: "Check saved approval result", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "does not show that the command failed" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+  expect(evidence.keys).toHaveLength(1); expect(evidence.decisions).toHaveLength(0);
 });
 
 test("capability false keeps approvals closed and read denial makes no queue request", async ({ page }) => {
@@ -345,4 +360,70 @@ test("unknown-response support does not expose a decision or retry without curre
   await expect(page.getByRole("button", { name: "Retry same decision", exact: true })).toHaveCount(0);
   expect(state.keys).toHaveLength(0);
   expect(state.decisions).toHaveLength(0);
+});
+
+for (const operation of ["Open", "Decide"] as const) {
+  test(`lost ${operation} reload uses only original GET acknowledgement with execution now unavailable`, async ({ page }) => {
+    const state = await mockErp(page, { principalOnly: true, unopened: operation === "Open", loseResponse: true, capabilityOffAfterLoss: true });
+    await page.goto(`${root}/${operation === "Open" ? `requests/${requestId}` : `approvals/${caseId}`}`);
+    if (operation === "Open") await page.getByRole("button", { name: "Start approvals", exact: true }).click();
+    else {
+      await page.getByRole("button", { name: "Return for changes", exact: true }).click();
+      await page.getByRole("dialog").getByLabel("Reason", { exact: true }).fill("Private decision reason is not a journal field");
+      await page.getByRole("dialog").getByRole("button", { name: "Confirm decision", exact: true }).click();
+    }
+    await expect(page.getByRole("button", { name: "Check saved approval result", exact: true })).toBeEnabled();
+    const journal = await page.evaluate(() => Object.entries(sessionStorage).filter(([key]) => key.startsWith("erp.procurement.pr-command.v1:")));
+    expect(journal).toHaveLength(1); expect(JSON.stringify(journal)).not.toContain("Private decision reason");
+    expect(state.keys).toHaveLength(1);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Check saved approval result", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Retry same decision", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Retry starting approvals", exact: true })).toHaveCount(0);
+    expect(state.keys).toHaveLength(1); expect(state.acknowledgementReads).toHaveLength(0);
+    await page.getByRole("button", { name: "Check saved approval result", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Saved approval result confirmed:" })).toBeVisible();
+    expect(state.acknowledgementReads).toHaveLength(1); expect(state.keys).toHaveLength(1);
+    expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("erp.procurement.pr-command.v1:")))).toEqual([]);
+    await page.reload(); expect(state.keys).toHaveLength(1);
+  });
+}
+for (const status of [403, 404, 409, 408, 429, 499, 503]) {
+  test(`GET acknowledgement HTTP${status} never clears a lost opening reference`, async ({ page }) => {
+    const state = await mockErp(page, { principalOnly: true, unopened: true, loseResponse: true, acknowledgementStatus: status });
+    await page.goto(`${root}/requests/${requestId}`);
+    await page.getByRole("button", { name: "Start approvals", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Check saved approval result", exact: true })).toBeEnabled();
+    await page.reload();
+    await page.getByRole("button", { name: "Check saved approval result", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "does not show that the command failed" })).toBeVisible();
+    expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("erp.procurement.pr-command.v1:")))).toHaveLength(1);
+    expect(state.keys).toHaveLength(1);
+  });
+}
+test("unbound original-result acknowledgement remains sealed", async ({ page }) => {
+  const state = await mockErp(page, { principalOnly: true, unopened: true, loseResponse: true, malformedAcknowledgement: true });
+  await page.goto(`${root}/requests/${requestId}`);
+  await page.getByRole("button", { name: "Start approvals", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Check saved approval result", exact: true })).toBeEnabled();
+  await page.reload(); await page.getByRole("button", { name: "Check saved approval result", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "original approval result could not be confirmed" })).toBeVisible();
+  expect(state.keys).toHaveLength(1);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("erp.procurement.pr-command.v1:")))).toHaveLength(1);
+});
+test("missing effective server branch prevents approval POST without assuming company-wide scope", async ({ page }) => {
+  const state = await mockErp(page, { principalOnly: true, unopened: true, missingBranch: true });
+  await page.goto(`${root}/requests/${requestId}`);
+  await expect(page.getByRole("button", { name: "Start approvals", exact: true })).toBeDisabled();
+  expect(state.keys).toHaveLength(0);
+});
+test("journal storage rejection blocks before approval POST", async ({ page }) => {
+  await page.addInitScript(() => { const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) { if (key.startsWith("erp.procurement.pr-command.v1:")) throw new Error("storage denied"); original.call(this, key, value); };
+  });
+  const state = await mockErp(page, { principalOnly: true, unopened: true });
+  await page.goto(`${root}/requests/${requestId}`);
+  await page.getByRole("button", { name: "Start approvals", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "earlier approval action must be checked" })).toBeVisible();
+  expect(state.keys).toHaveLength(0);
 });

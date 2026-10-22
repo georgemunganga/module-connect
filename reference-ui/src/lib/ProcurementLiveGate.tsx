@@ -1,3 +1,4 @@
+import { RequestApprovalJournalBoundary } from "./RequestApprovalJournal";
 import { requestApprovalsAvailable } from "./request-approval-availability";
 import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
@@ -60,8 +61,12 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || planPath && !permits("procurement-plan-read", "procurement-plan-create", "procurement-plan-edit")
     || invoicePath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
     || creditPath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"));
-  if (state.readiness && deniedCrud)
-    return <LiveReadiness.Provider value={state.readiness}><div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div></LiveReadiness.Provider>;
+  if (state.readiness && deniedCrud) {
+    const denied = <div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div>;
+    return <LiveReadiness.Provider value={state.readiness}>{requestPath
+      ? <RequestApprovalJournalBoundary readiness={state.readiness} isScopeCurrent={() => currentKey.current === readinessKey}>{denied}</RequestApprovalJournalBoundary>
+      : denied}</LiveReadiness.Provider>;
+  }
   if (state.readiness && ((overviewPath && [
     ["procurement-request-read", "requestDraft"], ["procurement-po-read", "orderDraft"],
     ["procurement-plan-read", "planningDraft"], ["procurement-contract-read", "contractDraft"],
@@ -83,7 +88,14 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
-    return <LiveReadiness.Provider value={state.readiness}>{children}</LiveReadiness.Provider>;
+    return <LiveReadiness.Provider value={state.readiness}>{requestPath || approvalPath
+      ? <RequestApprovalJournalBoundary readiness={state.readiness} isScopeCurrent={() => currentKey.current === readinessKey}>{children}</RequestApprovalJournalBoundary> : children}</LiveReadiness.Provider>;
+  // Historical acknowledgement remains reachable when execution/manual-policy
+  // capability is off. The journal itself exposes only this actor's own locators.
+  if (state.readiness && approvalPath)
+    return <LiveReadiness.Provider value={state.readiness}><RequestApprovalJournalBoundary readiness={state.readiness} isScopeCurrent={() => currentKey.current === readinessKey}>
+      {unavailable ?? <p className="p-5 text-sm">New approvals are currently unavailable. You can check your saved approval reference above.</p>}
+    </RequestApprovalJournalBoundary></LiveReadiness.Provider>;
   if (state.readiness && unavailable)
     return <LiveReadiness.Provider value={state.readiness}>{unavailable}</LiveReadiness.Provider>;
   const blocked = <main className={blockedShell && state.error ? "p-5 sm:p-8" : "flex min-h-dvh items-center justify-center bg-background px-5 text-foreground"}>

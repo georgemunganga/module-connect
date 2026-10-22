@@ -1,6 +1,8 @@
-import { definiteRequestApprovalRejection } from "../lib/request-approval-recovery";
+import { useRequestApprovalJournal } from "../lib/RequestApprovalJournal";
+import { approvalPayloadFingerprint, type ApprovalLocator } from "../lib/request-approval-journal";
+import { readBoundApprovalResult } from "../../../src/platform/procurement-approval-acknowledgements-api";
 import { requestApprovalsAvailable } from "../lib/request-approval-availability";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
 import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
@@ -65,12 +67,15 @@ function RequestApprovalQueue() {
   </div>;
 }
 
-type PendingDecision = { assignmentId: string; action: ApprovalAction; reason: string; key?: string; command?: ApprovalCommand; uncertain?: boolean };
+type PendingDecision = { assignmentId: string; action: ApprovalAction; reason: string; key?: string; command?: ApprovalCommand; uncertain?: boolean; locator?: ApprovalLocator; scopeKey?: string };
 export function LiveApprovalDetail() {
   const { id } = useParams(); const { legalEntityId, permissions } = useApprovalContext();
   const [data, setData] = useState<ApprovalDetail | null>(null), [error, setError] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [notice, setNotice] = useState("");
   const [pending, setPending] = useState<PendingDecision | null>(null);
+  const journal = useRequestApprovalJournal();
+  const write = journal.state("Decide");
+  const priorRecoveryBlocked = useRef(write.blocked);
   const canRead = permissions.includes("procurement-approval-read");
   async function refresh() {
     if (!id) return;
@@ -86,25 +91,43 @@ export function LiveApprovalDetail() {
     return () => abort.abort();
   }, [legalEntityId, id, canRead]);
   async function decide() {
-    if (!data || !pending || busy || !permissions.includes("procurement-approval-decide")) return;
+    if (!data || !pending || busy || !permissions.includes("procurement-approval-decide") || !journal.scope
+      || !journal.current() || write.blocked && !pending.locator) return;
     const assignment = data.stages.flatMap((s) => s.assignments).find((a) => a.id === pending.assignmentId);
     if (!assignment || !assignment.isMine || !assignment.allowedActions.includes(pending.action)) return;
     const command = pending.command ?? { action: pending.action, reason: pending.reason.trim() || null,
       expectedCaseVersion: data.caseVersion, expectedAssignmentVersion: assignment.version, expectedRequestVersion: data.requestVersion };
-    const key = pending.key ?? crypto.randomUUID();
-    const saved = { ...pending, command, key }; setPending(saved); setBusy(true); setError("");
+    const captured = journal;
+    setBusy(true); setError("");
+    let saved = pending;
     try {
-      const receipt = await decideApproval(legalEntityId, data.caseId, assignment.id, command, key);
+      if (!saved.locator) {
+        const locator: ApprovalLocator = { locatorSchemaVersion: 1, operation: "Decide", key: crypto.randomUUID(),
+          requestId: data.requestId, caseId: data.caseId, assignmentId: assignment.id,
+          expectedRequestVersion: command.expectedRequestVersion, expectedCaseVersion: command.expectedCaseVersion,
+          expectedAssignmentVersion: command.expectedAssignmentVersion, fingerprint: await approvalPayloadFingerprint(command) };
+        if (!captured.current() || !captured.claim(locator)) throw new Error("An earlier approval decision must be checked before sending another.");
+        saved = { ...pending, command, key: locator.key, locator, scopeKey: captured.scopeKey }; setPending(saved);
+      }
+      if (!captured.current() || saved.scopeKey !== captured.scopeKey || !saved.key || !saved.locator
+        || captured.state("Decide").pending?.key !== saved.key || !captured.reserve(saved.locator)) return;
+      const receipt = await decideApproval(legalEntityId, data.caseId, assignment.id, saved.command!, saved.key, captured.scope!.branchId);
+      readBoundApprovalResult(receipt, saved.locator);
+      if (!captured.current()) return;
+      if (!captured.confirm(saved.locator)) throw new Error("The result was returned but its recovery reference remains blocked. Check the saved result.");
       setPending(null); setNotice(receipt.requestState === "ReturnPendingFinanceRelease"
         ? "Request returned. Editing will open after Finance confirms the funds are released."
         : receipt.state === "Pending" ? "Your decision was saved. Other approvals are still needed." : `Decision saved. ${stateLabel(receipt.requestState)}.`);
       await refresh();
     } catch (cause) {
-      if (cause instanceof ApprovalApiError && cause.status === 409) {
-        setPending(null); await refresh(); setError(`${message(cause)} Review the refreshed request before trying again.`);
-      } else { setPending({ ...saved, uncertain: !(cause instanceof ApprovalApiError) || !definiteRequestApprovalRejection(cause.status) }); setError(message(cause)); }
-    } finally { setBusy(false); }
+      if (captured.current()) { setPending({ ...saved, uncertain: !!saved.locator }); setError(message(cause)); }
+    } finally { if (saved.locator) captured.settled(saved.locator); if (captured.current()) setBusy(false); }
   }
+  useEffect(() => {
+    const blocked = journal.state("Decide").blocked;
+    if (priorRecoveryBlocked.current && !blocked) { setPending(null); void refresh(); }
+    priorRecoveryBlocked.current = blocked;
+  }, [journal.revision]);
   if (!canRead) return <div className="p-5 sm:p-8" role="alert">You do not have access to this approval.</div>;
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading approval…</div>;
   if (!data) return <div className="p-5 sm:p-8"><p role="alert">{error || "Approval not found."}</p><Link to="/approvals">Back to approvals</Link></div>;
@@ -118,12 +141,12 @@ export function LiveApprovalDetail() {
       {lines.length > 0 && <div className="overflow-x-auto"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit price</th></tr></thead><tbody>{lines.map((line, index) => <tr key={String(line.Id ?? line.id ?? index)}><td>{String(line.Description ?? line.description ?? "Item")}</td><td>{String(line.quantity ?? line.RequestedQuantity ?? "—")}</td><td>{String(line.unitPrice ?? line.EstimatedUnitPrice ?? "—")}</td></tr>)}</tbody></RecordTable></div>}
     </div></Panel>
     <Panel title="Approval steps" className="mt-5"><div className="space-y-4 p-5">{data.stages.map((stage) => <div key={stage.id} className="space-y-2"><p className="font-medium">{stage.code} · {stage.state}</p>{stage.assignments.map((assignment) => <div key={assignment.id} className="flex flex-wrap items-center gap-2 text-sm"><span>{assignment.isMine ? "Your decision" : "Other approver"}: {assignment.state}</span>
-      {permissions.includes("procurement-approval-decide") && assignment.isMine && assignment.allowedActions.map((action) => <Button key={action} variant={action === "Approve" ? "primary" : "secondary"} disabled={busy || !!pending} onClick={() => { setError(""); setPending({ assignmentId: assignment.id, action, reason: "" }); }}>{action === "Return" ? "Return for changes" : action}</Button>)}
+      {permissions.includes("procurement-approval-decide") && assignment.isMine && assignment.allowedActions.map((action) => <Button key={action} variant={action === "Approve" ? "primary" : "secondary"} disabled={busy || !!pending || write.blocked || !journal.scope} onClick={() => { setError(""); setPending({ assignmentId: assignment.id, action, reason: "" }); }}>{action === "Return" ? "Return for changes" : action}</Button>)}
     </div>)}</div>)}{data.blockers.length > 0 && <p className="text-sm text-muted-foreground">Some approval checks need attention. You can still use the actions shown.</p>}</div></Panel>
     <Panel title="Decision history" className="mt-5"><div className="space-y-3 p-5">{data.decisions.length ? data.decisions.map((decision) => <div key={decision.id} className="text-sm"><p className="font-medium">{decision.action} · {date(decision.decidedAt)}</p>{decision.reason && <p>{decision.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">No decisions recorded yet.</p>}</div></Panel>
     <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/approvals">Back to approvals</Link>
     {pending && <ApprovalDecisionDialog action={pending.action} recordLabel="request" reason={pending.reason} busy={busy} error={error}
-      locked={!!pending.key} uncertain={!!pending.uncertain} canRetrySameCommand={permissions.includes("procurement-approval-decide") && !!pending.key && !!pending.command} onReason={(reason) => setPending({ ...pending, reason })}
+      locked={!!pending.key} uncertain={!!pending.uncertain} canRetrySameCommand={permissions.includes("procurement-approval-decide") && !!pending.key && !!pending.command && !!pending.locator && pending.scopeKey === journal.scopeKey} onReason={(reason) => setPending({ ...pending, reason })}
       onConfirm={() => void decide()} onCancel={() => setPending(null)} />}
   </div>;
 }
@@ -131,9 +154,12 @@ export function LiveApprovalDetail() {
 export function RequestApprovalPanel({ requestId, version, status, onChanged }: { requestId: string; version: number; status: string; onChanged: () => Promise<void> }) {
   const { legalEntityId, permissions, capabilities } = useApprovalContext();
   const requestApprovalAvailable = requestApprovalsAvailable(capabilities);
+  const journal = useRequestApprovalJournal();
+  const write = journal.state("Open");
+  const priorRecoveryBlocked = useRef(write.blocked);
   const [history, setHistory] = useState<ApprovalHistory | null>(null), [error, setError] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
-  const [command, setCommand] = useState<{ key: string; version: number } | null>(null);
+  const [command, setCommand] = useState<{ key: string; version: number; locator: ApprovalLocator; scopeKey: string } | null>(null);
   const [opened, setOpened] = useState(false);
   useEffect(() => {
     if (!requestApprovalAvailable) return;
@@ -143,24 +169,41 @@ export function RequestApprovalPanel({ requestId, version, status, onChanged }: 
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [legalEntityId, requestId, requestApprovalAvailable]);
-  if (!requestApprovalAvailable) return null;
   async function open() {
-    const intent = command ?? { key: crypto.randomUUID(), version }; setCommand(intent); setBusy(true); setError("");
-    try { await openApproval(legalEntityId, requestId, intent.version, intent.key); setOpened(true); setCommand(null);
-      setHistory(await getApprovalHistory(legalEntityId, requestId)); await onChanged();
-    } catch (cause) {
-      setError(message(cause));
-      if (cause instanceof ApprovalApiError && definiteRequestApprovalRejection(cause.status)) {
-        setCommand(null);
-        try { await onChanged(); } catch (refreshError) { setError(`${message(cause)} ${message(refreshError)}`); }
+    if (busy || !permissions.includes("procurement-approval-open") || !requestApprovalAvailable
+      || !journal.scope || !journal.current() || write.blocked && !command) return;
+    const captured = journal;
+    setBusy(true); setError("");
+    let intent = command;
+    try {
+      if (!intent) {
+        const locator: ApprovalLocator = { locatorSchemaVersion: 1, operation: "Open", key: crypto.randomUUID(), requestId,
+          caseId: null, assignmentId: null, expectedRequestVersion: version, expectedCaseVersion: null,
+          expectedAssignmentVersion: null, fingerprint: await approvalPayloadFingerprint({ expectedRequestVersion: version }) };
+        if (!captured.current() || !captured.claim(locator)) throw new Error("An earlier approval action must be checked before starting another.");
+        intent = { key: locator.key, version, locator, scopeKey: captured.scopeKey }; setCommand(intent);
       }
-    } finally { setBusy(false); }
+      if (!captured.current() || intent.scopeKey !== captured.scopeKey || captured.state("Open").pending?.key !== intent.key || !captured.reserve(intent.locator)) return;
+      const result = await openApproval(legalEntityId, requestId, intent.version, intent.key, captured.scope!.branchId);
+      readBoundApprovalResult(result, intent.locator);
+      if (!captured.current()) return;
+      if (!captured.confirm(intent.locator)) throw new Error("The result was returned but its recovery reference remains blocked. Check the saved result.");
+      setOpened(true); setCommand(null); setHistory(await getApprovalHistory(legalEntityId, requestId)); await onChanged();
+    } catch (cause) { if (captured.current()) setError(message(cause)); }
+    finally { if (intent) captured.settled(intent.locator); if (captured.current()) setBusy(false); }
   }
+  useEffect(() => {
+    const blocked = journal.state("Open").blocked;
+    if (priorRecoveryBlocked.current && !blocked) { setCommand(null); setOpened(true); void onChanged();
+      void getApprovalHistory(legalEntityId, requestId).then(setHistory).catch(cause => setError(message(cause))); }
+    priorRecoveryBlocked.current = blocked;
+  }, [journal.revision]);
+  if (!requestApprovalAvailable) return null;
   const pendingCase = history?.records.some((row) => row.state === "Pending");
   return <Panel title="Approvals" className="mt-5"><div className="space-y-3 p-5">
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {status === "ReturnPendingFinanceRelease" && <p className="text-sm">Waiting for Finance to release the reserved funds. You can edit after release is confirmed.</p>}
-    {permissions.includes("procurement-approval-open") && status === "Submitted" && (history || command) && ((!pendingCase && !opened) || command) && <Button disabled={busy || loading} onClick={() => void open()}>{busy ? "Starting…" : command ? "Retry starting approvals" : "Start approvals"}</Button>}
+    {permissions.includes("procurement-approval-open") && status === "Submitted" && (history || command) && ((!pendingCase && !opened) || command) && <Button disabled={busy || loading || !journal.scope || write.blocked && !command} onClick={() => void open()}>{busy ? "Starting…" : command ? "Retry starting approvals" : "Start approvals"}</Button>}
     {loading ? <p role="status">Loading approval history…</p> : history?.records.length ? history.records.map((row) => <div key={row.caseId} className="space-y-1 text-sm"><p className="font-medium">Submission {row.submittedVersion} · {stateLabel(row.state)}</p>{row.financeRelease && <p>{row.financeRelease.state === "Confirmed" ? "Finance release confirmed" : "Waiting for Finance release confirmation"}</p>}{row.decisions.map((decision) => <p key={decision.id}>{decision.action} · {date(decision.decidedAt)}{decision.reason ? ` · ${decision.reason}` : ""}</p>)}</div>) : history && <p className="text-sm text-muted-foreground">No approvals have started yet.</p>}
   </div></Panel>;
 }

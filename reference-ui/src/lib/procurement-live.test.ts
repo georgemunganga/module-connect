@@ -78,6 +78,14 @@ describe("Procurement system-user readiness", () => {
     expect(result.capabilities.principalApprovals).toBe(false);
     expect(result.capabilities.approvals).toBe(true);
   });
+  it("retains the actual effective branch without inventing a company-wide value", async () => {
+    expect((await fetchProcurementReadiness({}, undefined, fixture())).effectiveBranchId).toBeUndefined();
+    expect((await fetchProcurementReadiness({}, undefined, fixture({ branch: null }))).effectiveBranchId).toBeNull();
+    expect((await fetchProcurementReadiness({}, undefined, fixture({ branch: { id: branch } }))).effectiveBranchId).toBe(branch);
+  });
+  it.each([null, { id: entity }, { id: "not-a-uuid" }])("rejects mismatched effective selected branch %j", async value => {
+    await expect(fetchProcurementReadiness({ entityId: entity, branch }, undefined, fixture({ branch: value }))).rejects.toMatchObject({ code: "invalid-response" });
+  });
   it("does not infer worker-based availability over the server's actual capabilities", async () => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { orders: true, approvals: true }));
     expect(result.capabilities.orders).toBe(true);
