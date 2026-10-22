@@ -298,3 +298,27 @@ test("an older backend without the CRUD marker keeps invoice mutations unavailab
   await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0);
   expect(setup.mutations).toEqual([]);
 });
+
+for (const status of [408, 429, 499]) {
+  test(`invoice intake HTTP ${status} blocks another POST in the current form`, async ({ page }) => {
+    await mockErp(page);
+    let posts = 0;
+    await page.route("**/api/procurement/v1/invoices", route => {
+      if (route.request().method() !== "POST") return route.fallback();
+      posts++;
+      return route.fulfill({ status, contentType: "application/json", body: JSON.stringify({ message: "The save outcome was not confirmed." }) });
+    });
+    await page.goto("/procurement/workspace/bills/new");
+    await page.getByRole("combobox", { name: "Vendor", exact: true }).click();
+    await page.getByRole("option", { name: "Office Supplier", exact: true }).click();
+    await page.getByLabel("Invoice number").fill("INV-TIMEOUT");
+    await page.getByLabel("Description 1").fill("Supplies");
+    await page.getByLabel("Quantity", { exact: true }).fill("1");
+    await page.getByLabel("Unit price", { exact: true }).fill("10");
+    await page.getByRole("button", { name: "Record as received", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("not confirmed");
+    await expect(page.getByRole("button", { name: "Record as received", exact: true })).toBeDisabled();
+    await expect(page.getByLabel("Invoice number")).toHaveValue("INV-TIMEOUT");
+    expect(posts).toBe(1);
+  });
+}

@@ -1,3 +1,4 @@
+import { isDefiniteHttpRejection } from "../lib/http-write-outcome";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
@@ -145,7 +146,7 @@ function InvoiceEditorRecord() {
       if (!alive.current) return;
       setError(errorText(cause));
       if (cause instanceof InvoiceIntakeError && cause.status === 409) setStale(true);
-      if (!(cause instanceof InvoiceIntakeError) || cause.status === 0 || cause.status >= 500) setUncertain(true);
+      if (!(cause instanceof InvoiceIntakeError) || !isDefiniteHttpRejection(cause.status)) setUncertain(true);
     } finally { if (alive.current) setSaving(false); }
   }
   if (!permissions.includes("procurement-invoice-capture")) return <div className="p-5 sm:p-8" role="alert">You do not have access to record invoices for this company.</div>;
@@ -244,7 +245,7 @@ function InvoiceDetailRecord() {
       if (!alive.current) return;
       setError(errorText(cause));
       if (cause instanceof InvoiceIntakeError && cause.status === 409) setStale(true);
-      if (!(cause instanceof InvoiceIntakeError) || cause.status === 0 || cause.status >= 500) setUncertain(true);
+      if (!(cause instanceof InvoiceIntakeError) || !isDefiniteHttpRejection(cause.status)) setUncertain(true);
     } finally { if (alive.current) setBusy(false); }
   }
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
