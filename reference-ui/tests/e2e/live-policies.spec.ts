@@ -35,8 +35,8 @@ async function mockErp(page: Page, options: { invalid?: boolean; denied?: boolea
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId,
       workerId: "22222222-2222-4222-8222-222222222222", permissions: options.canApprove
-        ? ["procurement-configuration-edit", "procurement-configuration-approve"]
-        : ["procurement-configuration-edit"],
+        ? ["procurement-access", "procurement-configuration-read", "procurement-configuration-edit", "procurement-configuration-approve"]
+        : ["procurement-access", "procurement-configuration-read", "procurement-configuration-edit"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     const base = "/api/procurement/v1/configuration/policies";
@@ -242,7 +242,7 @@ for (const options of [{ interrupted: true }, { denied: true }])
     await page.getByRole("textbox", { name: "Retirement reason", exact: true }).fill("Duplicate draft");
     await page.getByRole("button", { name: "Confirm retirement" }).click();
     await expect(page.getByRole("button", { name: "Confirm retirement" })).toBeDisabled();
-    await expect(page.getByRole("status")).toContainText("will not repeat automatically");
+    await expect(page.getByRole("status").filter({ hasText: "will not repeat automatically" })).toBeVisible();
     await page.getByRole("button", { name: "Check saved rules", exact: true }).click();
     await expect(page.getByRole("cell", { name: "Purchase requests" })).toBeVisible();
     expect(fixture.posts()).toBe(1);
