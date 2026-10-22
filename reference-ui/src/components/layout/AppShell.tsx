@@ -359,7 +359,7 @@ export function AppShell() {
       </footer>
       {notifications && (
         <Modal title="Notifications" onClose={() => setNotifications(false)}>
-          <div className="space-y-4">
+          {isProcurementLiveMode ? <p className="text-sm text-muted-foreground">Notifications are not available here yet. Check your requests and approvals from the menu.</p> : <div className="space-y-4">
             <div className="rounded-md border border-amber-100 bg-amber-50 p-4">
               <p className="font-medium">Purchase request awaiting review</p>
               <p className="mt-1 text-sm text-slate-500">
@@ -376,7 +376,7 @@ export function AppShell() {
             <p className="text-xs text-slate-400">
               Notifications are fictional. No email is sent.
             </p>
-          </div>
+          </div>}
         </Modal>
       )}
       {help && (
@@ -385,9 +385,9 @@ export function AppShell() {
           onClose={() => setHelp(false)}
         >
           <p className="text-sm leading-6 text-slate-500">
-            This prototype follows the documented Procurement workflow. Shared
-            lists, transaction fields, catalogs, and settings are reused across
-            workflows—not rebuilt for each screenshot.
+            {isProcurementLiveMode
+              ? "Follow requests, quotations, orders, deliveries and bills from one workspace. Available actions depend on your account."
+              : "This preview follows the documented Procurement workflow using shared lists, forms, catalogs and settings."}
           </p>
           <div className="my-5 space-y-3">
             {[
@@ -412,7 +412,7 @@ export function AppShell() {
               </Link>
             ))}
           </div>
-          <Button
+          {!isProcurementLiveMode && <Button
             variant="secondary"
             onClick={() => {
               setHelp(false);
@@ -422,7 +422,7 @@ export function AppShell() {
             }}
           >
             About demo actions
-          </Button>
+          </Button>}
         </Modal>
       )}
     </div>
