@@ -53,6 +53,7 @@ function financeFootprint() {
 async function fill(page: Page, title: string) {
   const supplier = await approvedSupplier(page);
   await page.goto(workspace + "/new");
+  await expect(page.getByLabel("Currency", { exact: true })).toHaveValue(fixture().currencyCode);
   await page.getByRole("combobox", { name: "Supplier", exact: true }).click();
   await page.getByRole("option", { name: `${supplier.displayName} (${supplier.status})`, exact: true }).click();
   await page.getByLabel("Purchase name", { exact: true }).fill(title);
@@ -72,6 +73,8 @@ test("actual Core-only recurring planner creates, reloads, edits, consumes a no-
   const requests: string[] = []; page.on("request", request => { if (new URL(request.url()).pathname.startsWith("/api/procurement/")) requests.push(request.url()); });
   try {
     const title = `RECURRING-BROWSER-${randomUUID().toUpperCase()}`;
+    await page.goto(workspace);
+    await expect(page.getByRole("heading", { name: "Recurring purchases", exact: true })).toBeVisible();
     await fill(page, title);
     const created = await actualMutation(page, "POST", "/recurring-purchases", () => page.getByRole("button", { name: "Save recurring purchase", exact: true }).click());
     const id = actualId(created);
@@ -119,6 +122,8 @@ test("actual Core-only recurring planner creates, reloads, edits, consumes a no-
     const beforeClosedDenial = proof(id);
     expect((await page.request.put(`${api}/${id}`, { headers: headers(), data: { version: 4, draft: draft(noOp) } })).status()).toBe(409);
     expect(proof(id)).toEqual(beforeClosedDenial);
+    await page.getByRole("link", { name: "Back to recurring purchases", exact: true }).click();
+    await expect(page.getByRole("link", { name: title, exact: true })).toBeVisible();
     expect(financeFootprint()).toEqual(beforeFinance);
     expect(requests.some(url => /\/handoff|\/payments|post-to-finance/.test(url))).toBe(false);
     writeFileSync(info.outputPath("recurring-retained-proof.json"), JSON.stringify({ id, created, edited, noOp, closed, retained, financeUnchanged: true }, null, 2) + "\n", { mode: 0o600 });
