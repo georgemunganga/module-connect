@@ -10,7 +10,7 @@ export function ApprovalDecisionDialog({ action, recordLabel, reason, busy, erro
   return <Modal title={action === "Return" ? `Return ${recordLabel} for changes` : `${action} ${recordLabel}`} onClose={() => { if (!busy && !uncertain) onCancel(); }}>
     <div className="space-y-4">{error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <Field label={action === "Approve" ? "Comment (optional)" : "Reason"} hint={action === "Approve" ? undefined : "Explain what needs to change."}>
-        <Textarea rows={3} maxLength={2000} disabled={busy || locked} value={reason} onChange={(event) => onReason(event.target.value)} />
+        <Textarea aria-label={action === "Approve" ? "Comment (optional)" : "Reason"} rows={3} maxLength={2000} disabled={busy || locked} value={reason} onChange={(event) => onReason(event.target.value)} />
       </Field>
       {attestationRequired && action === "Approve" && <label className="flex items-start gap-2 text-sm"><Switch aria-label="I checked the original invoice document and confirm the units shown for its lines" checked={attested} disabled={busy || locked}
         onChange={(event) => onAttestation?.(event.target.checked)} />I checked the original invoice document and confirm the units shown for its lines.</label>}
