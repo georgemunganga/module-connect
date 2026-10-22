@@ -9,13 +9,16 @@ describe("recurring purchase unconfirmed write marker", () => {
       setItem: (key: string, value: string) => entries.set(key, value),
       removeItem: (key: string) => entries.delete(key),
     });
-    expect(claimRecurringWrite("company:worker:branch:new")).toBe(true);
-    expect(recurringWriteLocked("company:worker:branch:new")).toBe(true);
-    expect(claimRecurringWrite("company:worker:branch:new")).toBe(false);
-    expect(recurringWriteLocked("another-company:worker:branch:new")).toBe(false);
+    expect(claimRecurringWrite("company:principal:branch:new")).toBe(true);
+    expect(recurringWriteLocked("company:principal:branch:new")).toBe(true);
+    expect(claimRecurringWrite("company:principal:branch:new")).toBe(false);
+    expect(recurringWriteLocked("another-company:principal:branch:new")).toBe(false);
+    expect(recurringWriteLocked("company:other-principal:branch:new")).toBe(false);
+    confirmRecurringWrite("company:other-principal:branch:new");
+    expect(recurringWriteLocked("company:principal:branch:new")).toBe(true);
     expect([...entries.values()]).toEqual(["unconfirmed"]);
-    confirmRecurringWrite("company:worker:branch:new");
-    expect(recurringWriteLocked("company:worker:branch:new")).toBe(false);
+    confirmRecurringWrite("company:principal:branch:new");
+    expect(recurringWriteLocked("company:principal:branch:new")).toBe(false);
   });
   it("refuses writes when marker storage is unavailable", () => {
     vi.stubGlobal("sessionStorage", { getItem: () => { throw new Error("blocked"); } });

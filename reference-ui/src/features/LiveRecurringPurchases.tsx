@@ -21,7 +21,7 @@ function useRecurringScope() {
   if (!readiness) throw new Error("Recurring purchases require an ERP company.");
   const writeScope = JSON.stringify([readiness.tenantId, readiness.legalEntityId,
     readiness.principalId, shell.selection.branch ?? ""]);
-  return { ...readiness, writeScope, key: JSON.stringify([writeScope, shell.authEpoch]) };
+  return { ...readiness, selectedBranch: shell.selection.branch, writeScope, key: JSON.stringify([writeScope, shell.authEpoch]) };
 }
 function emptyDraft(currency: string): RecurringPurchaseDraft {
   return { supplierId: "", supplierContractId: null, title: "", frequency: "Monthly",
@@ -51,7 +51,7 @@ export function LiveRecurringPurchaseList() {
     setResult(null); setError(""); setLoading(true);
     listRecurringPurchases(scope.legalEntityId, page, controller.signal)
       .then((data) => {
-        data.items.forEach(record => recurringPurchaseForPrincipal(record, scope.principalId));
+        data.items.forEach(record => recurringPurchaseForPrincipal(record, scope.principalId, scope.selectedBranch));
         if (!controller.signal.aborted) setResult({ key: scope.key, data });
       })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
@@ -100,7 +100,7 @@ export function LiveRecurringPurchaseEditor() {
     setVendors([]); setContracts([]); setDraft(emptyDraft(scope.defaultCurrencyCode));
     if (id) getRecurringPurchase(scope.legalEntityId, id, controller.signal)
       .then((record) => { if (!controller.signal.aborted) {
-        recurringPurchaseForPrincipal(record, scope.principalId);
+        recurringPurchaseForPrincipal(record, scope.principalId, scope.selectedBranch);
         setDraft({ supplierId: record.supplierId, supplierContractId: record.supplierContractId,
           title: record.title, frequency: record.frequency, firstCycleOn: record.firstCycleOn,
           lastCycleOn: record.lastCycleOn, nextCycleOn: record.nextCycleOn,
@@ -146,7 +146,7 @@ export function LiveRecurringPurchaseEditor() {
       const saved = id && version !== null
         ? await updateRecurringPurchase(scope.legalEntityId, id, version, draft)
         : await createRecurringPurchase(scope.legalEntityId, draft);
-      recurringPurchaseForPrincipal(saved, scope.principalId);
+      recurringPurchaseForPrincipal(saved, scope.principalId, scope.selectedBranch);
       confirmRecurringWrite(writeScope);
       if (active()) navigate(`/recurring-bills/${saved.id}`);
     } catch (cause) {
@@ -206,7 +206,7 @@ export function LiveRecurringPurchaseDetail() {
     const controller = new AbortController();
     setLoaded(null); setLoading(true); setBusy(false); setReason(""); setError("");
     getRecurringPurchase(scope.legalEntityId, id, controller.signal)
-      .then((record) => { if (!controller.signal.aborted) { setLoaded({ key: context, record: recurringPurchaseForPrincipal(record, scope.principalId) }); setBlocked(recurringWriteLocked(writeScope)); } })
+      .then((record) => { if (!controller.signal.aborted) { setLoaded({ key: context, record: recurringPurchaseForPrincipal(record, scope.principalId, scope.selectedBranch) }); setBlocked(recurringWriteLocked(writeScope)); } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); generation.current += 1; };
@@ -221,7 +221,7 @@ export function LiveRecurringPurchaseDetail() {
     busyRef.current = true; setBusy(true); setError("");
     try {
       const saved = await closeRecurringPurchase(scope.legalEntityId, id, record.version, reason);
-      recurringPurchaseForPrincipal(saved, scope.principalId);
+      recurringPurchaseForPrincipal(saved, scope.principalId, scope.selectedBranch);
       confirmRecurringWrite(writeScope);
       if (active()) setLoaded({ key: context, record: saved });
     } catch (cause) {

@@ -18,6 +18,30 @@ const row = { ...draft, id, number: "RPC-1", ownerPrincipalId: owner, ownerWorke
 afterEach(() => vi.unstubAllGlobals());
 
 describe("recurring purchase planning contract", () => {
+  it("rejects zero references and incoherent returned schedules", async () => {
+    expect(validateRecurringPurchase({ ...draft, supplierId: "00000000-0000-0000-0000-000000000000" })).not.toBeNull();
+    for (const malformed of [
+      { ...row, ownerWorkerId: "00000000-0000-0000-0000-000000000000" },
+      { ...row, workLocationId: "00000000-0000-0000-0000-000000000000" },
+      { ...row, nextCycleOn: "2028-11-01" },
+    ]) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(malformed))));
+      await expect(getRecurringPurchase(company, id)).rejects.toMatchObject({ status: 0 });
+    }
+  });
+  it("never confirms another selected branch even for the same current principal", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(row))));
+    const saved = await getRecurringPurchase(company, id);
+    expect(recurringPurchaseForPrincipal(saved, owner)).toBe(saved);
+    expect(() => recurringPurchaseForPrincipal(saved, owner, supplier)).toThrow("different branch");
+    expect(recurringPurchaseForPrincipal({ ...saved, workLocationId: supplier }, owner, supplier)).toBeTruthy();
+  });
+  it("rejects duplicate or oversized scoped list responses", async () => {
+    for (const items of [[row, row], Array.from({ length: 26 }, (_, i) => ({ ...row, id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}` }))]) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ items, total: 100, page: 1, pageSize: 25 }))));
+      await expect(listRecurringPurchases(company)).rejects.toMatchObject({ status: 0 });
+    }
+  });
   it.each([0, 408, 429, 499, 500, 503])("treats status %s as an uncertain write, not a safe rejection", status => {
     expect(isDefiniteRecurringRejection(new RecurringPurchaseError(status, "Unconfirmed"))).toBe(false);
   });

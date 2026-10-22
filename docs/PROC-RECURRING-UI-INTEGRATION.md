@@ -38,3 +38,27 @@ The updated backend contract requires `ownerPrincipalId` (the actual stable Core
 Accepted update and close responses still require exactly the next revision; the backend integration must advance even no-op PUTs. Missing/foreign owner principals, wrong revisions/states/fields and unrecognized HTTP outcomes remain unconfirmed. Tests now exercise the full mocked CRUD journey with a Core principal and no employee, plus wrong-owner acknowledgment locking across reload. No backend identity is synthesized, and no Finance bill is generated.
 
 This source branch includes unverified Core picker and recurring changes. Existing proof for the earlier `36127ad` application is not proof for this branch. Unit, compiler, browser and real PostgreSQL gates remain pending; no heavy verification or schema operation was started while the backend SDK held the CPU slot.
+
+## Current P23/P24 alignment checkpoint
+
+The latest isolated branch starts at P23 policy UI `ae54ca8`, which includes published main
+`8b98080` and its deployed branch-name canonicalization/fallback. It ports the existing recurring
+UI and its already-authored receipt/journal/Core-principal safeguards, rather than introducing
+another interface. The capability merge preserves all current P23, comparison and sourcing flags;
+`recurringPurchaseDraft` is still optional and false unless the real server explicitly enables it.
+
+Backend `dd1b719` prepares the recurring-only successor on integrated P23 `dbf5107`. This actual
+contract requires a genuine Core owner, nullable employee metadata and exact +1 PUT/close CAS,
+including no-op saves. New response checks also refuse nonzero-UUID violations, incoherent saved
+schedules, duplicate/oversized lists and a returned record from another explicitly selected branch
+before a write marker can clear. Unknown markers survive reload and context changes; no fake
+record, tax/bill line, bulk import, recurring scheduler or payment effect is introduced.
+
+Additional authored unit cases cover selected-branch receipt binding, malformed schedules and list
+shapes; browser cases check every Procurement request's real selected-company/branch headers,
+wrong-branch acknowledgments across reload and denied storage before POST. Existing workerless
+Core CRUD, no permission, closed-history, exact amounts and HTTP408/429/499 unknown-outcome cases
+remain. All checks are SOURCE ONLY and unexecuted while the backend SDK owns the CPU slot.
+
+P24 generation/provider verification and the genuine scoped CRUD/browser fixture remain separate
+release prerequisites. These source changes do not inherit the deployed hotfix's runtime proof.
