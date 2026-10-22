@@ -12,10 +12,14 @@ function detail(action: keyof typeof permissions = "Finance", canStart = true) {
     totals: { lineBaseAmount: "99999999999999.9999", grossAmount: gross }, nextCommercialRevision: 2, financeStatus: action === "FinanceRelease" || action === "DraftFinanceRelease" ? "CommitmentHeld" : "NoConfirmedCommitmentHeld",
     sourceReservationReferences: ["RES-PR-1"], financeEvidence: action === "FinanceRelease" || action === "DraftFinanceRelease" ? [{ id: financeId, commitmentReference: "FIN-HELD-1", evidenceReference: "FIN-ORIGINAL", confirmedGrossAmount: gross, currencyCode: "ZMW", commercialRevision: 1, confirmedAt: new Date().toISOString(), releaseConfirmed: false, evidenceMode: "ApprovedManualEvidence" }] : [],
     financeResolutions: [], submissions: [], cases: [], decisions: [], issued: action === "Delivery" ? [{ id: issuedId, revisionNumber: 1, authorizedAt: new Date(Date.now() - 60_000).toISOString() }] : [], deliveries: [],
+    commercialEvidenceSelectionVersion: 1, latestFinanceEvidenceId: action === "FinanceRelease" || action === "DraftFinanceRelease" ? financeId : null,
+    latestIssuedVersionId: action === "Delivery" ? issuedId : null,
     actionCandidates: [{ code: action, permission: permissions[action], canStart, blockers: canStart ? [] : ["PolicyNotReady"], requiresCommandValidation: true }], configuredDeliveryChannels: ["Portal"], commandValidationRequired: true };
 }
-async function mock(page: Page, options: { action?: keyof typeof permissions; lost?: boolean; stale?: boolean; deniedId?: number; enabled?: boolean; draftEnabled?: boolean; hintBlocked?: boolean; invalidMoney?: boolean; buyerBoth?: boolean } = {}) {
+async function mock(page: Page, options: { action?: keyof typeof permissions; lost?: boolean; stale?: boolean; deniedId?: number; enabled?: boolean; draftEnabled?: boolean; hintBlocked?: boolean; invalidMoney?: boolean; buyerBoth?: boolean; missingEvidenceMarker?: boolean; wrongEvidencePointer?: boolean } = {}) {
   let current = detail(options.action, !options.hintBlocked), recovered = false;
+  if (options.missingEvidenceMarker) current = { ...current, commercialEvidenceSelectionVersion: undefined };
+  if (options.wrongEvidencePointer) current = { ...current, latestFinanceEvidenceId: other };
   const writes: Array<{ path: string; body: string; key: string }> = [], reads: string[] = [], unexpected: string[] = [];
   await page.addInitScript(({ entityId, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })), { entityId: company, branch });
   await page.route("**/api/**", async (route) => {
@@ -116,6 +120,19 @@ for (const status of [403, 404]) test(`detail navigation clears prior order acti
 test("blocked server hints cannot start a Finance action", async ({ page }) => {
   const evidence = await mock(page, { hintBlocked: true }); await page.goto(`${root}/${id}`);
   await expect(page.getByRole("button", { name: "Record Finance confirmation", exact: true })).toBeDisabled(); expect(evidence.writes).toHaveLength(0);
+});
+test("older order detail keeps history readable but blocks Finance evidence writes", async ({ page }) => {
+  const evidence = await mock(page, { missingEvidenceMarker: true }); await page.goto(`${root}/${id}`);
+  await expect(page.getByRole("heading", { name: "PO-REAL-1" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Current Finance and sending evidence is unavailable" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record Finance confirmation", exact: true })).toBeDisabled();
+  expect(evidence.writes).toHaveLength(0);
+});
+test("a Finance pointer outside retained evidence cannot authorize a release", async ({ page }) => {
+  const evidence = await mock(page, { action: "FinanceRelease", wrongEvidencePointer: true }); await page.goto(`${root}/${id}`);
+  await expect(page.getByRole("heading", { name: "PO-REAL-1" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record funds release", exact: true })).toBeDisabled();
+  expect(evidence.writes).toHaveLength(0);
 });
 test("execution capability false preserves legacy draft buying without probing execution APIs", async ({ page }) => {
   const evidence = await mock(page, { enabled: false }); await page.goto(root);

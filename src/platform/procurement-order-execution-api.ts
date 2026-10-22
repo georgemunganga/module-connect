@@ -10,6 +10,7 @@ export type ExecutionLine = { id: string; lineNumber: number; description: strin
 export type OrderCandidate = { code: string; permission: string; canStart: boolean; blockers: string[]; requiresCommandValidation: true };
 export type FinanceEvidence = { id: string; commitmentReference: string; evidenceReference: string; confirmedGrossAmount: string;
   currencyCode: string; commercialRevision: number; confirmedAt: string; releaseConfirmed: boolean; evidenceMode: string };
+export type IssuedOrderVersion = { id: string; revisionNumber: number; authorizedAt: string };
 export type ExecutionOrderDetail = {
   order: ExecutionOrderSummary & { total: string; shipToRef: string | null; billToRef: string | null; paymentTermRef: string | null; lines: ExecutionLine[] };
   totals: { lineBaseAmount: string; grossAmount: string }; nextCommercialRevision: number; financeStatus: string;
@@ -19,9 +20,11 @@ export type ExecutionOrderDetail = {
   cases: { id: string; state: string; sourceVersion: number; version: number; stages: { id: string; code: string; state: string;
     assignments: { id: string; state: string; version: number; assignedToMe: boolean }[] }[] }[];
   decisions: { id: string; action: string; reason: string | null; decidedAt: string }[];
-  issued: { id: string; revisionNumber: number; authorizedAt: string }[];
+  issued: IssuedOrderVersion[];
   deliveries: { id: string; outcome: string; channel: string; evidenceReference: string; observedAt: string }[];
   actionCandidates: OrderCandidate[]; configuredDeliveryChannels: string[]; commandValidationRequired: true;
+  /** Present only on the server contract that identifies current commercial evidence. Older detail remains readable. */
+  commercialEvidenceSelectionVersion?: number; latestFinanceEvidenceId?: string | null; latestIssuedVersionId?: string | null;
 };
 export type OrderCommandOperation = OrderAction | "Convert" | "SourceEdit" | "Decide";
 export type OrderCommand = { orderId: string | null; operation: OrderCommandOperation; key: string; body: string; assignmentId?: string };
@@ -82,6 +85,20 @@ export async function getOrderExecution(company: string, id: string, signal?: Ab
   // Financial output never passes through Number; wider products retain every decimal.
   for (const resolution of body.financeResolutions as Record<string, unknown>[]) if (!exact(resolution.releasedGrossAmount)) throw invalid();
   return body as unknown as ExecutionOrderDetail;
+}
+/** Do not infer current commitments or issued versions from array position or timestamps. */
+export function selectCurrentCommercialEvidence(detail: ExecutionOrderDetail): { finance: FinanceEvidence | null; issued: IssuedOrderVersion | null } | null {
+  if (detail.commercialEvidenceSelectionVersion !== 1
+    || !Object.hasOwn(detail, "latestFinanceEvidenceId") || !Object.hasOwn(detail, "latestIssuedVersionId")) return null;
+  const choose = <T extends { id: string }>(rows: T[], pointer: unknown): T | null | undefined => {
+    if (pointer === null) return rows.length === 0 ? null : undefined;
+    if (typeof pointer !== "string" || !uuid.test(pointer)) return undefined;
+    const matches = rows.filter((row) => row.id === pointer);
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+  const finance = choose(detail.financeEvidence, detail.latestFinanceEvidenceId);
+  const issued = choose(detail.issued, detail.latestIssuedVersionId);
+  return finance === undefined || issued === undefined ? null : { finance, issued };
 }
 const paths: Record<OrderCommandOperation, string> = { Decide: "", Convert: "from-approved-sources", SourceEdit: "source-draft", Finance: "finance-confirmations", DraftFinanceRelease: "draft-finance-release-confirmations",
   FinanceRelease: "finance-release-confirmations", Submit: "submit", Issue: "issue", Delivery: "delivery-confirmations" };

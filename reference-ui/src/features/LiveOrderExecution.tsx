@@ -8,11 +8,12 @@ import type { ApprovalAction } from "../../../src/platform/procurement-approvals
 import { pendingOrderCommands as pendingCommands } from "../lib/order-command-memory";
 import { procurementScopeHeaders } from "../../../shared/shell-scope";
 import { getOrderExecution, listOrderExecution, orderCommandBody, OrderExecutionError, recoverOrderCommand, sendOrderCommand,
-  type ExecutionOrderDetail, type ExecutionOrderPage, type OrderAction, type OrderCommand, type OrderCommandOperation, type WorklistView } from "../../../src/platform/procurement-order-execution-api";
+  selectCurrentCommercialEvidence, type ExecutionOrderDetail, type ExecutionOrderPage, type OrderAction, type OrderCommand, type OrderCommandOperation, type WorklistView } from "../../../src/platform/procurement-order-execution-api";
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : "The order could not be confirmed.";
 const labels: Record<OrderAction, string> = { Finance: "Record Finance confirmation", DraftFinanceRelease: "Record draft funds release",
   FinanceRelease: "Record funds release", Submit: "Send order for approval", Issue: "Authorise sending", Delivery: "Record sending outcome" };
 const supported = (code: string): code is OrderAction => Object.hasOwn(labels, code);
+const needsCurrentEvidence = (action: OrderCommandOperation) => ["Finance", "DraftFinanceRelease", "FinanceRelease", "Delivery"].includes(action);
 // Unconfirmed payloads survive detail navigation in this signed-in browser lifetime.
 // They are scoped to company, branch, canonical worker and order; never auto-replayed.
 const localNow = () => { const date = new Date(); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 23); };
@@ -78,6 +79,9 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
   }, [company, id, revision]);
   async function execute(body: string, operation: OrderCommandOperation, assignmentId?: string) {
     if (pending || pendingCommands.has(scopeKey) || busy) return;
+    if (needsCurrentEvidence(operation) && (!data || !canUseEvidence(operation))) {
+      setError("Current Finance or sending evidence is unavailable. Refresh the order before recording this action."); return;
+    }
     const command: OrderCommand = { orderId: id, operation, key: crypto.randomUUID(), body, assignmentId };
     pendingCommands.set(scopeKey, command); setPending(command); setBusy(true); setError("");
     try {
@@ -104,6 +108,14 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
     } }
     finally { if (alive.current) setBusy(false); }
   }
+  const evidenceSelection = data ? selectCurrentCommercialEvidence(data) : null;
+  function canUseEvidence(operation: OrderCommandOperation): boolean {
+    if (!needsCurrentEvidence(operation)) return true;
+    if (!evidenceSelection) return false;
+    if (operation === "FinanceRelease" || operation === "DraftFinanceRelease") return !!evidenceSelection.finance && !evidenceSelection.finance.releaseConfirmed;
+    if (operation === "Delivery") return !!evidenceSelection.issued;
+    return true;
+  }
   const recovery = pending && <Panel title="Check an unconfirmed action" className="mb-5"><div className="space-y-3 p-5"><p>The saved result is not confirmed. New actions are paused to avoid recording it twice.</p>
     <p className="text-sm">Command reference: <code>{pending.key}</code>. Keep this browser tab open until the result is reconciled.</p>
     <details className="text-sm"><summary>Original action details</summary><pre className="overflow-auto whitespace-pre-wrap">{pending.operation}{"\n"}{pending.body}</pre></details>
@@ -119,8 +131,9 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
         <tbody>{data.order.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.unitCode}</td><td>{line.quantity}</td><td>{data.order.currencyCode} {line.unitPrice}</td><td>{data.order.currencyCode} {line.taxAmount}</td><td>{line.acceptedQuantity}</td><td>{line.invoicedQuantity}</td></tr>)}</tbody></RecordTable>
         <p className="mt-4 text-right">Before tax: {data.order.currencyCode} {data.totals.lineBaseAmount}</p><p className="text-right font-semibold">Total: {data.order.currencyCode} {data.totals.grossAmount}</p></div></Panel>
       <Panel title="Next actions" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm">ERP checks your current access, amounts, approvals and evidence when you confirm. An available form does not guarantee approval.</p>
+        {!evidenceSelection && <p role="status" className="text-sm">Current Finance and sending evidence is unavailable in this order view. Those actions are paused; approval and order history remain available.</p>}
         <div className="flex flex-wrap gap-3">{!pending && data.actionCandidates.some((candidate) => candidate.code === "SourceEdit" && candidate.canStart && context.permissions.includes(candidate.permission)) && <Link className="text-sm text-primary hover:underline" to={`/purchase-orders/${id}/edit`}>Edit linked draft</Link>}{data.actionCandidates.filter((candidate) => supported(candidate.code) && context.permissions.includes(candidate.permission)).map((candidate) => <div key={candidate.code}>
-          <Button variant="secondary" disabled={busy || !!pending || !candidate.canStart} onClick={() => setAction(candidate.code as OrderAction)}>{labels[candidate.code as OrderAction]}</Button>
+          <Button variant="secondary" disabled={busy || !!pending || !candidate.canStart || !canUseEvidence(candidate.code as OrderAction)} onClick={() => setAction(candidate.code as OrderAction)}>{labels[candidate.code as OrderAction]}</Button>
           {!candidate.canStart && <p className="mt-2 text-sm text-muted-foreground">Current requirements are not met. Review funding, policy and assigned responsibilities.</p>}</div>)}</div>
         {!data.actionCandidates.some((candidate) => supported(candidate.code) && context.permissions.includes(candidate.permission)) && <p className="text-sm text-muted-foreground">There are no connected actions for your current responsibilities.</p>}
       </div></Panel>
@@ -149,17 +162,17 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
           void execute(orderCommandBody({ action: decision.action, reason: decision.reason.trim() || null, expectedOrderVersion: data.order.version,
             expectedCaseVersion: decision.caseVersion, expectedAssignmentVersion: decision.assignmentVersion }), "Decide", decision.assignmentId);
         }} />}
-      {action && !pending && <OrderActionForm key={`${action}:${data.order.version}`} action={action} data={data} busy={busy} onClose={() => setAction(null)} onConfirm={execute} />}
+      {action && !pending && canUseEvidence(action) && <OrderActionForm key={`${action}:${data.order.version}`} action={action} data={data} selection={evidenceSelection} busy={busy} onClose={() => setAction(null)} onConfirm={execute} />}
     </> : !loading && !error && <p role="alert">This order is unavailable in your current scope.</p>}
     <div className="mt-5 flex gap-3"><Link className="text-sm text-primary hover:underline" to="/purchase-orders">Back to purchase orders</Link><Button variant="secondary" disabled={busy} onClick={() => setRevision((n) => n + 1)}>Refresh order</Button></div>
   </div>;
 }
-function OrderActionForm({ action, data, busy, onClose, onConfirm }: { action: OrderAction; data: ExecutionOrderDetail; busy: boolean; onClose: () => void; onConfirm: (body: string, action: OrderAction) => Promise<void> }) {
+function OrderActionForm({ action, data, selection, busy, onClose, onConfirm }: { action: OrderAction; data: ExecutionOrderDetail; selection: ReturnType<typeof selectCurrentCommercialEvidence>; busy: boolean; onClose: () => void; onConfirm: (body: string, action: OrderAction) => Promise<void> }) {
   const [reference, setReference] = useState(""), [evidence, setEvidence] = useState(""), [reason, setReason] = useState("");
   const [timestamp, setTimestamp] = useState(localNow), [verified, setVerified] = useState(false), [error, setError] = useState("");
   const [channel, setChannel] = useState(""), [outcome, setOutcome] = useState("Delivered");
   const finance = action === "Finance", release = action === "FinanceRelease" || action === "DraftFinanceRelease", delivery = action === "Delivery";
-  const previous = data.financeEvidence[0], issued = data.issued.at(-1);
+  const previous = selection?.finance, issued = selection?.issued;
   async function confirm(event: FormEvent) {
     event.preventDefault(); if (!verified || busy) return; setError("");
     const fields: Record<string, unknown> = { expectedOrderVersion: data.order.version };

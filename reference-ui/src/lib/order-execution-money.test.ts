@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeExactOrderDraft, orderCommandBody, sourceOrderCommandBody } from "../../../src/platform/procurement-order-execution-api";
+import { encodeExactOrderDraft, orderCommandBody, selectCurrentCommercialEvidence, sourceOrderCommandBody, type ExecutionOrderDetail } from "../../../src/platform/procurement-order-execution-api";
 
 describe("order execution decimal transport", () => {
   it("retains a wide exact product and version/reference fields without Number conversion", () => {
@@ -35,5 +35,23 @@ describe("linked order payloads", () => {
   });
   it("rejects excess source precision before creating a command", () => {
     expect(() => encodeExactOrderDraft({ ...draft, lines: [{ ...draft.lines[0], quantity: "0.12345" }] })).toThrow("four decimal places");
+  });
+});
+
+describe("current commercial evidence", () => {
+  const first = "11111111-1111-4111-8111-111111111111", current = "22222222-2222-4222-8222-222222222222";
+  const evidence = (id: string) => ({ id, commitmentReference: id, evidenceReference: id, confirmedGrossAmount: "1", currencyCode: "ZMW", commercialRevision: 1,
+    confirmedAt: "2026-10-22T00:00:00Z", releaseConfirmed: false, evidenceMode: "ApprovedManualEvidence" });
+  const detail = { commercialEvidenceSelectionVersion: 1, latestFinanceEvidenceId: current, latestIssuedVersionId: null,
+    financeEvidence: [evidence(first), evidence(current)], issued: [] } as unknown as ExecutionOrderDetail;
+  it("uses the server pointer even when current evidence is not first in history", () => {
+    expect(selectCurrentCommercialEvidence(detail)?.finance?.id).toBe(current);
+  });
+  it("rejects missing, stale, repeated or contradictory evidence pointers", () => {
+    expect(selectCurrentCommercialEvidence({ ...detail, commercialEvidenceSelectionVersion: undefined })).toBeNull();
+    expect(selectCurrentCommercialEvidence({ ...detail, latestFinanceEvidenceId: null })).toBeNull();
+    expect(selectCurrentCommercialEvidence({ ...detail, latestFinanceEvidenceId: "33333333-3333-4333-8333-333333333333" })).toBeNull();
+    expect(selectCurrentCommercialEvidence({ ...detail, financeEvidence: [evidence(current), evidence(current)] })).toBeNull();
+    expect(selectCurrentCommercialEvidence({ ...detail, latestIssuedVersionId: first })).toBeNull();
   });
 });
