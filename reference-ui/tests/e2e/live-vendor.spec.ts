@@ -104,7 +104,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       if (version !== vendor.version) return json({ detail: "Stale version" }, 409);
       vendor = { ...vendor, qualifications: [...(vendor.qualifications as unknown[]),
         { ...qualification, id: "66666666-6666-4666-8666-666666666666", reviewStatus: "Pending" }], version: version + 1 };
-      return json({ id: vendorId, version: vendor.version }, 201);
+      return json({ id: "66666666-6666-4666-8666-666666666666", version: vendor.version }, 201);
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}/qualifications/66666666-6666-4666-8666-666666666666` && vendor && request.method() === "PUT") {
       const { version, qualification } = request.postDataJSON();

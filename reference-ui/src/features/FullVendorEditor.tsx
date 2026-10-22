@@ -30,15 +30,21 @@ function VendorEditorSession({id}:{id?:string}) {
   function change(value:VendorEditorModel,key:string){setModel(value);setDirty(current=>new Set(current).add(key));setSaved("");}
   function failed(cause:unknown){setError(errorText(cause));if(!(cause instanceof VendorApiError) || cause.status===0 || cause.status===409 || cause.status>=500)setBlocked(true);}
   async function reconcile(){if(!id)return;setBusy(true);setError("");try{const value=await getVendorDraft(company,id);if(!alive.current)return;setModel(readVendorModel(value,readiness.defaultCurrencyCode));setDetail(value);setDirty(new Set());setBlocked(false);setSaved("Saved vendor reloaded. Unsaved form changes were discarded.");}catch(cause){if(alive.current)setError(errorText(cause));}finally{if(alive.current)setBusy(false);}}
-  async function saveHeader(){if(disabled)return;setBusy(true);setError("");let mutationStarted=false;try{
+  async function saveHeader(){if(disabled)return;setBusy(true);setError("");let mutationStarted=false;let confirmed=false;try{
     if(!id){const payload=createVendorPayload(model);mutationStarted=true;const result=await createVendorDraft(company,payload);if(alive.current)navigate(`/vendors/${result.id}`);return;}
     if(!detail)throw new Error("Load the saved vendor before editing.");
     // Header/attributes only. Never submit child arrays as if PUT updated them.
     const draft=createVendorPayload({...model,primary:null,contacts:[],sites:[],qualifications:[]});
     const {primaryContact: _primary,contacts:_contacts,sites:_sites,qualifications:_qualifications,...header}=draft;
-    mutationStarted=true;const result=await updateVendorDraft(company,id,detail.version,header);if(!alive.current)return;
-    setDetail({...detail,version:result.version,status:result.status});setDirty(current=>{const next=new Set(current);next.delete("header");return next;});setSaved("Vendor details saved. Contacts, addresses and qualifications have their own Save buttons.");
-  }catch(cause){if(alive.current){if(mutationStarted)failed(cause);else setError(errorText(cause));}}finally{if(alive.current)setBusy(false);}}
+    mutationStarted=true;const result=await updateVendorDraft(company,id,detail.version,header);confirmed=true;if(!alive.current)return;
+    // Reconcile the actual saved header and attribute identities. Newly persisted keys
+    // must be locked in this session too; do not invent attribute IDs from a PUT receipt.
+    const fresh=await getVendorDraft(company,id);if(!alive.current)return;
+    if(fresh.version!==result.version)throw new Error("Another vendor change followed your save. Reload and compare before another change.");
+    const parsed=readVendorModel(fresh,readiness.defaultCurrencyCode);
+    setDetail(fresh);setModel(current=>({...current,header:parsed.header}));
+    setDirty(current=>{const next=new Set(current);next.delete("header");return next;});setSaved("Vendor details saved. Contacts, addresses and qualifications have their own Save buttons.");
+  }catch(cause){if(alive.current){if(mutationStarted){failed(cause);if(confirmed)setBlocked(true);}else setError(errorText(cause));}}finally{if(alive.current)setBusy(false);}}
   async function saveChild(kind:ChildKind,row:ChildRow,remove=false){if(disabled)return;
     if(remove&&!row.id){setModel(current=>({...current,primary:current.primary?.key===row.key?null:current.primary,contacts:current.contacts.filter(item=>item.key!==row.key),sites:current.sites.filter(item=>item.key!==row.key),qualifications:current.qualifications.filter(item=>item.key!==row.key)}));setDirty(current=>{const next=new Set(current);next.delete(row.key);return next;});return;}
     if(!id||!detail)return;

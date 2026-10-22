@@ -31,3 +31,24 @@ test("company context denial clears the old editable form and produces no mutati
 });
 
 test("already reviewed qualifications remain visible read-only without a guaranteed409 save",async({page})=>{const state=await fullVendorMock(page,{qualificationStatus:"Verified"});await page.goto(`/procurement/workspace/vendors/${vendor}/edit`);await expect(page.getByLabel("Qualification type",{exact:true})).toHaveValue("Reviewed clearance");await expect(page.getByLabel("Qualification type",{exact:true})).toBeDisabled();await expect(page.getByRole("button",{name:"Save qualification",exact:true})).toBeDisabled();expect(state.writes).toHaveLength(0);});
+
+test("newly saved field names are locked without discarding unsaved child edits",async({page})=>{
+  const state=await fullVendorMock(page);await page.goto(`/procurement/workspace/vendors/${vendor}/edit`);
+  await page.getByRole("tab",{name:"Contact Persons",exact:true}).click();await page.getByRole("textbox",{name:"Contact name",exact:true}).fill("Unsaved contact");
+  await page.getByRole("tab",{name:"Custom Fields",exact:true}).click();await page.getByRole("button",{name:"Add custom field",exact:true}).click();await page.getByRole("textbox",{name:"Name",exact:true}).fill("Tier");await page.getByRole("textbox",{name:"Value",exact:true}).fill("Local");
+  await page.getByRole("button",{name:"Save vendor details",exact:true}).click();await expect(page.getByRole("status").filter({hasText:"Vendor details saved"})).toBeVisible();await expect(page.getByRole("textbox",{name:"Name",exact:true})).toBeDisabled();
+  await page.getByRole("tab",{name:"Contact Persons",exact:true}).click();await expect(page.getByRole("textbox",{name:"Contact name",exact:true})).toHaveValue("Unsaved contact");expect((state.read().contacts as {name:string}[])[0].name).toBe("Jane");expect(state.writes).toHaveLength(1);
+});
+test("lost create acknowledgement blocks a second create and retains entered values",async({page})=>{
+  await fullVendorMock(page);let writes=0;await page.route("**/api/procurement/v1/vendors",route=>{if(route.request().method()!=="POST")return route.fallback();writes++;return route.abort("failed");});
+  await page.goto("/procurement/workspace/vendors/new");await page.getByLabel("Company name",{exact:true}).fill("Unconfirmed supplier");await page.getByLabel("Display name",{exact:true}).fill("Unconfirmed supplier");await page.getByRole("button",{name:"Save draft",exact:true}).click();await expect(page.getByRole("alert")).toBeVisible();await expect(page.getByRole("button",{name:"Save draft",exact:true})).toBeDisabled();await expect(page.getByLabel("Display name",{exact:true})).toHaveValue("Unconfirmed supplier");await expect(page.getByRole("link",{name:"Review vendor list before creating again",exact:true})).toBeVisible();expect(writes).toBe(1);
+});
+
+test("late create response cannot navigate after company context is denied",async({page})=>{
+  await fullVendorMock(page);let release!:()=>void;let entered!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});const started=new Promise<void>(resolve=>{entered=resolve;});let writes=0;
+  await page.route("**/api/procurement/v1/vendors",async route=>{if(route.request().method()!=="POST")return route.fallback();writes++;entered();await held;await route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({id:vendor,version:1,number:"VEN-1",possibleDuplicate:false})});});
+  await page.goto("/procurement/workspace/vendors/new");await page.getByLabel("Company name",{exact:true}).fill("Old company supplier");await page.getByLabel("Display name",{exact:true}).fill("Old company supplier");await page.getByRole("button",{name:"Save draft",exact:true}).click();await started;
+  await page.route("**/api/procurement/v1/context",route=>route.fulfill({status:403,contentType:"application/json",body:JSON.stringify({message:"No access to selected company"})}));
+  await page.evaluate(()=>{const key="erp.shell.state.v1";const value=JSON.stringify({entityId:"88888888-8888-4888-8888-888888888888"});localStorage.setItem(key,value);window.dispatchEvent(new StorageEvent("storage",{key,newValue:value}));});await expect(page.getByRole("textbox",{name:"Display name",exact:true})).toHaveCount(0);await expect(page.getByRole("alert")).toBeVisible();
+  const response=page.waitForResponse(value=>value.request().method()==="POST"&&new URL(value.url()).pathname.endsWith("/vendors"));release();await (await response).finished();await expect(page.waitForURL(new RegExp(`/vendors/${vendor}$`),{timeout:1000})).rejects.toThrow();expect(writes).toBe(1);
+});
