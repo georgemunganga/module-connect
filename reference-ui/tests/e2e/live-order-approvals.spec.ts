@@ -59,7 +59,7 @@ test("PO-only approver uses existing Approvals entry with actual order queue/det
   await expect(page.getByRole("heading", { name: "Order approvals", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Review order approval", exact: true }).click();
   await expect(page.getByRole("heading", { name: "PO-TASK-1", exact: true })).toBeVisible();
-  await decide(page, "Approve"); await expect(page.getByRole("status")).toContainText("Saved: Approved"); expect(evidence.writes).toHaveLength(1);
+  await decide(page, "Approve"); await expect(page.getByRole("status").filter({ hasText: "Saved: Approved" })).toBeVisible(); expect(evidence.writes).toHaveLength(1);
   const command = evidence.writes[0]; expect(command.path).toBe(`${api}/${id}/assignments/${assignmentId}/decisions`); expect(command.key).toMatch(/^[0-9a-f-]{36}$/i);
   expect(JSON.parse(command.raw)).toEqual({ action: "Approve", reason: "Current order and sources reviewed", expectedOrderVersion: 4, expectedCaseVersion: 7, expectedAssignmentVersion: 3 });
   expect(evidence.unexpected).toEqual([]);
@@ -75,14 +75,14 @@ for (const action of ["Reject", "Return"] as const) test(`PO ${action} requires 
 });
 test("stale PO decision removes old controls and does not reuse stale Core versions", async ({ page }) => {
   const evidence = await fixture(page, { stale: true }); await page.goto(`${root}/purchase-orders/${id}`); await decide(page, "Approve");
-  await expect(page.getByRole("status")).toContainText("changed"); await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "changed" })).toBeVisible(); await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0); expect(evidence.writes).toHaveLength(1);
 });
 test("lost PO decision uses actor-owned receipt recovery without a second POST", async ({ page }) => {
   const evidence = await fixture(page, { lost: true }); await page.goto(`${root}/purchase-orders/${id}`); await decide(page, "Approve");
   await expect(page.getByRole("button", { name: "Check saved result", exact: true })).toBeVisible();
   await expect(page.getByText(evidence.writes[0].key, { exact: true })).toBeVisible(); await page.getByRole("button", { name: "Check saved result", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Saved result found: Approved"); expect(evidence.writes).toHaveLength(1);
+  await expect(page.getByRole("status").filter({ hasText: "Saved result found: Approved" })).toBeVisible(); expect(evidence.writes).toHaveLength(1);
   expect(evidence.reads.some((path) => path.includes("command-receipts/Decide/"))).toBe(true);
 });
 test("inactive PO assignment cannot expose an approval action", async ({ page }) => {
