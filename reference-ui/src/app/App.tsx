@@ -136,7 +136,7 @@ export function App() {
                   path={`/${module.key}/:id/edit`}
                   element={
                     isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
-                      : isProcurementLiveMode && module.key === "bills" ? <PendingLiveWorkflow />
+                      : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceEditor />
                         : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderEditor /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />

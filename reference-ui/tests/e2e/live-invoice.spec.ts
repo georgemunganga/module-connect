@@ -13,13 +13,19 @@ const capabilities = Object.fromEntries([
   "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "vendorDraft" || key === "invoiceIntake"]));
 
-async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number } = {}) {
+async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number; crud?: boolean; staleUpdate?: boolean; loseUpdate?: boolean } = {}) {
   let invoice: Record<string, unknown> | null = options.seed ? {
     id: invoiceId, supplierId: vendorId, supplierName: "Office Supplier", invoiceNumber: "INV-DOC-1",
     invoiceDate: "2026-10-20", currencyCode: "ZMW", status: "Received", intakeChannel: "Manual",
     grossAmount: 100, netAmount: 100, taxAmount: 0, version: 1,
     lines: [{ id: "line-1", lineNumber: 1, description: "Supplies", quantity: 1, unitPrice: 100, taxAmount: 0 }],
   } : null;
+  const mutations: Array<{ method: string; body: unknown }> = [];
+  const withCrud = () => invoice && options.crud ? { ...invoice, intakeCrudVersion: 1,
+    allowedActions: invoice.status === "Received" && canCapture ? ["Edit", "Cancel"] : [],
+    exactAmounts: { netAmount: String(invoice.netAmount), taxAmount: String(invoice.taxAmount), grossAmount: String(invoice.grossAmount) },
+    lines: (invoice.lines as Array<Record<string, unknown>>).map(line => ({ ...line,
+      exactAmounts: { quantity: String(line.quantity), unitPrice: String(line.unitPrice), taxAmount: String(line.taxAmount) } })) } : invoice;
   const documents: Record<string, unknown>[] = [];
   const uploadKeys = new Map<string, Record<string, unknown>>();
   let lostResponse = false;
@@ -61,7 +67,7 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
         return json({ code: "duplicate-invoice", message: "This vendor invoice number is already recorded in this currency." }, 409);
       const netAmount = input.lines.reduce((sum: number, line: { quantity: number; unitPrice: number }) =>
         sum + line.quantity * line.unitPrice, 0);
-      const taxAmount = input.lines.reduce((sum: number, line: { taxAmount: number }) => sum + line.taxAmount, 0);
+      const taxAmount = input.lines.reduce((sum: number, line: { taxAmount: number }) => sum + Number(line.taxAmount), 0);
       invoice = { ...input, id: invoiceId, branchRef: branchId, supplierName: "Office Supplier", status: "Received",
         intakeChannel: "Manual", invoiceNumber: input.invoiceNumber.trim(),
         currencyCode: input.currencyCode.toUpperCase(), netAmount, taxAmount,
@@ -96,10 +102,29 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
       if (!documents[0]?.canDownload) return json({ message: "This file has not passed its security check." }, 409);
       return route.fulfill({ status: 200, contentType: "application/pdf", body: "%PDF-1.7 synthetic evidence" });
     }
-    if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}` && invoice)
-      return json({ ...invoice, nextStep: "Confirm source evidence and resolve duplicate or PO exceptions before matching." });
+    if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}/cancel` && invoice) {
+      const body = request.postDataJSON(); mutations.push({ method: "POST", body });
+      if (!canCapture || !options.crud) return json({ message: "Access denied" }, 403);
+      if (body.version !== invoice.version) return json({ message: "Refresh the saved invoice." }, 409);
+      invoice = { ...invoice, status: "Cancelled", version: Number(invoice.version) + 1 };
+      return json(withCrud());
+    }
+    if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}` && invoice) {
+      if (request.method() === "PUT") {
+        const body = request.postDataJSON(); mutations.push({ method: "PUT", body });
+        if (!canCapture || !options.crud) return json({ message: "Access denied" }, 403);
+        if (options.staleUpdate || body.version !== invoice.version) return json({ message: "Refresh the saved invoice." }, 409);
+        const lines = body.draft.lines.map((line: object, index: number) => ({ ...line, id: `line-${index + 1}`, lineNumber: index + 1 }));
+        const netAmount = lines.reduce((sum: number, line: { quantity: string; unitPrice: string }) => sum + Number(line.quantity) * Number(line.unitPrice), 0);
+        const taxAmount = lines.reduce((sum: number, line: { taxAmount: string }) => sum + Number(line.taxAmount), 0);
+        invoice = { ...invoice, ...body.draft, lines, netAmount, taxAmount, grossAmount: netAmount + taxAmount, version: Number(invoice.version) + 1 };
+        if (options.loseUpdate) return route.abort("failed");
+      }
+      return json({ ...withCrud(), nextStep: "Confirm source evidence and resolve duplicate or PO exceptions before matching." });
+    }
     return json({ title: `Unexpected route: ${url.pathname}` }, 404);
   });
+  return { mutations };
 }
 
 test("AP records a supplier invoice as received and sees no payment action", async ({ page }) => {
@@ -195,3 +220,81 @@ for (const status of [403, 404]) {
     await expect(page.getByRole("button", { name: "Add document", exact: true })).toHaveCount(0);
   });
 }
+
+
+// Mocked HTTP contract checks. Actual PostgreSQL/runtime acceptance is a separate gate.
+test("bill edit saves through the scoped API and survives refresh, then cancellation preserves its details", async ({ page }) => {
+  const setup = await mockErp(page, true, { seed: true, crud: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await page.getByRole("link", { name: "Edit invoice", exact: true }).click();
+  await expect(page.getByLabel("Description 1")).toHaveValue("Supplies");
+  await page.getByLabel("Description 1").fill("Corrected original supplies");
+  await page.getByLabel("Unit price", { exact: true }).fill("125.1234");
+  await page.getByLabel("Reason for change").fill("Correct original amount");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toBeVisible();
+  await expect(page.getByText("Corrected original supplies", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("ZMW 125.1234", { exact: true }).first()).toBeVisible();
+  await page.getByLabel("Cancellation reason").fill("Duplicate received document");
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Cancel invoice", exact: true }).click();
+  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Corrected original supplies", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit invoice", exact: true })).toHaveCount(0);
+  expect(setup.mutations).toEqual([
+    { method: "PUT", body: expect.objectContaining({ version: 1, reason: "Correct original amount", draft: expect.objectContaining({ lines: [expect.objectContaining({ unitPrice: "125.1234" })] }) }) },
+    { method: "POST", body: { version: 2, reason: "Duplicate received document" } },
+  ]);
+});
+
+test("stale edit keeps entered fields and requires an explicit reload without retrying", async ({ page }) => {
+  const setup = await mockErp(page, true, { seed: true, crud: true, staleUpdate: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}/edit`);
+  await page.getByLabel("Description 1").fill("Unsaved correction");
+  await page.getByLabel("Reason for change").fill("Correct original");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByText("The saved invoice changed.", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Description 1")).toHaveValue("Unsaved correction");
+  await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
+  expect(setup.mutations).toHaveLength(1);
+});
+
+test("lost edit response does not resend and GET refresh shows the actual saved invoice", async ({ page }) => {
+  const setup = await mockErp(page, true, { seed: true, crud: true, loseUpdate: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}/edit`);
+  await page.getByLabel("Description 1").fill("Saved despite lost response");
+  await page.getByLabel("Reason for change").fill("Correct original");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByText("The response was not confirmed.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
+  await page.getByRole("link", { name: "Open bills", exact: true }).click();
+  await page.getByRole("link", { name: "Open", exact: true }).click();
+  await expect(page.getByText("Saved despite lost response", { exact: true })).toBeVisible();
+  expect(setup.mutations).toHaveLength(1);
+});
+
+test("read-only user never receives edit or cancellation actions", async ({ page }) => {
+  const setup = await mockErp(page, false, { seed: true, crud: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit invoice", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cancel invoice", exact: true })).toHaveCount(0);
+  await page.goto(`/procurement/workspace/bills/${invoiceId}/edit`);
+  await expect(page.getByText("You do not have access to record invoices", { exact: false })).toBeVisible();
+  expect(setup.mutations).toEqual([]);
+});
+
+
+test("an older backend without the CRUD marker keeps invoice mutations unavailable", async ({ page }) => {
+  const setup = await mockErp(page, true, { seed: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit invoice", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cancel invoice", exact: true })).toHaveCount(0);
+  await page.goto(`/procurement/workspace/bills/${invoiceId}/edit`);
+  await expect(page.getByText("This invoice cannot be edited.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0);
+  expect(setup.mutations).toEqual([]);
+});
