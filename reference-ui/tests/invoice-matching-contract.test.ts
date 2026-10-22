@@ -6,6 +6,7 @@ const line = "33333333-3333-4333-8333-333333333333", order = "44444444-4444-4444
 const issued = "55555555-5555-4555-8555-555555555555", poLine = "66666666-6666-4666-8666-666666666666";
 const policy = "77777777-7777-4777-8777-777777777777", receipt = "88888888-8888-4888-8888-888888888888";
 const doc = "99999999-9999-4999-8999-999999999999", key = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const mapping = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const input = (): InvoiceMappingInput => ({ version: 3, purchaseOrderId: order, issuedVersionId: issued, lines: [{ invoiceLineId: line, purchaseOrderLineId: poLine,
   goodsReceiptLineId: receipt, serviceAcceptanceId: null, invoiceUnitCode: "EACH", documentVersionId: doc, documentLineReference: "Page 1 line 1" }] });
 const source = (): InvoiceSource => ({ orderId: order, orderNumber: "PO-1", issuedVersionId: issued, purchaseOrderLineId: poLine, description: "Own supplies",
@@ -57,7 +58,8 @@ describe("invoice matching adapter", () => {
   });
   it("sends the exact stable command once and accepts only unverified mapping confirmation", async () => {
     const command = invoiceMappingCommand(invoice, [line], input(), key), fetch = respond(envelope(invoiceMappingCommand(invoice, [line], input(), key)));
-    expect(invoiceMatchingRecovery(command)).toEqual({ operation: "InvoiceMapping", invoiceId: invoice, key, expectedVersion: 3, ownLineIds: [line] });
+    expect(invoiceMatchingRecovery(command)).toEqual({ operation: "InvoiceMapping", invoiceId: invoice, key, expectedVersion: 3, ownLineIds: [line],
+      purchaseOrderId: order, issuedVersionId: issued, mappingVersionId: null });
     expect((await sendInvoiceMatching(company, command)).outcome).toBe("MappingUnverified");
     expect(fetch).toHaveBeenCalledTimes(1); expect(fetch.mock.calls[0][1].body).toBe(command.body);
     expect(fetch.mock.calls[0][1].headers.get("Idempotency-Key")).toBe(key);
@@ -74,10 +76,39 @@ describe("invoice matching adapter", () => {
   it("does not retry an uncertain POST and recovers only the original operation/key via GET", async () => {
     const command = invoiceMappingCommand(invoice, [line], input(), key); const fetch = vi.fn().mockRejectedValue(new TypeError("lost")); vi.stubGlobal("fetch", fetch);
     await expect(sendInvoiceMatching(company, command)).rejects.toThrow("interrupted"); expect(fetch).toHaveBeenCalledTimes(1);
-    fetch.mockResolvedValue(new Response(JSON.stringify({ operation: "InvoiceMapping", commandKey: key, recordedHistoricalResult: true, isCurrentReplayAuthorization: false,
-      currentInvoiceVersion: 4, canPostToFinance: false, recordedResult: envelope(command) })));
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ operation: "InvoiceMapping", commandKey: key, recordedHistoricalResult: true, isCurrentReplayAuthorization: false,
+      currentInvoiceVersion: 4, canPostToFinance: false, recordedResult: envelope(command) })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ invoiceId: invoice, version: 4, mappings: [{ id: doc, purchaseOrderId: order, issuedVersionId: issued }],
+        comparisons: [], matchingStateIsRecordedResult: true, isInvoiceApproval: false, canPostToFinance: false })));
     expect((await recoverInvoiceMatching(company, invoiceMatchingRecovery(command))).id).toBe(doc); expect(fetch.mock.calls[1][1].method).toBe("GET");
     expect(fetch.mock.calls[1][0]).toContain(`/commands/${key}?operation=InvoiceMapping`);
+    expect(fetch.mock.calls[2][0]).toContain(`/invoices/${invoice}/matching`);
     respond({ operation: "InvoiceCompare", commandKey: key }); await expect(recoverInvoiceMatching(company, invoiceMatchingRecovery(command))).rejects.toThrow("confirm");
+  });
+  it("holds recovery when saved historical source pins do not match the original command", async () => {
+    const command = invoiceMappingCommand(invoice, [line], input(), key);
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ operation: "InvoiceMapping", commandKey: key, recordedHistoricalResult: true,
+        isCurrentReplayAuthorization: false, currentInvoiceVersion: 4, canPostToFinance: false, recordedResult: envelope(command) })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ invoiceId: invoice, version: 4, mappings: [{ id: doc, purchaseOrderId: order, issuedVersionId: receipt }],
+        comparisons: [], matchingStateIsRecordedResult: true, isInvoiceApproval: false, canPostToFinance: false })));
+    vi.stubGlobal("fetch", fetch);
+    await expect(recoverInvoiceMatching(company, invoiceMatchingRecovery(command))).rejects.toThrow("confirm");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it("binds a recovered comparison to its original mapping version", async () => {
+    const command = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: "private note" }, key);
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ operation: "InvoiceCompare", commandKey: key, recordedHistoricalResult: true,
+        isCurrentReplayAuthorization: false, currentInvoiceVersion: 4, canPostToFinance: false, recordedResult: envelope(command) })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ invoiceId: invoice, version: 4, mappings: [],
+        comparisons: [{ id: doc, mappingVersionId: mapping, recordedHistoricalResult: true, isCurrentApproval: false, canPostToFinance: false }],
+        matchingStateIsRecordedResult: true, isInvoiceApproval: false, canPostToFinance: false })));
+    vi.stubGlobal("fetch", fetch);
+    const locator = invoiceMatchingRecovery(command);
+    expect(locator).toMatchObject({ mappingVersionId: mapping, purchaseOrderId: null, issuedVersionId: null });
+    expect(JSON.stringify(locator)).not.toContain("private note");
+    expect((await recoverInvoiceMatching(company, locator)).outcome).toBe("Blocked");
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
