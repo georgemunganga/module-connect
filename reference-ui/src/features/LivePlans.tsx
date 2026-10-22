@@ -21,7 +21,7 @@ const emptyDraft = (currency: string): PlanDraft => ({ financialPeriodRef: "", c
 const money = (value: number, currency: string) => `${currency} ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function LivePlanList() {
-  const { legalEntityId, adminViewOnly } = useCompany();
+  const { legalEntityId, permissions } = useCompany();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<PlanPage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,13 +35,13 @@ export function LivePlanList() {
     return () => controller.abort();
   }, [legalEntityId, page]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Purchase Plans" subtitle="Forecast your department's needs. A plan does not reserve money or approve a purchase." actions={!adminViewOnly ? <Link to="/plans/new"><Button><Plus size={16} className="mr-2 inline" />New plan</Button></Link> : undefined} />
+    <PageHeader title="Purchase Plans" subtitle="Forecast your department's needs. A plan does not reserve money or approve a purchase." actions={permissions.includes("procurement-plan-create") ? <Link to="/plans/new"><Button><Plus size={16} className="mr-2 inline" />New plan</Button></Link> : undefined} />
     <Panel><div className="p-5">
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading plans…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Reference</th><th>Financial period</th><th>Needs</th><th>Currency</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>{data.items.map((item) => <tr key={item.id}><td>{item.number}</td><td><Link to={`/plans/${item.id}`} className="font-medium text-primary hover:underline">{item.financialPeriodRef}</Link></td><td>{item.lineCount}</td><td>{item.currencyCode}</td><td><Badge>{item.status}</Badge></td><td><Link to={`/plans/${item.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="No purchase plans yet" description="Add a draft forecast for the next financial period." action={!adminViewOnly ? <Link to="/plans/new"><Button>New plan</Button></Link> : undefined} />}
+      </RecordTable></div> : <EmptyState title="No purchase plans yet" description="Add a draft forecast for the next financial period." action={permissions.includes("procurement-plan-create") ? <Link to="/plans/new"><Button>New plan</Button></Link> : undefined} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
   </div>;
@@ -50,7 +50,7 @@ export function LivePlanList() {
 export function LivePlanEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, defaultCurrencyCode } = useCompany();
+  const { legalEntityId, defaultCurrencyCode, permissions } = useCompany();
   const [draft, setDraft] = useState<PlanDraft>(() => emptyDraft(defaultCurrencyCode));
   const [version, setVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(Boolean(id));
@@ -89,7 +89,7 @@ export function LivePlanEditor() {
     setDraft((current) => ({ ...current, lines: current.lines.map((line, at) => at === index ? { ...line, [key]: value } : line) }));
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saving || saveBlock) return;
+    if (saving || saveBlock || !permissions.includes(id ? "procurement-plan-edit" : "procurement-plan-create")) return;
     if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the list."); return; }
     const savingContext = editorContext;
     const savingGeneration = editorGeneration.current;
@@ -111,6 +111,7 @@ export function LivePlanEditor() {
     }
     finally { if (isCurrentSave()) setSaving(false); }
   }
+  if (!permissions.includes(id ? "procurement-plan-edit" : "procurement-plan-create")) return <p role="alert" className="p-5 sm:p-8">You cannot change this plan for this company.</p>;
   return <div className="p-5 sm:p-8">
     <PageHeader title={id ? "Edit purchase plan" : "New purchase plan"} subtitle="Estimate what your department may need. This draft does not commit a budget." />
     {loading ? <p role="status">Loading plan…</p> : id && (version === null || loadedContext !== editorContext)
@@ -144,7 +145,7 @@ export function LivePlanEditor() {
 export function LivePlanDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, adminViewOnly } = useCompany();
+  const { legalEntityId, permissions } = useCompany();
   const [record, setRecord] = useState<PlanDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -160,7 +161,7 @@ export function LivePlanDetail() {
     return () => controller.abort();
   }, [id, legalEntityId]);
   async function cancel() {
-    if (adminViewOnly) return;
+    if (!permissions.includes("procurement-plan-edit")) return;
     if (!record || !reason.trim()) { setError("Give a reason for cancelling this plan."); return; }
     setBusy(true); setError("");
     try { await cancelOwnPlan(legalEntityId, record.id, record.version, reason.trim()); navigate("/plans"); }
@@ -169,11 +170,11 @@ export function LivePlanDetail() {
   }
   return <div className="p-5 sm:p-8">
     {loading ? <p role="status">Loading plan…</p> : record ? <>
-      <PageHeader title={record.financialPeriodRef} subtitle={`${record.number} · Purchase forecast`} actions={!adminViewOnly && record.status === "Draft" ? <Link to={`/plans/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
+      <PageHeader title={record.financialPeriodRef} subtitle={`${record.number} · Purchase forecast`} actions={permissions.includes("procurement-plan-edit") && record.status === "Draft" ? <Link to={`/plans/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       <Panel title="Forecast"><div className="grid gap-4 p-5 text-sm sm:grid-cols-3"><div><span className="text-muted-foreground">Status</span><div className="mt-1"><Badge>{record.status}</Badge></div></div><div><span className="text-muted-foreground">Currency</span><div className="mt-1">{record.currencyCode}</div></div><div><span className="text-muted-foreground">Estimated total</span><div className="mt-1">{money(record.lines.filter((line) => line.status === "Active").reduce((sum, line) => sum + line.estimatedAmount, 0), record.currencyCode)}</div></div>{record.statusReason && <div className="sm:col-span-3"><span className="text-muted-foreground">Reason</span><div>{record.statusReason}</div></div>}</div></Panel>
       <Panel title="Planned needs" className="mt-5"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Need</th><th>Quantity</th><th>Unit</th><th>Estimated amount</th><th>Expected</th><th>Status</th></tr></thead><tbody>{record.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.estimatedQuantity}</td><td>{line.unitCode}</td><td>{money(line.estimatedAmount, record.currencyCode)}</td><td>{line.expectedOn || "—"}</td><td><Badge>{line.status}</Badge></td></tr>)}</tbody></RecordTable></div></Panel>
-      {!adminViewOnly && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
+      {permissions.includes("procurement-plan-edit") && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
     </> : <p role="alert">{error || "Plan not found."}</p>}
     <Link to="/plans" className="mt-5 inline-block text-sm text-primary hover:underline">Back to purchase plans</Link>
   </div>;

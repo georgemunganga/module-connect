@@ -11,6 +11,7 @@ import { ProcurementLiveGate, isProcurementLiveMode, useLiveReadiness } from "..
 import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/LiveVendors";
 import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
 import { LiveApprovalQueue, LiveApprovalDetail } from "../features/LiveApprovals";
+import { InvoiceUnitReviewDetail } from "../features/InvoiceUnitReviewTasks";
 import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../features/LiveRequests";
 import { LiveSourcingList, LiveSourcingEditor, LiveSourcingDetail } from "../features/LiveSourcing";
 import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../features/LiveContracts";
@@ -18,7 +19,10 @@ import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePl
 import { LiveVendorCreditList, LiveVendorCreditDetail, LiveVendorCreditEditor } from "../features/LiveVendorCredits";
 import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
+import { LiveReceivingList, LiveReceivingDetail } from "../features/LiveReceiving";
+import { LiveReceivingEditor } from "../features/LiveReceivingEditor";
 import { LiveBudgets } from "../features/LiveBudgets";
+import { LiveOverview } from "../features/LiveOverview";
 import { AppShell } from "../components/layout/AppShell";
 import { Dashboard } from "../features/Dashboard";
 import { RecordList } from "../features/RecordList";
@@ -31,6 +35,7 @@ import { Budgets, Analytics, PayablesInbox } from "../features/Insights";
 import { BatchPayments } from "../features/BatchPayments";
 import { BatchPaymentEditor } from "../features/BatchPaymentEditor";
 import { Settings } from "../features/Settings";
+import { LiveSettingsShell } from "../features/LiveSettingsShell";
 import { modules, type ModuleKey } from "../data/modules";
 
 function EditorRoute({ kind }: { kind: Exclude<ModuleKey, "rfqs"> }) {
@@ -84,11 +89,12 @@ export function App() {
         <ProcurementLiveGate unavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<PendingLiveWorkflow />} /></Route></Routes>}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={isProcurementLiveMode ? <LiveOverview /> : <Dashboard />} />
             <Route
               path="/approvals"
               element={isProcurementLiveMode ? <LiveApprovalQueue /> : <RecordList kind="requests" approval />}
             />
+            <Route path="/approvals/unit-review/:id" element={isProcurementLiveMode ? <InvoiceUnitReviewDetail /> : <PendingLiveWorkflow />} />
             <Route path="/approvals/:id" element={isProcurementLiveMode ? <LiveApprovalRoute /> : <PendingLiveWorkflow />} />
             <Route
               path="/procurement-requests"
@@ -102,6 +108,7 @@ export function App() {
                   : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingList />
                     : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditList />
                     : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceList />
+                    : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingList />
                     : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderList />
                     : <RecordList key={module.key} kind={module.key} />}
               />
@@ -112,6 +119,7 @@ export function App() {
                 path={`/${module.key}/:id`}
                 element={isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditDetail />
                   : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceDetail />
+                  : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingDetail />
                   : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderDetail />
                   : <div className="p-5 sm:p-8">
                     {isProcurementLiveMode && module.key === "requests" ? <LiveRequestRoute />
@@ -130,6 +138,7 @@ export function App() {
                     isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
                       : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditEditor />
                       : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceEditor />
+                        : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingEditor />
                         : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderEditor /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />
@@ -142,6 +151,7 @@ export function App() {
                     isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
                       : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditEditor />
                       : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceEditor />
+                        : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingEditor />
                         : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderEditor /> : <EditorRoute
                       kind={module.key as Exclude<ModuleKey, "rfqs">}
                     />
@@ -218,11 +228,8 @@ export function App() {
             />
             <Route
               path="/analytics"
-              element={
-                <div className="p-5 sm:p-8">
-                  <Analytics />
-                </div>
-              }
+              element={isProcurementLiveMode ? <LiveOverview analytics />
+                : <div className="p-5 sm:p-8"><Analytics /></div>}
             />
             <Route
               path="/inbox"
@@ -264,7 +271,7 @@ export function App() {
               }
             />
           </Route>
-          <Route path="/settings/*" element={<Settings />} />
+          <Route path="/settings/*" element={isProcurementLiveMode ? <LiveSettingsShell /> : <Settings />} />
         </Routes>
         </ProcurementLiveGate>
         </ErpShellProvider>

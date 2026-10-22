@@ -1,96 +1,94 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchProcurementReadiness, ProcurementLiveError } from "./procurement-live";
-
 const entity = "00000000-0000-0000-0000-000000000001";
 const branch = "00000000-0000-0000-0000-000000000002";
 const worker = "00000000-0000-0000-0000-000000000003";
+const principal = "00000000-0000-0000-0000-000000000004";
 const capabilities = {
   vendorDraft: true, itemDraft: true, requestDraft: true, approvals: false,
-  sourcing: false, contracts: false, orders: false, orderDraft: true, receiving: false,
-  invoiceIntake: true, invoiceValidation: false, financeHandoff: false, supplierPortal: false, planningDraft: true, configurationDraft: true, contractDraft: true, sourcingDraft: true,
+  sourcing: false, contracts: false, orders: false, receiving: false,
+  invoiceValidation: false, financeHandoff: false, supplierPortal: false,
+  planningDraft: true, configurationDraft: true, contractDraft: true, sourcingDraft: true,
 };
-const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-
-describe("Procurement live readiness", () => {
-  it("accepts explicit ERP administrator review without inventing a worker or mutation permissions", async () => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["erp_admin"] } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: null, adminViewOnly: true,
-        company: { id: entity, currencyCode: "ZMW" }, permissions: ["procurement-access", "procurement-vendor-read", "procurement-receipt-view", "procurement-vendor-create", "procurement-approval-decide"] }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities }));
+const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+function fixture(overrides: Record<string, unknown> = {}, flags: Record<string, unknown> = {}, roles: string[] = []) {
+  return vi.fn()
+    .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles } }))
+    .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, principalId: principal,
+      workerId: null, company: { id: entity, currencyCode: "ZMW" },
+      permissions: ["procurement-access", "procurement-vendor-read", "procurement-vendor-create"], ...overrides }))
+    .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true,
+      capabilities: { ...capabilities, ...flags } }));
+}
+describe("Procurement system-user readiness", () => {
+  it("accepts a permissioned Core user without an employee or assumed administrator role", async () => {
+    const fetcher = fixture();
     const result = await fetchProcurementReadiness({ entityId: entity, branch }, undefined, fetcher);
+    expect(result.principalId).toBe(principal);
     expect(result.workerId).toBeNull();
-    expect(result.adminViewOnly).toBe(true);
-    expect(result.permissions).toEqual(["procurement-access", "procurement-vendor-read", "procurement-receipt-view"]);
+    expect(result.adminViewOnly).toBe(false);
+    expect(result.permissions).toEqual(["procurement-access", "procurement-vendor-read", "procurement-vendor-create"]);
     expect(fetcher.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity, "X-Shell-Location": branch });
+    expect(fetcher.mock.calls[2][1].credentials).toBe("include");
   });
-
+  it("preserves an optional employee projection without using it as the acting principal", async () => {
+    const result = await fetchProcurementReadiness({ entityId: entity }, undefined, fixture({ workerId: worker }));
+    expect(result.workerId).toBe(worker);
+    expect(result.principalId).not.toBe(worker);
+  });
+  it("does not derive grants or read-only restrictions from ERP administrator roles", async () => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({ permissions: ["procurement-access", "procurement-vendor-create"], adminViewOnly: true }, {}, ["erp_admin"]));
+    expect(result.adminViewOnly).toBe(false);
+    expect(result.permissions).toEqual(["procurement-access", "procurement-vendor-create"]);
+  });
   it.each([
-    { roles: ["employee"], workerId: null, adminViewOnly: true },
-    { roles: ["erp_admin"], workerId: null, adminViewOnly: false },
-    { roles: ["erp_admin"], workerId: null },
-    { roles: ["erp_admin"], workerId: worker, adminViewOnly: true },
-  ])("rejects contradictory or unconfirmed administrator context %j", async ({ roles, ...context }) => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, company: { id: entity, currencyCode: "ZMW" }, ...context }));
-    await expect(fetchProcurementReadiness({}, undefined, fetcher)).rejects.toMatchObject({ code: "invalid-response" });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    { principalId: undefined }, { principalId: worker, workerId: "not-an-employee-id" },
+    { principalId: "00000000-0000-0000-0000-000000000000" }, { principalId: "bad" },
+    { company: { id: branch, currencyCode: "ZMW" } }, { company: { id: entity, currencyCode: "invalid" } },
+    { permissions: [] }, { permissions: undefined }, { permissions: ["procurement-access", null] },
+  ])("rejects an invalid or ungranted context %j", async overrides => {
+    await expect(fetchProcurementReadiness({}, undefined, fixture(overrides))).rejects.toMatchObject({ code: "invalid-response" });
   });
-
-  it.each([undefined, true, "true"])("requires the explicit boolean credit capability (%s)", async flag => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["employee"] } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity, currencyCode: "ZMW" } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities: { ...capabilities, vendorCreditDraft: flag } }));
-    expect((await fetchProcurementReadiness({ entityId: entity }, undefined, fetcher)).capabilities.vendorCreditDraft).toBe(flag === true);
+  it("rejects a company context different from the selected company", async () => {
+    await expect(fetchProcurementReadiness({ entityId: branch }, undefined, fixture())).rejects.toMatchObject({ code: "invalid-response" });
   });
-
-  it("does not reinterpret a server access denial as administrator review", async () => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["erp_admin"] } }))
+  it.each([undefined, false, true, "true"])("requires explicit optional workflow availability (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { invoiceOriginalUnitReview: flag, invoiceComparison: flag, vendorCreditDraft: flag }));
+    expect(result.capabilities.invoiceOriginalUnitReview).toBe(flag === true);
+    expect(result.capabilities.invoiceComparison).toBe(flag === true);
+    expect(result.capabilities.vendorCreditDraft).toBe(flag === true);
+  });
+  it("does not infer worker-based availability over the server's actual capabilities", async () => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { orders: true, approvals: true }));
+    expect(result.capabilities.orders).toBe(true);
+    expect(result.capabilities.approvals).toBe(true);
+  });
+  it("keeps existing screens ready with missing optional adapters defaulted off", async () => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture());
+    expect(result.capabilities.invoiceIntake).toBe(false);
+    expect(result.capabilities.orderDraft).toBe(false);
+    expect(result.capabilities.invoiceOriginalUnitReview).toBe(false);
+  });
+  it("does not reinterpret server denial as administrator access", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["erp_admin"] } }))
       .mockResolvedValueOnce(new Response("", { status: 403 }));
     await expect(fetchProcurementReadiness({}, undefined, fetcher)).rejects.toMatchObject({ code: "access" });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
-
-  it("uses Core's selected IDs and accepts only a matching ready API scope", async () => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity, currencyCode: "ZMW" } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true, capabilities }));
-    const result = await fetchProcurementReadiness({ entityId: entity, branch }, undefined, fetcher);
-    expect(result.capabilities.vendorDraft).toBe(true);
-    expect(result.defaultCurrencyCode).toBe("ZMW");
-    expect(result.capabilities.orders).toBe(false);
-    expect(fetcher.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity, "X-Shell-Location": branch });
-    expect(fetcher.mock.calls[2][1].credentials).toBe("include");
+  it("requires a signed-in active account", async () => {
+    await expect(fetchProcurementReadiness({}, undefined, vi.fn().mockResolvedValue(json({ authenticated: false }))))
+      .rejects.toMatchObject({ code: "sign-in" });
+    await expect(fetchProcurementReadiness({}, undefined, vi.fn().mockResolvedValue(json({ authenticated: true, user: { isActive: false } }))))
+      .rejects.toMatchObject({ code: "access" });
   });
-
-  it("keeps existing pages ready while an older API omits new draft capabilities", async () => {
-    const earlierCapabilities = Object.fromEntries(Object.entries(capabilities)
-      .filter(([key]) => key !== "invoiceIntake" && key !== "orderDraft"));
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker,
-        company: { id: entity, currencyCode: "ZMW" } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity,
-        schemaReady: true, capabilities: earlierCapabilities }));
-    const result = await fetchProcurementReadiness({ entityId: entity }, undefined, fetcher);
-    expect(result.capabilities.vendorDraft).toBe(true);
-    expect(result.capabilities.invoiceIntake).toBe(false);
-    expect(result.capabilities.orderDraft).toBe(false);
-  });
-
-  it("never falls back to demo data when sign-in or schema readiness fails", async () => {
-    const signedOut = vi.fn().mockResolvedValue(json({ authenticated: false }));
-    await expect(fetchProcurementReadiness({}, undefined, signedOut)).rejects.toMatchObject({ code: "sign-in" });
-    expect(signedOut).toHaveBeenCalledTimes(1);
-
-    const unmigrated = vi.fn()
-      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker, company: { id: entity, currencyCode: "ZMW" } }))
-      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: false, capabilities }));
-    await expect(fetchProcurementReadiness({}, undefined, unmigrated)).rejects.toBeInstanceOf(ProcurementLiveError);
+  it("requires matching schema readiness", async () => {
+    const fetcher = fixture();
+    fetcher.mockReset().mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, principalId: principal, workerId: null,
+        company: { id: entity, currencyCode: "ZMW" }, permissions: ["procurement-access"] }))
+      .mockResolvedValueOnce(json({ tenantId: "different", legalEntityId: entity, schemaReady: true, capabilities }));
+    await expect(fetchProcurementReadiness({}, undefined, fetcher)).rejects.toBeInstanceOf(ProcurementLiveError);
   });
 });

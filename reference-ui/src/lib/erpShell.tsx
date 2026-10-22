@@ -1,4 +1,6 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
+import { observeAuthContext } from "./auth-context-invalidation";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../shared/branding";
 import { ERP_SHELL_STORAGE_KEY } from "../../../shared/shell-scope";
 
@@ -26,6 +28,7 @@ type Entity = { id: string; name: string; code: string };
 type Branch = { id: string; name: string; legalEntityId: string };
 type ShellSelection = { entityId?: string; branch?: string; [key: string]: unknown };
 type ErpShellContext = {
+  authEpoch: number;
   branding: Branding | null;
   entities: Entity[];
   branches: Branch[];
@@ -62,12 +65,19 @@ function rows(value: unknown): Record<string, unknown>[] {
 }
 
 export function ErpShellProvider({ children }: { children: ReactNode }) {
+  const authGeneration=useRef(0);
+  const [authEpoch,setAuthEpoch]=useState(0);
   const [branding, setBranding] = useState<Branding | null>(null);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selection, setSelection] = useState<ShellSelection>(readSelection);
   const [contextAvailable, setContextAvailable] = useState(false);
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
+
+  useEffect(()=>observeAuthContext(window,()=>{
+    authGeneration.current+=1;
+    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);});
+  }),[]);
 
   useLayoutEffect(() => {
     const cached = readBrandingCache();
@@ -86,15 +96,16 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const epoch=authEpoch;
     const controller = new AbortController();
     fetch("/api/hrm/auth/me", { credentials: "include", cache: "no-store", signal: controller.signal })
       .then((response) => response.ok ? response.json() : Promise.reject())
       .then((body: { authenticated?: boolean; user?: { roles?: unknown } }) => {
-        if (body.authenticated && Array.isArray(body.user?.roles)) setAssignedRoles(body.user.roles.filter((role): role is string => typeof role === "string"));
+        if (epoch===authGeneration.current && !controller.signal.aborted && body.authenticated && Array.isArray(body.user?.roles)) setAssignedRoles(body.user.roles.filter((role): role is string => typeof role === "string"));
       })
       .catch(() => {});
     return () => controller.abort();
-  }, []);
+  }, [authEpoch]);
 
   useEffect(() => {
     const sync = (event: StorageEvent) => {
@@ -144,6 +155,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   }, [branding]);
 
   useEffect(() => {
+    const epoch=authEpoch;
     const token = accessToken();
     const controller = new AbortController();
     const request = async (path: string) => {
@@ -160,6 +172,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
       request("/api/hrm/admin/locations"),
       request("/api/hrm/shell/"),
     ]).then(([entityData, branchData, shellData]) => {
+      if(controller.signal.aborted || epoch!==authGeneration.current)return;
       const scope = shellData as { assignedLocationIds?: string[]; confined?: boolean };
       const allowed = new Set(scope.assignedLocationIds ?? []);
       setEntities(rows(entityData).map((row) => ({
@@ -175,17 +188,17 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
       setContextAvailable(true);
     }).catch(() => {});
     return () => controller.abort();
-  }, []);
+  }, [authEpoch]);
 
   const updateSelection = (next: ShellSelection) => {
     localStorage.setItem(SHELL_KEY, JSON.stringify(next));
     setSelection(next);
   };
   const value = useMemo<ErpShellContext>(() => ({
-    branding, entities, branches, selection, contextAvailable, assignedRoles,
+    authEpoch,branding, entities, branches, selection, contextAvailable, assignedRoles,
     selectEntity: (id) => updateSelection({ ...selection, entityId: id, branch: "" }),
     selectBranch: (id, entityId) => updateSelection({ ...selection, entityId, branch: id }),
-  }), [branding, entities, branches, selection, contextAvailable, assignedRoles]);
+  }), [authEpoch,branding, entities, branches, selection, contextAvailable, assignedRoles]);
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }
 

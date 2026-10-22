@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
-type Fixture = { tenantId: string; companyId: string; branchId: string; actorId: string; workerId: string; approvedSupplierId: string; database: string; production: false; cliProofComplete: true };
+type Fixture = { tenantId: string; companyId: string; branchId: string; actorId: string; workerId: string | null; approvedSupplierId: string; database: string; production: false; cliProofComplete: true };
 const enabled = !!process.env.CRUD_BROWSER_FIXTURE && !!process.env.CRUD_BROWSER_SOCKET;
 test.skip(!enabled, "Opt-in private actual CRUD API fixture and socket are required.");
 const fixture: Fixture | null = enabled ? JSON.parse(readFileSync(process.env.CRUD_BROWSER_FIXTURE!, "utf8")) : null;
@@ -11,7 +11,8 @@ const prefix = `BROWSER-${Date.now()}`;
 const tables = { vendor: "suppliers", item: "catalog_items", request: "purchase_requests", invoice: "supplier_invoices", category: "procurement_categories", contract: "supplier_contracts", plan: "procurement_plans" } as const;
 function active(): Fixture {
   if (!fixture || fixture.production !== false || fixture.cliProofComplete !== true || !/^procurement_crud_http_[A-Za-z0-9_]+$/.test(fixture.database) || fixture.database.length > 63
-    || ![fixture.companyId, fixture.branchId, fixture.actorId, fixture.workerId, fixture.approvedSupplierId].every(id => uuid.test(id))) throw new Error("Validated private fixture required");
+    || ![fixture.companyId, fixture.branchId, fixture.actorId, fixture.approvedSupplierId].every(id => uuid.test(id))
+    || fixture.workerId !== null && !uuid.test(fixture.workerId)) throw new Error("Validated private fixture required");
   return fixture;
 }
 /** Independent owning-store observation; fixed allowlisted tables, validated UUID, SELECT only. */
@@ -67,6 +68,10 @@ test("actual inactive catalog draft create and edit retain values without fabric
 });
 
 test("actual request draft create, edit and withdrawal preserve source rows", async ({ page }) => {
+  const f = active();
+  const current = await page.request.get("/api/procurement/v1/context", { headers: { "X-Shell-Entity": f.companyId, "X-Shell-Location": f.branchId } });
+  expect(current.ok()).toBe(true);
+  expect(await current.json()).toMatchObject({ principalId: f.actorId, workerId: f.workerId });
   await page.goto("/procurement/workspace/requests/new"); await page.getByLabel("What do you need?", { exact: true }).fill(`${prefix} Request`); await page.getByLabel("Item or service 1", { exact: true }).fill("Actual draft supplies"); await page.getByLabel("Quantity", { exact: true }).fill("2"); await page.getByLabel("Estimated unit price", { exact: true }).fill("10");
   const created = await mutation(page, "POST", "/requests", () => page.getByRole("button", { name: "Save draft", exact: true }).click()); const id = idOf(created);
   await expect(page.getByRole("heading", { name: `${prefix} Request`, exact: true })).toBeVisible(); await page.reload(); await page.getByRole("link", { name: "Edit request", exact: true }).click(); await page.getByLabel("Quantity", { exact: true }).fill("3");
@@ -77,7 +82,8 @@ test("actual request draft create, edit and withdrawal preserve source rows", as
     `SELECT jsonb_agg(jsonb_build_object('quantity',requested_quantity,'price',estimated_unit_price))::text FROM procurement.purchase_request_lines WHERE purchase_request_id='${id}'::uuid;`], { encoding: "utf8", timeout: 15000 }).trim());
   expect(requestLines).toEqual([{ quantity: 3, price: 10 }]);
   await page.getByRole("textbox", { name: /^Reason(?:\s|$)/ }).fill("Browser draft withdrawn"); await mutation(page, "POST", `/requests/${id}/withdraw`, () => page.getByRole("button", { name: "Withdraw request", exact: true }).click());
-  expect(owner("request", id).status).toBe("Withdrawn");
+  expect(owner("request", id)).toMatchObject({ status: "Withdrawn", requester_principal_id: f.actorId,
+    requester_worker_id: f.workerId, created_by: f.actorId });
 });
 
 test("actual invoice create, exact edit and cancellation survive refresh and owner inspection", async ({ page }) => {

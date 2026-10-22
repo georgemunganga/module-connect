@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 export interface ProcurementContext {
   tenantId: string;
   legalEntityId: string;
+  principalId: string;
   workerId: string | null;
   company: { id: string; code: string; name: string };
   branch: { id: string; code: string; name: string } | null;
@@ -41,6 +42,7 @@ function validContext(value: unknown): value is ProcurementContext {
   return (
     typeof value.tenantId === "string" &&
     value.tenantId.trim().length > 0 &&
+    uuid.test(String(value.principalId)) && value.principalId !== "00000000-0000-0000-0000-000000000000" &&
     uuid.test(String(value.legalEntityId)) &&
     (value.workerId === null || uuid.test(String(value.workerId))) &&
     validCompany(value.company) &&
@@ -49,6 +51,7 @@ function validContext(value: unknown): value is ProcurementContext {
     (value.orgUnit === null || validCompany(value.orgUnit)) &&
     value.roles.every((role) => typeof role === "string") &&
     value.permissions.every((permission) => typeof permission === "string") &&
+    value.permissions.includes("procurement-access") &&
     value.allowedCompanies.every(validCompany) &&
     value.allowedCompanies.some((company) => company.id === value.legalEntityId) &&
     typeof value.confined === "boolean"

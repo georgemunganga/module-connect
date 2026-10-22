@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Badge, Button, EmptyState, Field, Modal, PageHeader, Panel, Textarea } from "../components/ui";
+import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
+import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
+import { LiveOrderApprovalQueue } from "./LiveOrderApprovalQueue";
+import { InvoiceUnitReviewQueue } from "./InvoiceUnitReviewTasks";
 import { ApprovalOpeningPanel } from "./ApprovalOpeningPanel";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -16,6 +19,23 @@ function useApprovalContext() {
   return readiness;
 }
 export function LiveApprovalQueue() {
+  const context = useApprovalContext();
+  const requests = context.capabilities.approvals && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
+  const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
+  const units = context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
+  const available = ([requests && "requests", orders && "orders", units && "units"].filter(Boolean) as ("requests" | "orders" | "units")[]);
+  const [type, setType] = useState<"requests" | "orders" | "units">(() => available[0] ?? "requests");
+  const selected = available.includes(type) ? type : available[0];
+  if (!selected) return <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
+  const queue = selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "units" ? <InvoiceUnitReviewQueue /> : <RequestApprovalQueue />;
+  if (available.length === 1) return queue;
+  return <><div className="flex gap-3 px-5 pt-5 sm:px-8" role="tablist" aria-label="Approval records">
+    {requests && <Button role="tab" aria-selected={selected === "requests"} variant={selected === "requests" ? "primary" : "secondary"} onClick={() => setType("requests")}>Purchase requests</Button>}
+    {orders && <Button role="tab" aria-selected={selected === "orders"} variant={selected === "orders" ? "primary" : "secondary"} onClick={() => setType("orders")}>Purchase orders</Button>}
+    {units && <Button role="tab" aria-selected={selected === "units"} variant={selected === "units" ? "primary" : "secondary"} onClick={() => setType("units")}>Original invoice units</Button>}
+  </div>{queue}</>;
+}
+function RequestApprovalQueue() {
   const { legalEntityId, permissions } = useApprovalContext();
   const canRead = permissions.includes("procurement-approval-read");
   const [offset, setOffset] = useState(0), [revision, setRevision] = useState(0);
@@ -100,12 +120,9 @@ export function LiveApprovalDetail() {
     </div>)}</div>)}{data.blockers.length > 0 && <p className="text-sm text-muted-foreground">Some approval checks need attention. You can still use the actions shown.</p>}</div></Panel>
     <Panel title="Decision history" className="mt-5"><div className="space-y-3 p-5">{data.decisions.length ? data.decisions.map((decision) => <div key={decision.id} className="text-sm"><p className="font-medium">{decision.action} · {date(decision.decidedAt)}</p>{decision.reason && <p>{decision.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">No decisions recorded yet.</p>}</div></Panel>
     <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/approvals">Back to approvals</Link>
-    {pending && <Modal title={pending.action === "Return" ? "Return request for changes" : `${pending.action} request`} onClose={() => { if (!busy && !pending.uncertain) setPending(null); }}>
-      <div className="space-y-4">{error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-        <Field label={pending.action === "Approve" ? "Comment (optional)" : "Reason"} hint={pending.action === "Approve" ? undefined : "Explain what needs to change."}><Textarea rows={3} maxLength={2000} disabled={busy || !!pending.key} value={pending.reason} onChange={(event) => setPending({ ...pending, reason: event.target.value })} /></Field>
-        {pending.uncertain && <p className="text-sm">The response was interrupted. Retry this same decision to confirm whether it was saved.</p>}
-        <div className="flex gap-3"><Button disabled={busy || (pending.action !== "Approve" && !pending.reason.trim())} onClick={() => void decide()}>{busy ? "Saving…" : pending.uncertain ? "Retry same decision" : "Confirm decision"}</Button><Button variant="secondary" disabled={busy || pending.uncertain} onClick={() => setPending(null)}>Cancel</Button></div>
-      </div></Modal>}
+    {pending && <ApprovalDecisionDialog action={pending.action} recordLabel="request" reason={pending.reason} busy={busy} error={error}
+      locked={!!pending.key} uncertain={!!pending.uncertain} onReason={(reason) => setPending({ ...pending, reason })}
+      onConfirm={() => void decide()} onCancel={() => setPending(null)} />}
   </div>;
 }
 

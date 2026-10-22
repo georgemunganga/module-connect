@@ -2,13 +2,14 @@ import { expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 export const actualCrudEnabled = !!process.env.CRUD_BROWSER_FIXTURE && !!process.env.CRUD_BROWSER_SOCKET;
-type Fixture = { tenantId: string; companyId: string; branchId: string; actorId: string; workerId: string; approvedSupplierId: string; database: string; production: false; cliProofComplete: true };
+type Fixture = { tenantId: string; companyId: string; branchId: string; actorId: string; workerId: string | null; approvedSupplierId: string; database: string; production: false; cliProofComplete: true; browserActorSwitch?: "manifest-alias-v1"; actors?: { systemReviewer?: { principalId: string; workerId: null } } };
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function actualFixture(): Fixture {
   if (!actualCrudEnabled) throw new Error("Explicit private actual API fixture required");
   const value = JSON.parse(readFileSync(process.env.CRUD_BROWSER_FIXTURE!, "utf8")) as Fixture;
   if (value.production !== false || value.cliProofComplete !== true || !/^procurement_crud_http_[A-Za-z0-9_]+$/.test(value.database) || value.database.length > 63
-    || ![value.companyId,value.branchId,value.actorId,value.workerId,value.approvedSupplierId].every(id => guid.test(id))) throw new Error("Actual private fixture invalid");
+    || ![value.companyId,value.branchId,value.actorId,value.approvedSupplierId].every(id => guid.test(id))
+    || value.workerId !== null && !guid.test(value.workerId)) throw new Error("Actual private fixture invalid");
   return value;
 }
 export async function actualShell(page: Page) {

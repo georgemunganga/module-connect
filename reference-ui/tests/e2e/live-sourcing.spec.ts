@@ -25,7 +25,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId, company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId, permissions: ["procurement-access", "procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit"], company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/sourcing") {
       if (request.method() === "GET") return options.denyList ? json({ message: "Forbidden" }, 403)
@@ -161,4 +161,17 @@ test("unconfirmed rfqs create preserves entries and blocks repeat submission", a
   await page.getByRole("link", { name: /^Review saved / }).click();
   await expect(page).toHaveURL(/\/rfqs$/);
   expect(attempts).toBe(1);
+});
+
+test("actual exported ad hoc editor and detail routes remain legacy and never recurse into governed dispatch", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/rfqs/new");
+  await page.getByLabel("What are you buying?").fill("Ad hoc route proof");
+  await page.getByLabel("Item or service 1").fill("Paper");
+  await page.getByLabel("Quantity").fill("2");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Ad hoc route proof", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Ad hoc route proof", exact: true })).toBeVisible();
+  await expect(page.getByText("This is an internal draft.", { exact: false })).toHaveCount(0);
 });

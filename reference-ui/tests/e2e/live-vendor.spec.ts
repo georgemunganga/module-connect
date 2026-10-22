@@ -32,7 +32,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: companyId, workerId: options.adminViewOnly ? null : workerId, adminViewOnly: options.adminViewOnly || undefined,
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId: options.adminViewOnly ? null : workerId, adminViewOnly: options.adminViewOnly || undefined,
       permissions: options.adminViewOnly ? ["procurement-access", "procurement-vendor-read"] : options.approveOnly
         ? ["procurement-access", "procurement-vendor-read", "procurement-vendor-approve"]
         : ["procurement-access", "procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit", "procurement-vendor-manage", "procurement-vendor-approve"],
@@ -429,7 +429,7 @@ test("worker-less ERP administrator can review vendors without purchasing comman
   page.on("request", request => { if (new URL(request.url()).pathname.startsWith("/api/procurement/") && request.method() !== "GET") writes.push(request.url()); });
   await mockErp(page, { adminViewOnly: true });
   await page.goto("/procurement/workspace/vendors");
-  await expect(page.getByRole("status").filter({ hasText: "Administrator view" })).toBeVisible();
+  await expect(page.getByText("Administrator view")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Acme", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Add vendor|New vendor/i })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Add vendor|New vendor/i })).toHaveCount(0);
@@ -437,7 +437,7 @@ test("worker-less ERP administrator can review vendors without purchasing comman
   await expect(page.getByRole("heading", { name: "Review vendor", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Approve vendor|Reject vendor|Save vendor/i })).toHaveCount(0);
   await page.goto("/procurement/workspace/vendors/new");
-  await expect(page.getByRole("heading", { name: "View only", exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
   await expect(page.getByRole("button", { name: /Save/i })).toHaveCount(0);
   expect(writes).toEqual([]);
 });

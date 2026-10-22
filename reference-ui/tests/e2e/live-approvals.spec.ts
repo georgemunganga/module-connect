@@ -34,7 +34,7 @@ async function mockErp(page: Page, options: { enabled?: boolean; empty?: boolean
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (url.pathname === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: company, workerId: worker, permissions,
+    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: worker, permissions,
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities });
     if (url.pathname === "/api/procurement/v1/requests/approval-opening-queue") return json({

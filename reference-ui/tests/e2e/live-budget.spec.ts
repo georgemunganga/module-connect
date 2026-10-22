@@ -28,7 +28,7 @@ async function mockErp(page: Page, canReview: boolean) {
       code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo",
+    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo",
       legalEntityId: companyId, workerId,
       permissions: canReview ? ["procurement-access", "procurement-budget-check"] : ["procurement-access"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });

@@ -21,7 +21,7 @@ async function fixture(page: Page, mode: "normal"|"legacy"|"stale"|"lost"|"item-
     if(path==="/api/hrm/admin/legal-entities")return json({items:[{id:company,code:"TEST",registeredName:"Synthetic company"}]});
     if(path==="/api/hrm/admin/locations")return json({items:[]});
     if(path==="/api/hrm/shell/")return json({assignedLocationIds:[],confined:false});
-    if(path==="/api/procurement/v1/context")return json({tenantId:"synthetic",legalEntityId:company,workerId:worker,
+    if(path==="/api/procurement/v1/context")return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",tenantId:"synthetic",legalEntityId:company,workerId:worker,
       permissions:["procurement-access","procurement-item-manage"],company:{id:company,code:"TEST",name:"Synthetic company",currencyCode:"ZMW"}});
     if(path==="/api/procurement/v1/meta")return json({tenantId:"synthetic",legalEntityId:company,schemaReady:true,capabilities});
     if(path==="/api/procurement/v1/vendors")return json({items:[{id:vendor,number:"VEN-1",displayName:"Actual selected vendor",legalName:"Vendor",countryCode:"ZM",status:"Active",isOrderable:true,version:1,createdAt:"2026-10-22T00:00:00Z"}],total:1,page:1,pageSize:100});
@@ -67,7 +67,7 @@ test("stale price keeps the correction and explicit saved-price check performs o
 test("lost catalog correction stays unconfirmed with no automatic repeat PUT",async({page})=>{
   const f=await fixture(page,"lost");await page.goto(`/procurement/workspace/items/${item}`);await page.getByRole("button",{name:"Edit draft price",exact:true}).click();
   await page.getByRole("textbox",{name:"Draft unit price",exact:true}).fill("8.0001");await page.getByRole("button",{name:"Save draft price",exact:true}).click();
-  await expect(page.getByRole("status")).toContainText("save is unconfirmed");await expect(page.getByRole("button",{name:"Save draft price",exact:true})).toBeDisabled();
+  await expect(page.getByRole("status").filter({hasText:"This save is unconfirmed"})).toContainText("save is unconfirmed");await expect(page.getByRole("button",{name:"Save draft price",exact:true})).toBeDisabled();
   await page.getByRole("button",{name:"Check saved prices",exact:true}).click();await expect.poll(()=>f.readCount()).toBeGreaterThan(1);expect(f.writes).toHaveLength(1);
   await expect(page.getByRole("button",{name:"Save draft price",exact:true})).toBeDisabled();
 });

@@ -47,7 +47,7 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
       code: "AMIZO", registeredName: "Amizo Power" }] });
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (url.pathname === "/api/procurement/v1/context") return json({ tenantId: "amizo",
+    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo",
       legalEntityId: companyId, workerId,
       permissions: canCapture ? ["procurement-access", "procurement-vendor-read",
         "procurement-invoice-read", "procurement-invoice-capture"]
@@ -153,7 +153,7 @@ test("read-only invoice user cannot start intake", async ({ page }) => {
   await page.goto("/procurement/workspace/bills");
   await expect(page.getByRole("button", { name: "Record invoice" })).toHaveCount(0);
   await page.goto("/procurement/workspace/bills/new");
-  await expect(page.getByText("You do not have access to record invoices")).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
 });
 
 
@@ -282,7 +282,7 @@ test("read-only user never receives edit or cancellation actions", async ({ page
   await expect(page.getByRole("link", { name: "Edit invoice", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cancel invoice", exact: true })).toHaveCount(0);
   await page.goto(`/procurement/workspace/bills/${invoiceId}/edit`);
-  await expect(page.getByText("You do not have access to record invoices", { exact: false })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
   expect(setup.mutations).toEqual([]);
 });
 
@@ -298,3 +298,27 @@ test("an older backend without the CRUD marker keeps invoice mutations unavailab
   await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0);
   expect(setup.mutations).toEqual([]);
 });
+
+for (const status of [408, 429, 499]) {
+  test(`invoice intake HTTP ${status} blocks another POST in the current form`, async ({ page }) => {
+    await mockErp(page);
+    let posts = 0;
+    await page.route("**/api/procurement/v1/invoices", route => {
+      if (route.request().method() !== "POST") return route.fallback();
+      posts++;
+      return route.fulfill({ status, contentType: "application/json", body: JSON.stringify({ message: "The save outcome was not confirmed." }) });
+    });
+    await page.goto("/procurement/workspace/bills/new");
+    await page.getByRole("combobox", { name: "Vendor", exact: true }).click();
+    await page.getByRole("option", { name: "Office Supplier", exact: true }).click();
+    await page.getByLabel("Invoice number").fill("INV-TIMEOUT");
+    await page.getByLabel("Description 1").fill("Supplies");
+    await page.getByLabel("Quantity", { exact: true }).fill("1");
+    await page.getByLabel("Unit price", { exact: true }).fill("10");
+    await page.getByRole("button", { name: "Record as received", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "The save outcome was not confirmed." })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Record as received", exact: true })).toBeDisabled();
+    await expect(page.getByLabel("Invoice number")).toHaveValue("INV-TIMEOUT");
+    expect(posts).toBe(1);
+  });
+}
