@@ -1,3 +1,4 @@
+import { privateFixtureRequest } from "./private-unix-transport";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import type { ReceiptDetail, ServiceDetail } from "../../../src/platform/procurement-receiving-api";
@@ -5,7 +6,7 @@ import type { ReceiptDetail, ServiceDetail } from "../../../src/platform/procure
 type Actor = "requester" | "manager1" | "manager2" | "acceptor" | "unassigned" | "buyer" | "finance";
 type Context = { roles?: string[]; permissions: string[]; company: { name: string; code: string } };
 type Source = { orderId: string; orderNumber: string; purchaseOrderLineId: string; issuedVersionId: string; description: string; siteId: string; authorizedQuantity: string; netUnitPrice: string };
-type Manifest = { baseUrl: string; tenantId: string; companyId: string; branchId: string; currencyCode: string; authenticationHeader: string;
+type Manifest = { transport?: string; socketPath?: string; noTcpListener?: boolean; baseUrl: string; tenantId: string; companyId: string; branchId: string; currencyCode: string; authenticationHeader: string;
   actors: Record<Actor, { principalId: string; context: Context }>;
   receiving: { goods: Source; service: Source; physicalQuantity: string; qualifiedQuantity: string; goodsAcceptQuantity: string; partialServiceQuantity: string; serviceNotes: string; evidencePrefix: string; noReceivingEffectsSeeded: boolean } };
 type Traffic = { origin: "browser" | "verification"; actor: Actor; method: string; path: string; status: number; body: string | null; key?: string; response: unknown };
@@ -47,12 +48,12 @@ async function connect(page: Page, fixture: Manifest, trafficPath: string) {
       // Transport forwarding only. No Procurement context/meta/read/command/business response is mocked.
       expect(request.headers()["x-shell-entity"]).toBe(fixture.companyId);
       expect(request.headers()["x-shell-location"]).toBe(fixture.branchId);
-      const upstream = await route.fetch({ url: `${fixture.baseUrl}${url.pathname}${url.search}`, timeout: 45_000, maxRetries: 0,
-        headers: { ...request.headers(), ...headers(acting) } });
+      const upstream = await privateFixtureRequest(page.request, fixture, url.pathname + url.search, {
+        method: request.method(), body: request.postData(), headers: { ...request.headers(), ...headers(acting) } });
       const text = await upstream.text(); let response: unknown; try { response = JSON.parse(text); } catch { response = text; }
       record({ origin: "browser", actor: acting, method: request.method(), path: url.pathname, status: upstream.status(), body: request.postData(),
         key: request.headers()["idempotency-key"], response });
-      return route.fulfill({ response: upstream });
+      return route.fulfill(upstream.fulfill);
     }
     // Only presentation/authentication for the ERP shell is synthetic; API authorization is real.
     const context = fixture.actors[acting].context;
@@ -66,7 +67,7 @@ async function connect(page: Page, fixture: Manifest, trafficPath: string) {
   });
   return { traffic, async visit(next: Actor, path: string) { actor = next; await page.goto(workspace + path); },
     async request(next: Actor, path: string, method: "GET" | "POST" = "GET", body?: string, key?: string) {
-      const result = await page.request.fetch(fixture.baseUrl + path, { method, data: body, timeout: 45_000,
+      const result = await privateFixtureRequest(page.request, fixture, path, { method, body,
         headers: { ...headers(next), ...(body ? { "Content-Type": "application/json" } : {}), ...(key ? { "Idempotency-Key": key } : {}) } });
       const text = await result.text(); let response: unknown; try { response = JSON.parse(text); } catch { response = text; }
       record({ origin: "verification", actor: next, method, path, status: result.status(), body: body ?? null, key, response });
