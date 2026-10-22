@@ -9,7 +9,7 @@ export type RecurringPurchaseDraft = {
   currencyCode: string; expectedAmount: string;
 };
 export type RecurringPurchase = RecurringPurchaseDraft & {
-  id: string; number: string; ownerWorkerId: string; workLocationId: string | null;
+  id: string; number: string; ownerPrincipalId: string; ownerWorkerId: string | null; workLocationId: string | null;
   status: "Draft" | "Closed"; exactExpectedAmount: string; version: number;
   closedAt: string | null; closedReason: string | null; createdAt: string;
 };
@@ -48,7 +48,8 @@ export function validateRecurringPurchase(draft: RecurringPurchaseDraft): string
 }
 function parseRow(value: unknown): RecurringPurchase {
   if (!object(value) || !guid.test(String(value.id)) || !guid.test(String(value.supplierId))
-    || !guid.test(String(value.ownerWorkerId)) || value.supplierContractId !== null && !guid.test(String(value.supplierContractId))
+    || !guid.test(String(value.ownerPrincipalId)) || value.ownerPrincipalId === "00000000-0000-0000-0000-000000000000"
+    || value.ownerWorkerId !== null && !guid.test(String(value.ownerWorkerId)) || value.supplierContractId !== null && !guid.test(String(value.supplierContractId))
     || value.workLocationId !== null && !guid.test(String(value.workLocationId))
     || typeof value.number !== "string" || typeof value.title !== "string"
     || !["Weekly", "Monthly", "Quarterly", "Yearly"].includes(String(value.frequency))
@@ -66,6 +67,11 @@ function parseRow(value: unknown): RecurringPurchase {
   try { invoiceDecimal(value.exactExpectedAmount, true); }
   catch { throw new RecurringPurchaseError(0, "The ERP returned an invalid exact expected amount."); }
   return { ...value, expectedAmount: value.exactExpectedAmount } as unknown as RecurringPurchase;
+}
+export function recurringPurchaseForPrincipal(record: RecurringPurchase, principalId: string): RecurringPurchase {
+  if (record.ownerPrincipalId !== principalId)
+    throw new RecurringPurchaseError(0, "The returned purchase belongs to a different account. Refresh your company context.");
+  return record;
 }
 async function request(companyId: string, path: string, init: RequestInit = {}): Promise<unknown> {
   if (!guid.test(companyId)) throw new RecurringPurchaseError(0, "Choose an ERP company.");

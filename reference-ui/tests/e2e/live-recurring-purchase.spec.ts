@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const company = "11111111-1111-4111-8111-111111111111";
-const worker = "22222222-2222-4222-8222-222222222222";
+const principal = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const supplier = "33333333-3333-4333-8333-333333333333";
 const recordId = "44444444-4444-4444-8444-444444444444";
 const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
@@ -10,10 +10,10 @@ const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDra
 const permissions = ["procurement-access", "procurement-recurring-read", "procurement-recurring-create", "procurement-recurring-edit"];
 type RecordValue = Record<string, unknown> & { id: string; version: number; status: string };
 
-async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean; createStatus?: number; closed?: boolean } = {}) {
+async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean; createStatus?: number; closed?: boolean; wrongOwner?: boolean } = {}) {
   const writes: string[] = [];
   let record: RecordValue | null = opts.closed ? { id: recordId, number: "RPC-1", title: "Past service", supplierId: supplier,
-    supplierContractId: null, ownerWorkerId: worker, workLocationId: null, frequency: "Monthly",
+    supplierContractId: null, ownerPrincipalId: principal, ownerWorkerId: null, workLocationId: null, frequency: "Monthly",
     firstCycleOn: "2026-01-01", nextCycleOn: "2026-09-01", lastCycleOn: null,
     expectedAmount: 20, exactExpectedAmount: "20", currencyCode: "ZMW",
     status: "Closed", version: 2, createdAt: "2026-01-01T00:00:00Z", closedAt: "2026-10-01T00:00:00Z",
@@ -28,7 +28,7 @@ async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: b
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: company, workerId: worker,
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "amizo", legalEntityId: company, principalId: principal, workerId: null,
       permissions: opts.permissions ?? permissions, company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/vendors") return json({ items: [{ id: supplier, number: "VEN-1", displayName: "Copper Services", legalName: "Copper Services", countryCode: "ZM", status: "Active", isOrderable: true, version: 1, createdAt: "2026-10-22T00:00:00Z" }], total: 1, page: 1, pageSize: 100 });
@@ -38,7 +38,7 @@ async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: b
       if (opts.unknownCreate) return route.abort("failed");
       if (opts.createStatus) return json({ message: "The upstream result is unconfirmed." }, opts.createStatus);
       const input = route.request().postDataJSON();
-      record = { ...input, id: recordId, number: "RPC-1", ownerWorkerId: worker, workLocationId: null,
+      record = { ...input, id: recordId, number: "RPC-1", ownerPrincipalId: opts.wrongOwner ? supplier : principal, ownerWorkerId: null, workLocationId: null,
         exactExpectedAmount: input.expectedAmount, status: "Draft", version: 1,
         createdAt: "2026-10-22T00:00:00Z", closedAt: null, closedReason: null };
       return json(record, 201);
@@ -59,7 +59,7 @@ async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: b
   return { writes };
 }
 
-test("recurring purchase can be created, edited and closed without a Finance request", async ({ page }) => {
+test("system user without an employee can create, edit and close recurring purchases without a Finance request", async ({ page }) => {
   const state = await fixture(page);
   await page.goto("/procurement/workspace/recurring-bills");
   await expect(page.getByText("No recurring purchases yet")).toBeVisible();
@@ -148,3 +148,22 @@ for (const status of [408, 429, 499]) {
     expect(state.writes).toHaveLength(1);
   });
 }
+
+test("a save receipt owned by another principal never unlocks or navigates the editor", async ({ page }) => {
+  const state = await fixture(page, { wrongOwner: true });
+  await page.goto("/procurement/workspace/recurring-bills/new");
+  await page.getByRole("combobox", { name: "Supplier", exact: true }).click();
+  await page.getByRole("option", { name: "Copper Services (Active)", exact: true }).click();
+  await page.getByLabel("Purchase name").fill("Account-owned schedule");
+  await page.getByLabel("Expected each time").fill("10.0001");
+  await page.getByLabel("First expected date").fill("2026-11-01");
+  await page.getByLabel("Next expected date").fill("2026-11-01");
+  await page.getByRole("button", { name: "Save recurring purchase" }).click();
+  await expect(page.getByRole("alert")).toContainText("different account");
+  await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+  await expect(page).toHaveURL(/\/recurring-bills\/new$/);
+  expect(state.writes).toHaveLength(1);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+  expect(state.writes).toHaveLength(1);
+});

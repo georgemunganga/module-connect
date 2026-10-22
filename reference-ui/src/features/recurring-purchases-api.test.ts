@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  RecurringPurchaseError, isDefiniteRecurringRejection, closeRecurringPurchase, createRecurringPurchase, getRecurringPurchase, listRecurringPurchases,
+  RecurringPurchaseError, isDefiniteRecurringRejection, recurringPurchaseForPrincipal, closeRecurringPurchase, createRecurringPurchase, getRecurringPurchase, listRecurringPurchases,
   updateRecurringPurchase, validateRecurringPurchase, type RecurringPurchaseDraft,
 } from "../../../src/platform/procurement-recurring-purchases-api";
 
@@ -12,7 +12,7 @@ const draft: RecurringPurchaseDraft = { supplierId: supplier, supplierContractId
   title: "Monthly service", frequency: "Monthly", firstCycleOn: "2026-11-01",
   lastCycleOn: "2027-10-01", nextCycleOn: "2026-11-01",
   currencyCode: "ZMW", expectedAmount: "99999999999999.9999" };
-const row = { ...draft, id, number: "RPC-1", ownerWorkerId: owner, workLocationId: null,
+const row = { ...draft, id, number: "RPC-1", ownerPrincipalId: owner, ownerWorkerId: null, workLocationId: null,
   expectedAmount: 99999999999999.99, exactExpectedAmount: draft.expectedAmount,
   status: "Draft", version: 1, createdAt: "2026-10-22T00:00:00Z", closedAt: null, closedReason: null };
 afterEach(() => vi.unstubAllGlobals());
@@ -85,6 +85,18 @@ describe("recurring purchase planning contract", () => {
     vi.stubGlobal("fetch", fetcher);
     await expect(closeRecurringPurchase(company, id, 1, "Ended")).rejects.toMatchObject({ status: 0 });
     await expect(closeRecurringPurchase(company, id, 1, "Ended")).rejects.toMatchObject({ status: 0 });
+  });
+  it("requires a real owner principal while accepting a missing optional employee", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(row), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...row, ownerPrincipalId: undefined }), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    const saved = await getRecurringPurchase(company, id);
+    expect(saved.ownerPrincipalId).toBe(owner);
+    expect(saved.ownerWorkerId).toBeNull();
+    expect(recurringPurchaseForPrincipal(saved, owner)).toBe(saved);
+    expect(() => recurringPurchaseForPrincipal(saved, supplier)).toThrow("different account");
+    await expect(getRecurringPurchase(company, id)).rejects.toMatchObject({ status: 0 });
   });
   it("does not assume a failed close succeeded", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: "Refresh first" }), { status: 409 }));
