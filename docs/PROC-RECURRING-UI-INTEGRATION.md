@@ -31,6 +31,8 @@ This is deliberately a conservative browser-session safeguard, not server idempo
 
 ## Core system-user ownership correction (source only)
 
+Reviewed ERP backend contract source: `c4f65f2` on `codex/procurement-recurring-core-principal` (schema/runtime gates pending). Its detail DTO and assignment/close code were inspected.
+
 The updated backend contract requires `ownerPrincipalId` (the actual stable Core account UUID) and permits `ownerWorkerId: null`. CRUD permission checks no longer require an employee or derive a read-only mode from missing employees. Journal keys use the acting Core principal. Owner details display **You**, without exposing an employee UUID. List/detail/editor reads and mutation acknowledgments must match the current acting principal before displaying data or clearing a pending marker.
 
 Accepted update and close responses still require exactly the next revision; the backend integration must advance even no-op PUTs. Missing/foreign owner principals, wrong revisions/states/fields and unrecognized HTTP outcomes remain unconfirmed. Tests now exercise the full mocked CRUD journey with a Core principal and no employee, plus wrong-owner acknowledgment locking across reload. No backend identity is synthesized, and no Finance bill is generated.
