@@ -1,3 +1,5 @@
+import { LiveOrderExecutionList, LiveOrderExecutionDetail } from "./LiveOrderExecution";
+import { LiveOrderSourceEditor } from "./LiveOrderSourceEditor";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
@@ -26,6 +28,14 @@ function useCompany() {
 }
 
 export function LiveOrderList() {
+  const context = useCompany(); const { selection } = useErpShell();
+  if (selection.entityId && selection.entityId !== context.legalEntityId)
+    return <p role="status">Checking the selected company…</p>;
+  return context.capabilities.orders
+    ? <LiveOrderExecutionList key={[context.tenantId, context.legalEntityId, selection.branch, context.workerId].join(":")} />
+    : <LegacyOrderList />;
+}
+function LegacyOrderList() {
   const navigate = useNavigate();
   const { legalEntityId, permissions } = useCompany();
   const [page, setPage] = useState(1);
@@ -67,6 +77,7 @@ export function LiveOrderEditor() {
   const { id } = useParams(); const readiness = useCompany(); const { selection } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
+  if (readiness.capabilities.orders) return <LiveOrderSourceEditor />;
   return <LiveOrderEditorRecord key={[readiness.tenantId, readiness.legalEntityId, selection.branch,
     readiness.workerId ?? "admin", id ?? "new"].join(":")} />;
 }
@@ -214,6 +225,12 @@ function LiveOrderEditorRecord() {
 }
 
 export function LiveOrderDetail() {
+  const context = useCompany(); const { selection } = useErpShell();
+  if (selection.entityId && selection.entityId !== context.legalEntityId)
+    return <p role="status">Checking the selected company…</p>;
+  return context.capabilities.orders ? <LiveOrderExecutionDetail /> : <LegacyOrderDetail />;
+}
+function LegacyOrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { legalEntityId, permissions } = useCompany();
