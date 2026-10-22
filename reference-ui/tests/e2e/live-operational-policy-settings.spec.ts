@@ -67,12 +67,20 @@ test("invoice rule editor blocks a second create after lost response and reload"
   await page.goto("/procurement/workspace/settings/modules/bills/preferences");
   await page.getByRole("button", { name: "Add draft" }).click();
   await page.getByLabel("Category code").fill("LAPTOPS");
-  await page.getByLabel("Money decimal places").selectOption("2");
-  await page.getByLabel("Rounding").selectOption("ToEven");
-  await page.getByLabel("Check method").selectOption("TwoWay");
+  await page.getByRole("combobox", { name: "Money decimal places", exact: true }).click();
+  await page.getByRole("option", { name: "2", exact: true }).click();
+  await page.getByRole("combobox", { name: "Rounding", exact: true }).click();
+  await page.getByRole("option", { name: "To nearest even", exact: true }).click();
+  await page.getByRole("combobox", { name: "Check method", exact: true }).click();
+  await page.getByRole("option", { name: "Order and invoice", exact: true }).click();
   for (const amount of await page.getByLabel("Allowed amount").all()) await amount.fill("0");
   for (const percent of await page.getByLabel("Allowed percent").all()) await percent.fill("0");
-  for (const combine of await page.getByLabel("How limits combine").all()) await combine.selectOption("AllLimits");
+  const combinations = page.getByRole("combobox", { name: "How limits combine", exact: true });
+  await expect(combinations).toHaveCount(4);
+  for (const combine of await combinations.all()) {
+    await combine.click();
+    await page.getByRole("option", { name: "Both limits must pass", exact: true }).click();
+  }
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("A previous change has no confirmed result.", { exact: false })).toBeVisible();
   await expect(page.getByLabel("Category code")).toHaveValue("LAPTOPS");
@@ -100,6 +108,7 @@ test("receiving category picker reaches categories after the first page", async 
   await page.goto("/procurement/workspace/settings/modules/purchase-receives/preferences");
   await page.getByRole("button", { name: "Add draft" }).click();
   await page.getByRole("button", { name: "More categories" }).click();
-  await page.getByLabel("Purchase category", { exact: true }).selectOption("EXTRA");
-  await expect(page.getByLabel("Purchase category", { exact: true })).toHaveValue("EXTRA");
+  await page.getByRole("combobox", { name: "Purchase category", exact: true }).click();
+  await page.getByRole("option", { name: "Extra category · EXTRA", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Purchase category", exact: true })).toHaveText("Extra category · EXTRA");
 });

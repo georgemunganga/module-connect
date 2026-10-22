@@ -64,7 +64,8 @@ test("interrupted PO limit create keeps entered data and blocks a second POST", 
   await page.goto("/procurement/workspace/settings/modules/purchase-orders/approvals");
   await page.getByRole("button", { name: "Add approval limit" }).click();
   await page.getByLabel("Limit reference").fill("PO-LIMIT-KEEP");
-  await page.getByLabel("Person", { exact: true }).selectOption(person);
+  await page.getByRole("combobox", { name: "Person", exact: true }).click();
+  await page.getByRole("option", { name: "Named approver", exact: true }).click();
   await page.getByLabel("Maximum amount").fill("99999999999999.9999");
   await page.getByRole("button", { name: "Save limit draft" }).click();
   await expect(page.getByText("The saved result is uncertain.", { exact: false })).toBeVisible();
@@ -92,7 +93,8 @@ test("reload during an in-flight create retains the pending marker before the se
   await page.goto("/procurement/workspace/settings/modules/purchase-requests/approvals");
   await page.getByRole("button", { name: "Add approval limit" }).click();
   await page.getByLabel("Limit reference").fill("PR-IN-FLIGHT");
-  await page.getByLabel("Person", { exact: true }).selectOption(person);
+  await page.getByRole("combobox", { name: "Person", exact: true }).click();
+  await page.getByRole("option", { name: "Named approver", exact: true }).click();
   await page.getByLabel("Maximum amount").fill("100.00");
   await page.getByRole("button", { name: "Save limit draft" }).click();
   await sent;
