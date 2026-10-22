@@ -154,13 +154,18 @@ test('normal cookie Core-only request draft create edit reload withdraw and ungr
     expect(forbiddenList.status()).toBe(403);
     evidence.ungrantedLocalCookieLoginVerified=true; evidence.ungrantedProcurementDenied403=true;
     step='normal-session-logout-revocation';
-    for (const active of [denied,context]) {
+    evidence.logoutStatusCodes=[];
+    for (const [index,active] of [denied,context].entries()) {
+      step=index===0?'ungranted-session-logout':'maker-session-logout';
       const logout=await api(()=>active.request.post('/api/hrm/auth/logout'));
+      (evidence.logoutStatusCodes as number[]).push(logout.status()); retain();
       expect(logout.status()).toBe(200);
+      step=index===0?'ungranted-session-after-logout':'maker-session-after-logout';
       const signedOut=await api(()=>active.request.get('/api/hrm/auth/me'));
       expect(signedOut.status()).toBe(200);
       expect((await json(signedOut)).authenticated).toBe(false);
     }
+    step='revoked-maker-protected-context';
     const revoked=await api(()=>context.request.get('/api/procurement/v1/context',{headers:selection}));
     expect(revoked.status()).toBe(401);
     evidence.normalSessionRevocationVerified=true;
