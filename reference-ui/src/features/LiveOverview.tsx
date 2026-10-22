@@ -30,14 +30,16 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
   if (!readiness) throw new Error("Procurement overview requires ERP company context.");
   const { legalEntityId, permissions } = readiness;
   const permissionKey = permissions.slice().sort().join("|");
-  const contextKey = `${legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${permissionKey}`;
+  const capabilityKey = metrics.map(metric => `${metric.capability}:${readiness.capabilities[metric.capability] === true}`).join("|");
+  const contextKey = `${readiness.tenantId}:${legalEntityId}:${selection.entityId ?? ""}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${permissionKey}:${capabilityKey}`;
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{ key: string; values: Record<string, Result> }>({ key: "", values: {} });
 
   useEffect(() => {
     const controller = new AbortController();
     const allowed = new Set(permissions);
-    const available = (metric: Metric) => allowed.has(metric.permission) && readiness.capabilities[metric.capability] === true;
+    const available = (metric: Metric) => allowed.has(metric.permission) && readiness.capabilities[metric.capability] === true
+      && (!selection.entityId || selection.entityId === legalEntityId);
     setResult({ key: contextKey, values: Object.fromEntries(metrics.map(metric =>
       [metric.permission, { state: available(metric) ? "loading" : "unavailable" }])) });
     for (const metric of metrics) {
@@ -56,9 +58,10 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
         });
     }
     return () => controller.abort();
-  }, [contextKey, legalEntityId, permissionKey, readiness.capabilities, revision]);
+  }, [contextKey, legalEntityId, permissionKey, capabilityKey, readiness.capabilities, selection.entityId, revision]);
 
   const values = result.key === contextKey ? result.values : {};
+  if (selection.entityId && selection.entityId !== legalEntityId) return <p role="status">Checking the selected company…</p>;
   return <div className="p-5 sm:p-8">
     <PageHeader title={analytics ? "Procurement activity" : "Procurement home"}
       subtitle="Your saved purchasing records in the selected company. These counts do not represent company spend or Finance balances."

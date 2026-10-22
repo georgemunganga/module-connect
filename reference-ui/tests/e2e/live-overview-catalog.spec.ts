@@ -44,12 +44,30 @@ test("employee sees published catalog without calling buyer item management", as
   await page.goto("/procurement/workspace/items");
   await expect(page.getByText("Approved chair")).toBeVisible();
   await expect(page.getByText("Approved supplier")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Request item" })).toBeVisible();
+  await expect(page.getByTestId("erp-record-table")).toBeVisible();
+  await expect(page.getByRole("link", { name: "New request" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Request item" })).toHaveCount(0);
   expect(calls).toContain("/api/procurement/v1/catalog");
   expect(calls).not.toContain("/api/procurement/v1/items");
   await page.goto(`/procurement/workspace/items/${item}`);
   await expect(page.getByText("Item management details are unavailable")).toBeVisible();
   expect(calls).not.toContain(`/api/procurement/v1/items/${item}`);
+});
+
+test("approved catalog offers a general request only to employees allowed to create one", async ({ page }) => {
+  const calls = await fixture(page, { permissions: ["procurement-access", "procurement-item-read", "procurement-request-create"] });
+  await page.goto("/procurement/workspace/items");
+  await expect(page.getByRole("link", { name: "New request" })).toBeVisible();
+  await expect(page.getByText("Approved chair")).toBeVisible();
+  expect(calls).not.toContain("/api/procurement/v1/items");
+});
+
+test("catalog access denial does not query buyer management or published catalog", async ({ page }) => {
+  const calls = await fixture(page, { permissions: ["procurement-access", "procurement-request-read"] });
+  await page.goto("/procurement/workspace/items");
+  await expect(page.getByRole("alert")).toContainText("unavailable for your account");
+  expect(calls).not.toContain("/api/procurement/v1/items");
+  expect(calls).not.toContain("/api/procurement/v1/catalog");
 });
 
 test("live home reports a true zero only when the scoped ERP confirms it", async ({ page }) => {
