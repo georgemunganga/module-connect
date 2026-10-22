@@ -34,7 +34,7 @@ async function call(company: string, path: string, init: RequestInit = {}, downl
   Object.entries(procurementScopeHeaders(company)).forEach(([name, value]) => headers.set(name, value));
   if (init.body) headers.set("Content-Type", "application/json");
   let response: Response;
-  try { response = await fetch(`/api/procurement/v1${path}`, { ...init, headers, credentials: "include", cache: "no-store" }); }
+  try { response = await fetch(`/api/procurement/v1${path}`, { ...init, method: init.method ?? "GET", headers, credentials: "include", cache: "no-store" }); }
   catch { throw new UnitReviewError(0, "The response was interrupted. Check the saved review before another action."); }
   if (!response.ok) throw new UnitReviewError(response.status, response.status === 401 ? "Sign in to ERP before reviewing invoice units."
     : response.status === 403 ? "You do not have access to this original invoice review."
