@@ -15,7 +15,13 @@ const valid = (value: unknown): value is InvoiceMatchingRecovery => {
     && Array.isArray(command.ownLineIds) && command.ownLineIds.length <= 200
     && command.ownLineIds.every((id) => typeof id === "string" && uuid.test(id))
     && new Set(command.ownLineIds).size === command.ownLineIds.length
-    && Object.keys(command).every((key) => ["operation", "invoiceId", "key", "expectedVersion", "ownLineIds"].includes(key));
+    && (command.operation === "InvoiceMapping"
+      ? typeof command.purchaseOrderId === "string" && uuid.test(command.purchaseOrderId)
+        && typeof command.issuedVersionId === "string" && uuid.test(command.issuedVersionId) && command.mappingVersionId === null
+      : typeof command.mappingVersionId === "string" && uuid.test(command.mappingVersionId)
+        && command.purchaseOrderId === null && command.issuedVersionId === null)
+    && Object.keys(command).every((key) => ["operation", "invoiceId", "key", "expectedVersion", "ownLineIds",
+      "purchaseOrderId", "issuedVersionId", "mappingVersionId"].includes(key));
 };
 export type PendingInvoiceCommand = { command: InvoiceMatchingRecovery | null; blocked: boolean };
 export function readPendingInvoiceMatching(scope: string): PendingInvoiceCommand {
