@@ -20,3 +20,16 @@ test('switching fails closed without complete private proof and distinct system 
     { actors: { systemReviewer: { principalId: '00000000-0000-0000-0000-000000000000', workerId: null } } } ])
     assert.throws(() => resolveCrudBrowserActor({ ...fixture, ...changed }, 'systemReviewer'));
 });
+
+test('recurring planner requires its exact opt-in fixture kind and genuine declared Core identity', () => {
+  const recurring = { ...fixture, fixtureKind: 'recurring-purchases-v1', actors: { ...fixture.actors,
+    recurringPlanner: { principalId: reviewer, workerId: null } } };
+  assert.equal(resolveCrudBrowserActor(recurring, 'recurringPlanner'), reviewer);
+  for (const changed of [{ fixtureKind: undefined }, { fixtureKind: 'invoice-unit-review-v1' },
+    { browserActorSwitch: undefined }, { cliProofComplete: false }, { production: true },
+    { actors: {} }, { actors: { recurringPlanner: { principalId: maker, workerId: null } } },
+    { actors: { recurringPlanner: { principalId: reviewer, workerId: maker } } }])
+    assert.throws(() => resolveCrudBrowserActor({ ...recurring, ...changed }, 'recurringPlanner'));
+  for (const alias of ['recurringPlanner,systemReviewer', reviewer, ['recurringPlanner'], 'recurringAdmin'])
+    assert.throws(() => resolveCrudBrowserActor(recurring, alias));
+});

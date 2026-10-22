@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 export const actualCrudEnabled = !!process.env.CRUD_BROWSER_FIXTURE && !!process.env.CRUD_BROWSER_SOCKET;
-type Fixture = { tenantId: string; companyId: string; branchId: string; actorId: string; workerId: string | null; approvedSupplierId: string; database: string; production: false; cliProofComplete: true; browserActorSwitch?: "manifest-alias-v1"; actors?: { systemReviewer?: { principalId: string; workerId: null } } };
+type Fixture = { tenantId: string; companyId: string; branchId: string; actorId: string; workerId: string | null; approvedSupplierId: string; database: string; production: false; cliProofComplete: true; fixtureKind?: "recurring-purchases-v1"; otherBranchId?: string; defaultCurrencyCode?: string; browserActorSwitch?: "manifest-alias-v1"; actors?: { recurringPlanner?: { principalId: string; workerId: null }; systemReviewer?: { principalId: string; workerId: null } } };
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function actualFixture(): Fixture {
   if (!actualCrudEnabled) throw new Error("Explicit private actual API fixture required");
@@ -20,7 +20,7 @@ export async function actualMutation(page: Page, method: string, suffix: string,
   await action(); const response = await waiting; expect(response.status(), `actual ${method} ${suffix}`).toBeGreaterThanOrEqual(200); expect(response.status()).toBeLessThan(300); return response.json();
 }
 export function actualId(row: Record<string, unknown>): string { if (!guid.test(String(row.id))) throw new Error("Actual response UUID required"); return String(row.id); }
-const tables = { credit: "supplier_credit_note_refs", invoice: "supplier_invoices", rfq: "sourcing_events", order: "purchase_orders" } as const;
+const tables = { credit: "supplier_credit_note_refs", invoice: "supplier_invoices", rfq: "sourcing_events", order: "purchase_orders", recurring: "recurring_purchase_commitments" } as const;
 /** Independent observer. Fixed allowlisted table + validated UUID; SELECT only, no credentials. */
 export function actualOwner(kind: keyof typeof tables, id: string): Record<string, unknown> {
   const f = actualFixture(); if (!guid.test(id)) throw new Error("Actual owned UUID required");

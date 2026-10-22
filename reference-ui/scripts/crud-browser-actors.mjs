@@ -5,11 +5,13 @@ export function resolveCrudBrowserActor(fixture, alias) {
   if (!realGuid(fixture.actorId)) throw new Error('Protected maker identity required');
   if (alias === undefined) return fixture.actorId;
   // Exact fixed alias, protected manifest, genuine opt-in proof. No client-provided GUIDs or roles.
-  const reviewer = fixture.actors?.systemReviewer;
-  if (alias !== 'systemReviewer' || fixture.browserActorSwitch !== 'manifest-alias-v1'
+  const recurring = alias === 'recurringPlanner' && fixture.fixtureKind === 'recurring-purchases-v1';
+  const selected = alias === 'systemReviewer' ? fixture.actors?.systemReviewer
+    : recurring ? fixture.actors?.recurringPlanner : undefined;
+  if ((!recurring && alias !== 'systemReviewer') || fixture.browserActorSwitch !== 'manifest-alias-v1'
     || fixture.production !== false || fixture.cliProofComplete !== true
-    || !reviewer || !realGuid(reviewer.principalId) || reviewer.workerId !== null
-    || reviewer.principalId.toLowerCase() === fixture.actorId.toLowerCase())
+    || !selected || !realGuid(selected.principalId) || selected.workerId !== null
+    || selected.principalId.toLowerCase() === fixture.actorId.toLowerCase())
     throw new Error('Declared private actor alias required');
-  return reviewer.principalId;
+  return selected.principalId;
 }
