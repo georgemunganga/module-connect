@@ -1,3 +1,4 @@
+import { useRequestApprovalOperation } from "../lib/RequestApprovalJournal";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
@@ -290,6 +291,7 @@ export function LiveRequestEditor() {
 
 export function LiveRequestDetail() {
   const { id } = useParams();
+  const approvalRefresh = useRequestApprovalOperation(`request-detail:${id ?? ""}`);
   const { legalEntityId, permissions } = context();
   const navigate = useNavigate();
   const [record, setRecord] = useState<RequestDetail | null>(null);
@@ -366,7 +368,7 @@ export function LiveRequestDetail() {
     {permissions.includes("procurement-request-submit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Panel title="Send for review" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Add a needed-by date to this request or every line before sending it. No budget is reserved by this step.</p><Button disabled={busy || !activeLines.length || (!record.neededBy && activeLines.some((line) => !line.neededBy))} onClick={() => void submit()}>Send for review</Button></div></Panel>}
     {permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "Submitted" || record.status === "ReturnedForChanges") && <Panel title="Withdraw request" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason" hint={record.status === "Submitted" ? "Required once a request has been sent for review." : "Optional before review."}><Textarea rows={2} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || (record.status === "Submitted" && !withdrawReason.trim())} onClick={() => void withdraw()}>Withdraw request</Button></div></Panel>}
     <RequestApprovalPanel requestId={record.id} version={record.version} status={waitingForRelease ? "ReturnPendingFinanceRelease" : record.status}
-      onChanged={async () => { setRecord(await getOwnRequestDraft(legalEntityId, record.id)); }} />
+      onChanged={async () => { const captured = approvalRefresh; const updated = await getOwnRequestDraft(legalEntityId, record.id); if (captured.current()) setRecord(updated); }} />
     <Link to="/requests" className="mt-5 inline-block text-sm text-primary hover:underline">Back to my requests</Link>
   </div>;
 }

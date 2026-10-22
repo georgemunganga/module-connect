@@ -79,8 +79,9 @@ export function LiveApprovalDetail() {
   const canRead = permissions.includes("procurement-approval-read");
   async function refresh() {
     if (!id) return;
-    try { setData(await getApproval(legalEntityId, id)); }
-    catch (cause) { setData(null); setError(message(cause)); }
+    const captured = journal;
+    try { const refreshed = await getApproval(legalEntityId, id); if (captured.current()) setData(refreshed); }
+    catch (cause) { if (captured.current()) { setData(null); setError(message(cause)); } }
   }
   useEffect(() => {
     if (!id || !canRead) return;
@@ -188,14 +189,20 @@ export function RequestApprovalPanel({ requestId, version, status, onChanged }: 
       readBoundApprovalResult(result, intent.locator);
       if (!captured.current()) return;
       if (!captured.confirm(intent.locator)) throw new Error("The result was returned but its recovery reference remains blocked. Check the saved result.");
-      setOpened(true); setCommand(null); setHistory(await getApprovalHistory(legalEntityId, requestId)); await onChanged();
+      setOpened(true); setCommand(null);
+      const history = await getApprovalHistory(legalEntityId, requestId);
+      if (captured.current()) { setHistory(history); await onChanged(); }
     } catch (cause) { if (captured.current()) setError(message(cause)); }
     finally { if (intent) captured.settled(intent.locator); if (captured.current()) setBusy(false); }
   }
   useEffect(() => {
     const blocked = journal.state("Open").blocked;
-    if (priorRecoveryBlocked.current && !blocked) { setCommand(null); setOpened(true); void onChanged();
-      void getApprovalHistory(legalEntityId, requestId).then(setHistory).catch(cause => setError(message(cause))); }
+    if (priorRecoveryBlocked.current && !blocked) {
+      const captured = journal; setCommand(null); setOpened(true);
+      if (captured.current()) void onChanged();
+      void getApprovalHistory(legalEntityId, requestId).then(history => { if (captured.current()) setHistory(history); })
+        .catch(cause => { if (captured.current()) setError(message(cause)); });
+    }
     priorRecoveryBlocked.current = blocked;
   }, [journal.revision]);
   if (!requestApprovalAvailable) return null;

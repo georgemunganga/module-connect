@@ -52,7 +52,8 @@ export function ApprovalOpeningPanel() {
       if (!captured.current()) return;
       if (!captured.confirm(command.locator)) throw new Error("The result was returned but its recovery reference remains blocked. Check the saved result.");
       setIntent(null); setNotice(`Approvals started for ${command.row.requestNumber}. The assigned people can now review it.`);
-      setData(await listApprovalOpeningQueue(company, offset));
+      const refreshed = await listApprovalOpeningQueue(company, offset);
+      if (captured.current()) setData(refreshed);
     } catch (cause) { if (captured.current()) setError(message(cause)); }
     finally { if (command) captured.settled(command.locator); if (captured.current()) setBusy(false); }
   }
