@@ -1,3 +1,4 @@
+import { RequestApprovalRecoverySlot } from "../../lib/RequestApprovalJournal";
 import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
@@ -351,6 +352,7 @@ export function AppShell() {
         className={`min-w-0 pb-16 pt-14 transition-all ${compact ? "lg:pl-16" : "lg:pl-64"}`}
       >
         <div className="mx-auto w-full max-w-6xl">
+          <RequestApprovalRecoverySlot />
           <Outlet />
         </div>
       </main>

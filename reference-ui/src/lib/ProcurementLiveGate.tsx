@@ -64,7 +64,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   if (state.readiness && deniedCrud) {
     const denied = <div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div>;
     return <LiveReadiness.Provider value={state.readiness}>{requestPath
-      ? <RequestApprovalJournalBoundary readiness={state.readiness} isScopeCurrent={() => currentKey.current === readinessKey}>{denied}</RequestApprovalJournalBoundary>
+      ? <RequestApprovalJournalBoundary readiness={state.readiness} isScopeCurrent={() => currentKey.current === readinessKey}>{blockedShell ? blockedShell(denied) : denied}</RequestApprovalJournalBoundary>
       : denied}</LiveReadiness.Provider>;
   }
   if (state.readiness && ((overviewPath && [

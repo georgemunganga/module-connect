@@ -362,6 +362,19 @@ test("unknown-response support does not expose a decision or retry without curre
   expect(state.decisions).toHaveLength(0);
 });
 
+async function assertRecoveryInWorkspace(page: Page) {
+  const button = page.getByRole("button", { name: "Check saved approval result", exact: true });
+  await expect(button).toBeVisible(); await expect(button).toBeEnabled();
+  const box = await button.boundingBox();
+  expect(box).not.toBeNull();
+  const sidebar = await page.getByRole("complementary", { name: "Main navigation" }).boundingBox();
+  if (sidebar && box) expect(box.x).toBeGreaterThanOrEqual(sidebar.x + sidebar.width);
+  expect(await button.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  })).toBe(true);
+}
+
 for (const operation of ["Open", "Decide"] as const) {
   test(`lost ${operation} reload uses only original GET acknowledgement with execution now unavailable`, async ({ page }) => {
     const state = await mockErp(page, { principalOnly: true, unopened: operation === "Open", loseResponse: true, capabilityOffAfterLoss: true });
@@ -381,6 +394,7 @@ for (const operation of ["Open", "Decide"] as const) {
     await expect(page.getByRole("button", { name: "Retry same decision", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Retry starting approvals", exact: true })).toHaveCount(0);
     expect(state.keys).toHaveLength(1); expect(state.acknowledgementReads).toHaveLength(0);
+    await assertRecoveryInWorkspace(page);
     await page.getByRole("button", { name: "Check saved approval result", exact: true }).click();
     await expect(page.getByRole("status").filter({ hasText: "Saved approval result confirmed:" })).toBeVisible();
     expect(state.acknowledgementReads).toHaveLength(1); expect(state.keys).toHaveLength(1);

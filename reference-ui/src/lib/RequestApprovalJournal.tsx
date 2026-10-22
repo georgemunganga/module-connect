@@ -6,7 +6,7 @@ import { getApprovalAcknowledgement } from "../../../src/platform/procurement-ap
 import { approvalBrowserTabNonce, approvalJournalEvent, claimApprovalJournal, confirmApprovalJournal,
   readApprovalJournal, type ApprovalJournalScope, type ApprovalJournalState, type ApprovalLocator, type ApprovalOperation } from "./request-approval-journal";
 
-type Journal = { scope: ApprovalJournalScope | null; scopeKey: string; revision: number;
+type Journal = { readiness: ProcurementReadiness; scope: ApprovalJournalScope | null; scopeKey: string; revision: number;
   state: (operation: ApprovalOperation) => ApprovalJournalState; current: () => boolean;
   inFlight: (locator: ApprovalLocator) => boolean; reserve: (locator: ApprovalLocator) => boolean; settled: (locator: ApprovalLocator) => void;
   claim: (locator: ApprovalLocator) => boolean; confirm: (locator: ApprovalLocator) => boolean };
@@ -47,7 +47,7 @@ function JournalProvider({ scope, scopeKey, readiness, isScopeCurrent, children 
   const alive = useRef(true), [revision, setRevision] = useState(0);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const changed = () => { if (alive.current) setRevision(v => v + 1); };
-  const value: Journal = { scope, scopeKey, revision, current: () => alive.current && isScopeCurrent(),
+  const value: Journal = { readiness, scope, scopeKey, revision, current: () => alive.current && isScopeCurrent(),
     inFlight: locator => activeKeys.current.has(locator.key),
     reserve: locator => {
       if (!alive.current || !isScopeCurrent() || !scope || activeKeys.current.has(locator.key)
@@ -59,7 +59,12 @@ function JournalProvider({ scope, scopeKey, readiness, isScopeCurrent, children 
     claim: locator => { if (!alive.current || !isScopeCurrent() || !scope) return false; const ok = claimApprovalJournal(scope, locator); changed(); return ok; },
     confirm: locator => { if (!alive.current || !isScopeCurrent() || !scope) return false; const ok = confirmApprovalJournal(scope, locator); changed(); return ok; },
   };
-  return <Context.Provider value={value}><ApprovalCommandRecovery readiness={readiness} />{children}</Context.Provider>;
+  return <Context.Provider value={value}>{children}</Context.Provider>;
+}
+/** Optional shell content slot; outside PR journal routes it renders nothing. */
+export function RequestApprovalRecoverySlot() {
+  const journal = useContext(Context);
+  return journal ? <ApprovalCommandRecovery readiness={journal.readiness} /> : null;
 }
 function ApprovalCommandRecovery({ readiness }: { readiness: ProcurementReadiness }) {
   const journal = useRequestApprovalJournal();
