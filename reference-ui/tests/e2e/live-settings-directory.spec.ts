@@ -78,5 +78,5 @@ test("settings rail collapses on desktop and mobile navigation opens", async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open settings navigation" }).click();
   await expect(page.getByRole("navigation", { name: "Procurement settings" })).toBeVisible();
-  await page.getByRole("button", { name: "Close navigation" }).click();
+  await page.getByRole("button", { name: "Close navigation" }).click({ position: { x: 350, y: 400 } });
 });
