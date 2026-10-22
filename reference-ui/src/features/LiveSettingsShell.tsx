@@ -9,6 +9,8 @@ import { findModule, procurementModuleGroups, procurementModuleSlugs, settingsRo
 import { LiveConfiguration } from "./LiveConfiguration";
 import { LivePolicies } from "./LivePolicies";
 import { LiveApprovalSettings } from "./LiveApprovalSettings";
+import { LiveInvoiceMatchingSettings } from "./LiveInvoiceMatchingSettings";
+import { LiveSourcingSettings } from "./LiveSourcingSettings";
 
 const buyingLinks = [
   { label: "Buying categories & methods", href: "/settings/reference-data" },
@@ -85,6 +87,10 @@ export function LiveSettingsShell() {
       {(slug === "purchase-requests" || slug === "purchase-orders") && tab === "approvals"
         ? <LiveApprovalSettings key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.workerId ?? "admin"}:${slug}`}
           initialAction={slug === "purchase-orders" ? "PurchaseOrder.Approve" : "PurchaseRequest.Approve"} />
+        : slug === "bills" && tab === "preferences"
+          ? <LiveInvoiceMatchingSettings />
+        : slug === "request-for-quotes" && tab === "approvals"
+          ? <LiveSourcingSettings />
         : <section className="rounded-xl border border-border bg-surface p-7">
         <h2 className="text-lg font-semibold">{module.tabs.find(item => item.slug === tab)?.title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">This setting does not have a live editor yet. No changes can be saved here. Buying categories and rules are available from the Settings directory.</p>
