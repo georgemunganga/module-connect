@@ -2,6 +2,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveCrudBrowserActor } from './crud-browser-actors.mjs';
 const required = name => { const value = process.env[name]; if (!value || !path.isAbsolute(value)) throw new Error(`${name} must be an absolute private path`); return value; };
 const fixturePath = required('CRUD_BROWSER_FIXTURE'), socketPath = required('CRUD_BROWSER_SOCKET');
 if (fs.realpathSync(fixturePath) !== fixturePath || !fs.statSync(fixturePath).isFile() || fs.statSync(fixturePath).size > 65536 || (fs.statSync(fixturePath).mode & 0o077)) throw new Error('Protected fixture file required');
@@ -19,7 +20,11 @@ const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
 const server = http.createServer((request, response) => {
   if (request.url === '/__crud_proxy_health') { response.writeHead(200); response.end('ready'); return; }
   if (request.url?.startsWith('/api/')) {
-    const headers = { ...request.headers, host: 'localhost', 'x-crud-actor': fixture.actorId };
+    let actor;
+    try { actor = resolveCrudBrowserActor(fixture, request.headers['x-crud-browser-actor']); }
+    catch { response.writeHead(403, { 'content-type': 'text/plain' }); response.end('Private actor alias unavailable'); return; }
+    const headers = { ...request.headers, host: 'localhost', 'x-crud-actor': actor };
+    delete headers['x-crud-browser-actor'];
     delete headers.connection; delete headers['proxy-connection'];
     const upstream = http.request({ socketPath: transportSocketPath, path: request.url, method: request.method, headers }, reply => {
       response.writeHead(reply.statusCode || 502, reply.headers); reply.pipe(response);

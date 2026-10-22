@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 export const actualCrudEnabled = !!process.env.CRUD_BROWSER_FIXTURE && !!process.env.CRUD_BROWSER_SOCKET;
-type Fixture = { tenantId: string; companyId: string; branchId: string; actorId: string; workerId: string | null; approvedSupplierId: string; database: string; production: false; cliProofComplete: true };
+type Fixture = { tenantId: string; companyId: string; branchId: string; actorId: string; workerId: string | null; approvedSupplierId: string; database: string; production: false; cliProofComplete: true; browserActorSwitch?: "manifest-alias-v1"; actors?: { systemReviewer?: { principalId: string; workerId: null } } };
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function actualFixture(): Fixture {
   if (!actualCrudEnabled) throw new Error("Explicit private actual API fixture required");
