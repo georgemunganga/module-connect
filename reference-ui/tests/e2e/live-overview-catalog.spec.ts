@@ -86,3 +86,23 @@ test("live analytics shows an error instead of an invented zero", async ({ page 
   await expect(page.getByText("Could not load. Refresh to try again.")).toBeVisible();
   await expect(page.getByText("Budget balances, supplier payments, savings and spend trends")).toBeVisible();
 });
+
+for (const price of ["100.1234", "99999999999999.9999", undefined]) {
+  test(`employee catalog preserves explicit exact price or asks for confirmation ${price ?? "legacy"}`, async ({ page }) => {
+    await fixture(page, { permissions: ["procurement-access", "procurement-item-read"] });
+    let writes = 0;
+    page.on("request", request => { if (request.url().includes("/api/procurement/") && request.method() !== "GET") writes++; });
+    await page.route("**/api/procurement/v1/catalog**", route => {
+      // Keep the actual legacy numeric wire shape. Only the owning explicit string is display authority.
+      const record = { entryId: entry, itemId: item, code: "EXACT", name: "Exact published item", kind: "Goods",
+        categoryCode: "OFFICE", unitCode: "each", estimatedUnitPrice: 100.1234, currencyCode: "ZMW",
+        supplierId: supplier, supplierName: "Published supplier", publishedVersion: 2, exactEstimatedUnitPrice: price };
+      return route.fulfill({ json: { items: [record], total: 1, page: 1, pageSize: 25 } });
+    });
+    await page.goto("/procurement/workspace/items");
+    await expect(page.getByText("Exact published item", { exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: price === undefined ? "Confirm price" : `ZMW ${price} / each`, exact: true })).toBeVisible();
+    if (price === undefined) await expect(page.getByText("ZMW 100.123 / each", { exact: true })).toHaveCount(0);
+    expect(writes).toBe(0);
+  });
+}

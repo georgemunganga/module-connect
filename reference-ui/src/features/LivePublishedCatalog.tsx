@@ -57,7 +57,8 @@ export function LivePublishedCatalog() {
         rows={data.items.map(item => ({ ...item, id: item.entryId }))} columns={columns} visibleColumns={columns.map(column => column.key)}
         selected={selected} onSelectedChange={setSelected} rowLabel={item => item.name}
         renderCell={(item: PublishedCatalogPrice, column) => column.key === "price"
-          ? `${item.currencyCode} ${item.estimatedUnitPrice.toLocaleString()} / ${item.unitCode}`
+          ? item.exactEstimatedUnitPrice !== undefined
+            ? `${item.currencyCode} ${item.exactEstimatedUnitPrice} / ${item.unitCode}` : "Confirm price"
           : column.key === "supplier" ? item.supplierName
             : column.key === "name" ? item.name : column.key === "code" ? item.code : item.kind}
       /> : !visibleError ? <EmptyState title="No approved items found" description="Search again or make a request for something else." action={canCreateRequest ? <Link to="/requests/new"><Button>New request</Button></Link> : undefined} /> : null}
