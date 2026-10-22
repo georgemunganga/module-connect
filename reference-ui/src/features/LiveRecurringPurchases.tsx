@@ -10,7 +10,7 @@ import { listVendorDrafts, type VendorSummary } from "../../../src/platform/proc
 import { listOwnContractDrafts, type ContractSummary } from "../../../src/platform/procurement-contracts-api";
 import {
   RecurringPurchaseError, isDefiniteRecurringRejection, closeRecurringPurchase, createRecurringPurchase, getRecurringPurchase,
-  listRecurringPurchases, updateRecurringPurchase, validateRecurringPurchase,
+  listRecurringPurchases, recurringPurchaseForPrincipal, updateRecurringPurchase, validateRecurringPurchase,
   type RecurringPurchase, type RecurringPurchaseDraft, type RecurringPurchasePage,
 } from "../../../src/platform/procurement-recurring-purchases-api";
 
@@ -20,7 +20,7 @@ function useRecurringScope() {
   const shell = useErpShell();
   if (!readiness) throw new Error("Recurring purchases require an ERP company.");
   const writeScope = JSON.stringify([readiness.tenantId, readiness.legalEntityId,
-    readiness.workerId, shell.selection.branch ?? ""]);
+    readiness.principalId, shell.selection.branch ?? ""]);
   return { ...readiness, writeScope, key: JSON.stringify([writeScope, shell.authEpoch]) };
 }
 function emptyDraft(currency: string): RecurringPurchaseDraft {
@@ -32,12 +32,10 @@ function canRead(scope: ReturnType<typeof useRecurringScope>) {
   return scope.capabilities.recurringPurchaseDraft && scope.permissions.includes("procurement-recurring-read");
 }
 function canCreate(scope: ReturnType<typeof useRecurringScope>) {
-  return canRead(scope) && !scope.adminViewOnly && !!scope.workerId
-    && scope.permissions.includes("procurement-recurring-create");
+  return canRead(scope) && scope.permissions.includes("procurement-recurring-create");
 }
 function canEdit(scope: ReturnType<typeof useRecurringScope>) {
-  return canRead(scope) && !scope.adminViewOnly && !!scope.workerId
-    && scope.permissions.includes("procurement-recurring-edit");
+  return canRead(scope) && scope.permissions.includes("procurement-recurring-edit");
 }
 
 export function LiveRecurringPurchaseList() {
@@ -52,7 +50,10 @@ export function LiveRecurringPurchaseList() {
     const controller = new AbortController();
     setResult(null); setError(""); setLoading(true);
     listRecurringPurchases(scope.legalEntityId, page, controller.signal)
-      .then((data) => { if (!controller.signal.aborted) setResult({ key: scope.key, data }); })
+      .then((data) => {
+        data.items.forEach(record => recurringPurchaseForPrincipal(record, scope.principalId));
+        if (!controller.signal.aborted) setResult({ key: scope.key, data });
+      })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -99,6 +100,7 @@ export function LiveRecurringPurchaseEditor() {
     setVendors([]); setContracts([]); setDraft(emptyDraft(scope.defaultCurrencyCode));
     if (id) getRecurringPurchase(scope.legalEntityId, id, controller.signal)
       .then((record) => { if (!controller.signal.aborted) {
+        recurringPurchaseForPrincipal(record, scope.principalId);
         setDraft({ supplierId: record.supplierId, supplierContractId: record.supplierContractId,
           title: record.title, frequency: record.frequency, firstCycleOn: record.firstCycleOn,
           lastCycleOn: record.lastCycleOn, nextCycleOn: record.nextCycleOn,
@@ -144,6 +146,7 @@ export function LiveRecurringPurchaseEditor() {
       const saved = id && version !== null
         ? await updateRecurringPurchase(scope.legalEntityId, id, version, draft)
         : await createRecurringPurchase(scope.legalEntityId, draft);
+      recurringPurchaseForPrincipal(saved, scope.principalId);
       confirmRecurringWrite(writeScope);
       if (active()) navigate(`/recurring-bills/${saved.id}`);
     } catch (cause) {
@@ -203,7 +206,7 @@ export function LiveRecurringPurchaseDetail() {
     const controller = new AbortController();
     setLoaded(null); setLoading(true); setBusy(false); setReason(""); setError("");
     getRecurringPurchase(scope.legalEntityId, id, controller.signal)
-      .then((record) => { if (!controller.signal.aborted) { setLoaded({ key: context, record }); setBlocked(recurringWriteLocked(writeScope)); } })
+      .then((record) => { if (!controller.signal.aborted) { setLoaded({ key: context, record: recurringPurchaseForPrincipal(record, scope.principalId) }); setBlocked(recurringWriteLocked(writeScope)); } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); generation.current += 1; };
@@ -218,6 +221,7 @@ export function LiveRecurringPurchaseDetail() {
     busyRef.current = true; setBusy(true); setError("");
     try {
       const saved = await closeRecurringPurchase(scope.legalEntityId, id, record.version, reason);
+      recurringPurchaseForPrincipal(saved, scope.principalId);
       confirmRecurringWrite(writeScope);
       if (active()) setLoaded({ key: context, record: saved });
     } catch (cause) {
@@ -238,7 +242,7 @@ export function LiveRecurringPurchaseDetail() {
           {blocked && <p role="status" className="mb-4">The close result is uncertain or this version changed. Reloading does not retry the close action. <Button variant="secondary" onClick={() => setRefresh((value) => value + 1)}>Reload saved purchase</Button></p>}
           <Panel title="Schedule"><dl className="grid gap-5 p-5 text-sm sm:grid-cols-2">
             <div><dt className="text-muted-foreground">Status</dt><dd><Badge>{record.status}</Badge></dd></div>
-            <div><dt className="text-muted-foreground">Owner employee ID</dt><dd>{record.ownerWorkerId}</dd></div>
+            <div><dt className="text-muted-foreground">Owner</dt><dd>You</dd></div>
             <div><dt className="text-muted-foreground">Supplier</dt><dd><Link className="text-primary underline" to={`/vendors/${record.supplierId}`}>Open supplier</Link></dd></div>
             <div><dt className="text-muted-foreground">Related contract</dt><dd>{record.supplierContractId ? <Link className="text-primary underline" to={`/contracts/${record.supplierContractId}`}>Open contract</Link> : "None"}</dd></div>
             <div><dt className="text-muted-foreground">Repeats</dt><dd>{record.frequency}</dd></div>
