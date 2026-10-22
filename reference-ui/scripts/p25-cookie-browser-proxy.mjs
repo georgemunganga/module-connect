@@ -22,7 +22,7 @@ need(fixture.schemaVersion === 1 && fixture.controlPlaneOnly === true && fixture
   && fixture.apiSetupAuthentication === 'PRIVATE_SUBJECT_TEST_AUTH_ONLY'
   && fixture.localCookieLoginVerified === false && fixture.browserAcceptanceVerified === false
   && fixture.nativeIdentityProviderVerified === false && fixture.externalFinanceAuthority === false
-  && /^proc_release_backup_20261022_smoke_[a-z0-9_]+$/.test(fixture.database) && fixture.database.length <= 63
+  && /^proc_p25_http_[a-z0-9_]{1,48}$/.test(fixture.database) && fixture.database.length <= 63
   && fixture.database === process.env.P25_COOKIE_EXPECTED_DATABASE
   && [fixture.companyId,fixture.branchId,fixture.makerPrincipalId,fixture.ungrantedPrincipalId].every(guid)
   && Number.isFinite(Date.parse(fixture.expiresAt)) && Date.parse(fixture.expiresAt) > Date.now(), 'Current private local-cookie fixture required');

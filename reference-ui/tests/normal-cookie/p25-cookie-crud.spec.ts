@@ -142,6 +142,8 @@ test('normal cookie Core-only request draft create edit reload withdraw and ungr
     const withdrawn=await mutation(page,'POST',`/requests/${created.id}/withdraw`,()=>page.getByRole('button',{name:'Withdraw request',exact:true}).click());
     expect(withdrawn.id).toBe(created.id); expect(withdrawn.status).toBe('Withdrawn'); expect(withdrawn.version).toBe(updated.version+1);
     evidence.withdrawnVersion=withdrawn.version; evidence.finalStatus=withdrawn.status; retain();
+    await visible(page,'My Requests');
+    await page.getByRole('link',{name:prefix,exact:true}).click(); await visible(page,prefix);
     await page.reload(); await visible(page,prefix); await expect(page.getByText('Withdrawn',{exact:true})).toBeVisible();
     step='ungranted-normal-cookie-denial';
     denied=await browser.newContext({baseURL:proxy.origin,ignoreHTTPSErrors:true});

@@ -14,7 +14,10 @@ SSO acceptance. No application UI/transport/backend changes are included.
 - Root provides the exact runtime PID and enters its **network namespace only**
   (`nsenter -t <verified owned runtime PID> -n`), keeping the host filesystem.
   Node proxy and Chromium must both run there. No host/public port mappings,
-  network enabling, owner connection strings or production URLs.
+  network enabling, owner connection strings or production URLs. The database must
+  match the actual P25 tool allowlist `^proc_p25_http_[a-z0-9_]{1,48}$` and the
+  separately supplied exact expected database (planned root target
+  `proc_p25_http_20261022_localcookie01`).
 - A fresh 0700 host evidence directory, regular 0600 local-cookie fixture and TLS
   certificate/key; root generates a private certificate valid for 127.0.0.1
   (localhost optional). No key generation/pull/login/build is done by these files.
@@ -31,7 +34,7 @@ Root sets these inputs (absolute paths where applicable):
 
 ```text
 P25_COOKIE_FIXTURE          actual protected local-cookie-fixture.private.json
-P25_COOKIE_EXPECTED_DATABASE exact separately reviewed private smoke clone name
+P25_COOKIE_EXPECTED_DATABASE exact reviewed proc_p25_http_ clone name
 P25_COOKIE_RUNTIME_PID      actual owned running API PID
 P25_COOKIE_TLS_CERT         private regular 0600 certificate
 P25_COOKIE_TLS_KEY          private regular 0600 key
@@ -64,7 +67,9 @@ these test contexts, never global production TLS policy.
    worker, before the verified selection is persisted for the normal UI.
 3. Normal requests list 200 carries those real UI selection headers. New draft
    uses current context.company.currencyCode, exact decimal inputs, real Save
-   draft; reload/edit/+1/withdraw/+1/reload all use actual shared buttons.
+   draft; reload/edit/+1/withdraw/+1 all use actual shared buttons. Withdrawal
+   returns to My Requests; reopen the exact saved-purpose link, then reload its
+   detail and verify Withdrawn.
 4. Separate normal-cookie ungranted user signs in, while actual Procurement
    context/list deny 403. No permission grants or admin aliases are added.
 5. Typed 0600 results retain actual record/line IDs, versions and allowlisted
