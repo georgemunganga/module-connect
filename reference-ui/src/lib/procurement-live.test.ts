@@ -46,6 +46,17 @@ describe("Procurement live readiness", () => {
     expect((await fetchProcurementReadiness({ entityId: entity }, undefined, fetcher)).capabilities.vendorCreditDraft).toBe(flag === true);
   });
 
+  it.each([undefined, true, "true"])("requires explicit original-unit review availability (%s)", async flag => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["employee"] } }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, workerId: worker,
+        company: { id: entity, currencyCode: "ZMW" }, permissions: ["procurement-access", "procurement-invoice-unit-review", "procurement-invoice-read"] }))
+      .mockResolvedValueOnce(json({ tenantId: "tenant-a", legalEntityId: entity, schemaReady: true,
+        capabilities: { ...capabilities, invoiceOriginalUnitReview: flag, invoiceComparison: true, invoiceValidation: true } }));
+    const result = await fetchProcurementReadiness({ entityId: entity }, undefined, fetcher);
+    expect(result.capabilities.invoiceOriginalUnitReview).toBe(flag === true);
+  });
+
   it("does not reinterpret a server access denial as administrator review", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(json({ authenticated: true, user: { isActive: true, roles: ["erp_admin"] } }))

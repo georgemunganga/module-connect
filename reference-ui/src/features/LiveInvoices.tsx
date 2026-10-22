@@ -5,6 +5,7 @@ import { useErpShell } from "../lib/erpShell";
 import { invoiceDecimal, invoicePreview } from "./invoice-values";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
+import { InvoiceUnitReviewOwner } from "./InvoiceUnitReviewOwner";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
@@ -270,6 +271,7 @@ function InvoiceDetailRecord() {
     {capabilities.invoiceComparison && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
       company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
       comparisonAvailable={capabilities.invoiceComparison && !adminViewOnly} refresh={(message) => { setNotice(message ?? ""); setRefresh((value) => value + 1); }} />}
+    {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
     {!adminViewOnly && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel") && <Panel title="Cancel invoice" className="mt-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
       <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>

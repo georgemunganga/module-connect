@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
 import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
 import { LiveOrderApprovalQueue } from "./LiveOrderApprovalQueue";
+import { InvoiceUnitReviewQueue } from "./InvoiceUnitReviewTasks";
 import { ApprovalOpeningPanel } from "./ApprovalOpeningPanel";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -21,14 +22,18 @@ export function LiveApprovalQueue() {
   const context = useApprovalContext();
   const requests = context.capabilities.approvals && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
   const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
-  const [type, setType] = useState<"requests" | "orders">(() => requests ? "requests" : "orders");
-  if (!requests && !orders) return context.capabilities.approvals ? <RequestApprovalQueue /> : <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
-  if (!orders) return <RequestApprovalQueue />;
-  if (!requests) return <LiveOrderApprovalQueue />;
+  const units = !context.adminViewOnly && context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
+  const available = ([requests && "requests", orders && "orders", units && "units"].filter(Boolean) as ("requests" | "orders" | "units")[]);
+  const [type, setType] = useState<"requests" | "orders" | "units">(() => available[0] ?? "requests");
+  const selected = available.includes(type) ? type : available[0];
+  if (!selected) return <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
+  const queue = selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "units" ? <InvoiceUnitReviewQueue /> : <RequestApprovalQueue />;
+  if (available.length === 1) return queue;
   return <><div className="flex gap-3 px-5 pt-5 sm:px-8" role="tablist" aria-label="Approval records">
-    <Button role="tab" aria-selected={type === "requests"} variant={type === "requests" ? "primary" : "secondary"} onClick={() => setType("requests")}>Purchase requests</Button>
-    <Button role="tab" aria-selected={type === "orders"} variant={type === "orders" ? "primary" : "secondary"} onClick={() => setType("orders")}>Purchase orders</Button>
-  </div>{type === "orders" ? <LiveOrderApprovalQueue /> : <RequestApprovalQueue />}</>;
+    {requests && <Button role="tab" aria-selected={selected === "requests"} variant={selected === "requests" ? "primary" : "secondary"} onClick={() => setType("requests")}>Purchase requests</Button>}
+    {orders && <Button role="tab" aria-selected={selected === "orders"} variant={selected === "orders" ? "primary" : "secondary"} onClick={() => setType("orders")}>Purchase orders</Button>}
+    {units && <Button role="tab" aria-selected={selected === "units"} variant={selected === "units" ? "primary" : "secondary"} onClick={() => setType("units")}>Original invoice units</Button>}
+  </div>{queue}</>;
 }
 function RequestApprovalQueue() {
   const { legalEntityId, permissions } = useApprovalContext();
