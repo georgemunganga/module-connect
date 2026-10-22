@@ -84,6 +84,7 @@ export function LiveRecurringPurchaseEditor() {
   const [search, setSearch] = useState("");
   const [loaded, setLoaded] = useState<string | null>(null);
   const [version, setVersion] = useState<number | null>(null);
+  const [recordStatus, setRecordStatus] = useState<"Draft" | "Closed" | null>(null);
   const [loading, setLoading] = useState(Boolean(id));
   const [saving, setSaving] = useState(false);
   const [saveBlock, setSaveBlock] = useState<"unknown" | "stale" | null>(null);
@@ -91,7 +92,7 @@ export function LiveRecurringPurchaseEditor() {
   useEffect(() => {
     generation.current += 1;
     const controller = new AbortController();
-    setLoaded(null); setVersion(null); setError(""); setSaveBlock(null); setLoading(Boolean(id));
+    setLoaded(null); setVersion(null); setRecordStatus(null); setError(""); setSaveBlock(null); setLoading(Boolean(id));
     setVendors([]); setContracts([]); setDraft(emptyDraft(scope.defaultCurrencyCode));
     if (id) getRecurringPurchase(scope.legalEntityId, id, controller.signal)
       .then((record) => { if (!controller.signal.aborted) {
@@ -99,7 +100,7 @@ export function LiveRecurringPurchaseEditor() {
           title: record.title, frequency: record.frequency, firstCycleOn: record.firstCycleOn,
           lastCycleOn: record.lastCycleOn, nextCycleOn: record.nextCycleOn,
           expectedAmount: record.exactExpectedAmount, currencyCode: record.currencyCode });
-        setVersion(record.version); setLoaded(context);
+        setVersion(record.version); setRecordStatus(record.status); setLoaded(context);
       } }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); generation.current += 1; };
@@ -129,7 +130,7 @@ export function LiveRecurringPurchaseEditor() {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!writable || pending.current || saveBlock) return;
-    if (id && (loaded !== context || version === null)) { setError("This purchase could not be loaded. Return to the list."); return; }
+    if (id && (loaded !== context || version === null || recordStatus !== "Draft")) { setError("This purchase cannot be edited. Open the saved record."); return; }
     const issue = validateRecurringPurchase(draft);
     if (issue) { setError(issue); return; }
     const captured = context, at = generation.current;
@@ -153,6 +154,7 @@ export function LiveRecurringPurchaseEditor() {
     {!writable ? <p role="alert">You cannot {id ? "edit" : "create"} recurring purchases for this company.</p>
       : loading ? <p role="status">Loading recurring purchase…</p>
         : id && loaded !== context ? <p role="alert">{error || "This purchase is unavailable. Return to the list."}</p>
+          : id && recordStatus !== "Draft" ? <p role="status">This recurring purchase is closed. <Link className="text-primary underline" to={`/recurring-bills/${id}`}>Open its saved history</Link>.</p>
           : <form onSubmit={save} className="max-w-5xl space-y-5">
             {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
             {saveBlock && <p role="status" className="rounded-lg border p-3 text-sm">{saveBlock === "unknown" ? "The save result was not confirmed." : "This purchase changed."} Your entered values are still here. Review the saved {id ? "purchase" : "list"} before trying again. <Link className="text-primary underline" to={id ? `/recurring-bills/${id}` : "/recurring-bills"}>Review saved records</Link></p>}
