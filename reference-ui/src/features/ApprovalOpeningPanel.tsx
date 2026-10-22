@@ -1,3 +1,5 @@
+import { definiteRequestApprovalRejection } from "../lib/request-approval-recovery";
+import { requestApprovalsAvailable } from "../lib/request-approval-availability";
 import { useEffect, useState } from "react";
 import { Button, Panel } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
@@ -9,7 +11,7 @@ export function ApprovalOpeningPanel() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Starting approvals needs ERP company context.");
   const company = readiness.legalEntityId;
-  const enabled = readiness.capabilities.approvals && readiness.permissions.includes("procurement-approval-open");
+  const enabled = requestApprovalsAvailable(readiness.capabilities) && readiness.permissions.includes("procurement-approval-open");
   const [data, setData] = useState<ApprovalOpeningQueue | null>(null), [offset, setOffset] = useState(0), [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [intent, setIntent] = useState<{ row: ApprovalOpeningRow; key: string } | null>(null);
@@ -33,7 +35,7 @@ export function ApprovalOpeningPanel() {
       setData(await listApprovalOpeningQueue(company, offset));
     } catch (cause) {
       setError(message(cause));
-      if (cause instanceof ApprovalApiError && cause.status >= 400 && cause.status < 500) {
+      if (cause instanceof ApprovalApiError && definiteRequestApprovalRejection(cause.status)) {
         setIntent(null);
         if (cause.status === 409) {
           try { setData(await listApprovalOpeningQueue(company, offset)); } catch { setData(null); }

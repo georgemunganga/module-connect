@@ -1,3 +1,5 @@
+import { definiteRequestApprovalRejection } from "../lib/request-approval-recovery";
+import { requestApprovalsAvailable } from "../lib/request-approval-availability";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
@@ -20,7 +22,7 @@ function useApprovalContext() {
 }
 export function LiveApprovalQueue() {
   const context = useApprovalContext();
-  const requests = context.capabilities.approvals && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
+  const requests = requestApprovalsAvailable(context.capabilities) && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
   const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
   const units = context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
   const available = ([requests && "requests", orders && "orders", units && "units"].filter(Boolean) as ("requests" | "orders" | "units")[]);
@@ -84,9 +86,9 @@ export function LiveApprovalDetail() {
     return () => abort.abort();
   }, [legalEntityId, id, canRead]);
   async function decide() {
-    if (!data || !pending) return;
+    if (!data || !pending || busy || !permissions.includes("procurement-approval-decide")) return;
     const assignment = data.stages.flatMap((s) => s.assignments).find((a) => a.id === pending.assignmentId);
-    if (!assignment) return;
+    if (!assignment || !assignment.isMine || !assignment.allowedActions.includes(pending.action)) return;
     const command = pending.command ?? { action: pending.action, reason: pending.reason.trim() || null,
       expectedCaseVersion: data.caseVersion, expectedAssignmentVersion: assignment.version, expectedRequestVersion: data.requestVersion };
     const key = pending.key ?? crypto.randomUUID();
@@ -100,7 +102,7 @@ export function LiveApprovalDetail() {
     } catch (cause) {
       if (cause instanceof ApprovalApiError && cause.status === 409) {
         setPending(null); await refresh(); setError(`${message(cause)} Review the refreshed request before trying again.`);
-      } else { setPending({ ...saved, uncertain: !(cause instanceof ApprovalApiError) || cause.status === 0 || cause.status >= 500 }); setError(message(cause)); }
+      } else { setPending({ ...saved, uncertain: !(cause instanceof ApprovalApiError) || !definiteRequestApprovalRejection(cause.status) }); setError(message(cause)); }
     } finally { setBusy(false); }
   }
   if (!canRead) return <div className="p-5 sm:p-8" role="alert">You do not have access to this approval.</div>;
@@ -121,33 +123,34 @@ export function LiveApprovalDetail() {
     <Panel title="Decision history" className="mt-5"><div className="space-y-3 p-5">{data.decisions.length ? data.decisions.map((decision) => <div key={decision.id} className="text-sm"><p className="font-medium">{decision.action} · {date(decision.decidedAt)}</p>{decision.reason && <p>{decision.reason}</p>}</div>) : <p className="text-sm text-muted-foreground">No decisions recorded yet.</p>}</div></Panel>
     <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/approvals">Back to approvals</Link>
     {pending && <ApprovalDecisionDialog action={pending.action} recordLabel="request" reason={pending.reason} busy={busy} error={error}
-      locked={!!pending.key} uncertain={!!pending.uncertain} onReason={(reason) => setPending({ ...pending, reason })}
+      locked={!!pending.key} uncertain={!!pending.uncertain} canRetrySameCommand={permissions.includes("procurement-approval-decide") && !!pending.key && !!pending.command} onReason={(reason) => setPending({ ...pending, reason })}
       onConfirm={() => void decide()} onCancel={() => setPending(null)} />}
   </div>;
 }
 
 export function RequestApprovalPanel({ requestId, version, status, onChanged }: { requestId: string; version: number; status: string; onChanged: () => Promise<void> }) {
   const { legalEntityId, permissions, capabilities } = useApprovalContext();
+  const requestApprovalAvailable = requestApprovalsAvailable(capabilities);
   const [history, setHistory] = useState<ApprovalHistory | null>(null), [error, setError] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [command, setCommand] = useState<{ key: string; version: number } | null>(null);
   const [opened, setOpened] = useState(false);
   useEffect(() => {
-    if (!capabilities.approvals) return;
+    if (!requestApprovalAvailable) return;
     const abort = new AbortController(); setLoading(true); setHistory(null); setError(""); setCommand(null); setOpened(false);
     getApprovalHistory(legalEntityId, requestId, abort.signal).then((result) => { if (!abort.signal.aborted) setHistory(result); })
       .catch((cause: unknown) => { if (!abort.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
-  }, [legalEntityId, requestId, capabilities.approvals]);
-  if (!capabilities.approvals) return null;
+  }, [legalEntityId, requestId, requestApprovalAvailable]);
+  if (!requestApprovalAvailable) return null;
   async function open() {
     const intent = command ?? { key: crypto.randomUUID(), version }; setCommand(intent); setBusy(true); setError("");
     try { await openApproval(legalEntityId, requestId, intent.version, intent.key); setOpened(true); setCommand(null);
       setHistory(await getApprovalHistory(legalEntityId, requestId)); await onChanged();
     } catch (cause) {
       setError(message(cause));
-      if (cause instanceof ApprovalApiError && cause.status >= 400 && cause.status < 500) {
+      if (cause instanceof ApprovalApiError && definiteRequestApprovalRejection(cause.status)) {
         setCommand(null);
         try { await onChanged(); } catch (refreshError) { setError(`${message(cause)} ${message(refreshError)}`); }
       }

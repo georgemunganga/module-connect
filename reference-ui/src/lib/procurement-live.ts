@@ -1,7 +1,7 @@
 export type ShellSelection = { entityId?: string; branch?: string };
 
 export type ProcurementCapability =
-  | "vendorDraft" | "itemDraft" | "requestDraft" | "approvals" | "sourcing"
+  | "vendorDraft" | "itemDraft" | "requestDraft" | "approvals" | "principalApprovals" | "sourcing"
   | "contracts" | "orders" | "orderDraft" | "receiving" | "invoiceIntake" | "invoiceDocuments" | "invoiceValidation" | "financeHandoff" | "supplierPortal"
   | "planningDraft" | "configurationDraft" | "contractDraft" | "recurringPurchaseDraft" | "sourcingDraft" | "sourcingSourceDrafts" | "vendorCreditDraft" | "receivingDrafts" | "receivingGoods" | "receivingInspection" | "receivingServices" | "invoiceComparison" | "invoiceOriginalUnitReview";
 
@@ -19,10 +19,10 @@ export type ProcurementReadiness = {
 
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const capabilityKeys: ProcurementCapability[] = [
-  "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
+  "vendorDraft", "itemDraft", "requestDraft", "approvals", "principalApprovals", "sourcing", "contracts",
   "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "recurringPurchaseDraft", "sourcingDraft", "sourcingSourceDrafts", "vendorCreditDraft", "receivingDrafts", "receivingGoods", "receivingInspection", "receivingServices", "invoiceComparison", "invoiceOriginalUnitReview",
 ];
-const optionalCapability = (key: ProcurementCapability) => key === "recurringPurchaseDraft" || key === "invoiceComparison" || key === "invoiceOriginalUnitReview" || key === "sourcingSourceDrafts" || key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments" || key === "vendorCreditDraft" || (key.startsWith("receiving") && key !== "receiving");
+const optionalCapability = (key: ProcurementCapability) => key === "principalApprovals" || key === "recurringPurchaseDraft" || key === "invoiceComparison" || key === "invoiceOriginalUnitReview" || key === "sourcingSourceDrafts" || key === "invoiceIntake" || key === "orderDraft" || key === "invoiceDocuments" || key === "vendorCreditDraft" || (key.startsWith("receiving") && key !== "receiving");
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
