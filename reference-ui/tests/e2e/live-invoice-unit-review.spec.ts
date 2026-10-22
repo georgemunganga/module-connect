@@ -91,7 +91,8 @@ test("purpose reviewer sees pinned original and attests explicitly without broad
     }
     if (path === `/api/procurement/v1/invoice-unit-reviews/${review}/assignments/${assignment}/decisions`) {
       const body = request.postDataJSON(); expect(body.attestation).toBe("OriginalDocumentUnitsConfirmed");
-      expect(body.action).toBe("Approve"); votes++; await json({ ...receipt("Decision", request.headers()["idempotency-key"]), caseState: "Approved", reviewState: "Verified" }); return true;
+      expect(body.action).toBe("Approve"); votes++; await json({ ...receipt("Decision", request.headers()["idempotency-key"]), caseVersion: 2,
+        caseState: "Approved", reviewState: "Verified", decisionId: mapping, outcomeId: doc }); return true;
     }
     return false;
   });
