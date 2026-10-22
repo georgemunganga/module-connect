@@ -17,6 +17,10 @@ export type RecurringPurchasePage = { items: RecurringPurchase[]; total: number;
 export class RecurringPurchaseError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
+/** Only statuses used by known pre-commit rejection paths permit another write. */
+export function isDefiniteRecurringRejection(error: unknown): error is RecurringPurchaseError {
+  return error instanceof RecurringPurchaseError && [400, 401, 403, 404, 409, 422].includes(error.status);
+}
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const date = /^\d{4}-\d{2}-\d{2}$/;
 function validDate(value: unknown): value is string {

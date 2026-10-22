@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  closeRecurringPurchase, createRecurringPurchase, getRecurringPurchase, listRecurringPurchases,
+  RecurringPurchaseError, isDefiniteRecurringRejection, closeRecurringPurchase, createRecurringPurchase, getRecurringPurchase, listRecurringPurchases,
   updateRecurringPurchase, validateRecurringPurchase, type RecurringPurchaseDraft,
 } from "../../../src/platform/procurement-recurring-purchases-api";
 
@@ -18,6 +18,12 @@ const row = { ...draft, id, number: "RPC-1", ownerWorkerId: owner, workLocationI
 afterEach(() => vi.unstubAllGlobals());
 
 describe("recurring purchase planning contract", () => {
+  it.each([0, 408, 429, 499, 500, 503])("treats status %s as an uncertain write, not a safe rejection", status => {
+    expect(isDefiniteRecurringRejection(new RecurringPurchaseError(status, "Unconfirmed"))).toBe(false);
+  });
+  it.each([400, 401, 403, 404, 409, 422])("recognizes the known pre-commit rejection status %s", status => {
+    expect(isDefiniteRecurringRejection(new RecurringPurchaseError(status, "Rejected"))).toBe(true);
+  });
   it("requires valid cycle dates, supplier and exact positive amount", () => {
     expect(validateRecurringPurchase(draft)).toBeNull();
     for (const expectedAmount of ["0", "-1", "1.00001", "100000000000000", "1e3"])

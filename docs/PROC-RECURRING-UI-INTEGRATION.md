@@ -18,7 +18,7 @@ New source guards validate real calendar dates, exact returned identity/status a
 
 ## Unconfirmed writes
 
-Before POST/PUT, a session-storage marker is required. Its scope includes tenant, company, worker, branch and the target record (or `new`). It contains only `unconfirmed`, with no draft, money, reason, or document data. A synchronous component latch prevents repeat clicks. Storage failure blocks a write before the request. Only a validated receipt or a definite 4xx rejection clears the marker; unmount, context change, list/detail reload and malformed/network/5xx responses do not clear it.
+Before POST/PUT, a session-storage marker is required. Its scope includes tenant, company, worker, branch and the target record (or `new`). It contains only `unconfirmed`, with no draft, money, reason, or document data. A synchronous component latch prevents repeat clicks. Storage failure blocks a write before the request. Only a validated receipt or an explicitly known rejection (HTTP 400, 401, 403, 404, 409 or 422) clears the marker; unmount, context change, list/detail reload and malformed/network/408/429/499/5xx or any other unrecognized responses do not clear it.
 
 This is deliberately a conservative browser-session safeguard, not server idempotency or cross-tab exactly-once protection. An uncertain new purchase must be inspected in saved records; the browser session remains blocked rather than silently retrying. Server command-idempotency/recovery receipts remain future work.
 
