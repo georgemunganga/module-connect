@@ -46,7 +46,7 @@ test("maker opens one review, then reload recovers an interrupted result by GET 
     if (path === `/api/procurement/v1/invoices/${invoice}`) { await json({ id: invoice, supplierId: worker, invoiceNumber: "INV-1",
       invoiceDate: "2026-10-20", currencyCode: "ZMW", status: "Received", intakeChannel: "Manual", grossAmount: "10", netAmount: "10",
       taxAmount: "0", version: 2, lines: [{ id: line, lineNumber: 1, description: "Service", quantity: "1", unitPrice: "10", taxAmount: "0" }], nextStep: "Review" }); return true; }
-    if (path === `/api/procurement/v1/invoices/${invoice}/unit-review-readiness") { await json({ invoiceId: invoice, invoiceVersion: 2,
+    if (path === `/api/procurement/v1/invoices/${invoice}/unit-review-readiness`) { await json({ invoiceId: invoice, invoiceVersion: 2,
       mappingRevision: 1, existingReviewId: existing ? review : null, canRequestReview: !existing, blockers: existing ? ["OriginalUnitReviewAlreadyOpen"] : [],
       isUnitVerification: false, ...flags }); return true; }
     if (path === `/api/procurement/v1/invoices/${invoice}/unit-reviews` && request.method() === "POST") {
