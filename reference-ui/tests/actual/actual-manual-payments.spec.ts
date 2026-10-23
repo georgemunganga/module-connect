@@ -54,13 +54,19 @@ async function login(page: Page, role: string, record = '/payments') {
   expect(choices.principalId).toBe(account.principalId);
   const company = choices.companies?.find(item => item.id === f().companyId);
   expect(company?.registeredName).toBeTruthy();
-  await page.goto(`/procurement/workspace${record}`);
+  // Wait for the live shell, rather than the temporary loading shell whose
+  // local menu state is discarded once Core context has been verified.
+  const landing = role.startsWith('policy_') ? '/settings/modules/payments-made/approvals' : '/payments';
+  await page.goto(`/procurement/workspace${landing}`);
+  await expect(page.getByRole('heading', { name: landing === '/payments' ? 'Payments Made' : 'Payments Made settings', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Organisation context' }).click();
   await page.getByRole('button', {
-    name: `${company!.registeredName}${record.startsWith('/payments') ? ' · All branches' : ''}`,
+    name: `${company!.registeredName}${landing.startsWith('/payments') ? ' · All branches' : ''}`,
     exact: true,
   }).click();
-  await page.getByRole('button', { name: 'Organisation context' }).click();
+  const menu = page.getByRole('button', { name: 'Organisation context' });
+  if (await menu.getAttribute('aria-expanded') === 'true') await menu.click();
+  if (record !== landing) await page.goto(`/procurement/workspace${record}`);
 }
 async function mutation(page: Page, method: string, suffix: string, action: () => Promise<unknown>): Promise<Response> {
   const waiting = page.waitForResponse(response => response.request().method() === method
