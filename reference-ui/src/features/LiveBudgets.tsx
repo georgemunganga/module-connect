@@ -7,7 +7,7 @@ import {
   listBudgetChecks, listBudgetQueue, recordBudgetCheck,
   type BudgetCheck, type BudgetDecision, type BudgetQueuePage, type BudgetQueueRecord,
 } from "../../../src/platform/procurement-budget-api";
-import { budgetAmountExact, formatBudgetAmount } from "../../../src/platform/procurement-budget-amount";
+import { coversBudgetMinimum, formatBudgetAmount, validBudgetMinimum } from "../../../src/platform/procurement-budget-amount";
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Finance review failed. Try again.";
 
@@ -28,6 +28,7 @@ export function LiveBudgets() {
   const [financeCheckRef, setFinanceCheckRef] = useState("");
   const [evidenceRef, setEvidenceRef] = useState("");
   const [reservationRef, setReservationRef] = useState("");
+  const [checkedAmount, setCheckedAmount] = useState("");
   const [reason, setReason] = useState("");
   const [outcome, setOutcome] = useState<BudgetDecision["status"]>("Available");
 
@@ -55,7 +56,8 @@ export function LiveBudgets() {
     event.preventDefault();
     if (!selected) return;
     setError(""); setNotice("");
-    if (!budgetAmountExact(selected.estimatedAmountExact)) { setError("The exact request amount is unavailable. Refresh before recording a Finance check."); return; }
+    if (!validBudgetMinimum(selected.estimatedAmountExact, selected.minimumCheckedAmountExact)) { setError("The exact request amount or minimum Finance amount is unavailable. Refresh before recording a Finance check."); return; }
+    if (!coversBudgetMinimum(checkedAmount, selected.minimumCheckedAmountExact)) { setError(`Enter an exact checked amount of at least ${formatBudgetAmount(selected.minimumCheckedAmountExact, selected.currencyCode)}.`); return; }
     if (!financeCheckRef.trim() || !evidenceRef.trim()) { setError("Add the Finance reference and evidence reference."); return; }
     if (outcome === "Available" && !reservationRef.trim()) { setError("Add the confirmed Finance reservation reference."); return; }
     if (outcome !== "Available" && !reason.trim()) { setError("Explain why the full amount is not available."); return; }
@@ -64,7 +66,7 @@ export function LiveBudgets() {
       await recordBudgetCheck(companyId, selected.id, {
         requestVersion: selected.version,
         financeCheckRef: financeCheckRef.trim(), status: outcome,
-        checkedAmount: selected.estimatedAmountExact, currencyCode: selected.currencyCode,
+        checkedAmount, currencyCode: selected.currencyCode,
         evidenceRef: evidenceRef.trim(), decisionReason: reason.trim() || null,
         reservationRef: outcome === "Available" ? reservationRef.trim() : null,
         reservationStatus: outcome === "Available" ? "Confirmed" : null,
@@ -72,7 +74,7 @@ export function LiveBudgets() {
       setNotice(`Finance check saved for ${selected.number}. This does not approve the purchase.`);
       setHistory(await listBudgetChecks(companyId, selected.id));
       setPage(await listBudgetQueue(companyId, offset));
-      setFinanceCheckRef(""); setEvidenceRef(""); setReservationRef(""); setReason("");
+      setFinanceCheckRef(""); setEvidenceRef(""); setReservationRef(""); setCheckedAmount(""); setReason("");
     } catch (cause) { setError(errorText(cause)); }
     finally { setSaving(false); }
   }
@@ -86,20 +88,23 @@ export function LiveBudgets() {
       <Panel title="Requests waiting for Finance"><div className="p-5">
         {loading ? <p role="status">Loading requests…</p> : page?.records.length ? <div className="overflow-x-auto"><RecordTable>
           <thead><tr><th>Request</th><th>Purpose</th><th>Amount</th><th>Sent</th><th>Action</th></tr></thead>
-          <tbody>{page.records.map((record) => <tr key={record.id}><td>{record.number}</td><td>{record.purpose}</td><td>{formatBudgetAmount(record.estimatedAmountExact, record.currencyCode)}</td><td>{new Date(record.submittedAt).toLocaleDateString()}</td><td><Button variant="secondary" onClick={() => { setSelected(record); setNotice(""); setFinanceCheckRef(""); setEvidenceRef(""); setReservationRef(""); setReason(""); setOutcome("Available"); }}>Review funding</Button></td></tr>)}</tbody>
+          <tbody>{page.records.map((record) => <tr key={record.id}><td>{record.number}</td><td>{record.purpose}</td><td>{formatBudgetAmount(record.estimatedAmountExact, record.currencyCode)}</td><td>{new Date(record.submittedAt).toLocaleDateString()}</td><td><Button variant="secondary" onClick={() => { setSelected(record); setNotice(""); setFinanceCheckRef(""); setEvidenceRef(""); setReservationRef(""); setCheckedAmount(""); setReason(""); setOutcome("Available"); }}>Review funding</Button></td></tr>)}</tbody>
         </RecordTable></div> : <EmptyState title="No requests waiting" description="Submitted purchase requests will appear here for Finance review." />}
         {page && page.count > page.limit && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - page.limit))}>Previous</Button><span>{offset + 1}–{Math.min(offset + page.limit, page.count)} of {page.count}</span><Button variant="secondary" disabled={offset + page.limit >= page.count} onClick={() => setOffset(offset + page.limit)}>Next</Button></div>}
       </div></Panel>
       {selected && <Panel title={`Finance review · ${selected.number}`}><div className="space-y-5 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-medium">{selected.purpose}</p><p className="text-sm text-muted-foreground">Request version {selected.version} · {formatBudgetAmount(selected.estimatedAmountExact, selected.currencyCode)}</p></div><Button variant="ghost" onClick={() => setSelected(null)}>Close</Button></div>
-        {!budgetAmountExact(selected.estimatedAmountExact) && <p role="alert" className="text-sm text-amber-700">The exact amount is unavailable. Refresh after the ERP provides it; a Finance check cannot be saved yet.</p>}
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-medium">{selected.purpose}</p><p className="text-sm text-muted-foreground">Request version {selected.version} · Estimate {formatBudgetAmount(selected.estimatedAmountExact, selected.currencyCode)}</p></div><Button variant="ghost" onClick={() => setSelected(null)}>Close</Button></div>
+        {validBudgetMinimum(selected.estimatedAmountExact, selected.minimumCheckedAmountExact)
+          ? <p className="text-sm text-muted-foreground">Minimum Finance amount: {formatBudgetAmount(selected.minimumCheckedAmountExact, selected.currencyCode)}. Enter the amount verified in Finance. The estimate may have more than four decimal places; the minimum covers it without rounding down.</p>
+          : <p role="alert" className="text-sm text-amber-700">The exact estimate or minimum Finance amount is unavailable. Refresh after the ERP provides both; a Finance check cannot be saved yet.</p>}
         <form onSubmit={(event) => void save(event)} className="grid max-w-3xl gap-4 sm:grid-cols-2">
+          <Field label="Exact amount checked" hint="Up to four decimal places. Enter at least the minimum Finance amount shown above."><Input required inputMode="decimal" maxLength={19} value={checkedAmount} onChange={(event) => setCheckedAmount(event.target.value)} /></Field>
           <Field label="Finance check reference"><Input required maxLength={200} value={financeCheckRef} onChange={(event) => setFinanceCheckRef(event.target.value)} /></Field>
           <Field label="Evidence reference" hint="Use a reference to the check in Finance; do not enter bank details."><Input required maxLength={500} value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} /></Field>
           <Field label="Funding outcome"><Select value={outcome} onChange={(event) => setOutcome(event.target.value as BudgetDecision["status"])}><option value="Available">Full amount available</option><option value="PartiallyAvailable">Part of the amount available</option><option value="Insufficient">Not enough funds</option><option value="NotConfigured">Budget is not set up</option></Select></Field>
           {outcome === "Available" && <Field label="Confirmed Finance reservation reference"><Input required maxLength={200} value={reservationRef} onChange={(event) => setReservationRef(event.target.value)} /></Field>}
           <Field label={outcome === "Available" ? "Note (optional)" : "Reason"} className="sm:col-span-2"><Textarea required={outcome !== "Available"} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
-          <div className="sm:col-span-2"><Button type="submit" disabled={saving || historyLoading || !budgetAmountExact(selected.estimatedAmountExact)}>{saving ? "Saving…" : "Save Finance check"}</Button></div>
+          <div className="sm:col-span-2"><Button type="submit" disabled={saving || historyLoading || !validBudgetMinimum(selected.estimatedAmountExact, selected.minimumCheckedAmountExact)}>{saving ? "Saving…" : "Save Finance check"}</Button></div>
         </form>
         <div><h3 className="mb-3 font-semibold">Previous Finance checks</h3>{historyLoading ? <p role="status">Loading check history…</p> : history.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Checked</th><th>Outcome</th><th>Finance reference</th><th>Evidence</th><th>Reservation</th><th>Request version</th></tr></thead><tbody>{history.map((check) => <tr key={check.id}><td>{new Date(check.checkedAt).toLocaleString()}</td><td><Badge>{check.status}</Badge></td><td>{check.financeCheckRef}</td><td>{check.evidenceRef}</td><td>{check.reservationRef || "—"}</td><td>{check.requestVersion}</td></tr>)}</tbody></RecordTable></div> : <p className="text-sm text-muted-foreground">No Finance checks recorded yet.</p>}</div>
       </div></Panel>}

@@ -1,12 +1,12 @@
 import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 import { RequestApiError } from "./procurement-requests-api";
-import { budgetAmountExact, sameBudgetAmount } from "./procurement-budget-amount";
+import { budgetAmountExact, budgetEstimateExact, sameBudgetAmount, validBudgetMinimum } from "./procurement-budget-amount";
 
 export type BudgetQueueRecord = {
   id: string; number: string; purpose: string; currencyCode: string;
   submittedAt: string; version: number; approvalState: string;
-  createdBy: string; estimatedAmount: number; estimatedAmountExact?: string;
+  createdBy: string; estimatedAmount: number; estimatedAmountExact?: string; minimumCheckedAmountExact?: string;
 };
 export type BudgetQueuePage = { records: BudgetQueueRecord[]; count: number; limit: number; offset: number };
 export type BudgetCheck = {
@@ -58,7 +58,9 @@ export async function listBudgetQueue(companyId: string, offset = 0, signal?: Ab
       || typeof row.number !== "string" || typeof row.purpose !== "string"
       || typeof row.currencyCode !== "string" || typeof row.version !== "number"
       || typeof row.estimatedAmount !== "number"
-      || (row.estimatedAmountExact !== undefined && !budgetAmountExact(row.estimatedAmountExact))))
+      || (row.estimatedAmountExact !== undefined && !budgetEstimateExact(row.estimatedAmountExact))
+      || (row.minimumCheckedAmountExact !== undefined
+        && !validBudgetMinimum(row.estimatedAmountExact, row.minimumCheckedAmountExact))))
     throw new RequestApiError(0, "The ERP returned an invalid Finance review list.");
   return body as BudgetQueuePage;
 }

@@ -38,12 +38,13 @@ async function mockErp(page: Page, canReview: boolean) {
       id: requestId, number: "PR-001", purpose: "Office chairs", currencyCode: "ZMW",
       submittedAt: "2026-10-20T10:00:00Z", version: 3, approvalState: "PendingPolicyAndBudget",
       createdBy: "requester-1", estimatedAmount: 2500,
+      estimatedAmountExact: "2500.00000000", minimumCheckedAmountExact: "2500.0000",
     }], count: 1, limit: 50, offset: 0 });
     if (path === `/api/procurement/v1/requests/${requestId}/budget-checks`) {
       if (request.method() === "GET") return json({ records: saved ? [saved] : [] });
       const body = request.postDataJSON();
       if (body.requestVersion !== 3) return json({ message: "Refresh this request before recording a budget decision." }, 409);
-      saved = { ...body, id: checkId, checkedAt: "2026-10-20T11:00:00Z",
+      saved = { ...body, id: checkId, checkedAmountExact: body.checkedAmount, checkedAt: "2026-10-20T11:00:00Z",
         checkedBySubjectId: workerId };
       return json(saved, 201);
     }
@@ -58,6 +59,7 @@ test("Finance records a confirmed check and sees its history", async ({ page }) 
   await expect(page.getByText("Office chairs")).toBeVisible();
   await page.getByRole("button", { name: "Review funding" }).click();
   await page.getByLabel("Finance check reference").fill("FIN-2026-001");
+  await page.getByLabel("Exact amount checked").fill("2500.0000");
   await page.getByLabel("Evidence reference").fill("finance/checks/001");
   await page.getByRole("button", { name: "Save Finance check" }).click();
   expect(state.saved()).toBeNull();
@@ -66,7 +68,7 @@ test("Finance records a confirmed check and sees its history", async ({ page }) 
   await expect(page.getByText("Finance check saved for PR-001.", { exact: false })).toBeVisible();
   await expect(page.getByText("FIN-2026-001")).toBeVisible();
   expect(state.saved()).toMatchObject({ requestVersion: 3, status: "Available",
-    checkedAmount: 2500, currencyCode: "ZMW", reservationRef: "RES-001", reservationStatus: "Confirmed" });
+    checkedAmount: "2500.0000", currencyCode: "ZMW", reservationRef: "RES-001", reservationStatus: "Confirmed" });
 });
 
 test("budget queue stays closed without Finance permission", async ({ page }) => {
