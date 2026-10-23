@@ -133,7 +133,7 @@ export const moduleSettings: ModuleSettingsConfig[] = [
     slug: "payments-made",
     title: "Payments Made",
     group: "Purchases",
-    description: "Set review and approval controls for recorded payments.",
+    description: "Set independent review rules for externally reported manual payments. Finance owns execution.",
     tabs: [tab("approvals", "Approvals")],
   },
 ];
@@ -144,6 +144,7 @@ export const procurementModuleGroups = [
   { title: "Buying", slugs: ["purchase-requests", "purchase-orders"] },
   { title: "Sourcing & contracts", slugs: ["request-for-quotes", "contracts"] },
   { title: "Receiving & invoice checks", slugs: ["purchase-receives", "inspections", "returns", "bills"] },
+  { title: "Payment review", slugs: ["payments-made"] },
 ] as const;
 
 export const procurementModuleSlugs: ReadonlySet<string> = new Set(procurementModuleGroups.flatMap((group) => group.slugs));
@@ -152,7 +153,6 @@ export const moduleOwner: Record<string, string> = {
   accounts: "Finance",
   customers: "Customer Management",
   "recurring-bills": "Finance / Accounts Payable",
-  "payments-made": "Finance / Treasury",
 };
 
 const organizationRoutes: SettingsRoute[] = [

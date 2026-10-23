@@ -80,7 +80,7 @@ function validSummary(value: unknown): boolean {
     && typeof value.version === "number" && typeof value.effectiveFrom === "string";
 }
 
-export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "SOURCING" | "RECEIVING"): Promise<PolicyPage> {
+export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "SOURCING" | "RECEIVING" | "MANUAL_PAYMENT_REVIEW"): Promise<PolicyPage> {
   const body = await call(companyId, `?page=1&pageSize=100${key ? `&key=${key}` : ""}`, { signal });
   if (!object(body) || !Array.isArray(body.items) || !body.items.every(validSummary)
     || typeof body.total !== "number" || typeof body.page !== "number"
@@ -99,6 +99,16 @@ export async function validatePolicy(companyId: string, rulesJson: string): Prom
   if (!object(body) || typeof body.isValid !== "boolean" || !Array.isArray(body.issues))
     throw new PolicyActionError("ERP returned an invalid buying rule check.", 0);
   return body as PolicyValidation;
+}
+export async function validateManualPaymentPolicy(companyId: string, rulesJson: string):
+  Promise<PolicyValidation & { reviewReady: boolean; reviewIssues: PolicyIssue[] }> {
+  const body = await call(companyId, "/validate", { method: "POST", body: JSON.stringify({ rulesJson }) });
+  if (!object(body) || typeof body.isValid !== "boolean" || !Array.isArray(body.issues)
+    || typeof body.reviewReady !== "boolean" || !Array.isArray(body.reviewIssues)
+    || [...body.issues, ...body.reviewIssues].some(issue => !object(issue)
+      || typeof issue.path !== "string" || typeof issue.message !== "string"))
+    throw new PolicyActionError("ERP returned an invalid manual payment review check.", 0);
+  return body as PolicyValidation & { reviewReady: boolean; reviewIssues: PolicyIssue[] };
 }
 export async function createPolicy(companyId: string, draft: PolicyDraft): Promise<PolicyRecord> {
   const body = await call(companyId, "", { method: "POST", body: JSON.stringify(draft) });
@@ -141,7 +151,7 @@ export async function decidePolicy(companyId: string, id: string, version: numbe
     throw new PolicyActionError("ERP did not confirm the policy decision. Check saved rules before retrying.", 0);
   return body;
 }
-export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW"):
+export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "MANUAL_PAYMENT_REVIEW"):
   Promise<{ status: string; isAuthority: false; policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null }> {
   const body = await call(companyId, `/effective?key=${key}`);
   if (!object(body) || typeof body.status !== "string" || body.isAuthority !== false)
