@@ -4,6 +4,7 @@ export async function expectOrderWorkspaceBounds(page: Page, width: number, targ
   await page.setViewportSize({ width, height: 1000 });
   await expect(page.locator("#erp-global-preloader")).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => window.scrollTo(0, 0));
   const bounds = await page.evaluate(() => {
     const header = document.querySelector("main header")?.getBoundingClientRect();
     const nav = document.querySelector('aside[aria-label="Main navigation"]')?.getBoundingClientRect();
