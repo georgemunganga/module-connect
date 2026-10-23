@@ -360,7 +360,7 @@ export function Budgets() {
 }
 
 export type AnalyticsRecord = { id: string; number?: string; title: string; kind: string; party: string; date: string; status: string; amount?: number };
-export type LiveAnalyticsData = { rows: AnalyticsRecord[]; state: "ready" | "loading" | "error" | "unavailable"; refresh: () => void };
+export type LiveAnalyticsData = { rows: AnalyticsRecord[]; state: "ready" | "loading" | "error" | "unavailable"; incomplete?: boolean; refresh: () => void };
 export function Analytics({ live }: { live?: LiveAnalyticsData } = {}) {
   return live ? <AnalyticsFrame records={live.rows} live={live} /> : <DemoAnalytics />;
 }
@@ -422,6 +422,7 @@ function AnalyticsFrame({ records, live }: { records: AnalyticsRecord[]; live?: 
             <Download size={15} /> Export CSV
           </Button></>}
       />
+      {live?.incomplete && live.state === "ready" && <p role="alert" className="mb-4 text-sm text-muted-foreground">Some records could not be loaded. The table shows only the records available now.</p>}
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <Stat label="Matching records" value={live && live.state !== "ready" ? "—" : String(reportRows.length)} />
         <Stat label="Record value" value={live ? "—" : money(total ?? 0)} tone="green" />

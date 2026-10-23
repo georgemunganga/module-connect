@@ -113,6 +113,7 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
       state: metrics.some(metric => values[metric.permission]?.state === "ready") ? "ready"
         : metrics.some(metric => values[metric.permission]?.state === "error") ? "error"
           : metrics.some(metric => !values[metric.permission] || values[metric.permission]?.state === "loading") ? "loading" : "unavailable",
+      incomplete: metrics.some(metric => values[metric.permission]?.state === "error"),
       refresh: () => setRevision(value => value + 1) }} />
     <div className="mt-5 grid gap-4 sm:grid-cols-2">
       {metrics.map(metric => {

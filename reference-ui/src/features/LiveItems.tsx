@@ -63,7 +63,7 @@ function ManagedItemList() {
       subtitle="Manage goods and services your company may buy."
       columns={[{ key: "number", label: "Item / Code", width: 260 }, { key: "kind", label: "Type", width: 110 },
         { key: "category", label: "Category", width: 135 }, { key: "unit", label: "Unit", width: 85 },
-        { key: "purchasable", label: "Purchasable", width: 105 }, { key: "status", label: "Status", width: 110 }]}
+        { key: "purchasable", label: "Available to buy", width: 140 }, { key: "status", label: "Status", width: 110 }]}
       rows={(data?.items ?? []).map(item => ({ id: item.id, number: item.code, title: item.name,
         status: item.status, path: `/items/${item.id}`, fields: { kind: item.kind, category: item.categoryCode,
           unit: item.unitCode, purchasable: item.isPurchasable ? "Yes" : "No" } }))}

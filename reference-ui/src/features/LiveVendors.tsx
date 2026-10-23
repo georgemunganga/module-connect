@@ -69,8 +69,8 @@ function VendorListRecord() {
   return <div className="p-5 sm:p-8">
     <LiveCatalogDirectory key={`${search}:${status}:${page}`} title="Vendors" entity="vendors"
       subtitle="Add vendors, review their details, and manage who can receive new orders."
-      columns={[{ key: "number", label: "Vendor / Company ID", width: 250 }, { key: "legal", label: "Legal name", width: 210 },
-        { key: "country", label: "Country", width: 100 }, { key: "orderable", label: "Orderable", width: 95 },
+      columns={[{ key: "number", label: "Vendor / Reference", width: 250 }, { key: "legal", label: "Legal name", width: 210 },
+        { key: "country", label: "Country", width: 100 }, { key: "orderable", label: "Ready for orders", width: 140 },
         { key: "created", label: "Created", width: 130 }, { key: "status", label: "Status", width: 125 }]}
       rows={(data?.items ?? []).map(vendor => ({ id: vendor.id, number: vendor.number, title: vendor.displayName,
         status: vendor.status, path: `/vendors/${vendor.id}`, fields: { legal: vendor.legalName,
