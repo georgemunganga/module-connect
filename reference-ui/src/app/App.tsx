@@ -127,10 +127,10 @@ export function App() {
                   : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingDetail />
                   : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderDetail />
                   : isProcurementLiveMode && module.key === "requests" ? <LiveRequestRoute />
+                  : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingDetail />
                   : <div className="p-5 sm:p-8">
                     {isProcurementLiveMode && module.key === "requests" ? <LiveRequestRoute />
-                      : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingDetail />
-                        : <RecordRoute kind={module.key} />}
+                      : <RecordRoute kind={module.key} />}
                   </div>}
               />
             ))}

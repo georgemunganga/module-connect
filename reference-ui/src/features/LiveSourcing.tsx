@@ -4,8 +4,10 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useErpShell } from "../lib/erpShell";
 import { GovernedSourcingCreate, GovernedSourcingDetail, GovernedSourcingList } from "./GovernedSourcing";
 import { Plus, Trash2 } from "lucide-react";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { Button, Field, Input, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
+import { DetailSection, DetailValue } from "../components/data/DetailPrimitives";
+import { RfqDetailLayout, RfqWizardLayout } from "./RfqPresentation";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   SourcingApiError,
@@ -150,8 +152,8 @@ function LegacySourcingEditor() {
     }
     finally { if (isCurrentSave()) setSaving(false); }
   }
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={id ? "Edit quote request" : "New quote request"} subtitle="Save a draft. Vendors will not receive it until publication is approved." />
+  return <RfqWizardLayout title={id ? "Edit quote request" : "New quote request"} back={id ? `/rfqs/${id}` : "/rfqs"}>
+    <p className="text-sm text-muted-foreground">Save an internal draft. Vendors will not receive it until publication is approved.</p>
     {loading ? <p role="status">Loading quote request…</p> : id && (version === null || loadedContext !== editorContext)
       ? <p role="alert">{error || "This draft is unavailable. Return to the quote request list."}</p>
       : <form className="max-w-6xl space-y-5" onSubmit={save}>
@@ -175,9 +177,9 @@ function LegacySourcingEditor() {
         </div>)}
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add line</Button>
       </div></Panel>
-      <div className="flex gap-3"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/rfqs/${id}` : "/rfqs"}><Button variant="secondary">Cancel</Button></Link></div>
+      <div className="sticky bottom-0 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/rfqs/${id}` : "/rfqs"}><Button variant="secondary">Cancel</Button></Link></div>
     </form>}
-  </div>;
+  </RfqWizardLayout>;
 }
 
 function LegacySourcingDetail() {
@@ -208,12 +210,15 @@ function LegacySourcingDetail() {
   }
   if (loading) return <div role="status" className="p-5 sm:p-8">Loading quote request…</div>;
   if (!record) return <div role="alert" className="p-5 sm:p-8">{error || "Quote request not found."}</div>;
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={record.title} subtitle={`${record.number} · ${record.method} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{permissions.includes("procurement-sourcing-edit") && record.status === "Draft" && <Link to={`/rfqs/${record.id}/edit`}><Button variant="secondary">Edit draft</Button></Link>}</>} />
+  return <RfqDetailLayout title={record.title} number={record.number} method={record.method} currency={record.currencyCode} status={record.status} back="/rfqs"
+    actions={<>{permissions.includes("procurement-sourcing-edit") && record.status === "Draft" && <Link to={`/rfqs/${record.id}/edit`}><Button variant="secondary">Edit draft</Button></Link>}<Button variant="secondary" disabled title="Publishing and invitations are not available yet">Publish</Button></>}
+    itemCount={record.lines.length}
+    items={<div className="overflow-x-auto"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Category</th><th>Needed by</th><th>Status</th></tr></thead><tbody>{record.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitCode}</td><td>{line.categoryCode || "—"}</td><td>{line.neededBy || "—"}</td><td>{line.status}</td></tr>)}</tbody></RecordTable></div>}
+    overview={<>
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
-    <Panel title="Items and services"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Category</th><th>Status</th></tr></thead><tbody>{record.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitCode}</td><td>{line.categoryCode || "—"}</td><td>{line.status}</td></tr>)}</tbody></RecordTable></div></Panel>
-    <div className="mt-5 grid gap-5 lg:grid-cols-2"><Panel title="Schedule"><div className="space-y-2 p-5 text-sm"><p>Opens: {record.opensAt ? new Date(record.opensAt).toLocaleString() : "Not set"}</p><p>Closes: {record.closesAt ? new Date(record.closesAt).toLocaleString() : "Not set"}</p></div></Panel><Panel title="Next step"><p className="p-5 text-sm text-muted-foreground">Publication and vendor invitations will open after approval rules and supplier access are connected.</p></Panel></div>
+    <div className="grid gap-5 lg:grid-cols-3"><DetailSection title="Quote details" className="lg:col-span-2"><dl className="grid gap-4 sm:grid-cols-2"><DetailValue label="Reference" value={record.number} /><DetailValue label="Method" value={record.method} /><DetailValue label="Currency" value={record.currencyCode} /></dl></DetailSection>
+      <DetailSection title="Schedule"><dl className="space-y-4"><DetailValue label="Opens" value={record.opensAt ? new Date(record.opensAt).toLocaleString() : "Not set"} /><DetailValue label="Closes" value={record.closesAt ? new Date(record.closesAt).toLocaleString() : "Not set"} /></dl></DetailSection></div>
+    <DetailSection title="Next step" className="mt-5"><p className="text-sm text-muted-foreground">Supplier invitations, bids, evaluation and award are not available yet.</p></DetailSection>
     {permissions.includes("procurement-sourcing-edit") && record.status === "Draft" && <Panel title="Cancel this draft" className="mt-5"><div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-end"><Field label="Reason" className="flex-1"><Textarea rows={2} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
-    <Link to="/rfqs" className="mt-5 inline-block text-sm text-primary hover:underline">Back to quote requests</Link>
-  </div>;
+    </>} />;
 }

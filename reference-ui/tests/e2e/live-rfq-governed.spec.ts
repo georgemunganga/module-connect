@@ -84,7 +84,20 @@ test("approved requests support exact partial consolidation and controlled cance
   expect((creation.body as { sources: Selection[] }).sources.map(x => x.quantity)).toEqual(["12345678901234.5678", "2.0001"]); expect(creation.key).toMatch(/^[0-9a-f-]{36}$/i);
   await page.getByRole("textbox", { name: "Reason", exact: true }).fill("No longer required"); await page.getByRole("button", { name: "Cancel draft and release its quantities" }).click();
   await expect(page.getByText("Cancelled", { exact: true })).toBeVisible(); expect(calls.filter(x => x.method === "POST")).toHaveLength(2);
-  await expect(page.getByRole("button", { name: /publish|send to vendor|award/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Publish", exact: true })).toBeDisabled();
+});
+test("governed RFQ list keeps server search, company status and imported table controls", async ({ page }) => {
+  await mock(page, { seed: true });
+  await page.goto("/procurement/workspace/rfqs?source=approved");
+  await expect(page.getByRole("button", { name: "Filter Quote Requests by field" })).toBeVisible();
+  await expect(page.getByTestId("erp-record-table")).toBeVisible();
+  await page.getByLabel("Find quote request").fill("Office");
+  await expect(page.getByText("Search and status use the full company list.", { exact: false })).toBeVisible();
+  await page.getByRole("link", { name: /RF-1.*Office supplies/ }).click();
+  await page.getByRole("tab", { name: "Items (1)" }).click();
+  await expect(page.getByRole("cell", { name: "Office notebooks" })).toBeVisible();
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await expect(page.getByRole("button", { name: "Cancel draft and release its quantities" })).toBeVisible();
 });
 test("interrupted creation checks original operation by GET without repeating POST", async ({ page }) => {
   const calls = await mock(page, { loseCreate: true }); await page.goto("/procurement/workspace/rfqs/new?source=approved"); await selectTwo(page);
