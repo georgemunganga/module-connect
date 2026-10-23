@@ -54,10 +54,11 @@ function PrincipalDetail({id,view,assignmentId,scopeKey}:{id:string;view:View;as
   function availableActions():Action[]{
     if(!data)return [];
     if(data.view==="buyer")return [
-      ...(data.record.status==="Draft"&&grant("procurement-po-edit")?["Cancel" as const]:[]),
+      ...(data.record.status==="Draft"&&!data.record.fundingRecorded&&grant("procurement-po-edit")?["Cancel" as const]:[]),
       ...(context.capabilities.principalOrderGovernance&&data.record.status==="Draft"&&data.record.fundingRecorded
         &&grant("procurement-po-submit")?["Submit" as const]:[]),
-      ...(context.capabilities.principalOrderGovernance&&["Returned","Rejected","Approved","Issued","Disputed"].includes(data.record.status)
+      ...(context.capabilities.principalOrderGovernance&&data.record.fundingRecorded
+        &&["Draft","Returned","Rejected"].includes(data.record.status)
         &&grant("procurement-po-edit")?["ReleaseRequest" as const]:[])];
     if(!context.capabilities.principalOrderGovernance)return [];
     if(data.view==="finance")return [
