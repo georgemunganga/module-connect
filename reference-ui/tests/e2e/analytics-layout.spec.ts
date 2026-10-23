@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mockErp } from "./request-mock";
+import { mockErp, capabilities } from "./request-mock";
 const permissions=["procurement-access","procurement-request-read"];
 test("Analytics preserves original report center with actual loaded rows and no invented spend",async({page})=>{
   const calls:string[]=[];page.on("request",r=>{if(r.url().includes("/api/procurement/"))calls.push(new URL(r.url()).pathname);});
@@ -34,4 +34,20 @@ for(const width of [1440,390])test(`Analytics original report layout fits ${widt
   await expect(page.getByRole("cell",{name:/Office chairs/})).toBeVisible();await expect(page.locator("#erp-global-preloader")).toHaveCount(0);
   await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath(`analytics-${width}.png`),fullPage:true});
+});
+
+test("Analytics waits for every permitted page before declaring an empty report", async ({ page }) => {
+  await mockErp(page, { permissions: [...permissions, "procurement-po-read"] });
+  await page.route("**/api/procurement/v1/meta", route => route.fulfill({ json: { tenantId: "amizo", legalEntityId: "11111111-1111-4111-8111-111111111111", schemaReady: true, capabilities: { ...capabilities, orderDraft: true } } }));
+  let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/procurement/v1/orders**", async route => {
+    await held; await route.fulfill({ json: { items: [{ id: "55555555-5555-4555-8555-555555555555", number: "PO-LATER", supplierId: "33333333-3333-4333-8333-333333333333", currencyCode: "ZMW", status: "Draft", version: 1, createdAt: "2026-10-23T00:00:00Z" }], total: 1, page: 1, pageSize: 25 } });
+  });
+  try {
+    await page.goto("/procurement/workspace/analytics");
+    await expect(page.getByLabel("My purchase requests: 0")).toBeVisible();
+    await expect(page.getByText("Loading saved records…", { exact: true })).toBeVisible();
+    await expect(page.getByText("No report rows match", { exact: true })).toHaveCount(0);
+  } finally { release(); }
+  await expect(page.getByRole("cell", { name: /PO-LATER/ })).toBeVisible();
 });

@@ -34,7 +34,7 @@ async function catalogFixture(page: Page, kind: "vendors" | "items", failList = 
       if (failList) return json({ message: "Scoped list unavailable" }, 503);
       if (kind === "vendors") {
         const label = url.searchParams.get("page") === "2" ? "Second vendor" : "Copper Supply";
-        return json({ items: [{ id: vendor, number: "SUP-001", displayName: label, legalName: `${label} Ltd",
+        return json({ items: [{ id: vendor, number: "SUP-001", displayName: label, legalName: `${label} Ltd`,
           countryCode: "ZM", status: "Active", isOrderable: true, version: 1, createdAt: "2026-10-20T00:00:00Z" }],
           total: 26, page: Number(url.searchParams.get("page") ?? 1), pageSize: 25 });
       }
