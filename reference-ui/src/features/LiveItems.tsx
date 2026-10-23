@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Plus } from "lucide-react";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { ArrowLeft, MoreHorizontal, Package, Plus } from "lucide-react";
+import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { RecordTable } from "../components/data/RecordTable";
 import { LiveCatalogDirectory } from "../components/data/LiveCatalogDirectory";
 import { useErpShell } from "../lib/erpShell";
@@ -76,10 +77,10 @@ function ManagedItemList() {
 }
 
 export function LiveItemEditor() {
-  const { id } = useParams(); const readiness = useLiveReadiness(); const { selection } = useErpShell();
+  const { id } = useParams(); const readiness = useLiveReadiness(); const { selection, authEpoch } = useErpShell();
   if (!readiness?.permissions.includes("procurement-item-manage"))
     return <div className="p-5 sm:p-8" role="alert">Item changes are unavailable for your account. <Link to="/items">Browse approved items</Link></div>;
-  return <LiveItemEditorBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.principalId, selection.entityId, selection.branch, id ?? "new"].join(":")} />;
+  return <LiveItemEditorBody key={[authEpoch, readiness?.tenantId, readiness?.legalEntityId, readiness?.principalId, selection.entityId, selection.branch, id ?? "new"].join(":")} />;
 }
 function LiveItemEditorBody() {
   const { id } = useParams();
@@ -91,24 +92,27 @@ function LiveItemEditorBody() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [unconfirmed,setUnconfirmed]=useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
   const savingRef=useRef(false);
   const mounted = useRef(true); useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [loadedKey, setLoadedKey] = useState<string | null>(id ? null : `${company}:new`);
   const viewOnly = useLiveReadiness()?.permissions.includes("procurement-item-manage") !== true;
   useEffect(() => {
     setVersion(null); setLoadedKey(null);
-    if (!id) { setDraft(initial); setLoadedKey(`${company}:new`); return; }
+    if (!id) { setDraft(initial); setDirty(false); setLoadedKey(`${company}:new`); return; }
     const controller = new AbortController();
     setLoading(true); setError("");
     getItemDraft(company, id, controller.signal).then((item) => {
       if (controller.signal.aborted) return;
-      setDraft({ ...initial, ...item }); setVersion(item.version); setLoadedKey(`${company}:${id}`);
+      setDraft({ ...initial, ...item }); setDirty(false); setVersion(item.version); setLoadedKey(`${company}:${id}`);
     })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [company, id]);
-  const field = (key: keyof ItemDraft, value: string | boolean | number | null) => setDraft((current) => ({ ...current, [key]: value }));
+  const field = (key: keyof ItemDraft, value: string | boolean | number | null) => { setDraft((current) => ({ ...current, [key]: value })); setDirty(true); };
+  function leave() { if (savingRef.current || saving) return; if (dirty || unconfirmed) setLeaveOpen(true); else navigate(id ? `/items/${id}` : "/items"); }
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!mounted.current || savingRef.current || saving || unconfirmed || viewOnly || loadedKey !== `${company}:${id ?? "new"}` || id && version === null) {
@@ -129,17 +133,18 @@ function LiveItemEditorBody() {
     savingRef.current=true;setSaving(true);
     try { const saved=await getItemDraft(company,id);if(!mounted.current)return;
       if(saved.id!==id)throw new ItemApiError(0,"The ERP returned a different item.");
-      setDraft({...initial,...saved});setVersion(saved.version);setLoadedKey(`${company}:${id}`);setUnconfirmed(false);setError("");
+      setDraft({...initial,...saved});setDirty(false);setVersion(saved.version);setLoadedKey(`${company}:${id}`);setUnconfirmed(false);setError("");
     } catch(cause){if(mounted.current)setError(message(cause));}finally{savingRef.current=false;if(mounted.current)setSaving(false);}
   }
   return <div className="p-5 sm:p-8">
-    <PageHeader title={id ? "Edit item" : "New item"} subtitle="Save a draft. Items need a separate approval before employees can buy them." />
+    <div className="mb-5 flex items-center gap-2 text-sm text-muted-foreground"><Button type="button" variant="ghost" disabled={saving} onClick={leave}><ArrowLeft size={15} /> Items</Button><span>/</span><span>{id ? "Edit item" : "New item"}</span></div>
+    <PageHeader title={id ? "Edit item" : "New item"} subtitle="Save a draft. A separate approval makes items available for buying." />
     {loading ? <p role="status">Loading item…</p> : id && loadedKey !== `${company}:${id}`
       ? <div role="alert"><p>{error || "This item could not be loaded for editing. No new item will be created."}</p><Link to="/items">Back to items</Link></div>
       : <form className="max-w-4xl space-y-5" onSubmit={save}>
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("changed") && <span className="block">Your edits are still here. Compare with the current item before retrying.</span>}</p>}
       {unconfirmed && <div className="space-y-2 text-sm"><p role="status">This change is unconfirmed or the item changed. Your entries are still here. Do not submit again; review the saved records first.</p>{id ? <><Link to={`/items/${id}`} target="_blank" rel="noreferrer" className="text-primary">Review saved item</Link><Button type="button" variant="secondary" disabled={saving} onClick={()=>void reloadSaved()}>Reload saved item and discard edits</Button></> : <Link to="/items" className="text-primary">Review items before creating again</Link>}</div>}
-      <Panel title="Item details"><div className="grid gap-4 p-5 sm:grid-cols-2">
+      <Panel title="Item details"><div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Item name"><Input required maxLength={300} value={draft.name} onChange={(event) => field("name", event.target.value)} /></Field>
         <Field label="Item code"><Input required maxLength={50} value={draft.code} onChange={(event) => field("code", event.target.value.toUpperCase())} /></Field>
         <Field label="Type"><Select value={draft.kind} onChange={(event) => field("kind", event.target.value)}><option>Goods</option><option>Service</option><option>Asset</option><option>Subscription</option></Select></Field>
@@ -148,19 +153,23 @@ function LiveItemEditorBody() {
         <Field label="Brand"><Input value={draft.brand ?? ""} onChange={(event) => field("brand", event.target.value)} /></Field>
         <Field label="Description" className="sm:col-span-2"><Textarea rows={3} value={draft.description ?? ""} onChange={(event) => field("description", event.target.value)} /></Field>
       </div></Panel>
-      <Panel title="Buying details"><div className="grid gap-4 p-5 sm:grid-cols-2">
+      <Panel title="Purchase information"><div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Manufacturer"><Input value={draft.manufacturer ?? ""} onChange={(event) => field("manufacturer", event.target.value)} /></Field>
         <Field label="Manufacturer part number"><Input value={draft.manufacturerPartNumber ?? ""} onChange={(event) => field("manufacturerPartNumber", event.target.value)} /></Field>
         <Field label="Lead time in days"><Input type="number" min={0} value={draft.leadTimeDays ?? ""} onChange={(event) => field("leadTimeDays", event.target.value === "" ? null : Number(event.target.value))} /></Field>
         <Field label="Minimum order quantity"><Input type="number" min={0} step="any" value={draft.minimumOrderQuantity ?? ""} onChange={(event) => field("minimumOrderQuantity", event.target.value === "" ? null : Number(event.target.value))} /></Field>
         <Field label="Tax code"><Input value={draft.taxCodeRef ?? ""} onChange={(event) => field("taxCodeRef", event.target.value)} /></Field>
         <Field label="Expense account reference"><Input value={draft.expenseAccountRef ?? ""} onChange={(event) => field("expenseAccountRef", event.target.value)} /></Field>
+        <Field label="Preferred vendor"><Input disabled value="Set per supplier catalog price" /></Field>
+        <Field label="Purchase rate"><Input disabled value="Set per supplier catalog price after approval" /></Field>
         <Field label="Stock item"><Select value={draft.isStockItem ? "yes" : "no"} onChange={(event) => field("isStockItem", event.target.value === "yes")}><option value="no">No</option><option value="yes">Yes</option></Select></Field>
         <Field label="Asset"><Select value={draft.isAsset ? "yes" : "no"} onChange={(event) => field("isAsset", event.target.value === "yes")}><option value="no">No</option><option value="yes">Yes</option></Select></Field>
         <Field label="Inspection needed"><Select value={draft.inspectionRequired ? "yes" : "no"} onChange={(event) => field("inspectionRequired", event.target.value === "yes")}><option value="no">No</option><option value="yes">Yes</option></Select></Field>
       </div></Panel>
-      <div className="flex gap-3"><Button type="submit" disabled={saving || unconfirmed || viewOnly}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/items/${id}` : "/items"}><Button variant="secondary">Cancel</Button></Link></div>
+      <div className="grid gap-4 sm:grid-cols-2"><Panel title="Sales information"><p className="p-5 text-sm text-muted-foreground">Sales rate and sales accounting are not managed in this procurement item record.</p></Panel><Panel title="Reporting tags"><p className="p-5 text-sm text-muted-foreground">Reporting tags are not available for this item yet.</p></Panel></div>
+      <div className="sticky bottom-8 z-10 flex gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={saving || unconfirmed || viewOnly}>{saving ? "Saving…" : "Save draft"}</Button><Button type="button" variant="secondary" disabled={saving} onClick={leave}>Cancel</Button></div>
     </form>}
+    {leaveOpen && <Modal title={unconfirmed ? "Leave item review?" : "Discard item changes?"} onClose={() => setLeaveOpen(false)}><p className="mb-5 text-sm text-muted-foreground">{unconfirmed ? "This save needs review before another change. Your entries may already have reached ERP." : "Your changes to this draft have not been saved."}</p><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setLeaveOpen(false)}>Keep editing</Button><Button onClick={() => navigate(id ? `/items/${id}` : "/items")}>{unconfirmed ? "Leave and review" : "Discard changes"}</Button></div></Modal>}
   </div>;
 }
 
@@ -170,8 +179,8 @@ export function LiveItemDetail() {
 }
 
 function ManagedItemDetail() {
-  const { id } = useParams(); const readiness = useLiveReadiness(); const { selection } = useErpShell();
-  return <LiveItemDetailBody key={[readiness?.tenantId, readiness?.legalEntityId, readiness?.principalId, selection.entityId, selection.branch, id].join(":")} />;
+  const { id } = useParams(); const readiness = useLiveReadiness(); const { selection, authEpoch } = useErpShell();
+  return <LiveItemDetailBody key={[authEpoch, readiness?.tenantId, readiness?.legalEntityId, readiness?.principalId, selection.entityId, selection.branch, id].join(":")} />;
 }
 function LiveItemDetailBody() {
   const { id } = useParams();
@@ -197,6 +206,8 @@ function LiveItemDetailBody() {
   const [priceEdit, setPriceEdit] = useState<{ price: CatalogPrice; draft: CatalogPriceEdit } | null>(null);
   const [writeUnconfirmed, setWriteUnconfirmed] = useState(false);
   const [priceSaved, setPriceSaved] = useState("");
+  const [tab, setTab] = useState("overview");
+  const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -284,17 +295,42 @@ function LiveItemDetailBody() {
   }
   if (loading) return <div role="status" className="p-5 sm:p-8">Loading item…</div>;
   if (!item) return <div role="alert" className="p-5 sm:p-8">{error || "Item not found."}</div>;
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={item.name} subtitle={`${item.code} · ${item.kind}`} actions={<><Badge>{item.status}</Badge>{!viewOnly && !writeUnconfirmed && !busy && item.status === "Inactive" && <Link to={`/items/${item.id}/edit`}><Button variant="secondary">Edit item</Button></Link>}</>} />
-    {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
-    {writeUnconfirmed && <div className="mb-4 space-y-2 text-sm"><p role="status">A change is unconfirmed or this record changed. Your entries are preserved. Review the saved item and prices before another action; no command will be sent again automatically.</p><Button variant="secondary" disabled={busy} onClick={()=>void reloadSavedItem()}>Reload saved item and discard edits</Button><Link to={`/items/${item.id}`} target="_blank" rel="noreferrer" className="ml-3 text-primary">Review saved item</Link></div>}
-    <div className="grid gap-5 lg:grid-cols-2"><Panel title="Item overview"><dl className="grid grid-cols-2 gap-4 p-5 text-sm"><dt>Category</dt><dd>{item.categoryCode}</dd><dt>Unit</dt><dd>{item.unitCode}</dd><dt>Brand</dt><dd>{item.brand || "—"}</dd><dt>Available for buying</dt><dd>{item.isPurchasable ? "Yes" : "No — approval required"}</dd></dl></Panel><Panel title="Description"><p className="p-5 text-sm">{item.description || "No description."}</p></Panel></div>
+  return <div className="min-h-[calc(100dvh-5rem)] bg-muted/30">
+    <div className="flex min-h-[calc(100dvh-5rem)] flex-col xl:flex-row">
+      <aside className="w-full shrink-0 border-b border-border bg-surface xl:w-64 xl:border-b-0 xl:border-r">
+        <div className="border-b border-border p-5"><p className="text-xs text-muted-foreground">Directory</p><Button variant="ghost" disabled={busy || writeUnconfirmed} onClick={() => navigate("/items")}>Items</Button></div>
+        <div className="flex items-start gap-3 p-5"><span className="rounded-lg bg-primary/10 p-2 text-primary"><Package size={18} /></span><div className="min-w-0"><p className="break-words text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs text-muted-foreground">{item.code} · {item.unitCode}</p><Badge>{item.status}</Badge></div></div>
+        <p className="px-5 pb-5 text-xs text-muted-foreground">Other items are available in the item directory.</p>
+      </aside>
+      <main className="min-w-0 flex-1">
+        <header className="sticky top-14 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 py-4 sm:px-8">
+          <div className="min-w-0"><Button type="button" variant="ghost" disabled={busy || writeUnconfirmed} onClick={() => navigate("/items")}><ArrowLeft size={13} /> Items</Button><h1 className="break-words text-xl font-semibold">{item.name}</h1><p className="text-sm text-muted-foreground">{item.code} · {item.kind} · {item.unitCode}</p></div>
+          <div className="flex flex-wrap items-center gap-2"><Badge>{item.status}</Badge>
+            {!viewOnly && !writeUnconfirmed && item.status === "Inactive" && <Link to={`/items/${item.id}/edit`} aria-disabled={busy} onClick={event => { if (busyRef.current || busy) event.preventDefault(); }}><Button variant="secondary" disabled={busy}>Edit item</Button></Link>}
+            {!viewOnly && item.status === "Active" && <Button variant="secondary" disabled={busy || writeUnconfirmed} onClick={() => void retire()}>Make inactive</Button>}
+            <div className="relative"><Button variant="secondary" aria-expanded={moreOpen} disabled={busy} onClick={() => setMoreOpen(value => !value)}><MoreHorizontal size={16} /> More</Button>
+              {moreOpen && <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-52 rounded-lg border border-border bg-surface p-2 shadow-lg">
+                <Button variant="ghost" disabled title="Item cloning is not available yet">Clone item</Button>
+                <Button variant="ghost" disabled title="Item deletion is not available; use inactive status">Delete item</Button>
+              </div>}</div>
+          </div>
+        </header>
+        <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "prices", label: `Catalog prices (${prices.length})` }, { key: "transactions", label: "Transactions" }, { key: "history", label: "History" }]} active={tab} onChange={value => { if (!busyRef.current && !busy) setTab(value); }} />
+        <div className="space-y-5 p-5 sm:p-8">
+    {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    {writeUnconfirmed && <div className="space-y-2 text-sm"><p role="status">A change is unconfirmed or this record changed. Your entries are preserved. Review the saved item and prices before another action; no command will be sent again automatically.</p><Button variant="secondary" disabled={busy} onClick={()=>void reloadSavedItem()}>Reload saved item and discard edits</Button><Link to={`/items/${item.id}`} target="_blank" rel="noreferrer" className="ml-3 text-primary">Review saved item</Link></div>}
+    <div hidden={tab !== "overview"} inert={tab !== "overview" ? true : undefined} className="space-y-5"><div className="grid gap-5 lg:grid-cols-2">
+      <DetailSection title="Item Details"><dl className="grid gap-4 sm:grid-cols-2"><DetailValue label="Item type" value={item.kind} /><DetailValue label="Usage unit" value={item.unitCode} /><DetailValue label="SKU / Code" value={item.code} /><DetailValue label="Category" value={item.categoryCode} /><DetailValue label="Brand" value={item.brand || "—"} /><DetailValue label="Available for buying" value={item.isPurchasable ? "Yes" : "No — approval required"} /></dl></DetailSection>
+      <DetailSection title="Purchase Information"><dl className="grid gap-4 sm:grid-cols-2"><DetailValue label="Manufacturer" value={item.manufacturer || "—"} /><DetailValue label="Manufacturer part number" value={item.manufacturerPartNumber || "—"} /><DetailValue label="Lead time in days" value={item.leadTimeDays ?? "—"} /><DetailValue label="Minimum order quantity" value={item.minimumOrderQuantity ?? "—"} /><DetailValue label="Tax code" value={item.taxCodeRef || "—"} /><DetailValue label="Expense account reference" value={item.expenseAccountRef || "—"} /><DetailValue label="Preferred vendor" value="Set per supplier catalog price" /><DetailValue label="Purchase rate" value="See catalog prices" /></dl></DetailSection></div>
+      <div className="grid gap-5 lg:grid-cols-2"><DetailSection title="Description"><p className="text-sm">{item.description || "No description."}</p></DetailSection><DetailSection title="Buying flags"><dl className="grid gap-4 sm:grid-cols-2"><DetailValue label="Stock item" value={item.isStockItem ? "Yes" : "No"} /><DetailValue label="Asset" value={item.isAsset ? "Yes" : "No"} /><DetailValue label="Inspection needed" value={item.inspectionRequired ? "Yes" : "No"} /></dl></DetailSection></div>
     {!viewOnly && item.status === "Inactive" && readiness?.permissions.includes("procurement-item-approve") && <Panel title="Review item" className="mt-5"><div className="space-y-3 p-5">
       <p className="text-sm text-muted-foreground">Check its category and buying details. Another person must review an item you created.</p>
       <Field label="Review reason"><Textarea required maxLength={1000} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>
       <Button disabled={busy || writeUnconfirmed || !reviewReason.trim()} onClick={() => void activate()}>{busy ? "Saving…" : "Activate item"}</Button>
     </div></Panel>}
-    {item.status === "Active" && <Panel title="Catalog prices" className="mt-5"><div className="space-y-4 p-5">
+    </div>
+    <div hidden={tab !== "prices"} inert={tab !== "prices" ? true : undefined}>
+    {item.status === "Active" ? <Panel title="Catalog prices"><div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">A vendor price needs a separate review before employees see it in the catalog.</p>
       {priceSaved && <p role="status">{priceSaved}</p>}
       {priceError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{priceError}</p>}
@@ -333,26 +369,30 @@ function LiveItemDetailBody() {
         {writeUnconfirmed && <p role="status">This save is unconfirmed. Check saved prices before taking another action. Your correction stays here; it will not be sent again automatically.</p>}
         <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy || writeUnconfirmed}>{busy ? "Saving…" : "Save draft price"}</Button>
           <Button variant="secondary" disabled={busy} onClick={() => void checkSavedPrices()}>Check saved prices</Button>
-          <Button variant="secondary" disabled={busy} onClick={() => { setPriceEdit(null); setPriceError(""); }}>Close correction</Button></div>
+          <Button variant="secondary" disabled={busy || writeUnconfirmed} onClick={() => { setPriceEdit(null); setPriceError(""); }}>Close correction</Button></div>
       </form>}
       {!viewOnly && publishId && <div className="space-y-3 rounded-lg border border-border p-4">
         <p className="text-sm">Review the vendor, amount, unit and dates. A different person must approve a price they entered.</p>
         <Field label="Price review reason"><Textarea required maxLength={1000} value={publishReason} onChange={(event) => setPublishReason(event.target.value)} /></Field>
-        <div className="flex gap-2"><Button disabled={busy || writeUnconfirmed || !publishReason.trim()} onClick={() => void publishPrice()}>{busy ? "Saving…" : "Publish price"}</Button><Button variant="secondary" onClick={() => setPublishId(null)}>Cancel</Button></div>
+        <div className="flex gap-2"><Button disabled={busy || writeUnconfirmed || !publishReason.trim()} onClick={() => void publishPrice()}>{busy ? "Saving…" : "Publish price"}</Button><Button variant="secondary" disabled={busy || writeUnconfirmed} onClick={() => setPublishId(null)}>Cancel</Button></div>
       </div>}
       {!viewOnly && withdrawId && <div className="space-y-3 rounded-lg border border-border p-4">
         <p className="text-sm">Withdraw this price from future buying. Existing requests keep their history.</p>
         <Field label="Withdrawal reason"><Textarea required maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field>
-        <div className="flex gap-2"><Button variant="danger" disabled={busy || writeUnconfirmed || !withdrawReason.trim()} onClick={() => void withdrawPrice()}>{busy ? "Saving…" : "Confirm withdrawal"}</Button><Button variant="secondary" onClick={() => setWithdrawId(null)}>Cancel</Button></div>
+        <div className="flex gap-2"><Button variant="danger" disabled={busy || writeUnconfirmed || !withdrawReason.trim()} onClick={() => void withdrawPrice()}>{busy ? "Saving…" : "Confirm withdrawal"}</Button><Button variant="secondary" disabled={busy || writeUnconfirmed} onClick={() => setWithdrawId(null)}>Cancel</Button></div>
       </div>}
       {!viewOnly && readiness?.permissions.includes("procurement-item-manage") && <form className="grid gap-3 border-t border-border pt-4 sm:grid-cols-4" onSubmit={(event) => void addPrice(event)}>
         <Field label="Vendor" className="sm:col-span-2"><Select required value={priceDraft.supplierId} onChange={(event) => setPriceDraft((value) => ({ ...value, supplierId: event.target.value }))}><option value="">Choose approved vendor</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.displayName}</option>)}</Select></Field>
         <Field label={`Unit price (${readiness.defaultCurrencyCode})`}><Input required inputMode="decimal" value={priceDraft.unitPrice} onChange={(event) => setPriceDraft((value) => ({ ...value, unitPrice: event.target.value }))} /></Field>
         <Field label="Price starts"><Input required type="date" value={priceDraft.effectiveFrom} onChange={(event) => setPriceDraft((value) => ({ ...value, effectiveFrom: event.target.value }))} /></Field>
-        <div className="sm:col-span-4 flex items-center gap-3"><Button type="submit" disabled={busy || writeUnconfirmed || !vendors.length || !priceDraft.supplierId}>{busy ? "Saving…" : "Add draft price"}</Button>{!vendors.length && <Link to="/vendors" className="text-sm text-primary hover:underline">Add an approved vendor first</Link>}</div>
+        <div className="sm:col-span-4 flex items-center gap-3"><Button type="submit" disabled={busy || writeUnconfirmed || !vendors.length || !priceDraft.supplierId}>{busy ? "Saving…" : "Add draft price"}</Button>{!vendors.length && <Link to="/vendors" aria-disabled={busy} onClick={event => { if (busyRef.current || busy) event.preventDefault(); }} className="text-sm text-primary hover:underline">Add an approved vendor first</Link>}</div>
       </form>}
-    </div></Panel>}
-    {!viewOnly && item.status !== "Inactive" && <div className="mt-6"><Button variant="danger" disabled={busy || writeUnconfirmed} onClick={() => void retire()}>Make inactive</Button></div>}
-    <Link to="/items" className="mt-5 inline-block text-sm text-primary hover:underline">Back to items</Link>
+    </div></Panel> : <DetailSection title="Catalog prices"><p className="text-sm text-muted-foreground">Activate this item before adding supplier catalog prices.</p></DetailSection>}
+    </div>
+    {tab === "transactions" && <DetailSection title="Transactions"><p className="text-sm text-muted-foreground">Related purchase orders, receipts and bills are not available in this item view yet.</p></DetailSection>}
+    {tab === "history" && <DetailSection title="History"><p className="text-sm text-muted-foreground">An item activity history is not available in this view yet.</p></DetailSection>}
+        </div>
+      </main>
+    </div>
   </div>;
 }

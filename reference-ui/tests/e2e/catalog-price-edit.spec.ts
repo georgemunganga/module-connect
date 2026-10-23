@@ -39,35 +39,39 @@ async function fixture(page: Page, mode: "normal"|"legacy"|"stale"|"lost"|"item-
   return {writes,readCount:()=>reads};
 }
 test("draft catalog price edits exact strings and preserves saved terms without publishing",async({page})=>{
-  const f=await fixture(page);await page.goto(`/procurement/workspace/items/${item}`);
+  const f=await fixture(page);await page.goto(`/procurement/workspace/items/${item}`);await page.getByRole("tab",{name:/Catalog prices/}).click();
   await page.getByRole("button",{name:"Edit draft price",exact:true}).click();
   const form=page.getByRole("form",{name:"Edit catalog draft price"});
   await expect(form.getByRole("textbox",{name:"Draft unit price",exact:true})).toHaveValue("99999999999999.9999");
   await form.getByRole("textbox",{name:"Draft unit price",exact:true}).fill("12345678901234.5678");
+  await page.getByRole("tab",{name:"Overview"}).click();
+  await page.getByRole("tab",{name:/Catalog prices/}).click();
+  await expect(form.getByRole("textbox",{name:"Draft unit price",exact:true})).toHaveValue("12345678901234.5678");
   await form.getByRole("button",{name:"Save draft price",exact:true}).click();
   await expect(page.getByRole("status")).toContainText("Draft price updated");
   expect(f.writes).toHaveLength(1);expect(f.writes[0].method).toBe("PUT");
   expect(f.writes[0].body).toMatchObject({version:3,entry:{unitPrice:"12345678901234.5678",minimumQuantity:null,maximumQuantity:"2.0001",
     taxBasis:"Exclusive",audienceCode:"STAFF",effectiveFrom:"2026-10-22T12:34:56.123456Z",effectiveTo:null}});
-  await page.reload();await expect(page.getByRole("cell").filter({hasText:"12345678901234.5678"})).toBeVisible();
+  await page.reload();await page.getByRole("tab",{name:/Catalog prices/}).click();await expect(page.getByRole("cell").filter({hasText:"12345678901234.5678"})).toBeVisible();
   expect(f.writes).toHaveLength(1);
 });
 test("legacy catalog details stay readable without offering destructive guessed edits",async({page})=>{
-  const f=await fixture(page,"legacy");await page.goto(`/procurement/workspace/items/${item}`);
+  const f=await fixture(page,"legacy");await page.goto(`/procurement/workspace/items/${item}`);await page.getByRole("tab",{name:/Catalog prices/}).click();
   await expect(page.getByRole("heading",{name:"Catalog item",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Edit draft price",exact:true})).toHaveCount(0);expect(f.writes).toHaveLength(0);
 });
 test("stale price keeps the correction and explicit saved-price check performs only GET",async({page})=>{
-  const f=await fixture(page,"stale");await page.goto(`/procurement/workspace/items/${item}`);
+  const f=await fixture(page,"stale");await page.goto(`/procurement/workspace/items/${item}`);await page.getByRole("tab",{name:/Catalog prices/}).click();
   await page.getByRole("button",{name:"Edit draft price",exact:true}).click();
   await page.getByRole("textbox",{name:"Draft unit price",exact:true}).fill("7.0001");await page.getByRole("button",{name:"Save draft price",exact:true}).click();
   await expect(page.getByRole("alert")).toContainText("changed");await expect(page.getByRole("textbox",{name:"Draft unit price",exact:true})).toHaveValue("7.0001");
   await page.getByRole("button",{name:"Check saved prices",exact:true}).click();await expect.poll(()=>f.readCount()).toBeGreaterThan(1);expect(f.writes).toHaveLength(1);
 });
 test("lost catalog correction stays unconfirmed with no automatic repeat PUT",async({page})=>{
-  const f=await fixture(page,"lost");await page.goto(`/procurement/workspace/items/${item}`);await page.getByRole("button",{name:"Edit draft price",exact:true}).click();
+  const f=await fixture(page,"lost");await page.goto(`/procurement/workspace/items/${item}`);await page.getByRole("tab",{name:/Catalog prices/}).click();await page.getByRole("button",{name:"Edit draft price",exact:true}).click();
   await page.getByRole("textbox",{name:"Draft unit price",exact:true}).fill("8.0001");await page.getByRole("button",{name:"Save draft price",exact:true}).click();
   await expect(page.getByRole("status").filter({hasText:"This save is unconfirmed"})).toContainText("save is unconfirmed");await expect(page.getByRole("button",{name:"Save draft price",exact:true})).toBeDisabled();
+  await expect(page.getByRole("button",{name:"Close correction",exact:true})).toBeDisabled();
   await page.getByRole("button",{name:"Check saved prices",exact:true}).click();await expect.poll(()=>f.readCount()).toBeGreaterThan(1);expect(f.writes).toHaveLength(1);
   await expect(page.getByRole("button",{name:"Save draft price",exact:true})).toBeDisabled();
 });
