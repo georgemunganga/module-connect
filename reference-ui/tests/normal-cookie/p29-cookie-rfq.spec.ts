@@ -39,6 +39,7 @@ const evidence: Record<string, unknown> = { schemaVersion: 2, status: 'RUNNING_N
   transport: 'normal-local-cookie-https-v1', authentication: 'NORMAL_LOCAL_PASSWORD_AND_SESSION_COOKIE',
   fixtureSha256: proxy.fixtureSha256, database: fixture.database, tenantId: fixture.tenantId,
   companyId: fixture.companyId, branchId: fixture.branchId, buyerPrincipalId: fixture.buyerPrincipalId,
+  challenge: fixture.challenge,
   principalRfqDraftVerified: false, supplierDispatchVerified: false, productionTouched: false };
 let sequence = 0;
 function retain() {
@@ -106,10 +107,13 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
       && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Create internal draft', exact: true }).click();
     const createdResponse = await createdWaiting; expect(createdResponse.status()).toBe(201);
+    const createCommandKey = createdResponse.request().headers()['idempotency-key'];
+    expect(guid(createCommandKey)).toBe(true);
     const created = await createdResponse.json() as Record<string, any>;
     expect(guid(created.eventId)).toBe(true); expect(created.status).toBe('Draft');
     expect(created.recordedHistoricalResult).toBe(true); expect(created.canPublish).toBe(false);
-    evidence.eventId = created.eventId; evidence.createdVersion = created.version; retain();
+    evidence.eventId = created.eventId; evidence.createdVersion = created.version;
+    evidence.createCommandKey = createCommandKey; retain();
     await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
 
     step = 'reload-and-cancel';
@@ -122,11 +126,14 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
       && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Cancel draft and release its quantities' }).click();
     const cancelledResponse = await cancelledWaiting; expect(cancelledResponse.status()).toBe(200);
+    const cancelCommandKey = cancelledResponse.request().headers()['idempotency-key'];
+    expect(guid(cancelCommandKey)).toBe(true); expect(cancelCommandKey).not.toBe(createCommandKey);
     const cancelled = await cancelledResponse.json() as Record<string, any>;
     expect(cancelled.status).toBe('Cancelled'); expect(cancelled.version).toBe(created.version + 1);
     await page.reload(); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
     await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
-    evidence.cancelledVersion = cancelled.version; evidence.principalRfqDraftVerified = true;
+    evidence.cancelledVersion = cancelled.version; evidence.cancelCommandKey = cancelCommandKey;
+    evidence.principalRfqDraftVerified = true;
     evidence.status = 'PASS_NORMAL_COOKIE_P29_INTERNAL_DRAFT_UI_ONLY'; retain();
   } catch { failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step; }
   finally {
