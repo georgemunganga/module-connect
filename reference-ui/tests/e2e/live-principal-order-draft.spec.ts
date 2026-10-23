@@ -50,8 +50,13 @@ async function fixture(page:Page,{lost=false}={}){
 }
 async function prepare(page:Page){await page.goto(root+"/new?workflow=principal");
   await page.getByRole("button",{name:"Add line"}).click();
-  await page.getByRole("combobox",{name:"Vendor"}).selectOption(supplier);
-  await page.getByRole("textbox",{name:"Quantity"}).fill("1.0001");}
+  await expect(page.getByRole("heading",{name:"New purchase order"})).toBeVisible();
+  await expect(page.getByRole("region",{name:"Order lines"}).getByRole("table")).toBeVisible();
+  await expect(page.getByRole("region",{name:"Notes and attachments"})).toBeVisible();
+  await expect(page.getByRole("textbox",{name:"Terms and conditions"})).toHaveAttribute("readonly","");
+  await page.getByRole("combobox",{name:/Vendor Name/}).selectOption(supplier);
+  await page.getByRole("textbox",{name:"Line 1 quantity"}).fill("1.0001");
+  await expect(page.getByText("1.00020001")).toBeVisible();}
 
 test("workerless buyer converts approved direct demand using purpose supplier lookup and exact transport",async({page})=>{
   const result=await fixture(page);await prepare(page);

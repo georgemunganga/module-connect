@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ShoppingBag, X } from "lucide-react";
-import { Button, Field, Input, Panel, Select } from "../components/ui";
+import { useNavigate, useParams } from "react-router-dom";
+import { Paperclip } from "lucide-react";
+import { Button, Field, Input, Select } from "../components/ui";
+import { TransactionEditorFrame } from "./TransactionEditor";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { principalOrderJournal, type PrincipalLocator } from "../lib/principal-order-command-journal";
@@ -12,6 +13,21 @@ import type { ExactOrderDraft, ExactOrderDraftLine } from "../../../src/platform
 const blank = (currencyCode: string): ExactOrderDraft => ({ supplierId: "", currencyCode,
   shipToRef: "", billToRef: "", paymentTermRef: "", expectedDeliveryOn: null, lines: [] });
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : "The order could not be confirmed.";
+const exactUnits = (value: string): bigint | null => {
+  if (!/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(value)) return null;
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole) * 10000n + BigInt(fraction.padEnd(4, "0"));
+};
+function draftTotal(lines: ExactOrderDraftLine[]): string | null {
+  let units = 0n;
+  for (const line of lines) {
+    const quantity = exactUnits(line.quantity), price = exactUnits(line.unitPrice), tax = exactUnits(line.taxAmount);
+    if (quantity === null || price === null || tax === null) return null;
+    units += quantity * price + tax * 10000n;
+  }
+  const whole = units / 100000000n, fractional = String(units % 100000000n).padStart(8, "0").replace(/0+$/, "");
+  return fractional ? `${whole}.${fractional}` : String(whole);
+}
 
 export function LivePrincipalOrderEditor() {
   const context=useLiveReadiness()!, shell=useErpShell(), navigate=useNavigate(), {id}=useParams();
@@ -78,53 +94,72 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
   if(id)return <div className="p-5 sm:p-8" role="status">This governed order keeps its approved lines unchanged. Open the saved order to continue its workflow.</div>;
   if(!context.capabilities.principalDirectOrderDrafts||!context.permissions.includes("procurement-po-convert"))
     return <div className="p-5 sm:p-8" role="alert">Creating an order from approved requests is unavailable for this account.</div>;
-  return <div className="min-h-[calc(100dvh-5rem)] bg-background pb-20">
-    <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-5 py-5 sm:px-8">
-      <div className="min-w-0"><h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} />New purchase order</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Select approved request lines. This first saves an internal draft.</p></div>
-      <Button variant="ghost" aria-label="Close editor" disabled={busy} onClick={()=>navigate("/purchase-orders?workflow=principal")}><X size={20}/></Button>
-    </header>
-    <form onSubmit={save} className="max-w-[1260px] space-y-6 px-5 py-6 sm:px-8">
+  const total=draftTotal(draft.lines);
+  const footer=<>
+    <Button form="principal-order-draft-form" type="submit" disabled={busy||!!pending||!chosen.length||!draft.supplierId}>{busy?"Saving…":"Save internal draft"}</Button>
+    <Button type="button" variant="secondary" disabled title="Supplier sending requires a separately approved order.">Save and send</Button>
+    <Button type="button" variant="ghost" disabled={busy} onClick={()=>navigate("/purchase-orders?workflow=principal")}>Cancel</Button>
+    <span className="ml-auto text-xs text-muted-foreground">No supplier notification or Finance posting occurs here</span>
+  </>;
+  return <TransactionEditorFrame title="New purchase order" close={()=>navigate("/purchase-orders?workflow=principal")} closeDisabled={busy} footer={footer}>
+    <p className="text-sm text-muted-foreground">Select approved request lines. This first saves an internal draft.</p>
+    <form id="principal-order-draft-form" onSubmit={save} className="space-y-7">
       {error&&<p role="alert" className="text-sm text-destructive">{error}</p>}{notice&&<p role="status">{notice}</p>}
-      {pending&&<Panel title="Check your last save"><div className="space-y-3 p-5"><p>The last order save may have succeeded. Check command {pending.key} before another save.</p>
-        <Button type="button" disabled={busy} onClick={()=>void recover()}>Check saved result</Button></div></Panel>}
-      <fieldset disabled={busy||!!pending} className="contents">
-      <Panel title="Approved requests"><div className="space-y-3 p-5">{loading?<p role="status">Loading approved requests…</p>:available.length?available.map(source=><div key={source.purchaseRequestLineId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
-        <div><p className="font-medium">{source.requestNumber} · {source.description??"Request line"}</p>
-          <p className="text-sm text-muted-foreground">{source.canSelect?`${source.availableQuantity} ${source.unitCode} available · ${source.currencyCode} ${source.approvedUnitEstimate} each`:"Unavailable for this order"}</p></div>
-        <Button type="button" variant="secondary" disabled={!source.canSelect||chosen.some(row=>row.purchaseRequestLineId===source.purchaseRequestLineId)} onClick={()=>select(source)}>Add line</Button>
-      </div>):<p>No approved direct-purchase lines are available in this company and branch.</p>}
-      <div className="flex gap-3"><Button type="button" variant="secondary" disabled={page===1} onClick={()=>setPage(page-1)}>Previous</Button><Button type="button" variant="secondary" disabled={page*25>=total} onClick={()=>setPage(page+1)}>More</Button></div>
-      </div></Panel>
-      <Panel title="Order details"><div className="grid gap-4 p-5 sm:grid-cols-2">
-        <Field label="Find vendor"><Input value={vendorSearch} onChange={event=>{setVendorSearch(event.target.value);setVendorPage(1);}} /></Field>
-        <Field label="Vendor"><Select required value={draft.supplierId} onChange={event=>setDraft(current=>({...current,supplierId:event.target.value}))}>
-          <option value="">Choose an approved vendor</option>
-          {draft.supplierId&&!vendors.some(row=>row.id===draft.supplierId)&&<option value={draft.supplierId}>Previously selected vendor</option>}
-          {vendors.map(row=><option key={row.id} value={row.id}>{row.displayName}</option>)}</Select>
-          <div className="mt-2 flex gap-2"><Button type="button" variant="secondary" disabled={vendorPage===1} onClick={()=>setVendorPage(vendorPage-1)}>Previous</Button>
-            <Button type="button" variant="secondary" disabled={!vendorNext} onClick={()=>setVendorPage(vendorNext??vendorPage)}>More</Button></div></Field>
-        <Field label="Currency"><Input readOnly value={draft.currencyCode} /></Field>
-        <Field label="Expected delivery"><Input type="date" value={draft.expectedDeliveryOn??""} onChange={event=>setDraft(current=>({...current,expectedDeliveryOn:event.target.value||null}))}/></Field>
-        {(["shipToRef","billToRef","paymentTermRef"] as const).map((field)=><Field key={field} label={{shipToRef:"Deliver to",billToRef:"Bill to",paymentTermRef:"Payment terms"}[field]}>
-          <Input value={draft[field]} onChange={event=>setDraft(current=>({...current,[field]:event.target.value}))} /></Field>)}
-      </div></Panel>
-      <Panel title="Linked order lines"><div className="space-y-4 p-5">{draft.lines.map((entry,at)=><div key={chosen[at]?.purchaseRequestLineId??at} className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-6">
-        <p className="text-sm sm:col-span-6">Source {chosen[at]?.requestNumber} · Available {chosen[at]?.availableQuantity}</p>
-        <Field label="Description" className="sm:col-span-2"><Input required value={entry.description} onChange={event=>line(at,{description:event.target.value})}/></Field>
-        <Field label="Unit"><Input readOnly value={entry.unitCode}/></Field>
-        <Field label="Quantity"><Input required inputMode="decimal" value={entry.quantity} onChange={event=>line(at,{quantity:event.target.value})}/></Field>
-        <Field label="Unit price"><Input required inputMode="decimal" value={entry.unitPrice} onChange={event=>line(at,{unitPrice:event.target.value})}/></Field>
-        <Field label="Tax"><Input required inputMode="decimal" value={entry.taxAmount} onChange={event=>line(at,{taxAmount:event.target.value})}/></Field>
-        <Button type="button" variant="secondary" onClick={()=>remove(at)}>Remove line</Button></div>)}
-        {!draft.lines.length&&<p>Choose a request line above to prepare the order.</p>}</div></Panel>
+      {pending&&<section aria-label="Check your last save" className="space-y-3 rounded-md border border-border bg-card p-4">
+        <h2 className="font-semibold">Check your last save</h2><p className="text-sm">The last order save may have succeeded. Check command {pending.key} before another save.</p>
+        <Button type="button" disabled={busy} onClick={()=>void recover()}>Check saved result</Button></section>}
+      <fieldset disabled={busy||!!pending} className="space-y-7">
+        <section aria-label="Approved requests" className="space-y-3">
+          <h2 className="text-sm font-semibold">Approved requests</h2>
+          {loading?<p role="status">Loading approved requests…</p>:available.length?available.map(source=><div key={source.purchaseRequestLineId} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
+            <div><p className="font-medium">{source.requestNumber} · {source.description??"Request line"}</p>
+              <p className="text-sm text-muted-foreground">{source.canSelect?`${source.availableQuantity} ${source.unitCode} available · ${source.currencyCode} ${source.approvedUnitEstimate} each`:"Unavailable for this order"}</p></div>
+            <Button type="button" variant="secondary" disabled={!source.canSelect||chosen.some(row=>row.purchaseRequestLineId===source.purchaseRequestLineId)} onClick={()=>select(source)}>Add line</Button>
+          </div>):<p className="text-sm text-muted-foreground">No approved direct-purchase lines are available in this company and branch.</p>}
+          <div className="flex gap-3"><Button type="button" variant="secondary" disabled={page===1} onClick={()=>setPage(page-1)}>Previous</Button><Button type="button" variant="secondary" disabled={page*25>=total} onClick={()=>setPage(page+1)}>More</Button></div>
+        </section>
+        <section aria-label="Vendor" className="-mx-5 bg-muted/50 px-5 py-5 sm:-mx-8 sm:px-8">
+          <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
+            <Field label="Find vendor"><Input value={vendorSearch} onChange={event=>{setVendorSearch(event.target.value);setVendorPage(1);}} /></Field>
+            <Field label="Vendor Name *"><Select required value={draft.supplierId} onChange={event=>setDraft(current=>({...current,supplierId:event.target.value}))}>
+              <option value="">Choose an approved vendor</option>
+              {draft.supplierId&&!vendors.some(row=>row.id===draft.supplierId)&&<option value={draft.supplierId}>Previously selected vendor</option>}
+              {vendors.map(row=><option key={row.id} value={row.id}>{row.displayName}</option>)}</Select>
+              <div className="mt-2 flex gap-2"><Button type="button" variant="secondary" disabled={vendorPage===1} onClick={()=>setVendorPage(vendorPage-1)}>Previous</Button>
+                <Button type="button" variant="secondary" disabled={!vendorNext} onClick={()=>setVendorPage(vendorNext??vendorPage)}>More</Button></div></Field>
+          </div>
+        </section>
+        <section aria-label="Order details" className="grid max-w-4xl gap-x-8 gap-y-5 sm:grid-cols-2">
+          <Field label="Date"><Input readOnly value="Set by ERP when saved" /></Field>
+          <Field label="Purchase order #"><Input readOnly value="Generated when saved" /></Field>
+          <Field label="Currency"><Input readOnly value={draft.currencyCode} /></Field>
+          <Field label="Delivery Date"><Input type="date" value={draft.expectedDeliveryOn??""} onChange={event=>setDraft(current=>({...current,expectedDeliveryOn:event.target.value||null}))}/></Field>
+          <Field label="Deliver to"><Input value={draft.shipToRef} onChange={event=>setDraft(current=>({...current,shipToRef:event.target.value}))}/></Field>
+          <Field label="Billing address"><Input value={draft.billToRef} onChange={event=>setDraft(current=>({...current,billToRef:event.target.value}))}/></Field>
+          <Field label="Payment terms"><Input value={draft.paymentTermRef} onChange={event=>setDraft(current=>({...current,paymentTermRef:event.target.value}))}/></Field>
+          <Field label="Shipment preference"><Input readOnly value="Set after approval, before manual issue" /></Field>
+        </section>
+        <section aria-label="Order lines" className="space-y-3">
+          <h2 className="text-sm font-semibold">Order lines</h2>
+          <div className="overflow-x-auto rounded-md border border-border"><table className="w-full min-w-[850px] text-sm">
+            <thead className="bg-muted/50 text-left"><tr><th className="p-3">Item / source</th><th className="p-3">Unit</th><th className="p-3">Quantity</th><th className="p-3">Unit price</th><th className="p-3">Tax</th><th className="p-3">Action</th></tr></thead>
+            <tbody>{draft.lines.map((entry,at)=><tr key={chosen[at]?.purchaseRequestLineId??at} className="border-t border-border align-top">
+              <td className="p-3"><span className="mb-1 block text-xs text-muted-foreground">{chosen[at]?.requestNumber} · Available {chosen[at]?.availableQuantity}</span><Input aria-label={`Line ${at+1} description`} required value={entry.description} onChange={event=>line(at,{description:event.target.value})}/></td>
+              <td className="p-3"><Input aria-label={`Line ${at+1} unit`} readOnly value={entry.unitCode}/></td>
+              <td className="p-3"><Input aria-label={`Line ${at+1} quantity`} required inputMode="decimal" value={entry.quantity} onChange={event=>line(at,{quantity:event.target.value})}/></td>
+              <td className="p-3"><Input aria-label={`Line ${at+1} unit price`} required inputMode="decimal" value={entry.unitPrice} onChange={event=>line(at,{unitPrice:event.target.value})}/></td>
+              <td className="p-3"><Input aria-label={`Line ${at+1} tax`} required inputMode="decimal" value={entry.taxAmount} onChange={event=>line(at,{taxAmount:event.target.value})}/></td>
+              <td className="p-3"><Button type="button" variant="secondary" onClick={()=>remove(at)}>Remove</Button></td>
+            </tr>)}</tbody></table>{!draft.lines.length&&<p className="p-4 text-sm text-muted-foreground">Choose a request line above to prepare the order.</p>}</div>
+          <div className="ml-auto max-w-sm space-y-2 border-t border-border pt-3 text-sm"><div className="flex justify-between"><span>Draft total ({draft.currencyCode})</span><strong>{total??"Check line amounts"}</strong></div>
+            <p className="text-xs text-muted-foreground">Exact quantity × unit price plus entered tax. ERP validates the saved value.</p></div>
+        </section>
+        <section aria-label="Notes and attachments" className="grid gap-6 border-t border-border pt-6 sm:grid-cols-2">
+          <Field label="Notes"><Input readOnly value="Notes are not available in this draft workflow" /></Field>
+          <Field label="Terms and conditions"><Input readOnly value="Terms are set in the controlled issue workflow" /></Field>
+          <div className="sm:col-span-2 flex items-center gap-2 rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground"><Paperclip size={16}/>Attachments become available when the governed order workflow supports them.</div>
+        </section>
       </fieldset>
-      <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-3 border-y border-border bg-surface/95 px-5 py-4 backdrop-blur">
-        <Button type="submit" disabled={busy||!!pending||!chosen.length||!draft.supplierId}>{busy?"Saving…":"Save internal draft"}</Button>
-        <Button type="button" variant="secondary" disabled title="Supplier sending is a separate controlled action.">Save and send</Button>
-        <Link to="/purchase-orders?workflow=principal" className="text-sm text-primary">Back to orders</Link>
-        <span className="ml-auto text-xs text-muted-foreground">No supplier notification or Finance posting occurs here</span>
-      </footer>
     </form>
-  </div>;
+  </TransactionEditorFrame>;
 }
