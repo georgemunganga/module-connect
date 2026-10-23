@@ -137,4 +137,3 @@ export async function mockErp(page: Page, options: { denyList?: boolean; staleUp
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
 }
-

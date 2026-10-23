@@ -60,6 +60,7 @@ for (const width of [1440,390]) for (const view of ["list","editor","detail"]) t
   await page.goto(`/procurement/workspace/requests${view==="editor"?"/new":view==="detail"?`/${requestId}`:""}`);
   await expect(page.getByRole("heading",{name:view==="editor"?"New request":view==="detail"?"Office chairs":"My Requests",exact:true})).toBeVisible();
   await expect(page.locator("#erp-global-preloader")).toHaveCount(0);
+  await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath(`request-${view}-${width}.png`),fullPage:true});
 });
