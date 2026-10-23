@@ -1,7 +1,7 @@
 import { isDefiniteHttpRejection } from "../lib/http-write-outcome";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { MoreHorizontal, Plus, Search } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Paperclip, Plus, Save, Search, ShoppingBag, Trash2, X } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { useErpShell } from "../lib/erpShell";
 import { invoiceDecimal, invoicePreview } from "./invoice-values";
@@ -197,9 +197,9 @@ function InvoiceListRecord() {
 export function LiveInvoiceEditor() {
   const { id } = useParams();
   const readiness = useCompany();
-  const { selection } = useErpShell();
+  const { selection, authEpoch } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <InvoiceEditorRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id ?? "new"}`} />;
+  return <InvoiceEditorRecord key={`${authEpoch}:${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id ?? "new"}`} />;
 }
 function InvoiceEditorRecord() {
   const { id } = useParams();
@@ -209,11 +209,14 @@ function InvoiceEditorRecord() {
   const { legalEntityId, defaultCurrencyCode, permissions } = useCompany();
   const [input, setInput] = useState<InvoiceIntakeInput>({ supplierId: "", invoiceNumber: "",
     invoiceDate: new Date().toISOString().slice(0, 10), currencyCode: defaultCurrencyCode, lines: [blankLine()] });
+  const [baseline, setBaseline] = useState(() => JSON.stringify({ supplierId: "", invoiceNumber: "",
+    invoiceDate: new Date().toISOString().slice(0, 10), currencyCode: defaultCurrencyCode, lines: [blankLine()] }));
   const [original, setOriginal] = useState<InvoiceDetail | null>(null);
   const [loadingInvoice, setLoadingInvoice] = useState(!!id);
   const [reason, setReason] = useState("");
   const [uncertain, setUncertain] = useState(false);
   const [stale, setStale] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
   useEffect(() => {
     if (!id) return;
     const abort = new AbortController();
@@ -222,7 +225,7 @@ function InvoiceEditorRecord() {
       if (abort.signal.aborted) return;
       const editable = invoiceAllows(record, "Edit") ? invoiceEditInput(record) : null;
       setOriginal(record);
-      if (editable) setInput(editable);
+      if (editable) { setInput(editable); setBaseline(JSON.stringify(editable)); }
     }).catch(cause => { if (!abort.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!abort.signal.aborted) setLoadingInvoice(false); });
     return () => abort.abort();
@@ -232,6 +235,9 @@ function InvoiceEditorRecord() {
   const [loadingVendors, setLoadingVendors] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const dirty = JSON.stringify(input) !== baseline || reason.trim().length > 0;
+  const backTo = id ? `/bills/${id}` : "/bills";
+  const leave = () => { if (dirty) setDiscardOpen(true); else navigate(backTo); };
   useEffect(() => {
     const controller = new AbortController();
     setLoadingVendors(true);
@@ -271,52 +277,93 @@ function InvoiceEditorRecord() {
     } finally { if (alive.current) setSaving(false); }
   }
   if (!permissions.includes("procurement-invoice-capture")) return <div className="p-5 sm:p-8" role="alert">You do not have access to record invoices for this company.</div>;
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={id ? "Edit supplier invoice" : "Record supplier invoice"} subtitle="Save the invoice as received. Review and matching happen next." />
-    {loadingInvoice ? <p role="status">Loading invoice…</p> : id && !original ? <p role="alert">{error || "Invoice not found."}</p> : id && (!original || !invoiceAllows(original, "Edit")) ? <p role="alert">This invoice cannot be edited. Open its details to review the current status.</p> :
-    <form onSubmit={save} className="max-w-5xl space-y-5">
+  return <div className="pb-20">
+    <header className="flex items-center justify-between border-b border-border px-5 py-5 sm:px-8">
+      <h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} strokeWidth={1.4} />{id ? "Edit" : "New"} Bill</h1>
+      <Button type="button" variant="ghost" aria-label="Close editor" onClick={leave}><X size={21} /></Button>
+    </header>
+    {loadingInvoice ? <p className="px-5 py-6 sm:px-8" role="status">Loading invoice…</p>
+      : id && !original ? <p className="px-5 py-6 sm:px-8" role="alert">{error || "Invoice not found."}</p>
+        : id && !invoiceAllows(original!, "Edit") ? <div className="px-5 py-6 sm:px-8" role="alert">This invoice cannot be edited. <Link className="text-primary underline" to={backTo}>Open its saved details</Link>.</div>
+          : <form onSubmit={save}>
       <fieldset disabled={saving || uncertain || stale} className="contents">
-      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{id && <Button type="button" variant="secondary" onClick={() => { if (window.confirm("Reload the saved invoice and discard these changes?")) window.location.reload(); }}>Reload saved invoice</Button>}</div>}
-      <Panel title="Invoice details"><div className="grid gap-4 p-5 sm:grid-cols-2">
-        <Field label="Find vendor"><Input value={vendorSearch} onChange={(event) => setVendorSearch(event.target.value)} placeholder="Search vendor name" /></Field>
-        <Field label="Vendor"><Select required value={input.supplierId} disabled={loadingVendors || !!id}
-          onChange={(event) => setInput({ ...input, supplierId: event.target.value })}>
-          <option value="">{loadingVendors ? "Loading vendors…" : "Choose vendor"}</option>
-          {id && original && !vendors.some(vendor => vendor.id === original.supplierId) && <option value={original.supplierId}>{original.supplierName || "Saved vendor"}</option>}
-          {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.displayName}{vendor.status !== "Active" ? ` · ${vendor.status}` : ""}</option>)}
-        </Select></Field>
-        <Field label="Invoice number"><Input required maxLength={120} value={input.invoiceNumber}
-          onChange={(event) => setInput({ ...input, invoiceNumber: event.target.value })} /></Field>
-        <Field label="Currency"><Input required maxLength={3} value={input.currencyCode}
-          onChange={(event) => setInput({ ...input, currencyCode: event.target.value.toUpperCase() })} /></Field>
-        <Field label="Invoice date"><Input required type="date" value={input.invoiceDate}
-          onChange={(event) => setInput({ ...input, invoiceDate: event.target.value })} /></Field>
-        <Field label="Due date"><Input type="date" min={input.invoiceDate} value={input.dueDate || ""}
-          onChange={(event) => setInput({ ...input, dueDate: event.target.value || null })} /></Field>
-      </div></Panel>
-      <Panel title="Items and services"><div className="space-y-4 p-5">
-        {input.lines.map((line, index) => <div key={index} className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-4">
-          <Field label={`Description ${index + 1}`}><Input required maxLength={500} value={line.description}
-            onChange={(event) => setLine(index, { description: event.target.value })} /></Field>
-          <Field label="Quantity"><Input required type="number" min="0.0001" step="0.0001" value={line.quantity}
-            onChange={(event) => setLine(index, { quantity: event.target.value })} /></Field>
-          <Field label="Unit price"><Input required type="number" min="0" step="0.0001" value={line.unitPrice}
-            onChange={(event) => setLine(index, { unitPrice: event.target.value })} /></Field>
-          <Field label="Tax amount"><Input required type="number" min="0" step="0.0001" value={line.taxAmount}
-            onChange={(event) => setLine(index, { taxAmount: event.target.value })} /></Field>
-          {input.lines.length > 1 && <Button type="button" variant="secondary" onClick={() =>
-            setInput({ ...input, lines: input.lines.filter((_, at) => at !== index) })}>Remove line</Button>}
-        </div>)}
-        <Button type="button" variant="secondary" disabled={input.lines.length >= 200} onClick={() =>
-          setInput({ ...input, lines: [...input.lines, blankLine()] })}>Add line</Button>
-        <div className="text-right text-sm">{preview ? <>Net {money(preview.net, input.currencyCode)} · Tax {money(preview.tax, input.currencyCode)}<strong className="ml-3">Total {money(preview.total, input.currencyCode)}</strong></> : "Complete valid quantities and amounts to preview totals."}</div>
-      </div></Panel>
-      {id && <Field label="Reason for change"><Textarea required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
-      <div className="flex gap-3"><Button type="submit" disabled={saving || uncertain || stale}>{saving ? "Saving…" : id ? "Save changes" : "Record as received"}</Button>
-        <Button type="button" variant="secondary" onClick={() => navigate("/bills")}>Cancel</Button></div>
+        <div className="max-w-[1260px] space-y-7 px-5 py-6 sm:px-8">
+          <p className="text-sm text-muted-foreground">Record the supplier invoice as received. Review and matching happen after intake.</p>
+          {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}
+            {id && <Button type="button" variant="secondary" onClick={() => { if (window.confirm("Reload the saved invoice and discard these changes?")) window.location.reload(); }}>Reload saved invoice</Button>}
+          </div>}
+          <div className="-mx-5 bg-surface-muted px-5 py-5 sm:-mx-8 sm:px-8">
+            <div className="max-w-xl space-y-3">
+              <Field label="Find vendor"><Input value={vendorSearch} disabled={!!id} onChange={event => setVendorSearch(event.target.value)} placeholder="Search vendor name" /></Field>
+              <Field label="Vendor Name *"><Select required value={input.supplierId} disabled={loadingVendors || !!id}
+                onChange={event => setInput({ ...input, supplierId: event.target.value })}>
+                <option value="">{loadingVendors ? "Loading vendors…" : "Choose vendor"}</option>
+                {id && original && !vendors.some(vendor => vendor.id === original.supplierId) && <option value={original.supplierId}>{original.supplierName || "Saved vendor"}</option>}
+                {vendors.map(vendor => <option key={vendor.id} value={vendor.id}>{vendor.displayName}{vendor.status !== "Active" ? ` · ${vendor.status}` : ""}</option>)}
+              </Select></Field>
+              {id ? <p className="text-xs text-muted-foreground">The saved supplier cannot be changed on this invoice.</p>
+                : <Link className="block text-sm text-primary hover:underline" to={`/vendors/new?returnTo=${encodeURIComponent("/bills/new")}`}>+ Add a vendor in the shared directory</Link>}
+            </div>
+          </div>
+          <div className="grid max-w-4xl gap-x-8 gap-y-5 sm:grid-cols-2">
+            <Field label="Bill Date *"><Input required type="date" value={input.invoiceDate} onChange={event => setInput({ ...input, invoiceDate: event.target.value })} /></Field>
+            <Field label="Bill # *"><Input required maxLength={120} value={input.invoiceNumber} onChange={event => setInput({ ...input, invoiceNumber: event.target.value })} /></Field>
+            <Field label="Due Date"><Input type="date" min={input.invoiceDate} value={input.dueDate || ""} onChange={event => setInput({ ...input, dueDate: event.target.value || null })} /></Field>
+            <Field label="Currency *"><Input required maxLength={3} value={input.currencyCode} onChange={event => setInput({ ...input, currencyCode: event.target.value.toUpperCase() })} /></Field>
+            <Field label="Payment Terms"><Select disabled value="unavailable"><option value="unavailable">Not captured by invoice intake</option></Select></Field>
+          </div>
+          <p className="text-xs text-muted-foreground">Payment terms are shown for continuity with the original bill form. The current intake API does not save them; use the due date above.</p>
+          <section className="rounded-xl border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3"><h2 className="text-sm font-medium">Item Table</h2><span className="text-xs text-muted-foreground">Goods and services on this invoice</span></div>
+            <div className="overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[760px] text-left">
+              <thead className="table-head"><tr><th>Item Details</th><th>Quantity</th><th>Rate</th><th>Tax amount</th><th>Amount</th><th><span className="sr-only">Actions</span></th></tr></thead>
+              <tbody>{input.lines.map((line, index) => {
+                let lineTotal = "—"; try { lineTotal = money(invoicePreview([line]).total, input.currencyCode); } catch { /* Wait for valid input. */ }
+                return <tr key={index}>
+                  <td className="min-w-56 p-3"><Input required aria-label={`Item details ${index + 1}`} maxLength={500} value={line.description}
+                    onChange={event => setLine(index, { description: event.target.value })} /></td>
+                  <td className="w-32 p-3"><Input required aria-label={`Quantity ${index + 1}`} type="number" min="0.0001" step="0.0001" value={line.quantity}
+                    onChange={event => setLine(index, { quantity: event.target.value })} /></td>
+                  <td className="w-36 p-3"><Input required aria-label={`Rate ${index + 1}`} type="number" min="0" step="0.0001" value={line.unitPrice}
+                    onChange={event => setLine(index, { unitPrice: event.target.value })} /></td>
+                  <td className="w-36 p-3"><Input required aria-label={`Tax amount ${index + 1}`} type="number" min="0" step="0.0001" value={line.taxAmount}
+                    onChange={event => setLine(index, { taxAmount: event.target.value })} /></td>
+                  <td className="whitespace-nowrap px-3 text-right text-sm font-medium">{lineTotal}</td>
+                  <td className="p-3"><Button type="button" variant="ghost" aria-label={`Remove item ${index + 1}`} disabled={input.lines.length === 1}
+                    onClick={() => setInput({ ...input, lines: input.lines.filter((_, at) => at !== index) })}><Trash2 size={15} /></Button></td>
+                </tr>;
+              })}</tbody>
+            </RecordTable></div>
+            <div className="p-3"><Button type="button" variant="ghost" disabled={input.lines.length >= 200}
+              onClick={() => setInput({ ...input, lines: [...input.lines, blankLine()] })}><Plus size={14} /> Add new row</Button></div>
+          </section>
+          <div className="ml-auto max-w-md space-y-3 rounded-xl bg-surface-muted p-5 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Sub Total</span><span>{preview ? money(preview.net, input.currencyCode) : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{preview ? money(preview.tax, input.currencyCode) : "—"}</span></div>
+            <div className="flex justify-between border-t border-border pt-3 text-base font-semibold"><span>Total ({input.currencyCode})</span><span>{preview ? money(preview.total, input.currencyCode) : "—"}</span></div>
+            {!preview && <p className="text-xs text-muted-foreground">Complete valid quantities and amounts to preview totals.</p>}
+          </div>
+          <div className="grid gap-6 border-t border-border pt-6 sm:grid-cols-2">
+            <Field label="Notes"><Textarea disabled value="" placeholder="Notes are not captured by invoice intake." /></Field>
+            <Field label="Terms and Conditions"><Textarea disabled value="" placeholder="Terms are not captured by invoice intake." /></Field>
+            <div className="sm:col-span-2"><Button type="button" variant="secondary" disabled><Paperclip size={16} /> Attach Files</Button>
+              <p className="mt-2 text-xs text-muted-foreground">Save the invoice first, then use its Documents panel to attach supplier files. No attachment is silently stored from this form.</p>
+            </div>
+          </div>
+          {id && <Field label="Reason for change *"><Textarea required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
+        </div>
+        <footer className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 border-y border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-8">
+          <Button type="submit" disabled={saving || uncertain || stale}><Save size={14} />{saving ? "Saving…" : id ? "Save changes" : "Record as received"}</Button>
+          <Button type="button" variant="ghost" onClick={leave}><ArrowLeft size={14} /> Cancel</Button>
+        </footer>
       </fieldset>
-      {stale && <p role="alert">The saved invoice changed. Your entries are kept here. <Button type="button" variant="secondary" onClick={() => { if (window.confirm("Reload the saved invoice and discard these changes?")) window.location.reload(); }}>Reload saved invoice</Button></p>}
-      {uncertain && <p role="alert">The response was not confirmed. Open the invoice list and check the saved record before making another change. <Link className="text-primary underline" to="/bills">Open bills</Link></p>}
+      {stale && <p className="px-5 py-4 sm:px-8" role="alert">The saved invoice changed. Your entries are kept here. <Button type="button" variant="secondary" onClick={() => { if (window.confirm("Reload the saved invoice and discard these changes?")) window.location.reload(); }}>Reload saved invoice</Button></p>}
+      {uncertain && <p className="px-5 py-4 sm:px-8" role="alert">The response was not confirmed. Open the invoice list and check the saved record before making another change. <Link className="text-primary underline" to="/bills">Open bills</Link></p>}
+      {discardOpen && <Modal title="Discard unsaved changes?" onClose={() => setDiscardOpen(false)}>
+        <p className="text-sm text-muted-foreground">Your entries have not been saved to the ERP. Leave this bill editor?</p>
+        <div className="mt-5 flex gap-2"><Button type="button" variant="secondary" onClick={() => setDiscardOpen(false)}>Keep editing</Button>
+          <Button type="button" variant="danger" onClick={() => navigate(backTo)}>Discard and leave</Button></div>
+      </Modal>}
     </form>}
   </div>;
 }
