@@ -29,7 +29,7 @@ export function parseCoreWorkspaceChoices(value: unknown, currentPrincipalId: st
       && typeof company.currency === "string" && /^[A-Z]{3}$/.test(company.currency)
       && typeof company.isDefault === "boolean")
     || !branches.every(branch => object(branch) && canonicalScopeId(branch.id)
-      && label(branch.code) && label(branch.name) && canonicalScopeId(branch.legalEntityId))
+      && label(branch.code) && label(branch.name) && canonicalScopeId(branch.legalEntityId)))
     throw new Error("ERP organisation choices could not be verified.");
   const companyIds = new Set(companies.map(company => company.id));
   if (companyIds.size !== companies.length || companies.filter(company => company.isDefault).length > 1
