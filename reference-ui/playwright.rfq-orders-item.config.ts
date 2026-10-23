@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 import baseline from "./playwright.config";
 export default defineConfig({ ...baseline,
-  testMatch: ["live-sourcing.spec.ts", "live-rfq-governed.spec.ts", "live-order.spec.ts", "live-order-execution.spec.ts", "live-order-sources.spec.ts", "live-order-approvals.spec.ts", "live-item.spec.ts", "live-item-write-safety.spec.ts", "catalog-price-edit.spec.ts"],
+  testMatch: ["analytics-layout.spec.ts", "catalog-directory-layout.spec.ts", "live-sourcing.spec.ts", "live-rfq-governed.spec.ts", "live-order.spec.ts", "live-order-execution.spec.ts", "live-order-sources.spec.ts", "live-order-approvals.spec.ts", "live-item.spec.ts", "live-item-write-safety.spec.ts", "catalog-price-edit.spec.ts"],
   workers: 1, fullyParallel: false, retries: 0, forbidOnly: true,
   reporter: [["line"], ["json", { outputFile: process.env.LAYOUT_REPORT || "test-results/rfq-orders-item/report.json" }]],
   outputDir: process.env.LAYOUT_ARTIFACTS || "test-results/rfq-orders-item/artifacts",
