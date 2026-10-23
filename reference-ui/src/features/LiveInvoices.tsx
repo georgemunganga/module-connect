@@ -321,8 +321,8 @@ function InvoiceEditorRecord() {
           <p className="text-xs text-muted-foreground">Payment terms cannot be saved on bills yet. Use the due date above.</p>
           <section className="rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-4 py-3"><h2 className="text-sm font-medium">Item Table</h2><span className="text-xs text-muted-foreground">Goods and services on this invoice</span></div>
-            <div className="overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[760px] text-left">
-              <thead className="table-head"><tr><th>Item Details</th><th>Quantity</th><th>Rate</th><th>Tax amount</th><th>Amount</th><th><span className="sr-only">Actions</span></th></tr></thead>
+            <div className="relative overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[760px] text-left">
+              <thead className="table-head"><tr><th>Item Details</th><th>Quantity</th><th>Rate</th><th>Tax amount</th><th>Amount</th><th scope="col" aria-label="Actions" /></tr></thead>
               <tbody>{input.lines.map((line, index) => {
                 let lineTotal = "—"; try { lineTotal = money(invoicePreview([line]).total, input.currencyCode); } catch { /* Wait for valid input. */ }
                 return <tr key={index}>
