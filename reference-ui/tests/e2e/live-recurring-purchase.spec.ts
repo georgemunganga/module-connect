@@ -293,3 +293,19 @@ for (const mode of ["wrong branch", "blocked storage"] as const) {
     expect(state.writes).toHaveLength(mode === "wrong branch" ? 1 : 0);
   });
 }
+
+test("recurring amount sorting compares exact decimal text within currency", async ({ page }) => {
+  await fixture(page, { closed: true });
+  const common = { supplierId: supplier, supplierContractId: null, ownerPrincipalId: principal, ownerWorkerId: null,
+    workLocationId: branch, frequency: "Monthly", firstCycleOn: "2026-01-01", nextCycleOn: "2026-09-01", lastCycleOn: null,
+    currencyCode: "ZMW", status: "Closed", version: 2, createdAt: "2026-01-01T00:00:00Z", closedAt: "2026-10-01T00:00:00Z", closedReason: "Completed" };
+  await page.route("**/api/procurement/v1/recurring-purchases?*", route => route.fulfill({ json: { items: [
+    { ...common, id: recordId, number: "RPC-LARGE", title: "Larger fraction", expectedAmount: 0.001, exactExpectedAmount: "0.001" },
+    { ...common, id: "55555555-5555-4555-8555-555555555555", number: "RPC-SMALL", title: "Smaller fraction", expectedAmount: 0.0001, exactExpectedAmount: "0.0001" },
+  ], total: 2, page: 1, pageSize: 25 } }));
+  await page.goto("/procurement/workspace/recurring-bills");
+  await page.getByRole("combobox", { name: "Sort recurring purchases on this page", exact: true }).click();
+  await page.getByRole("option", { name: "Expected each time", exact: true }).click();
+  const rows = page.getByTestId("erp-record-table").locator("tbody tr");
+  await expect(rows.first()).toContainText("Smaller fraction");await expect(rows.last()).toContainText("Larger fraction");
+});

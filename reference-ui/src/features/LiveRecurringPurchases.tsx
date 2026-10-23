@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus } from "lucide-react";
 import { Badge, Button, Field, Input, Modal, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { claimRecurringWrite, confirmRecurringWrite, recurringWriteLocked } from "../lib/recurring-write-lock";
+import { compareExactDecimal } from "../lib/decimal-comparison";
 import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
 import { ActivityTimeline, DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { useErpShell } from "../lib/erpShell";
@@ -76,7 +77,9 @@ export function LiveRecurringPurchaseList() {
           rows={(data?.items ?? []).map(item => ({ id: item.id, number: item.number, title: item.title,
             status: item.status, path: `/recurring-bills/${item.id}`, fields: {
               date: item.createdAt.slice(0, 10), frequency: item.frequency, next: item.nextCycleOn,
-              amount: `${item.currencyCode} ${item.exactExpectedAmount}` } }))}
+              amount: `${item.currencyCode} ${item.exactExpectedAmount}`, currency: item.currencyCode, amountValue: item.exactExpectedAmount } }))}
+          sortComparators={{ amount: (left, right) => left.fields.currency.localeCompare(right.fields.currency)
+            || compareExactDecimal(left.fields.amountValue, right.fields.amountValue) }}
           loading={loading} error={error} total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25}
           onPage={setPage} onRefresh={() => setRevision(value => value + 1)} action={action}
           emptyTitle="No recurring purchases yet" emptyDescription="Add an expected schedule for repeat goods or services." />}

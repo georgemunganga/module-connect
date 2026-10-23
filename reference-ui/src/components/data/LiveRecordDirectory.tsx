@@ -51,7 +51,7 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
     <PageHeader title={title} subtitle={subtitle} actions={<>
       <ListTools entity={title} columns={columns} visibleColumns={visible} onVisibleColumnsChange={setVisible}
         columnWidths={widths} onColumnWidthsChange={setWidths} clipText={clip} onClipTextChange={setClip}
-        sortOptions={serverQuery ? [{ key: "server", label: "Server order" }, ...columns.map(c => ({ key: c.key, label: c.label }))]
+        sortOptions={serverQuery ? [{ key: "server", label: "Default order" }, ...columns.map(c => ({ key: c.key, label: c.label }))]
           : [{ key: "newest", label: "Date · Newest first" }, { key: "oldest", label: "Date · Oldest first" }, ...columns.filter(c => c.key !== "date").map(c => ({ key: c.key, label: c.label }))]} onSort={setSort}
         filterFields={fields} activeFilters={filters} onApplyFilters={applyFilters}
         currentView={serverQuery ? undefined : filters.status || `All ${title}`}
@@ -78,16 +78,16 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
           : (!serverQuery || !serverQuery.onStatusChange) && <Select aria-label={`Filter ${entity} by status on this page`} value={filters.status || ""} onChange={event => applyFilters({ ...filters, status: event.target.value })}>
             <option value="">All {title}</option>{[...new Set([...statuses, ...(filters.status ? [filters.status] : [])])].map(status => <option key={status} value={status}>{status}</option>)}
           </Select>}</div>
-        <div className="flex flex-wrap items-center gap-3">{serverQuery ? <form className="flex items-center gap-2" onSubmit={event => { event.preventDefault(); setSelected([]); setPreviewId(null); serverQuery.onSearch(serverInput.trim()); }}>
-          <Input aria-label={`Search ${entity}`} placeholder={`Search ${entity} across pages`} value={serverInput} onChange={event => setServerInput(event.target.value)} />
+        <div className="flex flex-wrap items-center gap-3">{serverQuery ? <form className="flex min-w-0 max-w-full flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); setSelected([]); setPreviewId(null); serverQuery.onSearch(serverInput.trim()); }}>
+          <Input aria-label={`Search ${entity}`} placeholder={`Search ${entity}`} className="w-56 max-w-full" value={serverInput} onChange={event => setServerInput(event.target.value)} />
           <Button type="submit" variant="secondary">Search</Button>
           {serverQuery.search && <Button variant="ghost" onClick={() => { setServerInput(""); serverQuery.onSearch(""); }}>Clear</Button>}
         </form> : <div className="relative"><Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input aria-label={`Search ${entity} on this page`} placeholder={`Search ${entity} on this page`} className="w-56 max-w-full pl-9" value={query} onChange={event => { setQuery(event.target.value); setSelected([]); setPreviewId(null); }} /></div>}
-          <Select aria-label={`Sort ${entity} on this page`} value={sort} onChange={event => setSort(event.target.value)}>
-            {serverQuery ? <option value="server">Server order</option> : <><option value="newest">Newest first</option><option value="oldest">Oldest first</option></>}
+          <Input aria-label={`Search ${entity} on this page`} placeholder={`Search ${entity}`} className="w-56 max-w-full pl-9" value={query} onChange={event => { setQuery(event.target.value); setSelected([]); setPreviewId(null); }} /></div>}
+          <div className="w-44 max-w-full"><Select aria-label={`Sort ${entity} on this page`} value={sort} onChange={event => setSort(event.target.value)}>
+            {serverQuery ? <option value="server">Default order</option> : <><option value="newest">Newest first</option><option value="oldest">Oldest first</option></>}
             {columns.filter(column => serverQuery || column.key !== "date").map(column => <option key={column.key} value={column.key}>{column.label}</option>)}
-          </Select>
+          </Select></div>
         </div>
       </div>
       <ActiveFilterChips fields={fields} filters={filters} onChange={applyFilters} />
