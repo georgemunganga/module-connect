@@ -99,6 +99,12 @@ test("live RFQ retains directory, wizard stages and detail sections without publ
   await page.getByRole("link", { name: "New quote request" }).first().click();
   await expect(page.getByLabel("Quote request stages")).toBeVisible();
   await expect(page.getByText("Bidding Preferences", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Items", exact: true }).click();
+  await expect(page.locator("#rfq-stage-1")).toBeInViewport();
+  await page.getByRole("button", { name: "Terms", exact: true }).click();
+  await expect(page.locator("#rfq-stage-2")).toBeInViewport();
+  await page.getByRole("button", { name: "Basic Details", exact: true }).click();
+  await expect(page.locator("#rfq-stage-0")).toBeInViewport();
   await page.getByLabel("What are you buying?").fill("Office chairs");
   await page.getByLabel("Item or service 1").fill("Chair");
   await page.getByRole("button", { name: "Save draft" }).click();

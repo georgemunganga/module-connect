@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { ListTools, type ListColumn } from "../components/data/ListTools";
 import { StandardDataTable } from "../components/data/StandardDataTable";
@@ -29,8 +29,9 @@ export function GovernedSourcingList() {
   const [revision, setRevision] = useState(0), [notice, setNotice] = useState("");
   const [visible, setVisible] = useState(["number", "currency", "status"]), [widths, setWidths] = useState<Record<string, number>>({});
   const [clip, setClip] = useState(false), [sort, setSort] = useState("number"), [selected, setSelected] = useState<string[]>([]);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const columns: ListColumn[] = [{ key: "number", label: "Reference / Description", width: 360 }, { key: "currency", label: "Currency", width: 160 }, { key: "status", label: "Status", width: 160 }];
-  useEffect(() => { const controller = new AbortController(); setData(null); setError(""); setSelected([]);
+  useEffect(() => { const controller = new AbortController(); setData(null); setError(""); setSelected([]); setPreviewId(null);
     listGovernedRfq(legalEntityId, page, search, state, controller.signal).then(value => { if (!controller.signal.aborted) setData(value); })
       .catch(error => { if (!controller.signal.aborted) setError(message(error)); }); return () => controller.abort();
   }, [legalEntityId, page, search, state, revision]);
@@ -38,31 +39,36 @@ export function GovernedSourcingList() {
     const field = (row: RfqOwned) => sort === "currency" ? row.currencyCode || "" : sort === "status" ? row.status || row.state : row.number;
     return field(left).localeCompare(field(right)) || left.id.localeCompare(right.id);
   }), [data, sort]);
+  const currentIds = new Set(rows.map(row => row.id));
+  const currentSelection = selected.filter(id => currentIds.has(id));
+  const preview = rows.find(row => row.id === previewId && row.state === "VerifiedRetainedDraft");
   return <div className="p-5 sm:p-8"><PageHeader title="Request for Quotes" subtitle="Internal drafts from approved purchase requests. Vendors have not received these drafts."
     actions={<><ListTools entity="Quote Requests" columns={columns} visibleColumns={visible} onVisibleColumnsChange={setVisible}
       columnWidths={widths} onColumnWidthsChange={setWidths} clipText={clip} onClipTextChange={setClip}
       sortOptions={columns.map(column => ({ key: column.key, label: `${column.label} on this page` }))} onSort={setSort}
       filterFields={[{ key: "status", label: "Status", type: "select", options: ["Draft", "Cancelled"] }]} activeFilters={{ status: state }}
-      onApplyFilters={filters => { setPage(1); setState(filters.status || ""); }} showSavedView={false}
-      onExport={() => setNotice("Export is not available yet.")} onRefresh={() => setRevision(value => value + 1)}
+      onApplyFilters={filters => { setSelected([]); setPreviewId(null); setPage(1); setState(filters.status || ""); }} showSavedView={false}
+      onExport={() => setNotice("Export is not available yet.")} onRefresh={() => { setSelected([]); setPreviewId(null); setRevision(value => value + 1); }}
       onResetWidths={() => setWidths({})} notify={setNotice} unavailableImportReason="Import is not available yet."
       unavailableExportReason="Export is not available yet." unavailableAllExportReason="Only the current page is loaded."
-      viewExportLabel="Export Current Page View" selectedCount={selected.length} />
+      viewExportLabel="Export Current Page View" selectedCount={currentSelection.length} />
       {permissions.includes("procurement-sourcing-convert") && <Link to="/rfqs/new?source=approved"><Button>Use approved requests</Button></Link>}</>} />
-    <Panel><div className="flex flex-wrap items-end gap-3 border-b border-border p-5"><Field label="Find quote request" className="min-w-56 flex-1"><Input maxLength={100} value={search} onChange={e => { setPage(1); setSearch(e.target.value); }} /></Field>
-      <Field label="Status" className="min-w-40"><Select value={state} onChange={e => { setPage(1); setState(e.target.value); }}><option value="">All statuses</option><option value="Draft">Draft</option><option value="Cancelled">Cancelled</option></Select></Field></div>
-      <p className="px-5 pt-3 text-xs text-muted-foreground">Search and status use the full company list. Sorting and selection apply to this page only.</p>
+    <Panel><div className="flex flex-wrap items-end gap-3 border-b border-border p-5"><Field label="Find quote request" className="min-w-56 flex-1"><Input maxLength={100} value={search} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setSearch(e.target.value); }} /></Field>
+      <Field label="Status" className="min-w-40"><Select value={state} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setState(e.target.value); }}><option value="">All statuses</option><option value="Draft">Draft</option><option value="Cancelled">Cancelled</option></Select></Field></div>
+      <p className="px-5 pt-3 text-xs text-muted-foreground">Search and status work across pages you can access. Sorting and selection apply to this page only.</p>
       {notice && <p role="status" className="px-5 pt-3 text-sm">{notice}</p>}
       {error ? <p role="alert" className="p-5">{error}</p> : !data ? <p role="status" className="p-5">Loading your quote requests…</p> : !rows.length ? <div className="p-5"><EmptyState title="No drafts from approved requests" description="Use approved purchase requests to prepare a quote request." /></div>
         : <><StandardDataTable rows={rows} columns={columns} visibleColumns={visible} columnWidths={widths} clipText={clip}
-          selected={selected} onSelectedChange={setSelected} onSort={setSort} rowLabel={row => `Open ${row.number}`}
+          selected={currentSelection} onSelectedChange={ids => setSelected(ids.filter(id => currentIds.has(id)))} onSort={setSort} rowLabel={row => `Open ${row.number}`}
           renderCell={(row, column) => column.key === "number" ? row.state === "VerifiedRetainedDraft" ? <Link to={detailLink(row.id)} className="block text-primary"><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm">{row.title || "Needs review"}</span></Link>
             : <><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm text-muted-foreground">Needs review</span></>
             : column.key === "currency" ? row.currencyCode || "—" : <Badge>{row.status || "Needs review"}</Badge>}
-          renderActions={row => row.state === "VerifiedRetainedDraft" ? <Link to={detailLink(row.id)} className="text-primary">Open</Link> : <span className="text-xs text-muted-foreground">Needs review</span>} />
-          {selected.length > 0 && <div className="border-t border-border bg-primary/5 px-5 py-3 text-sm">{selected.length} selected on this page · Bulk changes are not available yet. <Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}</>}
-      {data && <div className="border-t border-border px-5 py-3"><Pager page={page} total={data.total} size={data.pageSize} change={setPage} /></div>}
-    </Panel></div>;
+          renderActions={row => row.state === "VerifiedRetainedDraft" ? <span className="flex items-center gap-2"><Link to={detailLink(row.id)} className="text-primary">Open</Link><Button variant="ghost" onClick={() => setPreviewId(row.id)}>Preview</Button></span> : <span className="text-xs text-muted-foreground">Needs review</span>} />
+          {currentSelection.length > 0 && <div className="border-t border-border bg-primary/5 px-5 py-3 text-sm">{currentSelection.length} selected on this page · Bulk changes are not available yet. <Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}</>}
+      {data && <div className="border-t border-border px-5 py-3"><Pager page={page} total={data.total} size={data.pageSize} change={next => { setSelected([]); setPreviewId(null); setPage(next); }} /></div>}
+    </Panel>
+    {preview && <Modal title={`${preview.number} · Preview`} onClose={() => setPreviewId(null)}><div className="space-y-3 text-sm"><p className="font-medium">{preview.title}</p><Badge>{preview.status}</Badge><p>Currency: {preview.currencyCode}</p><Link to={detailLink(preview.id)}><Button variant="secondary">View full details</Button></Link></div></Modal>}
+  </div>;
 }
 
 function Pending({ command, busy, error, check }: { command: RfqRecoveryReference; busy: boolean; error: string; check: () => void }) {
@@ -129,12 +135,12 @@ export function GovernedSourcingCreate() {
     try { const saved = await recoverRfqCommand(legalEntityId, pending); setPending(null); if (live.current) navigate(detailLink(saved.eventId)); }
     catch (error) { setError(message(error)); } finally { working.current = false; if (live.current) setBusy(false); }
   }
-  return <RfqWizardLayout title="Use approved purchase requests" back="/rfqs?source=approved" approved>
+  return <RfqWizardLayout title="Use approved purchase requests" back="/rfqs?source=approved" approved busy={busy}>
     <p className="text-sm text-muted-foreground">Choose full or partial quantities. A draft holds quantities only after you explicitly create it.</p>
     {journal.error ? <p role="alert">{journal.error}</p> : pending ? <Pending command={pending} busy={busy} error={error} check={() => void recover()} /> : <form className="space-y-5" onSubmit={create}>
       {error && <p role="alert" className="text-red-600">{error}</p>}
-      <Panel title="Quote request"><div className="p-5"><Field label="What are you buying?"><Input required maxLength={200} value={title} onChange={e => setTitle(e.target.value)} /></Field></div></Panel>
-      <Panel title="Approved requests"><div className="space-y-4 p-5"><div className="flex items-end gap-3"><Field label="Find request or item" className="flex-1"><Input maxLength={100} value={search} onChange={e => { setPage(1); setSearch(e.target.value); }} /></Field>
+      <div id="rfq-stage-0" className="scroll-mt-28"><Panel title="Quote request"><div className="p-5"><Field label="What are you buying?"><Input required maxLength={200} value={title} onChange={e => setTitle(e.target.value)} /></Field></div></Panel></div>
+      <div id="rfq-stage-1" className="scroll-mt-28"><Panel title="Approved requests"><div className="space-y-4 p-5"><div className="flex items-end gap-3"><Field label="Find request or item" className="flex-1"><Input maxLength={100} value={search} onChange={e => { setPage(1); setSearch(e.target.value); }} /></Field>
         <Button variant="secondary" type="button" onClick={() => { setSelected([]); setRefresh(value => value + 1); }}>Refresh sources</Button></div>
         {loadError ? <p role="alert">{loadError}</p> : !data ? <p role="status">Loading approved requests…</p> : !data.items.length ? <EmptyState title="No approved requests found" description="Approved competitive purchases appear here after their funding and source checks pass." />
           : <div className="overflow-x-auto"><RecordTable><thead><tr><th>Request</th><th>Item or service</th><th>Available</th><th>Approved estimate</th><th>Action</th></tr></thead><tbody>{data.items.map(row => <tr key={row.purchaseRequestLineId}>
@@ -143,12 +149,12 @@ export function GovernedSourcingCreate() {
             <td><Button type="button" variant="secondary" disabled={!row.canSelect || selected.some(x => x.source.purchaseRequestLineId === row.purchaseRequestLineId)} onClick={() => choose(row)}>
               {row.state === "Unavailable" ? "Needs review" : row.state === "FullyAllocated" ? "Already assigned" : "Add line"}</Button></td></tr>)}</tbody></RecordTable></div>}
         {data && <><p className="text-sm text-muted-foreground">{data.candidateTotal} request lines to check. This includes lines needing review or already assigned.</p><Pager page={page} total={data.candidateTotal} size={data.pageSize} change={setPage} /></>}
-      </div></Panel>
+      </div></Panel></div>
       <Panel title="Selected quantities"><div className="space-y-4 p-5">{!selected.length ? <p className="text-sm text-muted-foreground">Add lines from approved requests above.</p> : selected.map((row, index) => <div className="grid gap-3 sm:grid-cols-4" key={row.source.purchaseRequestLineId}>
         <div className="sm:col-span-2"><p>{row.source.description}</p><p className="text-sm text-muted-foreground">{row.source.requestNumber} · Available {row.source.availableQuantity} {row.source.unitCode}</p></div>
         <Field label={`Quantity for ${row.source.requestNumber}`}><Input required inputMode="decimal" value={row.quantity} onChange={e => setSelected(selected.map((item, at) => at === index ? { ...item, quantity: e.target.value } : item))} /></Field>
         <Button type="button" variant="ghost" onClick={() => setSelected(selected.filter((_, at) => at !== index))}>Remove line</Button></div>)}</div></Panel>
-      <div className="sticky bottom-0 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={busy || !selected.length}>Create internal draft</Button><Link to="/rfqs?source=approved"><Button variant="secondary" type="button">Back</Button></Link></div>
+      <div className="sticky bottom-8 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={busy || !selected.length}>Create internal draft</Button><Link to="/rfqs?source=approved" onClick={event => { if (busy) event.preventDefault(); }} aria-disabled={busy}><Button variant="secondary" type="button" disabled={busy}>Back</Button></Link></div>
     </form>}
   </RfqWizardLayout>;
 }

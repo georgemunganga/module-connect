@@ -92,7 +92,11 @@ test("governed RFQ list keeps server search, company status and imported table c
   await expect(page.getByRole("button", { name: "Filter Quote Requests by field" })).toBeVisible();
   await expect(page.getByTestId("erp-record-table")).toBeVisible();
   await page.getByLabel("Find quote request").fill("Office");
-  await expect(page.getByText("Search and status use the full company list.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Search and status work across pages you can access.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  const preview = page.getByRole("dialog", { name: "RF-1 · Preview" });
+  await expect(preview).toContainText("Office supplies");
+  await preview.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.getByRole("link", { name: /RF-1.*Office supplies/ }).click();
   await page.getByRole("tab", { name: "Items (1)" }).click();
   await expect(page.getByRole("cell", { name: "Office notebooks" })).toBeVisible();

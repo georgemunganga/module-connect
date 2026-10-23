@@ -152,21 +152,21 @@ function LegacySourcingEditor() {
     }
     finally { if (isCurrentSave()) setSaving(false); }
   }
-  return <RfqWizardLayout title={id ? "Edit quote request" : "New quote request"} back={id ? `/rfqs/${id}` : "/rfqs"}>
+  return <RfqWizardLayout title={id ? "Edit quote request" : "New quote request"} back={id ? `/rfqs/${id}` : "/rfqs"} busy={saving}>
     <p className="text-sm text-muted-foreground">Save an internal draft. Vendors will not receive it until publication is approved.</p>
     {loading ? <p role="status">Loading quote request…</p> : id && (version === null || loadedContext !== editorContext)
       ? <p role="alert">{error || "This draft is unavailable. Return to the quote request list."}</p>
       : <form className="max-w-6xl space-y-5" onSubmit={save}>
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current draft before retrying.</span>}</p>}
       {saveBlock && <p role="status" className="rounded-lg border border-border p-3 text-sm">{saveBlock === "stale" ? "The saved quote request changed. Review it before saving again." : "The save result was not confirmed. Review saved quote requests before trying again."} <Link className="text-primary underline" to={id ? `/rfqs/${id}` : "/rfqs"}>Review saved quote request{id ? "" : "s"}</Link></p>}
-      <Panel title="Quote details"><div className="grid gap-4 p-5 sm:grid-cols-2">
+      <div id="rfq-stage-0" className="scroll-mt-28"><Panel title="Quote details"><div className="grid gap-4 p-5 sm:grid-cols-2">
         <Field label="What are you buying?" className="sm:col-span-2"><Input required maxLength={300} value={draft.title} onChange={(event) => field("title", event.target.value)} /></Field>
         <Field label="Buying method"><Select value={draft.method} onChange={(event) => field("method", event.target.value)}><option value="RFQ">Request for quotes</option><option value="RFP">Request for proposals</option><option value="ITT">Tender</option></Select></Field>
         <Field label="Currency"><Input required maxLength={3} value={draft.currencyCode ?? ""} onChange={(event) => field("currencyCode", event.target.value.toUpperCase())} /></Field>
         <Field label="Opens (local time)"><Input type="datetime-local" value={draft.opensAt ?? ""} onChange={(event) => field("opensAt", event.target.value)} /></Field>
         <Field label="Closes (local time)"><Input type="datetime-local" value={draft.closesAt ?? ""} onChange={(event) => field("closesAt", event.target.value)} /></Field>
-      </div></Panel>
-      <Panel title="What suppliers will quote"><div className="space-y-4 p-5">
+      </div></Panel></div>
+      <div id="rfq-stage-1" className="scroll-mt-28"><Panel title="What suppliers will quote"><div className="space-y-4 p-5">
         {draft.lines.map((line, index) => <div key={line.id ?? `new-${index}`} className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-6">
           <Field label={`Item or service ${index + 1}`} className="sm:col-span-3"><Input required maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field>
           <Field label="Quantity"><Input required type="number" min="0.0001" step="0.0001" value={line.quantity} onChange={(event) => lineField(index, "quantity", Number(event.target.value))} /></Field>
@@ -176,8 +176,8 @@ function LegacySourcingEditor() {
           <div className="flex items-end">{draft.lines.length > 1 && <Button variant="ghost" aria-label={`Remove line ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((_, at) => at !== index) }))}><Trash2 size={16} /></Button>}</div>
         </div>)}
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add line</Button>
-      </div></Panel>
-      <div className="sticky bottom-0 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/rfqs/${id}` : "/rfqs"}><Button variant="secondary">Cancel</Button></Link></div>
+      </div></Panel></div>
+      <div className="sticky bottom-8 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/rfqs/${id}` : "/rfqs"} onClick={event => { if (saving) event.preventDefault(); }} aria-disabled={saving}><Button variant="secondary" disabled={saving}>Cancel</Button></Link></div>
     </form>}
   </RfqWizardLayout>;
 }
