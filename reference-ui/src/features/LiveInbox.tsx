@@ -40,7 +40,7 @@ function LiveInboxRecord({ company, canCapture }: { company: string; canCapture:
 
   return <div className="p-5 sm:p-8">
     <PageHeader title="Payables inbox" subtitle="Review supplier invoices received by the ERP, or record invoice details manually."
-      actions={<Button onClick={explainUpload}><Upload size={15} /> Upload bill</Button>} />
+      actions={<>{canCapture && <Link to="/bills/new"><Button variant="secondary">Record invoice</Button></Link>}<Button onClick={explainUpload}><Upload size={15} /> Upload bill</Button></>} />
     {notice && <p role="status" className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">{notice}</p>}
     <Panel className="mb-5">
       <div onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); explainUpload(); }}
@@ -51,14 +51,7 @@ function LiveInboxRecord({ company, canCapture }: { company: string; canCapture:
         <Button className="mt-5" onClick={explainUpload}><Paperclip size={15} /> Choose file</Button>
       </div>
     </Panel>
-    <div className="mb-5 grid gap-3 sm:grid-cols-3" aria-label="Invoice intake channels">
-      <Panel title="Manual entry"><div className="p-5 text-sm text-slate-500"><p>Record supplier invoice details in the ERP.</p>
-        {canCapture ? <Link className="mt-3 inline-block text-primary hover:underline" to="/bills/new">Record invoice <ChevronRight size={14} className="inline" /></Link>
-          : <p className="mt-3">Invoice capture permission is required.</p>}</div></Panel>
-      <Panel title="Email inbox"><p className="p-5 text-sm text-slate-500">Email intake is not connected yet. Use manual entry for invoices received by email.</p></Panel>
-      <Panel title="Supplier portal"><p className="p-5 text-sm text-slate-500">Portal invoice submission is not connected yet. Use manual entry for supplier documents.</p></Panel>
-    </div>
-    <Panel title="Inbox files" action={<span className="text-xs text-slate-400">{data?.total ?? 0} invoices</span>}>
+    <Panel title="Received bills" action={<span className="text-xs text-slate-400">{data?.total ?? 0} invoices</span>}>
       {error && <p role="alert" className="px-5 py-4 text-sm text-red-700">{error}</p>}
       {loading ? <p role="status" className="px-5 py-4 text-sm">Loading invoices…</p>
         : !data?.items.length ? <EmptyState title="Your inbox is clear" description="Invoices recorded in the ERP will appear here. File uploads are not connected yet."
@@ -77,6 +70,6 @@ function LiveInboxRecord({ company, canCapture }: { company: string; canCapture:
         <Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
       </div>}
     </Panel>
-    <p className="mt-4 text-xs text-slate-400">File upload, OCR, email intake, and supplier portal submission await their ERP APIs. This inbox shows only invoices saved by the ERP.</p>
+    <p className="mt-4 text-xs text-muted-foreground">This list shows recorded bills, not uploaded files. Uploading bills will be available here when enabled.</p>
   </div>;
 }

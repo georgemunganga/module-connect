@@ -118,7 +118,7 @@ function InvoiceListRecord() {
     return <span className="font-medium">{money(invoice.grossAmount, invoice.currencyCode)}</span>;
   };
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Bills" subtitle="Supplier invoices received for review. Payment is handled by Finance."
+    <PageHeader title="Bills" subtitle="Create and manage your vendor bills."
       actions={<><ListTools entity="Bills" columns={invoiceColumns} visibleColumns={visibleColumns} onVisibleColumnsChange={setVisibleColumns}
         columnWidths={columnWidths} onColumnWidthsChange={setColumnWidths} clipText={clipText} onClipTextChange={setClipText}
         sortOptions={invoiceSortOptions} onSort={key => setSort(key as InvoiceSort)}
@@ -184,7 +184,6 @@ function InvoiceListRecord() {
         </div>
       </footer>
     </Panel>
-    <p className="mt-4 text-xs text-muted-foreground">Invoice intake is live ERP data. Full-dataset search, import, bulk changes, and Finance payment actions are not connected in this list.</p>
     {preview && <Modal title={`${preview.invoiceNumber} · Bill`} onClose={() => setPreview(null)}>
       <div className="space-y-3 text-sm"><p className="font-medium">{preview.supplierName || "Vendor"}</p>
         <p>{preview.invoiceDate} · {money(preview.grossAmount, preview.currencyCode)} · <Badge>{preview.status}</Badge></p>

@@ -356,3 +356,28 @@ test("live Bills filter and selection stay on the loaded page while opening save
   await page.getByRole("button", { name: "View full details" }).click();
   await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
 });
+
+
+test("live inbox preserves the imported upload layout without creating local files", async ({ page }) => {
+  const { mutations } = await mockErp(page, true, { seed: true, crud: true });
+  await page.goto("/procurement/workspace/inbox");
+  await expect(page.getByRole("heading", { name: "Payables inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Upload bills", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Received bills", exact: true })).toBeVisible();
+  await expect(page.getByText("INV-DOC-1", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Choose file", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("File intake is not connected");
+  expect(mutations).toHaveLength(0);
+  expect(await page.evaluate(() => localStorage.getItem("payables.inbox.v1"))).toBeNull();
+  await page.getByRole("button", { name: "Open invoice", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toBeVisible();
+});
+
+test("read-only live inbox retains layout without offering manual invoice capture", async ({ page }) => {
+  await mockErp(page, false);
+  await page.goto("/procurement/workspace/inbox");
+  await expect(page.getByRole("heading", { name: "Payables inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record invoice", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Upload bill", exact: true })).toBeVisible();
+  await expect(page.getByText("Your inbox is clear", { exact: true })).toBeVisible();
+});
