@@ -121,7 +121,7 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
     running.current = true; setBusy(true); setActionError("");
     try {
       await execute(reference.key); store(null);
-      if (live.current) { setRefresh(value => value + 1); setQuote(null); setQuoteInvitation(null); }
+      if (live.current) { setRecord(null); setRefresh(value => value + 1); setQuote(null); setQuoteInvitation(null); }
     } catch (error) {
       if (error instanceof PublicationApiError && (error.status === 400 || error.status === 422)) {
         try { store(null); } catch (storageError) { setActionError(explain(storageError)); return; }
@@ -134,7 +134,7 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
     running.current = true; setBusy(true); setActionError("");
     try {
       await recoverPublicationCommand(company, pending);
-      store(null); if (live.current) setRefresh(value => value + 1);
+      store(null); if (live.current) { setRecord(null); setRefresh(value => value + 1); }
     } catch (error) { if (live.current) setActionError(explain(error)); }
     finally { running.current = false; if (live.current) setBusy(false); }
   }
@@ -151,7 +151,7 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
       cancelReason, crypto.randomUUID(), "principal"); storeCancellation(command); }
     catch (error) { setActionError(explain(error)); return; }
     running.current = true; setBusy(true); setActionError("");
-    try { await sendRfqCommand(company, command); storeCancellation(null); if (live.current) setRefresh(value => value + 1); }
+    try { await sendRfqCommand(company, command); storeCancellation(null); if (live.current) { setRecord(null); setRefresh(value => value + 1); } }
     catch (error) {
       if (error instanceof RfqExecutionError && (error.status === 400 || error.status === 422)) {
         try { storeCancellation(null); } catch (failure) { setActionError(explain(failure)); return; }
@@ -162,7 +162,7 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
   async function recoverCancellation() {
     if (!cancelPending || running.current) return;
     running.current = true; setBusy(true); setActionError("");
-    try { await recoverRfqCommand(company, cancelPending); storeCancellation(null); if (live.current) setRefresh(value => value + 1); }
+    try { await recoverRfqCommand(company, cancelPending); storeCancellation(null); if (live.current) { setRecord(null); setRefresh(value => value + 1); } }
     catch (error) { if (live.current) setActionError(explain(error)); }
     finally { running.current = false; if (live.current) setBusy(false); }
   }
