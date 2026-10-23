@@ -7,15 +7,25 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { claimPrincipalInvoicePending, clearPrincipalInvoicePending, readPrincipalInvoicePending } from "../lib/principal-invoice-command-memory";
 import { listInvoiceDocuments, type InvoiceDocument } from "../../../src/platform/procurement-invoices-api";
 import { getPrincipalInvoiceState, listPrincipalAcceptances, listPrincipalInvoiceSources,
-  recoverPrincipalInvoiceCommand, sendPrincipalInvoiceCommand, PrincipalInvoiceError,
+  listPrincipalInvoiceIssues, recoverPrincipalInvoiceCommand, recoverPrincipalIssueAction,
+  sendPrincipalInvoiceCommand, sendPrincipalIssueAction, PrincipalInvoiceError,
   type PrincipalInvoiceLocator, type PrincipalInvoiceMappingLine, type PrincipalInvoiceSource,
   type PrincipalInvoiceSourcePage, type PrincipalAcceptance, type PrincipalInvoiceState,
+  type PrincipalInvoiceIssuePage, type PrincipalInvoiceIssue,
 } from "../../../src/platform/procurement-principal-invoice-api";
 
 type Line = { id: string; lineNumber: number; description: string };
 type LinkDraft = { source: PrincipalInvoiceSource; acceptance: PrincipalAcceptance | null;
   unit: string; document: string; reference: string };
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : "The invoice action could not be confirmed.";
+const issueLabel = (code: string) => ({
+  InvoiceDuplicateEvidenceUnavailable: "A possible duplicate bill needs checking",
+  CompleteHistoricalExposureUnavailable: "Earlier bill or credit history needs checking",
+  OriginalInvoiceUnitsNotVerified: "Units on the original bill need checking",
+  PrincipalInvoiceOriginalLinesChanged: "The original bill lines changed",
+  PrincipalInvoiceSourceChanged: "The purchase order or receipt changed",
+  PublishedInvoiceMatchingPolicyUnavailable: "Buying rules need review",
+}[code] ?? "The bill and purchasing evidence need checking");
 
 /** Fits inside the imported Bill detail Overview; the legacy comparison remains separate. */
 export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, refresh }: {
@@ -32,10 +42,13 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
   const [state, setState] = useState<PrincipalInvoiceState | null>(null);
   const [sources, setSources] = useState<PrincipalInvoiceSourcePage | null>(null);
   const [documents, setDocuments] = useState<InvoiceDocument[]>([]);
+  const [issues, setIssues] = useState<PrincipalInvoiceIssuePage | null>(null);
   const [drafts, setDrafts] = useState<Record<string, LinkDraft>>({});
   const [activeLine, setActiveLine] = useState(lines[0]?.id ?? "");
   const [acceptances, setAcceptances] = useState<PrincipalAcceptance[] | null>(null);
   const [page, setPage] = useState(1), [search, setSearch] = useState(""), [query, setQuery] = useState("");
+  const [issuePage, setIssuePage] = useState(1), [issueRevision, setIssueRevision] = useState(0);
+  const [issueReason, setIssueReason] = useState(""), [issueEvidence, setIssueEvidence] = useState("");
   const [reason, setReason] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
   const inFlight = useRef(false), alive = useRef(true);
@@ -49,6 +62,14 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [canRead, company, invoiceId, invoiceVersion]);
+  useEffect(() => {
+    if (!canRead || state?.state !== "ComparisonBlocked") { setIssues(null); return; }
+    const abort = new AbortController(); setIssues(null);
+    listPrincipalInvoiceIssues(company, invoiceId, issuePage, abort.signal)
+      .then(value => { if (!abort.signal.aborted) setIssues(value); })
+      .catch(cause => { if (!abort.signal.aborted) setError(errorText(cause)); });
+    return () => abort.abort();
+  }, [canRead, company, invoiceId, state?.state, issuePage, issueRevision]);
   useEffect(() => {
     if (!editing || !canMap || pending.blocked) return;
     const abort = new AbortController(); setSources(null);
@@ -103,7 +124,9 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
       const receipt = await sendPrincipalInvoiceCommand(company, locator, body);
       if (!clearPrincipalInvoicePending(scope, locator)) throw new Error("The saved result was confirmed, but its browser recovery marker could not be cleared.");
       if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setEditing(false); setDrafts({});
-        setNotice(`${String(receipt.state)} recorded. Invoice approval and Finance remain separate.`);
+        setNotice(receipt.state === "ComparisonBlocked"
+          ? "Comparison issues were recorded with an owner. Correct the evidence before retrying. No claim or Finance action was created."
+          : "Invoice evidence recorded. Invoice approval and Finance remain separate.");
         await refreshState(); refresh("Invoice evidence recorded."); }
     } catch (cause) {
       // Only definite input rejection is correctable without checking the original key.
@@ -124,9 +147,14 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
           throw new Error("The review reference is not available. Ask an administrator to inspect the saved action.");
         locator = { ...locator, reviewId: current.reviewId };
       }
-      const result = await recoverPrincipalInvoiceCommand(company, locator);
+      const result = locator.operation === "IssueAction"
+        ? await recoverPrincipalIssueAction(company, locator)
+        : await recoverPrincipalInvoiceCommand(company, locator);
       if (!clearPrincipalInvoicePending(scope, pending.locator!)) throw new Error("The original action was found, but browser recovery remains locked.");
-      if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setNotice(`Saved ${String(result.state)} action found.`); refresh(); }
+      if (alive.current) { setPending(readPrincipalInvoicePending(scope));
+        setNotice(`Saved ${String(result.state ?? result.issueState)} action found.`);
+        if (locator.operation === "IssueAction") setIssueRevision(n => n + 1);
+        else refresh(); }
     } catch (cause) { if (alive.current) setError(errorText(cause)); }
     finally { inFlight.current = false; if (alive.current) setBusy(false); }
   }
@@ -165,7 +193,7 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
     { invoiceVersion, mappingRevision: state.mappingRevision, reason: reason.trim() || null });
   }
   function compare() {
-    if (!state || state.state !== "Reviewed" || !state.mappingVersionId || !state.reviewOutcomeId
+    if (!state || !["Reviewed", "ComparisonBlocked"].includes(state.state) || !state.mappingVersionId || !state.reviewOutcomeId
       || !state.exposureVersion || !canRead) return;
     void execute({ operation: "Compare", invoiceId, key: crypto.randomUUID(), invoiceVersion,
       mappingRevision: state.mappingRevision, mappingVersionId: state.mappingVersionId,
@@ -173,21 +201,43 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
     { invoiceVersion, mappingVersionId: state.mappingVersionId, reviewOutcomeId: state.reviewOutcomeId,
       exposureVersion: state.exposureVersion, reason: reason.trim() || null });
   }
+  async function workIssue(issue: PrincipalInvoiceIssue, action: "Comment" | "CorrectionRequested" | "ReadyToRetry") {
+    if (inFlight.current || busy || pending.blocked || !state || state.state !== "ComparisonBlocked"
+      || issue.mappingVersionId !== state.mappingVersionId || issue.ownerPrincipalId !== context.principalId
+      || !issueReason.trim()) return;
+    const locator: PrincipalInvoiceLocator = { operation: "IssueAction", invoiceId,
+      key: crypto.randomUUID(), invoiceVersion, mappingRevision: state.mappingRevision,
+      mappingVersionId: state.mappingVersionId, reviewId: state.reviewId,
+      reviewOutcomeId: state.reviewOutcomeId, orderId: null, issuedVersionId: null,
+      issueId: issue.issueId, expectedIssueVersion: issue.version };
+    inFlight.current = true;
+    if (!claimPrincipalInvoicePending(scope, locator)) { inFlight.current = false; setPending(readPrincipalInvoicePending(scope));
+      setError("A previous issue action needs checking before another change."); return; }
+    setPending(readPrincipalInvoicePending(scope)); setBusy(true); setError("");
+    try { await sendPrincipalIssueAction(company, locator, action, issueReason,
+      issueEvidence.trim() || null);
+      if (!clearPrincipalInvoicePending(scope, locator)) throw new Error("The issue action was confirmed, but browser recovery remains locked.");
+      if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setIssueReason(""); setIssueEvidence("");
+        setIssueRevision(n => n + 1); setNotice("Correction note recorded. No bill approval or Finance effect was created."); }
+    } catch (cause) { if (cause instanceof PrincipalInvoiceError && [400, 422].includes(cause.status)) clearPrincipalInvoicePending(scope, locator);
+      if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setError(errorText(cause)); } }
+    finally { inFlight.current = false; if (alive.current) setBusy(false); }
+  }
   if (!canRead) return null;
   return <Panel title="Issued order and original bill checks" className="mt-5"><div className="space-y-4 p-5 text-sm">
     <p>Link original bill lines to an issued order. An independent person checks the original document before comparison. This does not approve the bill or send it to Finance.</p>
     {loading && <p role="status">Loading saved bill checks…</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {notice && <p role="status">{notice}</p>}
-    {state && <p>Current step: <Badge>{state.state === "Unmapped" ? "Not linked" : state.state === "LegacyWorkflow" ? "Existing bill workflow" : state.state === "Mapped" ? "Original review needed" : state.state === "Reviewed" ? "Ready to compare" : "Comparison recorded"}</Badge></p>}
+    {state && <p>Current step: <Badge>{state.state === "Unmapped" ? "Not linked" : state.state === "LegacyWorkflow" ? "Existing bill workflow" : state.state === "Mapped" ? "Original review needed" : state.state === "Reviewed" ? "Ready to compare" : state.state === "ComparisonBlocked" ? "Correction needed" : "Comparison recorded"}</Badge></p>}
     {state?.state === "LegacyWorkflow" && <p>This bill already uses the existing invoice comparison. Its saved history remains available above.</p>}
     {state && state.invoiceVersion !== invoiceVersion && <p role="alert">The bill changed. Refresh its details before continuing.</p>}
     {pending.blocked && <div className="space-y-2"><p role="alert">A prior change has an unconfirmed result. Another change is blocked.</p>
       {pending.locator ? <Button variant="secondary" disabled={busy} onClick={() => void recover()}>Check saved action</Button>
         : <p>The saved recovery information cannot be read in this tab. Ask an administrator to inspect the history.</p>}</div>}
     {!pending.blocked && state?.invoiceVersion === invoiceVersion && <>
-      {canMap && ["Unmapped", "Mapped"].includes(state.state) && !editing && <Button variant="secondary" disabled={busy} onClick={() => setEditing(true)}>Link bill lines</Button>}
-      {editing && canMap && ["Unmapped", "Mapped"].includes(state.state) && <form onSubmit={save} className="space-y-4">
+      {canMap && ["Unmapped", "Mapped", "ComparisonBlocked"].includes(state.state) && !editing && <Button variant="secondary" disabled={busy} onClick={() => setEditing(true)}>Link bill lines</Button>}
+      {editing && canMap && ["Unmapped", "Mapped", "ComparisonBlocked"].includes(state.state) && <form onSubmit={save} className="space-y-4">
         <div className="flex flex-wrap items-end gap-3"><Field label="Bill line"><Select value={activeLine} disabled={busy} onChange={event => setActiveLine(event.target.value)}>
           {lines.map(line => <option key={line.id} value={line.id}>Line {line.lineNumber} · {line.description}</option>)}</Select></Field>
           <Field label="Find order or item"><Input value={search} maxLength={120} disabled={busy} onChange={event => setSearch(event.target.value)} /></Field>
@@ -218,9 +268,30 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
         {state.reviewId ? <Link className="text-primary underline" to={`/approvals/principal-unit-review/${state.reviewId}`}>Open original review</Link>
           : canOpen && <><Field label="Review note (optional)"><Textarea maxLength={2000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></Field>
             <Button disabled={busy} onClick={openReview}>Request original unit review</Button></>}</div>}
-      {state.state === "Reviewed" && <div className="space-y-3"><p>The independent original unit decision is recorded. Comparison will recheck the issued order and all claims.</p>
+      {(state.state === "Reviewed" || state.state === "ComparisonBlocked") && <div className="space-y-3"><p>{state.state === "ComparisonBlocked"
+        ? "A saved comparison found issues. Review the issue history and correct the original or purchasing evidence. A retry rechecks every source and claim."
+        : "The independent original unit decision is recorded. Comparison will recheck the issued order and all claims."}</p>
         <Field label="Comparison note (optional)"><Textarea maxLength={2000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></Field>
         <Button disabled={busy || !state.exposureVersion} onClick={compare}>Compare original bill with order</Button></div>}
+      {state.state === "ComparisonBlocked" && <div className="space-y-4 border-t border-border pt-4">
+        <h3 className="font-medium">Recorded issues</h3>
+        {!issues && <p role="status">Loading issue history…</p>}
+        {issues?.items.map(issue => <div key={issue.issueId} className="space-y-2 rounded-lg border border-border p-4">
+          <p className="font-medium">{issueLabel(issue.code)} <Badge>{issue.state}</Badge></p>
+          <p>{issue.supplierInvoiceLineId ? `Bill line ${lines.find(line => line.id === issue.supplierInvoiceLineId)?.lineNumber ?? "—"}` : "Whole bill"}
+            {issue.ownerPrincipalId === context.principalId ? " · Assigned to you" : " · Assigned to another reviewer"}</p>
+          {issue.history.map(action => <p key={action.actionId}>{action.action}: {action.reason}</p>)}
+          {issue.ownerPrincipalId === context.principalId && issue.mappingVersionId === state.mappingVersionId
+            && !["Resolved", "CancelledWithReason"].includes(issue.state) && <div className="space-y-2">
+              <Field label="Correction note or next step"><Textarea maxLength={2000} value={issueReason} disabled={busy} onChange={event => setIssueReason(event.target.value)} /></Field>
+              <Field label="Evidence reference (optional)"><Input maxLength={200} value={issueEvidence} disabled={busy} onChange={event => setIssueEvidence(event.target.value)} /></Field>
+              <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={busy || !issueReason.trim()} onClick={() => void workIssue(issue, "CorrectionRequested")}>Request correction</Button>
+                <Button variant="secondary" disabled={busy || !issueReason.trim()} onClick={() => void workIssue(issue, "ReadyToRetry")}>Ready to retry</Button></div>
+            </div>}
+        </div>)}
+        {issues && issues.total > issues.pageSize && <div className="flex gap-3"><Button variant="secondary" disabled={issuePage <= 1} onClick={() => setIssuePage(issuePage - 1)}>Previous issues</Button>
+          <span>Page {issuePage}</span><Button variant="secondary" disabled={issuePage * issues.pageSize >= issues.total} onClick={() => setIssuePage(issuePage + 1)}>Next issues</Button></div>}
+      </div>}
       {state.state === "Compared" && <p>A commercial quantity claim was recorded. Finance posting and payment are separate.</p>}
     </>}
   </div></Panel>;

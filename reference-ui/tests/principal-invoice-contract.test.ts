@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPrincipalInvoiceState, listPrincipalInvoiceSources, listPrincipalAcceptances,
+import { getPrincipalInvoiceState, listPrincipalInvoiceSources, listPrincipalAcceptances, listPrincipalInvoiceIssues,
   recoverPrincipalInvoiceCommand, sendPrincipalInvoiceCommand,
   type PrincipalInvoiceLocator, type PrincipalInvoiceSource } from "../../src/platform/procurement-principal-invoice-api";
 import { claimPrincipalInvoicePending, clearPrincipalInvoicePending,
@@ -82,6 +82,32 @@ describe("principal invoice protocol", () => {
     expect(sent.mock.calls[0][1].headers.get("Idempotency-Key")).toBe(key);
     respond({ ...reply, canPostToFinance: true });
     await expect(recoverPrincipalInvoiceCommand(company, marker)).rejects.toThrow("confirm");
+  });
+  it("shows a durable typed mismatch as blocked, never a claim or Finance approval", async () => {
+    const compare: PrincipalInvoiceLocator = { ...locator(), operation: "Compare", mappingVersionId: mapping,
+      reviewId: line, reviewOutcomeId: order, orderId: null, issuedVersionId: null };
+    const blocked = { invoiceId: invoice, invoiceVersion: 3, mappingVersionId: mapping,
+      comparisonId: null, commandKey: key, state: "ComparisonBlocked", sourceSchemaVersion: 2,
+      issues: [{ issueId: line, invoiceLineId: null, code: "InvoiceQuantityExceedsReceipt",
+        ownerPrincipalId: company, state: "Open" }], commercialClaimRecorded: false,
+      canPostToFinance: false, financePostingId: null };
+    respond(blocked);
+    expect((await sendPrincipalInvoiceCommand(company, compare, { invoiceVersion: 3,
+      mappingVersionId: mapping, reviewOutcomeId: order, exposureVersion: 1, reason: null })).state).toBe("ComparisonBlocked");
+    respond({ ...blocked, commercialClaimRecorded: true });
+    await expect(recoverPrincipalInvoiceCommand(company, compare)).rejects.toThrow("confirm");
+    const issueList = { invoiceId: invoice, invoiceVersion: 3, page: 1, pageSize: 20,
+      total: 1, sourceSchemaVersion: 2, canPostToFinance: false,
+      items: [{ issueId: line, supplierInvoiceLineId: null, mappingVersionId: mapping,
+        code: "InvoiceQuantityExceedsReceipt", state: "Open", ownerPrincipalId: company,
+        version: 1, openedAt: "2026-10-23T10:00:00Z", dueAt: null, resolvedAt: null,
+        resolutionReference: null, history: [{ actionId: order, action: "Opened",
+          actorPrincipalId: company, reason: "Check receipt", evidenceReference: null,
+          at: "2026-10-23T10:00:00Z" }] }] };
+    respond(issueList);
+    expect((await listPrincipalInvoiceIssues(company, invoice)).items[0].state).toBe("Open");
+    respond({ ...issueList, canPostToFinance: true });
+    await expect(listPrincipalInvoiceIssues(company, invoice)).rejects.toThrow("confirm");
   });
   it("blocks another POST when storage cannot retain the locator", () => {
     vi.stubGlobal("sessionStorage", { getItem: () => { throw new Error("unavailable"); }, setItem: vi.fn() });

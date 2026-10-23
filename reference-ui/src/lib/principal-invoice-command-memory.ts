@@ -10,7 +10,7 @@ const optionalId = (value: unknown) => value === null || id(value);
 function valid(value: unknown): value is PrincipalInvoiceLocator {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Partial<PrincipalInvoiceLocator>;
-  return ["Map", "OpenReview", "Compare", "DecideReview"].includes(String(row.operation)) && id(row.invoiceId) && id(row.key)
+  return ["Map", "OpenReview", "Compare", "DecideReview", "IssueAction"].includes(String(row.operation)) && id(row.invoiceId) && id(row.key)
     && Number.isSafeInteger(row.invoiceVersion) && Number(row.invoiceVersion) > 0
     && Number.isSafeInteger(row.mappingRevision) && Number(row.mappingRevision) >= 0
     && optionalId(row.mappingVersionId) && optionalId(row.reviewId) && optionalId(row.reviewOutcomeId)
@@ -18,8 +18,13 @@ function valid(value: unknown): value is PrincipalInvoiceLocator {
     && (row.expectedCaseVersion === undefined || row.expectedCaseVersion === null
       || Number.isSafeInteger(row.expectedCaseVersion) && Number(row.expectedCaseVersion) >= 1)
     && (row.operation !== "DecideReview" || id(row.reviewId) && Number.isSafeInteger(row.expectedCaseVersion))
+    && (row.issueId === undefined || optionalId(row.issueId))
+    && (row.expectedIssueVersion === undefined || row.expectedIssueVersion === null
+      || Number.isSafeInteger(row.expectedIssueVersion) && Number(row.expectedIssueVersion) >= 1)
+    && (row.operation !== "IssueAction" || id(row.issueId) && Number.isSafeInteger(row.expectedIssueVersion))
     && Object.keys(value).every((key) => ["operation", "invoiceId", "key", "invoiceVersion", "mappingRevision",
-      "mappingVersionId", "reviewId", "reviewOutcomeId", "orderId", "issuedVersionId", "expectedCaseVersion"].includes(key));
+      "mappingVersionId", "reviewId", "reviewOutcomeId", "orderId", "issuedVersionId", "expectedCaseVersion",
+      "issueId", "expectedIssueVersion"].includes(key));
 }
 export type PendingPrincipalInvoice = { locator: PrincipalInvoiceLocator | null; blocked: boolean };
 export function readPrincipalInvoicePending(scope: string): PendingPrincipalInvoice {

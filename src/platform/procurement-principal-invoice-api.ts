@@ -2,7 +2,7 @@ import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 /** Held P31 protocol. These records describe Procurement evidence, never AP or payment. */
 export type PrincipalInvoiceState = { invoiceId: string; invoiceVersion: number; sourceSchemaVersion: 2;
-  state: "Unmapped" | "LegacyWorkflow" | "Mapped" | "Reviewed" | "Compared"; stateVersion: number;
+  state: "Unmapped" | "LegacyWorkflow" | "Mapped" | "Reviewed" | "ComparisonBlocked" | "Compared"; stateVersion: number;
   mappingRevision: number; mappingVersionId: string | null; reviewId: string | null;
   reviewOutcomeId: string | null; reviewState: string; comparisonId: string | null;
   exposureVersion: number | null; isAuthority: false; canPostToFinance: false };
@@ -21,11 +21,12 @@ export type PrincipalInvoiceMappingLine = { invoiceLineId: string; purchaseOrder
   principalReceivingSourceStateId: string | null; principalAcceptanceFactId: string | null;
   acceptanceSequence: number | null; invoiceUnitCode: string; documentVersionId: string;
   documentLineReference: string };
-export type PrincipalInvoiceCommand = "Map" | "OpenReview" | "Compare" | "DecideReview";
+export type PrincipalInvoiceCommand = "Map" | "OpenReview" | "Compare" | "DecideReview" | "IssueAction";
 export type PrincipalInvoiceLocator = { operation: PrincipalInvoiceCommand; invoiceId: string; key: string;
   invoiceVersion: number; mappingRevision: number; mappingVersionId: string | null;
   reviewId: string | null; reviewOutcomeId: string | null; orderId: string | null;
-  issuedVersionId: string | null; expectedCaseVersion?: number | null };
+  issuedVersionId: string | null; expectedCaseVersion?: number | null;
+  issueId?: string | null; expectedIssueVersion?: number | null };
 export class PrincipalInvoiceError extends Error { constructor(readonly status: number, message: string) { super(message); } }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,12 +60,12 @@ export async function getPrincipalInvoiceState(company: string, invoice: string,
   const body = await call(company, `${invoicePath(invoice)}/principal-matching/status`, { signal });
   if (!record(body) || body.invoiceId !== invoice || body.sourceSchemaVersion !== 2 || !integer(body.invoiceVersion)
     || !integer(body.mappingRevision) || !integer(body.stateVersion)
-    || !["Unmapped", "LegacyWorkflow", "Mapped", "Reviewed", "Compared"].includes(String(body.state))
+    || !["Unmapped", "LegacyWorkflow", "Mapped", "Reviewed", "ComparisonBlocked", "Compared"].includes(String(body.state))
     || !nullableId(body.mappingVersionId) || !nullableId(body.reviewId) || !nullableId(body.reviewOutcomeId)
     || !nullableId(body.comparisonId) || !(body.exposureVersion === null || integer(body.exposureVersion))
     || typeof body.reviewState !== "string" || body.isAuthority !== false || body.canPostToFinance !== false
     || (body.state === "Unmapped" || body.state === "LegacyWorkflow") && (body.mappingVersionId !== null || body.mappingRevision !== 0)
-    || ["Mapped", "Reviewed", "Compared"].includes(String(body.state)) && (!id(body.mappingVersionId) || body.mappingRevision === 0)) throw invalid();
+    || ["Mapped", "Reviewed", "ComparisonBlocked", "Compared"].includes(String(body.state)) && (!id(body.mappingVersionId) || body.mappingRevision === 0)) throw invalid();
   return body as unknown as PrincipalInvoiceState;
 }
 export async function listPrincipalInvoiceSources(company: string, invoice: string, page: number, q = "", signal?: AbortSignal): Promise<PrincipalInvoiceSourcePage> {
@@ -96,7 +97,7 @@ export async function listPrincipalAcceptances(company: string, invoice: string,
 }
 export async function sendPrincipalInvoiceCommand(company: string, locator: PrincipalInvoiceLocator, body: Record<string, unknown>): Promise<Record<string, unknown>> {
   if (!id(locator.invoiceId) || !id(locator.key) || !integer(locator.invoiceVersion) || locator.invoiceVersion < 1) throw invalid();
-  if (locator.operation === "DecideReview") throw invalid();
+  if (locator.operation === "DecideReview" || locator.operation === "IssueAction") throw invalid();
   const path = locator.operation === "Map" ? `${invoicePath(locator.invoiceId)}/principal-matching/mappings`
     : locator.operation === "OpenReview" ? `${invoicePath(locator.invoiceId)}/principal-unit-reviews`
       : `${invoicePath(locator.invoiceId)}/principal-matching/comparisons`;
@@ -104,7 +105,7 @@ export async function sendPrincipalInvoiceCommand(company: string, locator: Prin
 }
 export async function recoverPrincipalInvoiceCommand(company: string, locator: PrincipalInvoiceLocator): Promise<Record<string, unknown>> {
   if (!id(locator.invoiceId) || !id(locator.key)) throw invalid();
-  if (locator.operation === "DecideReview") throw invalid();
+  if (locator.operation === "DecideReview" || locator.operation === "IssueAction") throw invalid();
   const path = locator.operation === "Map" ? `${invoicePath(locator.invoiceId)}/principal-matching/commands/${locator.key}`
     : locator.operation === "OpenReview" ? `/principal-unit-reviews/${locator.reviewId}/commands/${locator.key}`
       : `${invoicePath(locator.invoiceId)}/principal-matching/comparisons/commands/${locator.key}`;
@@ -118,9 +119,18 @@ function validateReceipt(value: unknown, locator: PrincipalInvoiceLocator): Reco
     || value.mappingRevision !== locator.mappingRevision + 1 || value.matchingAuthorityAvailable !== false || value.canAllocate !== false)) throw invalid();
   if (locator.operation === "OpenReview" && (value.state !== "Pending" || !id(value.reviewId)
     || value.isUnitVerified !== false || value.canCompare !== false)) throw invalid();
-  if (locator.operation === "Compare" && (value.state !== "Compared" || !id(value.comparisonId)
-    || value.mappingVersionId !== locator.mappingVersionId || value.commercialClaimRecorded !== true
-    || value.financePostingId !== null)) throw invalid();
+  if (locator.operation === "Compare") {
+    if (value.mappingVersionId !== locator.mappingVersionId || value.financePostingId !== null) throw invalid();
+    if (value.state === "Compared") {
+      if (!id(value.comparisonId) || value.commercialClaimRecorded !== true) throw invalid();
+    } else if (value.state === "ComparisonBlocked") {
+      if (value.comparisonId !== null || value.commercialClaimRecorded !== false
+        || !Array.isArray(value.issues) || value.issues.length === 0
+        || value.issues.some((issue: unknown) => !record(issue) || !id(issue.issueId)
+          || typeof issue.code !== "string" || !(issue.invoiceLineId === null || id(issue.invoiceLineId))
+          || issue.state !== "Open")) throw invalid();
+    } else throw invalid();
+  }
   return value;
 }
 
@@ -233,5 +243,59 @@ function reviewDecisionReceipt(value: unknown, detail: PrincipalReviewDetail, ke
     || value.caseVersion !== detail.caseVersion + 1 || !["Pending", "Approved", "Returned", "Rejected"].includes(String(value.caseState))
     || !["Pending", "Verified", "Returned", "Rejected"].includes(String(value.reviewState))
     || value.canPostToFinance !== false || value.isUnitVerified !== (value.reviewState === "Verified")) throw invalid();
+  return value;
+}
+
+export type PrincipalInvoiceIssue = { issueId: string; supplierInvoiceLineId: string | null;
+  mappingVersionId: string; code: string; state: string; ownerPrincipalId: string;
+  version: number; openedAt: string; dueAt: string | null; resolvedAt: string | null;
+  resolutionReference: string | null; history: { actionId: string; action: string;
+    actorPrincipalId: string; reason: string; evidenceReference: string | null; at: string }[] };
+export type PrincipalInvoiceIssuePage = { invoiceId: string; invoiceVersion: number;
+  items: PrincipalInvoiceIssue[]; total: number; page: number; pageSize: number };
+export async function listPrincipalInvoiceIssues(company: string, invoice: string, page = 1,
+  signal?: AbortSignal): Promise<PrincipalInvoiceIssuePage> {
+  if (!integer(page) || page < 1 || page > 100000) throw invalid();
+  const value = await call(company, `${invoicePath(invoice)}/principal-matching/exceptions?page=${page}&pageSize=20`, { signal });
+  if (!record(value) || value.invoiceId !== invoice || !integer(value.invoiceVersion)
+    || value.sourceSchemaVersion !== 2 || value.page !== page || value.pageSize !== 20
+    || !integer(value.total) || value.canPostToFinance !== false
+    || !Array.isArray(value.items) || value.items.length > 20) throw invalid();
+  for (const issue of value.items) {
+    if (!record(issue) || !id(issue.issueId) || !id(issue.mappingVersionId)
+      || !nullableId(issue.supplierInvoiceLineId) || typeof issue.code !== "string"
+      || !["Open", "InReview", "AwaitingCorrection", "ReadyToRetry", "Resolved", "CancelledWithReason"].includes(String(issue.state))
+      || !id(issue.ownerPrincipalId) || !integer(issue.version) || issue.version < 1
+      || typeof issue.openedAt !== "string" || !Array.isArray(issue.history)
+      || issue.history.some((row: unknown) => !record(row) || !id(row.actionId)
+        || !id(row.actorPrincipalId) || typeof row.action !== "string"
+        || typeof row.reason !== "string" || typeof row.at !== "string")) throw invalid();
+  }
+  return value as unknown as PrincipalInvoiceIssuePage;
+}
+export async function sendPrincipalIssueAction(company: string, locator: PrincipalInvoiceLocator,
+  action: "Comment" | "CorrectionRequested" | "ReadyToRetry" | "Assign", reason: string,
+  evidenceReference: string | null = null, newOwnerPrincipalId: string | null = null): Promise<Record<string, unknown>> {
+  if (locator.operation !== "IssueAction" || !id(locator.issueId)
+    || !integer(locator.expectedIssueVersion) || Number(locator.expectedIssueVersion) < 1
+    || !reason.trim() || reason.length > 2000 || evidenceReference !== null && evidenceReference.length > 200
+    || action === "Assign" && !id(newOwnerPrincipalId)
+    || action !== "Assign" && newOwnerPrincipalId !== null) throw invalid();
+  const value = await call(company, `${invoicePath(locator.invoiceId)}/principal-matching/exceptions/${locator.issueId}/actions`,
+    { method: "POST", headers: { "Idempotency-Key": locator.key }, body: JSON.stringify({
+      expectedVersion: locator.expectedIssueVersion, action, reason: reason.trim(), evidenceReference, newOwnerPrincipalId }) });
+  return issueActionReceipt(value, locator);
+}
+export async function recoverPrincipalIssueAction(company: string, locator: PrincipalInvoiceLocator): Promise<Record<string, unknown>> {
+  if (locator.operation !== "IssueAction" || !id(locator.issueId)) throw invalid();
+  return issueActionReceipt(await call(company, `${invoicePath(locator.invoiceId)}/principal-matching/exceptions/commands/${locator.key}`), locator);
+}
+function issueActionReceipt(value: unknown, locator: PrincipalInvoiceLocator): Record<string, unknown> {
+  if (!record(value) || value.invoiceId !== locator.invoiceId || value.issueId !== locator.issueId
+    || !id(value.actionId) || value.commandKey !== locator.key
+    || value.invoiceVersion !== locator.invoiceVersion || value.sourceSchemaVersion !== 2
+    || !id(value.ownerPrincipalId) || !integer(value.issueVersion)
+    || !["Open", "InReview", "AwaitingCorrection", "ReadyToRetry"].includes(String(value.issueState))
+    || value.canPostToFinance !== false) throw invalid();
   return value;
 }
