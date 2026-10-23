@@ -25,7 +25,7 @@ describe("principal order exact transport",()=>{
     const command:PrincipalCommand={operation:"Create",key:id(6),orderId:null,body:'{"draft":{}}'};
     const historic={orderId:id(7),number:"PO-1",status:"Draft",version:1,originalDirectSourceSha256:"a".repeat(64),commandKey:id(6),recordedHistoricalResult:true};
     const fetcher=vi.fn(async(url:string)=>new Response(JSON.stringify(url.includes("command-receipts/")?{
-      operation:"Create",commandKey:id(6),responseJson:JSON.stringify(historic),recordedHistoricalResult:true}:historic),
+      operation:"Create",commandKey:id(6),originalStatusCode:201,responseJson:JSON.stringify(historic),recordedHistoricalResult:true}:historic),
     {status:200,headers:{"Content-Type":"application/json"}}));vi.stubGlobal("fetch",fetcher);
     expect((await recoverPrincipalCommand(id(5),command)).orderId).toBe(id(7));
     expect(fetcher).toHaveBeenCalledTimes(1);expect(fetcher.mock.calls[0][0]).toContain("/principal-direct-command-receipts/Create/");

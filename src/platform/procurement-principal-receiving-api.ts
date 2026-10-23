@@ -107,7 +107,7 @@ export async function getPrincipalService(company: string, id: string, certifica
   const rows = await tasks(company, id, "Service", signal); if (rows.length !== 1) throw invalid();
   const row = rows[0], value = row.projection as Record<string, unknown>;
   if (!quantity(value.quantity) || typeof value.deliverableReference !== "string" || typeof value.periodFrom !== "string" || typeof value.periodTo !== "string") throw invalid();
-  return readReceivingService({ id, version: row.version, status: row.status, executionVersion: 2, purchaseOrderLineId: row.lineId, sourcePurchaseOrderId: row.purchaseOrderId,
+  return readReceivingService({ id, version: row.version, status: row.status, executionVersion: 2, purchaseOrderLineId: row.purchaseOrderLineId, sourcePurchaseOrderId: row.purchaseOrderId,
     issuedBindingId: row.issuedVersionId, sourceVersion: row.sourceVersion, periodFrom: value.periodFrom, periodTo: value.periodTo, deliverableRef: value.deliverableReference,
     intendedQuantity: value.quantity, acceptedQuantity: null, acceptedNetAmount: null, currentAcceptedQuantity: null, currentAcceptedNetAmount: null,
     isCertifiedRecord: false, matchingAuthorityAvailable: false, capacity: { verified: false, orderRemainingQuantity: null, physicalRemainingQuantity: null, acceptableQuantity: null, blocker: null },
