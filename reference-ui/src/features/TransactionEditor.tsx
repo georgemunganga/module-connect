@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Link,
   useLocation,
@@ -66,6 +66,20 @@ type Draft = {
   files: string[];
   lines: Line[];
 };
+/** The imported transaction editor's header, context width and action footer,
+ * shared by the live payment workflow without mounting its browser demo store. */
+export function TransactionEditorFrame({ title, close, closeDisabled = false, children, footer }: {
+  title: string; close: () => void; closeDisabled?: boolean; children: ReactNode; footer: ReactNode;
+}) {
+  return <div className="pb-20">
+    <header className="flex items-center justify-between border-b border-border px-5 py-5 sm:px-8">
+      <h1 className="flex items-center gap-2 text-xl font-medium tracking-tight"><ShoppingBag size={23} strokeWidth={1.4} />{title}</h1>
+      <Button type="button" variant="ghost" aria-label="Close editor" disabled={closeDisabled} onClick={close}><X size={21} /></Button>
+    </header>
+    <div className="max-w-[1260px] space-y-7 px-5 py-6 sm:px-8">{children}</div>
+    <footer className="sticky bottom-10 z-10 flex flex-wrap items-center gap-2 border-y border-border bg-card px-5 py-4 backdrop-blur sm:px-8">{footer}</footer>
+  </div>;
+}
 export function TransactionEditor({
   kind,
 }: {

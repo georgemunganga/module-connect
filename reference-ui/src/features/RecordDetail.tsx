@@ -1,5 +1,5 @@
 import { RecordTable } from "../components/data/RecordTable";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import {
   Link,
   useNavigate,
@@ -113,6 +113,23 @@ function safeMetaValue(key: string, value: string) {
     /* Display readable scalar metadata. */
   }
   return { key, value };
+}
+
+/** Original record detail header and tab placement for a live owning record. */
+export function RecordDetailFrame({ back, backLabel, title, status, subtitle, actions,
+  tabs, active, onTab, children }: { back: string; backLabel: string; title: string;
+  status: string; subtitle: string; actions?: ReactNode; tabs: { key: string; label: string }[];
+  active: string; onTab: (key: string) => void; children: ReactNode }) {
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background">
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/95 px-4 py-4 backdrop-blur sm:px-6">
+      <div className="min-w-0"><Link to={back} className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><ArrowLeft size={13} />{backLabel}</Link>
+        <div className="flex flex-wrap items-center gap-2"><h1 className="truncate text-xl font-semibold">{title}</h1><Badge>{status}</Badge></div>
+        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p></div>
+      <div className="flex flex-wrap items-center gap-2">{actions}</div>
+    </header>
+    <DetailTabs tabs={tabs} active={active} onChange={onTab} />
+    <div className="space-y-4 p-4 sm:p-6">{children}</div>
+  </div>;
 }
 
 export function RecordDetail({ kind }: { kind: string }) {

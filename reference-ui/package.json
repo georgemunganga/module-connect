@@ -10,7 +10,7 @@
     "build:live": "VITE_PROCUREMENT_LIVE_MODE=1 npm run build",
     "build:staged": "node scripts/generate-routes.mjs && tsc --noEmit && vite build --outDir .verification-dist",
     "check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node --test scripts/crud-browser-actors.test.mjs && vitest run",
     "test:e2e": "playwright test",
     "test:e2e:release": "VITE_PROCUREMENT_LIVE_MODE=1 npm run build:staged && playwright test --config playwright.release.config.ts"
   },

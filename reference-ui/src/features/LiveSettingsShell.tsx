@@ -12,6 +12,7 @@ import { LiveApprovalSettings } from "./LiveApprovalSettings";
 import { LiveInvoiceMatchingSettings } from "./LiveInvoiceMatchingSettings";
 import { LiveSourcingSettings } from "./LiveSourcingSettings";
 import { LiveReceivingSettings } from "./LiveReceivingSettings";
+import { LiveManualPaymentSettings } from "./LiveManualPaymentSettings";
 
 const buyingLinks = [
   { label: "Buying categories & methods", href: "/settings/reference-data" },
@@ -94,6 +95,8 @@ export function LiveSettingsShell() {
           ? <LiveSourcingSettings />
         : slug === "purchase-receives" && tab === "preferences"
           ? <LiveReceivingSettings />
+        : slug === "payments-made" && tab === "approvals"
+          ? <LiveManualPaymentSettings />
         : <section className="rounded-xl border border-border bg-surface p-7">
         <h2 className="text-lg font-semibold">{module.tabs.find(item => item.slug === tab)?.title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">This setting does not have a live editor yet. No changes can be saved here. Buying categories and rules are available from the Settings directory.</p>

@@ -10,6 +10,7 @@ export function policyLabel(key: string): string {
     case "RECEIVING": return "Receiving and service acceptance";
     case "INVOICE_MATCHING": return "Invoice matching";
     case "INVOICE_UNIT_REVIEW": return "Original invoice unit review";
+    case "MANUAL_PAYMENT_REVIEW": return "Manual payment review";
     default: return key ? `Other policy (${key})` : "Other policy";
   }
 }
@@ -21,6 +22,8 @@ export function ownedPolicySettings(key: string): { path: string; label: string 
       return { path: "/settings/modules/bills/preferences", label: "Invoice check settings" };
     case "INVOICE_UNIT_REVIEW":
       return { path: "/settings/modules/bills/preferences?rule=unit-review", label: "Bill review rules" };
+    case "MANUAL_PAYMENT_REVIEW":
+      return { path: "/settings/modules/payments-made/approvals", label: "Manual payment review rules" };
     default: return { path: "/settings", label: "Procurement settings" };
   }
 }

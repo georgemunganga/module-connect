@@ -14,7 +14,8 @@ export const isProcurementLiveMode = liveMode;
 export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, blockedShell }: { children: ReactNode; unavailable?: ReactNode; scopeUnavailable?: ReactNode; blockedShell?: (content: ReactNode) => ReactNode }) {
   const { selection,authEpoch,procurementScopeStatus } = useErpShell();
   const location = useLocation();
-  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",procurementScopeStatus]);
+  const paymentPath = /^\/payments(?:\/|$)/.test(location.pathname);
+  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",procurementScopeStatus,paymentPath]);
   const currentKey=useRef(readinessKey);currentKey.current=readinessKey;
   const [storedState, setState] = useState<{ key:string; readiness?: ProcurementReadiness; error?: string }>({key:""});
   // Never render old scope readiness for even the render before passive effect cleanup.
@@ -24,14 +25,14 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     const controller = new AbortController();
     const capturedKey=readinessKey;
     setState({key:capturedKey});
-    fetchProcurementReadiness(selection, controller.signal)
+    fetchProcurementReadiness(selection, controller.signal, fetch, paymentPath)
       .then((readiness) => { if (!controller.signal.aborted && currentKey.current===capturedKey) setState({ key:capturedKey,readiness }); })
       .catch((error: unknown) => {
         if (!controller.signal.aborted && currentKey.current===capturedKey)
           setState({ key:capturedKey,error: error instanceof ProcurementLiveError ? error.message : "Procurement data is not ready. Please try again later." });
       });
     return () => controller.abort();
-  }, [selection.entityId, selection.branch,authEpoch,readinessKey,procurementScopeStatus]);
+  }, [selection.entityId, selection.branch,authEpoch,readinessKey,procurementScopeStatus,paymentPath]);
 
   if (!liveMode) return <>{children}</>;
   if (procurementScopeStatus !== "ready") return <>{scopeUnavailable ?? <ProcurementScopeSelectionState />}</>;
@@ -60,9 +61,14 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || contractPath && !permits("procurement-contract-read", "procurement-contract-create", "procurement-contract-edit")
     || planPath && !permits("procurement-plan-read", "procurement-plan-create", "procurement-plan-edit")
     || invoicePath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
+    || paymentPath && !(newRecord ? permission.includes("procurement-payment-create")
+      : editRecord ? permission.includes("procurement-payment-edit") : permission.includes("procurement-payment-read"))
     || creditPath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"));
   if (state.readiness && deniedCrud) {
     const denied = <div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div>;
+    // A Core account may be allowed in another company. Keep the existing
+    // organisation selector reachable when this payment company's grant denies.
+    if (paymentPath && blockedShell) return blockedShell(denied);
     return <LiveReadiness.Provider value={state.readiness}>{requestPath
       ? <RequestApprovalJournalBoundary readiness={state.readiness} isScopeCurrent={() => currentKey.current === readinessKey}>{blockedShell ? blockedShell(denied) : denied}</RequestApprovalJournalBoundary>
       : denied}</LiveReadiness.Provider>;
@@ -83,6 +89,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
+    || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders))
     || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
