@@ -65,7 +65,7 @@ test("approved catalog offers a general request only to employees allowed to cre
 test("catalog access denial does not query buyer management or published catalog", async ({ page }) => {
   const calls = await fixture(page, { permissions: ["procurement-access", "procurement-request-read"] });
   await page.goto("/procurement/workspace/items");
-  await expect(page.getByRole("alert")).toContainText("unavailable for your account");
+  await expect(page.getByRole("alert")).toContainText("You do not have permission to open this Procurement page for the selected company.");
   expect(calls).not.toContain("/api/procurement/v1/items");
   expect(calls).not.toContain("/api/procurement/v1/catalog");
 });
