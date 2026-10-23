@@ -62,7 +62,8 @@ async function mock(page:Page,options:Options={}){
       if(options.stale&&!rejected){rejected=true;version++;sourceVersion++;return json({message:"Changed"},409);}
       const captured=body.draft && typeof body.draft === "object" ? body.draft as Record<string,unknown> : body;
       if(Array.isArray(captured.lines) && captured.lines[0] && typeof captured.lines[0].receivedQuantity === "string")receivedQuantity=captured.lines[0].receivedQuantity;
-      version++;status=path.endsWith("principal-cancel")?"Cancelled":path.endsWith("principal-drafts")||path.endsWith("principal-draft")?"Draft":service?"Certified":"Recorded";
+      if(path.endsWith("principal-drafts")){version=1;sourceVersion=0;}else{version++;if(path.endsWith("principal-record")||path.endsWith("principal-inspect")||path.endsWith("principal-accept")||path.endsWith("principal-certify"))sourceVersion++;}
+      status=path.endsWith("principal-cancel")?"Cancelled":path.endsWith("principal-drafts")||path.endsWith("principal-draft")?"Draft":service?"Certified":"Recorded";
       const response=full();receipts.set(key,response);
       if(options.lostCreate&&!lost){lost=true;return route.abort("failed");}
       return json(response,path.endsWith("principal-drafts")?201:200);
@@ -73,7 +74,7 @@ async function mock(page:Page,options:Options={}){
 async function confirm(page:Page){await page.getByLabel("Evidence reference",{exact:true}).fill("REF:actual-evidence");await page.getByRole("switch",{name:"I checked the delivery evidence"}).click();await page.getByRole("button",{name:"Confirm delivery action"}).click();}
 
 test("absent principal capability never loads or mutates receiving despite Core permissions",async({page})=>{
-  const state=await mock(page,{absent:true});await page.goto(root+"/new");await expect(page.getByRole("button",{name:"Save delivery draft"})).toHaveCount(0);
+  const state=await mock(page,{absent:true});await page.goto(root+"/new");await expect(page.getByText(/Your ERP account and company are connected/)).toBeVisible();await expect(page.getByRole("button",{name:"Save delivery draft"})).toHaveCount(0);
   expect(state.writes).toHaveLength(0);expect(state.reads.filter(path=>path.includes("principal-"))).toHaveLength(0);
 });
 test("Core-only user preserves the editor frame, exact entered quantity and GET-only lost-create recovery",async({page})=>{
