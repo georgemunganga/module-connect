@@ -168,7 +168,8 @@ test("workerless principal capability keeps the full quote wizard, directory and
 test("absent principal capability or missing current conversion permission blocks principal saves", async ({ page }) => {
   const calls = await mock(page, { principal: true, principalUnavailable: true });
   await page.goto("/procurement/workspace/rfqs/new?source=principal-approved");
-  await expect(page.getByRole("alert")).toContainText("not available");
+  await expect(page.getByRole("main").getByRole("link", { name: "My requests", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create internal draft", exact: true })).toHaveCount(0);
   expect(calls.some(call => call.path.includes("principal-") || call.method === "POST")).toBe(false);
 });
 
