@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useStat
 import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../shared/branding";
 import { ERP_SHELL_STORAGE_KEY } from "../../../shared/shell-scope";
 import { canonicalScopeId, resolveLegacyBranchSelection } from "./legacy-branch-selection";
+import { parseCoreWorkspaceChoices } from "./core-workspace-choices";
 
 type Branding = {
   displayName: string;
@@ -83,6 +84,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const [lookupFinished, setLookupFinished] = useState(false);
   const [storageFailure, setStorageFailure] = useState<string | null>(null);
   const [lookupDenied, setLookupDenied] = useState(false);
+  const [selectorDenied, setSelectorDenied] = useState(false);
   const [verifiedSelection, setVerifiedSelection] = useState<{ key: string; value: VerifiedOrganisationContext } | null>(null);
   const verifiedKey = JSON.stringify([authEpoch, selection.entityId ?? "", selection.branch ?? ""]);
   const currentVerifiedKey = useRef(verifiedKey); currentVerifiedKey.current = verifiedKey;
@@ -90,7 +92,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
 
   useEffect(()=>observeAuthContext(window,()=>{
     authGeneration.current+=1;
-    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupFinished(false);setLookupDenied(false);setVerifiedSelection(null);});
+    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupFinished(false);setLookupDenied(false);setSelectorDenied(false);setVerifiedSelection(null);});
   }),[]);
 
   useLayoutEffect(() => {
@@ -108,18 +110,6 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
-
-  useEffect(() => {
-    const epoch=authEpoch;
-    const controller = new AbortController();
-    fetch("/api/hrm/auth/me", { credentials: "include", cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() : Promise.reject())
-      .then((body: { authenticated?: boolean; user?: { roles?: unknown } }) => {
-        if (epoch===authGeneration.current && !controller.signal.aborted && body.authenticated && Array.isArray(body.user?.roles)) setAssignedRoles(body.user.roles.filter((role): role is string => typeof role === "string"));
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [authEpoch]);
 
   useEffect(() => {
     const sync = (event: StorageEvent) => {
@@ -172,46 +162,93 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     const epoch=authEpoch;
     const token = accessToken();
     const controller = new AbortController();
+    const current = () => !controller.signal.aborted && epoch === authGeneration.current;
     const request = async (path: string) => {
       const response = await fetch(path, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         credentials: "include",
+        cache: "no-store",
         signal: controller.signal,
       });
       if (!response.ok) throw new ShellLookupError(response.status);
       return response.json() as Promise<unknown>;
     };
-    Promise.allSettled([
-      request("/api/hrm/admin/legal-entities"),
-      request("/api/hrm/admin/locations"),
-      request("/api/hrm/shell/"),
-    ]).then((results) => {
-      if(controller.signal.aborted || epoch!==authGeneration.current)return;
-      setLookupFinished(true);
-      if (!results.every(result => result.status === "fulfilled")) {
-        const coreDenied = results.slice(0, 2).some(result => result.status === "rejected"
-          && result.reason instanceof ShellLookupError && result.reason.status === 403);
-        const onlyForbiddenFailures = results.every(result => result.status === "fulfilled"
-          || result.reason instanceof ShellLookupError && result.reason.status === 403);
-        setLookupDenied(coreDenied && onlyForbiddenFailures);
-        return;
-      }
-      const [entityData, branchData, shellData] = results.map(result => result.status === "fulfilled" ? result.value : undefined);
-      setLookupDenied(false);
-      const scope = shellData as { assignedLocationIds?: string[]; confined?: boolean };
-      const allowed = new Set(scope.assignedLocationIds ?? []);
-      setEntities(rows(entityData).map((row) => ({
-        id: String(row.id ?? ""),
-        name: String(row.registeredName ?? row.tradingName ?? row.name ?? "Organisation"),
-        code: String(row.code ?? ""),
-      })).filter((row) => row.id));
-      setBranches(rows(branchData).map((row) => ({
-        id: String(row.id ?? ""),
-        name: String(row.name ?? "Branch"),
-        legalEntityId: String(row.legalEntityId ?? ""),
-      })).filter((row) => row.id && (!scope.confined || allowed.has(row.id))));
-      setContextAvailable(true);
-    }).catch(() => {});
+    const load = async () => {
+      try {
+        const auth = await fetch("/api/hrm/auth/me", { credentials: "include", cache: "no-store",
+          signal: controller.signal });
+        if (!auth.ok) throw new ShellLookupError(auth.status);
+        const body: unknown = await auth.json();
+        if (!body || typeof body !== "object" || (body as { authenticated?: unknown }).authenticated !== true
+          || (body as { user?: { isActive?: unknown } }).user?.isActive !== true)
+          throw new ShellLookupError(403);
+        const user = (body as { user: { id?: unknown; roles?: unknown } }).user;
+        if (!current()) return;
+        setAssignedRoles(Array.isArray(user.roles)
+          ? user.roles.filter((role): role is string => typeof role === "string") : []);
+
+        let core: Response;
+        try { core = await fetch("/api/core/v1/workspace-context", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: "include", cache: "no-store", signal: controller.signal,
+        }); } catch { throw new ShellLookupError(503); }
+        if (!current()) return;
+        if (core.ok) {
+          const choices = parseCoreWorkspaceChoices(await core.json(), String(user.id ?? ""));
+          if (!current()) return;
+          setEntities(choices.companies.map(company => ({ id: company.id,
+            name: company.registeredName, code: company.code })));
+          setBranches(choices.branches.map(branch => ({ id: branch.id,
+            name: branch.name, legalEntityId: branch.legalEntityId })));
+          setLookupDenied(false); setSelectorDenied(false); setContextAvailable(true);
+          const saved = readSelection();
+          if (!saved.entityId) {
+            const preferred = choices.companies.find(company => company.isDefault);
+            if (preferred) {
+              const next = { ...saved, entityId: preferred.id, branch: "" };
+              try { localStorage.setItem(SHELL_KEY, JSON.stringify(next)); setStorageFailure(null); setSelection(next); }
+              catch { setStorageFailure(JSON.stringify([epoch, saved.entityId ?? "", saved.branch ?? ""])); }
+            }
+          }
+          return;
+        }
+        if (core.status !== 404) throw new ShellLookupError(core.status);
+        // Older Core hosts retain the existing administrator/context selector.
+        const results = await Promise.allSettled([
+          request("/api/hrm/admin/legal-entities"),
+          request("/api/hrm/admin/locations"),
+          request("/api/hrm/shell/"),
+        ]);
+        if (!current()) return;
+        if (!results.every(result => result.status === "fulfilled")) {
+          const coreDenied = results.slice(0, 2).some(result => result.status === "rejected"
+            && result.reason instanceof ShellLookupError && result.reason.status === 403);
+          const onlyForbiddenFailures = results.every(result => result.status === "fulfilled"
+            || result.reason instanceof ShellLookupError && result.reason.status === 403);
+          setLookupDenied(coreDenied && onlyForbiddenFailures);
+          return;
+        }
+        const [entityData, branchData, shellData] = results.map(result => result.status === "fulfilled" ? result.value : undefined);
+        setLookupDenied(false); setSelectorDenied(false);
+        const scope = shellData as { assignedLocationIds?: string[]; confined?: boolean };
+        const allowed = new Set(scope.assignedLocationIds ?? []);
+        setEntities(rows(entityData).map((row) => ({
+          id: String(row.id ?? ""),
+          name: String(row.registeredName ?? row.tradingName ?? row.name ?? "Organisation"),
+          code: String(row.code ?? ""),
+        })).filter((row) => row.id));
+        setBranches(rows(branchData).map((row) => ({
+          id: String(row.id ?? ""),
+          name: String(row.name ?? "Branch"),
+          legalEntityId: String(row.legalEntityId ?? ""),
+        })).filter((row) => row.id && (!scope.confined || allowed.has(row.id))));
+        setContextAvailable(true);
+      } catch {
+        if (current()) { setSelectorDenied(true); setLookupDenied(false); setContextAvailable(false);
+          setEntities([]); setBranches([]); }
+      } finally { if (current()) setLookupFinished(true); }
+    };
+    void load();
     return () => controller.abort();
   }, [authEpoch]);
 
@@ -237,9 +274,15 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const resolution = resolveLegacyBranchSelection(selection, branches,
     contextAvailable ? "ready" : lookupFinished ? "unavailable" : "loading");
   const failedStorage = storageFailure === selectionKey;
-  const procurementScopeStatus = failedStorage ? "selection-required"
+  const validSelection = !contextAvailable || (!selection.entityId || entities.some(entity => entity.id === selection.entityId))
+    && (!selection.branch || branches.some(branch => branch.id === selection.branch
+      && branch.legalEntityId === selection.entityId));
+  const procurementScopeStatus = !lookupFinished ? "resolving"
+    : failedStorage || selectorDenied || !validSelection ? "selection-required"
     : resolution.kind === "ready" ? "ready" : resolution.kind === "waiting" || resolution.kind === "canonicalize" ? "resolving" : "selection-required";
-  const scopeMessage = failedStorage ? "Your branch could not be saved in this browser. Allow local storage, then choose your branch again."
+  const scopeMessage = selectorDenied ? "Your ERP account could not open verified organisation choices. Sign in again or contact your administrator."
+    : !validSelection ? "Your saved company or branch is no longer available to this ERP account. Choose an authorised organisation context."
+    : failedStorage ? "Your branch could not be saved in this browser. Allow local storage, then choose your branch again."
     : procurementScopeStatus === "resolving" ? "Checking the branch saved by your ERP workspace…"
       : "Choose your company and branch from Organisation context in the top bar. Your saved branch could not be matched safely, so no purchase records have been opened or changed.";
   useEffect(() => {

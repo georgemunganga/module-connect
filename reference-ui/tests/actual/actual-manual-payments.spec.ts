@@ -47,12 +47,20 @@ async function login(page: Page, role: string, record = '/payments') {
   expect(context.status(), `real Procurement context for ${role}`).toBe(200);
   const scope = await context.json() as { principalId?: string; legalEntityId?: string; workerId?: string | null };
   expect(scope).toMatchObject({ principalId: account.principalId, legalEntityId: f().companyId, workerId: null });
+  const choicesResponse = await page.request.get('/api/core/v1/workspace-context', { failOnStatusCode: false });
+  expect(choicesResponse.status(), 'real Core self-service organisation choices').toBe(200);
+  const choices = await choicesResponse.json() as { principalId?: string;
+    companies?: { id: string; registeredName: string }[] };
+  expect(choices.principalId).toBe(account.principalId);
+  const company = choices.companies?.find(item => item.id === f().companyId);
+  expect(company?.registeredName).toBeTruthy();
   await page.goto(`/procurement/workspace${record}`);
-  if (record.startsWith('/payments')) {
-    await page.getByRole('button', { name: 'Organisation context' }).click();
-    await page.getByRole('button', { name: /All branches/ }).first().click();
-    await page.getByRole('button', { name: 'Organisation context' }).click();
-  }
+  await page.getByRole('button', { name: 'Organisation context' }).click();
+  await page.getByRole('button', {
+    name: `${company!.registeredName}${record.startsWith('/payments') ? ' · All branches' : ''}`,
+    exact: true,
+  }).click();
+  await page.getByRole('button', { name: 'Organisation context' }).click();
 }
 async function mutation(page: Page, method: string, suffix: string, action: () => Promise<unknown>): Promise<Response> {
   const waiting = page.waitForResponse(response => response.request().method() === method
