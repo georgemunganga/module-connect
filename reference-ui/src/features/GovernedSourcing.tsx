@@ -45,7 +45,7 @@ export function GovernedSourcingList({ mode = "worker" }: { mode?: RfqSourceMode
       : listGovernedRfq(legalEntityId, page, search, state, controller.signal, mode)).then(value => { if (!controller.signal.aborted) setData(value); })
       .catch(error => { if (!controller.signal.aborted) setError(message(error)); }); return () => controller.abort();
   }, [legalEntityId, page, search, state, revision, mode, publication, ownerCanRead]);
-  const rows = useMemo(() => (data?.items ?? []).slice().sort((left, right) => {
+  const rows = useMemo<(RfqOwned | PublicationRow)[]>(() => [...(data?.items ?? [])].sort((left, right) => {
     const field = (row: RfqOwned | PublicationRow) => sort === "currency" ? row.currencyCode || "" : sort === "status" ? row.status || row.state : row.number;
     return field(left).localeCompare(field(right)) || left.id.localeCompare(right.id);
   }), [data, sort]);

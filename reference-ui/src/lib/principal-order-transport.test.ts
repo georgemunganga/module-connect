@@ -15,7 +15,7 @@ describe("principal order exact transport",()=>{
     expect(()=>exactJson({}, {releasedGrossAmount:"1e3"})).toThrow();
   });
   it("uses the PO-convert purpose picker with only minimal supplier labels",async()=>{
-    const fetcher=vi.fn(async()=>new Response(JSON.stringify({items:[{id:id(4),number:"SUP-4",displayName:"Approved vendor"}],
+    const fetcher=vi.fn(async(_url:string)=>new Response(JSON.stringify({items:[{id:id(4),number:"SUP-4",displayName:"Approved vendor"}],
       candidateTotal:1,page:1,pageSize:25,nextPage:null,previewOnly:true}),{status:200,headers:{"Content-Type":"application/json"}}));
     vi.stubGlobal("fetch",fetcher);
     const result=await listPrincipalSuppliers(id(5),1,"");expect(result.items[0].displayName).toBe("Approved vendor");

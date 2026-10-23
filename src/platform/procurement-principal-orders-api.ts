@@ -82,6 +82,10 @@ function displayLines(value: unknown): value is PrincipalDisplayLine[] {
     &&typeof line.description==="string"&&typeof line.unitCode==="string"
     &&exact.test(String(line.quantity))&&exact.test(String(line.unitPrice))&&exact.test(String(line.taxAmount)));
 }
+function orderLines(value: unknown): value is PrincipalOrderLine[] {
+  return displayLines(value) && value.every(line => obj(line)
+    && uuid.test(String(line.purchaseRequestId)) && typeof line.allocationStatus === "string");
+}
 export async function listPrincipalOrders(company: string, pageNumber: number, state: string, signal?: AbortSignal): Promise<PrincipalOrderPage> {
   const value = await call(company, `/principal-direct-drafts?page=${pageNumber}&pageSize=25${state ? `&state=${encodeURIComponent(state)}` : ""}`, { signal });
   if (!page(value)) throw invalid(); return value;
@@ -129,9 +133,8 @@ export async function getPrincipalOrder(company: string, id: string, signal?: Ab
   if (!uuid.test(id)) throw invalid();
   const value = await call(company, `/${id}/principal-direct-draft`, { signal });
   if (!summary(value) || value.id !== id || typeof value.supplierDisplayName !== "string"
-    || typeof value.branchDisplayName !== "string" || !displayLines(value.lines)
-    || typeof value.fundingRecorded !== "boolean"
-    || !value.lines.every(row => uuid.test(String(row.purchaseRequestId))&&typeof row.allocationStatus==="string")) throw invalid();
+    || typeof value.branchDisplayName !== "string" || !orderLines(value.lines)
+    || typeof value.fundingRecorded !== "boolean") throw invalid();
   return value as PrincipalOrderDetail;
 }
 export async function getPrincipalFinanceDetail(company: string, id: string, signal?: AbortSignal): Promise<PrincipalFinanceDetail> {

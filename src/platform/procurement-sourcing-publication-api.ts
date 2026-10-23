@@ -149,7 +149,7 @@ export async function getPublication(company: string, eventId: string, signal?: 
     publication: { openingId: body.publication.openingId, coreCaseId: body.publication.coreCaseId,
       caseState: body.publication.caseState, coreCaseVersion: body.publication.coreCaseVersion,
       policyVersionId: body.publication.policyVersionId, policyVersionNumber: body.publication.policyVersionNumber,
-      supplierDeliveryState: "PerInvitation", reviewer: body.publication.reviewer, assignments } };
+      supplierDeliveryState: "PerInvitation", reviewer: body.publication.reviewer === true, assignments } };
 }
 export async function searchPublicationSuppliers(company: string, eventId: string, q: string, page = 1, signal?: AbortSignal): Promise<{ items: SupplierChoice[]; total: number; pageSize: number }> {
   if (!id(eventId) || q.trim().length < 2 || q.length > 100 || !positive(page) || page > 20) throw invalid();

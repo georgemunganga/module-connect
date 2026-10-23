@@ -41,7 +41,7 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
   const [chosen,setChosen]=useState<PrincipalSource[]>([]),[available,setAvailable]=useState<PrincipalSource[]>([]);
   const [vendors,setVendors]=useState<PrincipalSupplier[]>([]),[vendorSearch,setVendorSearch]=useState(""),
     [vendorPage,setVendorPage]=useState(1),[vendorNext,setVendorNext]=useState<number|null>(null);
-  const [page,setPage]=useState(1),[total,setTotal]=useState(0),[loading,setLoading]=useState(true);
+  const [page,setPage]=useState(1),[sourceTotal,setSourceTotal]=useState(0),[loading,setLoading]=useState(true);
   const [error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
   const [pending,setPending]=useState<PrincipalLocator|null>(null);
   const lock=useRef(false),alive=useRef(true);
@@ -50,7 +50,7 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
     return()=>{alive.current=false;};},[scopeKey]);
   useEffect(()=>{if(id || !context.permissions.includes("procurement-po-convert"))return;
     const abort=new AbortController();setLoading(true);setError("");
-    listPrincipalSources(company,page,abort.signal).then(result=>{if(!abort.signal.aborted){setAvailable(result.items);setTotal(result.candidateTotal);}})
+    listPrincipalSources(company,page,abort.signal).then(result=>{if(!abort.signal.aborted){setAvailable(result.items);setSourceTotal(result.candidateTotal);}})
       .catch(cause=>{if(!abort.signal.aborted)setError(errorText(cause));})
       .finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();},[company,page,id,context.permissions]);
@@ -116,7 +116,7 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
               <p className="text-sm text-muted-foreground">{source.canSelect?`${source.availableQuantity} ${source.unitCode} available · ${source.currencyCode} ${source.approvedUnitEstimate} each`:"Unavailable for this order"}</p></div>
             <Button type="button" variant="secondary" disabled={!source.canSelect||chosen.some(row=>row.purchaseRequestLineId===source.purchaseRequestLineId)} onClick={()=>select(source)}>Add line</Button>
           </div>):<p className="text-sm text-muted-foreground">No approved direct-purchase lines are available in this company and branch.</p>}
-          <div className="flex gap-3"><Button type="button" variant="secondary" disabled={page===1} onClick={()=>setPage(page-1)}>Previous</Button><Button type="button" variant="secondary" disabled={page*25>=total} onClick={()=>setPage(page+1)}>More</Button></div>
+          <div className="flex gap-3"><Button type="button" variant="secondary" disabled={page===1} onClick={()=>setPage(page-1)}>Previous</Button><Button type="button" variant="secondary" disabled={page*25>=sourceTotal} onClick={()=>setPage(page+1)}>More</Button></div>
         </section>
         <section aria-label="Vendor" className="-mx-5 bg-muted/50 px-5 py-5 sm:-mx-8 sm:px-8">
           <div className="grid max-w-3xl gap-4 sm:grid-cols-2">

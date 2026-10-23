@@ -133,7 +133,7 @@ function PrincipalDetail({id,view,assignmentId,scopeKey}:{id:string;view:View;as
     catch(cause){if(alive.current)setError(`${errorText(cause)} Keep command reference ${pending.key}.`);}
     finally{lock.current=false;if(alive.current)setBusy(false);}}
   if(loading)return <div className="p-5 sm:p-8" role="status">Loading order…</div>;
-  if(!data)return <div className="p-5 sm:p-8"><p role="alert">{error||"This order is unavailable in your current company and branch."}</p>
+  if(!data||!record)return <div className="p-5 sm:p-8"><p role="alert">{error||"This order is unavailable in your current company and branch."}</p>
     <Link to="/purchase-orders?workflow=principal">Back to purchase orders</Link></div>;
   return <div className="min-h-[calc(100dvh-5rem)] bg-background">
     <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-8"><div className="min-w-0">
