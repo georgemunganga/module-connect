@@ -103,7 +103,9 @@ published `PURCHASE_REQUEST` rule, active `PRIVATE_P25` category, independently
 activated spending authority, and six synthetic workerless Core users. It does
 not publish a policy or grant authority in the browser. The real configuration
 maker reads the effective policy; the maker creates and submits a categorized
-request; the separate checker records exact Finance evidence through the UI;
+request; the configuration maker, with a current separate buyer check grant,
+uses the real "Check buying rules" action to persist a matched evaluation;
+the separate checker records exact Finance evidence through the UI;
 the maker opens the approval; and the named Core approver decides through the
 UI. Request and decision are read again after reload.
 

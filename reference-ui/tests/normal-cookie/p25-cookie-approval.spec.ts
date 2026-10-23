@@ -109,7 +109,10 @@ test('normal cookie users complete a real Core-only purchase request approval', 
   const contexts: BrowserContext[] = [];
   try {
     const configuration = await browser.newContext({ baseURL: proxy.origin, ignoreHTTPSErrors: true }); contexts.push(configuration);
-    await login(configuration, fixture.configurationMakerPrincipalId);
+    const configurationScope = await login(configuration, fixture.configurationMakerPrincipalId);
+    expect(configurationScope.permissions).toEqual(expect.arrayContaining([
+      'procurement-configuration-read', 'procurement-request-read', 'procurement-policy-evaluate',
+    ]));
     const effective = await api(() => configuration.request.get(
       '/api/procurement/v1/configuration/policies/effective?key=PURCHASE_REQUEST', { headers: selection }));
     expect(effective.status()).toBe(200);
@@ -145,6 +148,18 @@ test('normal cookie users complete a real Core-only purchase request approval', 
       makerPage.getByRole('button', { name: 'Send for review', exact: true }).click());
     expect(submitted.body.status).toBe('Submitted');
     evidence.submittedVersion = submitted.body.version; retain();
+
+    step = 'independent-buying-rule-check';
+    const policyPage = await pageFor(configuration, '/procurement-requests', 'Purchase Requests');
+    const policyRow = policyPage.getByRole('row').filter({ hasText: purpose });
+    await expect(policyRow).toBeVisible();
+    const evaluated = await mutation(policyPage, 'POST', `/requests/${requestId}/policy-evaluations`, () =>
+      policyRow.getByRole('button', { name: 'Check buying rules' }).click());
+    expect(evaluated.body.requestId).toBe(requestId);
+    expect(evaluated.body.requestVersion).toBe(submitted.body.version);
+    expect(evaluated.body.status).toBe('Matched');
+    expect(guid(evaluated.body.evaluation?.id)).toBe(true);
+    evidence.policyEvaluationId = evaluated.body.evaluation.id; retain();
 
     step = 'independent-finance-check';
     const checker = await browser.newContext({ baseURL: proxy.origin, ignoreHTTPSErrors: true }); contexts.push(checker);
