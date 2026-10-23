@@ -296,10 +296,10 @@ function RequestEditorRecord() {
           <thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th><th aria-label="Actions" /></tr></thead>
           <tbody>{draft.lines.flatMap((line, index) => [
             <tr key={`${line.id ?? index}-main`}>
-              <td><Field label={`Item or service ${index + 1}`}><Input required readOnly={Boolean(line.catalogEntryId)} maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field></td>
-              <td><Field label="Quantity"><Input required inputMode="decimal" value={line.requestedQuantity} onChange={(event) => lineField(index, "requestedQuantity", event.target.value)} /></Field></td>
-              <td><Field label="Unit"><Input required readOnly={Boolean(line.catalogEntryId)} value={line.unitCode} onChange={(event) => lineField(index, "unitCode", event.target.value)} /></Field></td>
-              <td><Field label="Estimated unit price"><Input required readOnly={Boolean(line.catalogEntryId)} inputMode="decimal" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", event.target.value)} /></Field></td>
+              <td><Field label={`Item or service ${index + 1}`} className="relative [&>span:first-child]:sr-only"><Input required readOnly={Boolean(line.catalogEntryId)} maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field></td>
+              <td><Field label="Quantity" className="relative [&>span:first-child]:sr-only"><Input required inputMode="decimal" value={line.requestedQuantity} onChange={(event) => lineField(index, "requestedQuantity", event.target.value)} /></Field></td>
+              <td><Field label="Unit" className="relative [&>span:first-child]:sr-only"><Input required readOnly={Boolean(line.catalogEntryId)} value={line.unitCode} onChange={(event) => lineField(index, "unitCode", event.target.value)} /></Field></td>
+              <td><Field label="Estimated unit price" className="relative [&>span:first-child]:sr-only"><Input required readOnly={Boolean(line.catalogEntryId)} inputMode="decimal" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", event.target.value)} /></Field></td>
               <td>{draft.lines.length > 1 && <Button variant="ghost" aria-label={`Remove line ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((_, at) => at !== index) }))}><Trash2 size={16} /></Button>}</td>
             </tr>,
             <tr key={`${line.id ?? index}-details`}><td colSpan={5}><div className="grid gap-3 sm:grid-cols-3">
@@ -388,7 +388,7 @@ function RequestDetailRecord() {
     && (Boolean(record.approvalInstanceRef) || ["Pending", "Returned", "ReturnPendingFinanceRelease"].includes(record.approvalState || "")));
   return <div className="min-h-[calc(100dvh-5rem)] bg-background">
     <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-5 py-4 sm:px-8">
-      <div className="min-w-0"><Link to="/requests" className="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground"><ArrowLeft size={14} />My Requests</Link><p className="text-xs text-muted-foreground">{record.number} · {record.currencyCode}</p><h1 className="break-words text-2xl font-semibold">{record.purpose}</h1></div>
+      <div className="min-w-0"><Link to="/requests" className="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground"><ArrowLeft size={14} />My Requests</Link><p className="text-xs text-muted-foreground">{record.number} · {record.currencyCode}</p><h1 title={record.purpose} className="max-w-3xl line-clamp-2 break-words text-2xl font-semibold">{record.purpose}</h1></div>
       <div className="flex items-center gap-3"><Badge>{record.status}</Badge>{permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Link to={`/requests/${record.id}/edit`} onClick={event => { if (busy) event.preventDefault(); }}><Button variant="secondary" disabled={busy}>Edit request</Button></Link>}</div>
     </header>
     <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "items", label: `Items (${activeLines.length})` }, { key: "related", label: "Related" }, { key: "comments", label: "Comments" }, { key: "history", label: "History" }]} active={tab} onChange={setTab} />
@@ -396,7 +396,7 @@ function RequestDetailRecord() {
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     {busy && <p role="status" className="text-sm text-muted-foreground">Saving request…</p>}
     <div hidden={tab !== "overview"} inert={tab !== "overview"} className="space-y-5">
-    <DetailSection title="Request Overview"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><DetailValue label="Request" value={record.number} /><DetailValue label="Currency" value={record.currencyCode} /><DetailValue label="Needed by" value={record.neededBy} /><DetailValue label="Cost centre" value={record.costCenterRef} /><DetailValue label="Project" value={record.projectRef} /><DetailValue label="Revision" value={record.version} /></dl></DetailSection>
+    <DetailSection title="Request Overview"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><DetailValue label="Request" value={record.number} /><DetailValue label="What do you need?" value={record.purpose} /><DetailValue label="Currency" value={record.currencyCode} /><DetailValue label="Needed by" value={record.neededBy} /><DetailValue label="Cost centre" value={record.costCenterRef} /><DetailValue label="Project" value={record.projectRef} /><DetailValue label="Revision" value={record.version} /></dl></DetailSection>
 
     {record.status === "Submitted" && !waitingForRelease && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">
       <p>Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>

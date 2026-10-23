@@ -35,13 +35,13 @@ test("original request editor frame retains catalog and line fields with guarded
 });
 test("request detail retains original tabs and preserves an entered withdrawal reason across them", async ({ page }) => {
   await mockErp(page, { seedDraft: true });await page.goto(`/procurement/workspace/requests/${requestId}`);
-  await page.getByLabel("Reason", { exact: true }).fill("Keep this reason");
+  await page.getByLabel(/^Reason/).fill("Keep this reason");
   await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Items / Line Details", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "History", exact: true }).click();
   await expect(page.getByText("Detailed activity history is not connected to this view yet.", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Overview", exact: true }).click();
-  await expect(page.getByLabel("Reason", { exact: true })).toHaveValue("Keep this reason");
+  await expect(page.getByLabel(/^Reason/)).toHaveValue("Keep this reason");
 });
 for (const code of [408, 429, 499]) test(`request save HTTP ${code} keeps the frozen draft and blocks another POST`, async ({ page }) => {
   await mockErp(page);let writes=0;
@@ -63,4 +63,14 @@ for (const width of [1440,390]) for (const view of ["list","editor","detail"]) t
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath(`request-${view}-${width}.png`),fullPage:true});
+});
+
+test("long request titles do not cover the detail workspace", async ({ page }) => {
+  const title = "Long request title ".repeat(50).slice(0, 1000);
+  await mockErp(page, { seedDraft: true, seedPurpose: title });
+  await page.goto(`/procurement/workspace/requests/${requestId}`);
+  const heading = page.getByRole("heading", { name: title, exact: true });
+  await expect(heading).toBeVisible();
+  expect(await heading.evaluate(node => node.getBoundingClientRect().height)).toBeLessThan(100);
+  await expect(page.getByRole("tab", { name: "Overview", exact: true })).toBeVisible();
 });

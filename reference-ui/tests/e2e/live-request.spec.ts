@@ -232,7 +232,7 @@ test("unconfirmed requests create preserves entries and blocks repeat submission
   await page.getByLabel("What do you need?", { exact: true }).fill("Unconfirmed request");
   await page.getByLabel("Item or service 1", { exact: true }).fill("Chair");
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("save result was not confirmed");
+  await expect(page.getByRole("status").filter({ hasText: "save result was not confirmed" })).toContainText("save result was not confirmed");
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
   await expect(page.getByLabel("What do you need?", { exact: true })).toHaveValue("Unconfirmed request");
   await page.getByRole("link", { name: /^Review saved / }).click();

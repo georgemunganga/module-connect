@@ -14,8 +14,8 @@ export const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "requestDraft"]));
 type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
 
-export async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean; oldEditContract?: boolean; missingCatalogExact?: boolean; permissions?: string[]; seedDraft?: boolean } = {}) {
-  let record: RecordValue | null = options.seedDraft ? { id: requestId, number: "PR-001", version: 1, purpose: "Office chairs", status: "Draft", currencyCode: "ZMW", createdAt: "2026-10-18T00:00:00Z", lines: [{ id: lineId, lineNumber: 1, approvalStatus: "Pending", description: "Office chair", unitCode: "each", requestedQuantity: 1, estimatedUnitPrice: 250 }] } : null;
+export async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean; oldEditContract?: boolean; missingCatalogExact?: boolean; permissions?: string[]; seedDraft?: boolean; seedPurpose?: string } = {}) {
+  let record: RecordValue | null = options.seedDraft ? { id: requestId, number: "PR-001", version: 1, purpose: options.seedPurpose || "Office chairs", status: "Draft", currencyCode: "ZMW", createdAt: "2026-10-18T00:00:00Z", lines: [{ id: lineId, lineNumber: 1, approvalStatus: "Pending", description: "Office chair", unitCode: "each", requestedQuantity: 1, estimatedUnitPrice: 250 }] } : null;
   let policyChecked = false;
   let policyBlocked = Boolean(options.blockedPolicy);
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);

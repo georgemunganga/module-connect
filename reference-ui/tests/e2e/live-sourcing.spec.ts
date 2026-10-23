@@ -60,7 +60,8 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
 test("quote request draft persists, can be revised and cancelled", async ({ page }) => {
   await mockErp(page);
   await page.goto("/procurement/workspace/rfqs");
-  await expect(page.getByText("No quote requests yet")).toBeVisible();
+  await expect(page.getByText("No quote requests yet")).toHaveCount(0);
+  await expect(page.getByTestId("erp-record-table")).toHaveCount(0);
   await page.getByRole("link", { name: "New quote request" }).first().click();
   await page.getByLabel("What are you buying?").fill("Office chairs for Lusaka");
   await page.getByLabel("Item or service 1").fill("Office chair");
