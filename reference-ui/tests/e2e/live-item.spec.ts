@@ -182,3 +182,12 @@ test("stale item edit keeps the entered form and active item can be deactivated"
   await expect(page.getByRole("alert")).toContainText("changed");
   await expect(page.getByLabel("Item name")).toHaveValue("Unsaved laptop");
 });
+
+for (const width of [1440, 390]) test(`item detail fits ERP workspace at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 1000 }); await mockErp(page, { activeItem: true });
+  await page.goto(`/procurement/workspace/items/${itemId}`);
+  await expect(page.getByRole("heading", { name: "Purchase Information", exact: true })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: info.outputPath(`item-detail-${width}.png`), fullPage: true });
+});

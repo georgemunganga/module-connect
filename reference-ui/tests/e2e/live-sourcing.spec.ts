@@ -204,3 +204,13 @@ test("actual exported ad hoc editor and detail routes remain legacy and never re
   await expect(page.getByRole("heading", { name: "Ad hoc route proof", exact: true })).toBeVisible();
   await expect(page.getByText("This is an internal draft.", { exact: false })).toHaveCount(0);
 });
+
+for (const width of [1440, 390]) test(`RFQ wizard fits ERP workspace at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 1000 }); await mockErp(page);
+  await page.goto("/procurement/workspace/rfqs/new");
+  await expect(page.getByLabel("Quote request stages")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "New quote request", exact: true })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: info.outputPath(`rfq-wizard-${width}.png`), fullPage: true });
+});
