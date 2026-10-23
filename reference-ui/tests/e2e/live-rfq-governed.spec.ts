@@ -416,5 +416,5 @@ test("principal RFQ detail clears the related tab and old record on branch chang
   }, { company, branch: otherBranch });
   await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Record manual contact" })).toHaveCount(0);
-  await expect(page.getByRole("alert")).toContainText("not available");
+  await expect(page.getByRole("alert")).toContainText("unavailable in your current company or branch");
 });
