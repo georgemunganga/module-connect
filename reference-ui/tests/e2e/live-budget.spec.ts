@@ -27,7 +27,7 @@ async function mockErp(page: Page, canReview: boolean) {
       user: { id: principalId, isActive: true, displayName: "Finance reviewer", email: "finance@example.test", roles: [] } });
     if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1,
       tenantId: "amizo", principalId, organisationWide: true,
-      companies: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power", currencyCode: "ZMW", isDefault: true }],
+      companies: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power", currency: "ZMW", isDefault: true }],
       branches: [{ id: branchId, code: "HQ", name: "Lusaka", legalEntityId: companyId }] });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId,
