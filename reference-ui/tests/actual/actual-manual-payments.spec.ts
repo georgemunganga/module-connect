@@ -140,3 +140,67 @@ test('real cookie roles complete one independently reviewed manual payment', asy
   expect(detail.status()).toBe(200);
   expect((await detail.json() as { request: { status: string } }).request.status).toBe('ConfirmedManually');
 });
+
+test('real policy author and publisher return, revise and publish explicit future payment limits', async ({ page }) => {
+  const settings = '/settings/modules/payments-made/approvals';
+  // Two UTC days ahead leaves publication time to complete even near midnight.
+  const effectiveDay = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
+  await login(page, 'policy_author', settings);
+  await expect(page.getByRole('heading', { name: 'Payments Made settings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add draft' }).click();
+  await page.getByLabel('Effective from (UTC)').fill(effectiveDay);
+  await page.getByLabel('Currency 1').fill('ZMW');
+  await page.getByLabel('Maximum bill amount 1').fill('100.0000');
+  const created = await mutation(page, 'POST', '/configuration/policies', () =>
+    page.getByRole('button', { name: 'Save draft' }).click());
+  const input = created.request().postDataJSON() as { policyKey: string; rulesJson: string };
+  expect(input.policyKey).toBe('MANUAL_PAYMENT_REVIEW');
+  expect(JSON.parse(input.rulesJson)).toMatchObject({ schemaVersion: 1, identitySchemaVersion: 2,
+    approvalType: 'SingleApprover', independentCreatorApprover: true,
+    independentRecorderConfirmer: true, maximumByCurrency: { ZMW: '100.0000' } });
+  const draft = await created.json() as { id: string; version: number; state: string };
+  expect(uuid.test(draft.id)).toBe(true);
+  expect(draft.state).toBe('Draft');
+  const policyId = draft.id;
+  const row = () => page.getByRole('row').filter({ hasText: effectiveDay });
+  await expect(row()).toBeVisible();
+  await row().getByRole('button', { name: 'Send for review' }).click();
+  await page.getByLabel('Reason').fill('Private review of an explicit future limit');
+  const submitted = await mutation(page, 'POST', `/configuration/policies/${policyId}/submit-review`, () =>
+    page.getByRole('button', { name: 'Confirm review' }).click());
+  expect((await submitted.json() as { state: string }).state).toBe('PendingReview');
+
+  await login(page, 'policy_publisher', settings);
+  await expect(row().getByRole('button', { name: 'Return' })).toBeVisible();
+  await row().getByRole('button', { name: 'Return' }).click();
+  await page.getByLabel('Reason').fill('Confirm the final exact amount before publication');
+  const returned = await mutation(page, 'POST', `/configuration/policies/${policyId}/return-for-changes`, () =>
+    page.getByRole('button', { name: 'Confirm return' }).click());
+  expect((await returned.json() as { state: string }).state).toBe('Draft');
+
+  await login(page, 'policy_author', settings);
+  await row().getByRole('button', { name: 'Edit draft' }).click();
+  await expect(page.getByLabel('Maximum bill amount 1')).toHaveValue('100.0000');
+  await page.getByLabel('Maximum bill amount 1').fill('1000.0000');
+  const revised = await mutation(page, 'PUT', `/configuration/policies/${policyId}`, () =>
+    page.getByRole('button', { name: 'Save draft' }).click());
+  expect((await revised.json() as { rulesJson: string }).rulesJson).toContain('"ZMW":"1000.0000"');
+  await row().getByRole('button', { name: 'Send for review' }).click();
+  await page.getByLabel('Reason').fill('Final exact future limit for independent review');
+  const resubmitted = await mutation(page, 'POST', `/configuration/policies/${policyId}/submit-review`, () =>
+    page.getByRole('button', { name: 'Confirm review' }).click());
+  expect((await resubmitted.json() as { state: string }).state).toBe('PendingReview');
+
+  await login(page, 'policy_publisher', settings);
+  await row().getByRole('button', { name: 'Publish' }).click();
+  await page.getByLabel('Reason').fill('Independent publication of explicit future ZMW ceiling');
+  const published = await mutation(page, 'POST', `/configuration/policies/${policyId}/publish`, () =>
+    page.getByRole('button', { name: 'Confirm publish' }).click());
+  expect((await published.json() as { state: string; effectiveFrom: string }).state).toBe('Published');
+  await expect(row().getByText('Published')).toBeVisible();
+  const effective = await page.request.get('/api/procurement/v1/configuration/policies/effective?key=MANUAL_PAYMENT_REVIEW', {
+    headers: { 'X-Shell-Entity': f().companyId }, failOnStatusCode: false });
+  expect(effective.status()).toBe(200);
+  // The policy begins in the future; it is not today's payment authority.
+  expect((await effective.json() as { policy: { id: string } | null }).policy?.id).not.toBe(policyId);
+});
