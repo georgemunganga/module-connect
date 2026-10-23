@@ -96,6 +96,13 @@ describe("Procurement system-user readiness", () => {
     expect(result.capabilities.financeHandoff).toBe(false);
     expect(result.workerId).toBeNull();
   });
+  it.each([undefined, false, true, "true", 1, null])("keeps principal RFQ source drafts off without a real separate capability (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { principalSourcingSourceDrafts: flag, sourcingSourceDrafts: false }));
+    expect(result.capabilities.principalSourcingSourceDrafts).toBe(flag === true);
+    expect(result.capabilities.sourcingSourceDrafts).toBe(false);
+    expect(result.workerId).toBeNull();
+  });
   it("keeps old API principal approvals disabled without replacing legacy availability", async () => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { approvals: true }));
     expect(result.capabilities.principalApprovals).toBe(false);

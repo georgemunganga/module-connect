@@ -14,25 +14,32 @@ export type RfqDetail = { id: string; number: string; title: string; method: str
   originalDraftFingerprint: string; cancellationReason: string | null; lines: { id: string; purchaseRequestId: string; purchaseRequestLineId: string;
     description: string; unitCode: string; categoryCode: string | null; quantity: string; approvedUnitEstimate: string; estimatedValue: string; allocationState: "Reserved" | "Released" }[] };
 export type RfqSelection = { source: RfqSource; quantity: string };
-export type RfqCommand = { operation: "Create" | "Cancel"; key: string; eventId: string | null; body: string };
+export type RfqSourceMode = "worker" | "principal";
+export type RfqCommand = { operation: "Create" | "Cancel"; key: string; eventId: string | null; body: string; mode?: "principal" };
 /** Read-only receipt locator: deliberately has no POST body. */
-export type RfqRecoveryReference = { operation: "Create"; key: string; eventId: null } |
-  { operation: "Cancel"; key: string; eventId: string; expectedEventVersion: number; originalDraftFingerprint: string };
+export type RfqRecoveryReference = { operation: "Create"; key: string; eventId: null; mode?: "principal" } |
+  { operation: "Cancel"; key: string; eventId: string; expectedEventVersion: number; originalDraftFingerprint: string; mode?: "principal" };
 export function validateRfqRecoveryReference(value: unknown): RfqRecoveryReference {
   if (!object(value) || !id(value.key)) throw invalid();
   const keys = Object.keys(value).sort().join(",");
-  if (value.operation === "Create" && value.eventId === null && keys === "eventId,key,operation")
-    return { operation: "Create", key: value.key, eventId: null };
+  const principal = value.mode === "principal" && keys.includes("mode");
+  if (value.mode !== undefined && !principal) throw invalid();
+  if (value.operation === "Create" && value.eventId === null &&
+    keys === (principal ? "eventId,key,mode,operation" : "eventId,key,operation"))
+    return principal ? { operation: "Create", key: value.key, eventId: null, mode: "principal" }
+      : { operation: "Create", key: value.key, eventId: null };
   if (value.operation === "Cancel" && id(value.eventId) && positive(value.expectedEventVersion) && sha(value.originalDraftFingerprint)
-    && keys === "eventId,expectedEventVersion,key,operation,originalDraftFingerprint")
-    return { operation: "Cancel", key: value.key, eventId: value.eventId, expectedEventVersion: value.expectedEventVersion, originalDraftFingerprint: value.originalDraftFingerprint };
+    && keys === (principal ? "eventId,expectedEventVersion,key,mode,operation,originalDraftFingerprint" : "eventId,expectedEventVersion,key,operation,originalDraftFingerprint"))
+    return principal ? { operation: "Cancel", key: value.key, eventId: value.eventId, expectedEventVersion: value.expectedEventVersion, originalDraftFingerprint: value.originalDraftFingerprint, mode: "principal" }
+      : { operation: "Cancel", key: value.key, eventId: value.eventId, expectedEventVersion: value.expectedEventVersion, originalDraftFingerprint: value.originalDraftFingerprint };
   throw invalid();
 }
 export function rfqRecoveryReference(command: RfqCommand): RfqRecoveryReference {
   validCommand(command);
-  return validateRfqRecoveryReference(command.operation === "Create" ? { operation: command.operation, key: command.key, eventId: null }
+  const mode = command.mode === "principal" ? { mode: "principal" as const } : {};
+  return validateRfqRecoveryReference(command.operation === "Create" ? { operation: command.operation, key: command.key, eventId: null, ...mode }
     : { operation: command.operation, key: command.key, eventId: command.eventId,
-      expectedEventVersion: JSON.parse(command.body).expectedEventVersion, originalDraftFingerprint: JSON.parse(command.body).originalDraftFingerprint });
+      expectedEventVersion: JSON.parse(command.body).expectedEventVersion, originalDraftFingerprint: JSON.parse(command.body).originalDraftFingerprint, ...mode });
 }
 export type RfqReply = { eventId: string; number: string; status: "Draft" | "Cancelled"; version: number; originalDraftFingerprint: string; recordedHistoricalResult: true };
 export class RfqExecutionError extends Error { constructor(readonly status: number, message: string) { super(message); } }
@@ -66,6 +73,10 @@ async function request(company: string, path: string, init: RequestInit = {}): P
             : "Quote requests are not ready, or the save could not be confirmed. Check the saved result before continuing.");
   try { return await response.json(); } catch { throw invalid(); }
 }
+function route(mode: RfqSourceMode, worker: string, principal: string): string {
+  if (mode !== "worker" && mode !== "principal") throw invalid();
+  return mode === "principal" ? principal : worker;
+}
 function query(page: number, q: string) {
   if (!positive(page) || page > 100000 || q.length > 100 || /[\x00-\x1f\x7f]/.test(q)) throw invalid();
   return `?page=${page}&pageSize=25${q ? `&q=${encodeURIComponent(q)}` : ""}`;
@@ -92,15 +103,15 @@ function sourceRow(row: unknown): RfqSource {
     availableQuantity: row.availableQuantity, approvedUnitEstimate: row.approvedUnitEstimate, currencyCode: row.currencyCode,
     minimumQuoteCount: row.minimumQuoteCount, sourceSubmissionId: row.sourceSubmissionId, sourceCaseId: row.sourceCaseId, methodId: row.methodId, methodRevision: row.methodRevision };
 }
-export async function listRfqSources(company: string, page = 1, q = "", signal?: AbortSignal): Promise<RfqSourcePage> {
-  const body = await request(company, `/approved-sources${query(page, q)}`, { signal }); pageBody(body, page);
+export async function listRfqSources(company: string, page = 1, q = "", signal?: AbortSignal, mode: RfqSourceMode = "worker"): Promise<RfqSourcePage> {
+  const body = await request(company, `${route(mode, "/approved-sources", "/approved-principal-sources")}${query(page, q)}`, { signal }); pageBody(body, page);
   if (!int(body.candidateTotal) || body.candidateTotal < body.items.length || body.eligibilityMeaning !== "CurrentPreviewOnly") throw invalid();
   const items = body.items.map(sourceRow); if (new Set(items.map(x => x.purchaseRequestLineId)).size !== items.length) throw invalid();
   return { items, candidateTotal: body.candidateTotal, page, pageSize: body.pageSize };
 }
-export async function listGovernedRfq(company: string, page = 1, q = "", state = "", signal?: AbortSignal): Promise<RfqOwnedPage> {
+export async function listGovernedRfq(company: string, page = 1, q = "", state = "", signal?: AbortSignal, mode: RfqSourceMode = "worker"): Promise<RfqOwnedPage> {
   if (state !== "" && state !== "Draft" && state !== "Cancelled") throw invalid();
-  const body = await request(company, `/source-drafts${query(page, q)}${state ? `&state=${state}` : ""}`, { signal }); pageBody(body, page);
+  const body = await request(company, `${route(mode, "/source-drafts", "/principal-source-drafts")}${query(page, q)}${state ? `&state=${state}` : ""}`, { signal }); pageBody(body, page);
   if (!int(body.total) || body.total < body.items.length) throw invalid();
   const items = body.items.map((row): RfqOwned => {
     if (!object(row) || !id(row.id) || !text(row.number) || row.canPublish !== false) throw invalid();
@@ -112,8 +123,8 @@ export async function listGovernedRfq(company: string, page = 1, q = "", state =
   });
   return { items, total: body.total, page, pageSize: body.pageSize };
 }
-export async function getGovernedRfq(company: string, eventId: string, signal?: AbortSignal): Promise<RfqDetail> {
-  if (!id(eventId)) throw invalid(); const body = await request(company, `/${eventId}/source-draft`, { signal });
+export async function getGovernedRfq(company: string, eventId: string, signal?: AbortSignal, mode: RfqSourceMode = "worker"): Promise<RfqDetail> {
+  if (!id(eventId)) throw invalid(); const body = await request(company, route(mode, `/${eventId}/source-draft`, `/${eventId}/principal-source-draft`), { signal });
   if (!object(body) || body.id !== eventId || !text(body.number) || !text(body.title) || !text(body.method) || !text(body.currencyCode)
     || !(body.status === "Draft" || body.status === "Cancelled") || !positive(body.version) || !sha(body.originalDraftFingerprint)
     || !(body.cancellationReason === null || text(body.cancellationReason)) || body.canPublish !== false
@@ -130,7 +141,8 @@ export async function getGovernedRfq(company: string, eventId: string, signal?: 
   return { id: eventId, number: body.number, title: body.title, method: body.method, currencyCode: body.currencyCode, status: body.status,
     version: body.version, originalDraftFingerprint: body.originalDraftFingerprint, cancellationReason: body.cancellationReason, lines };
 }
-export function createRfqCommand(title: string, selections: readonly RfqSelection[], key: string): RfqCommand {
+export function createRfqCommand(title: string, selections: readonly RfqSelection[], key: string, mode: RfqSourceMode = "worker"): RfqCommand {
+  route(mode, "", "");
   const name = title.trim().replace(/\s+/g, " ");
   if (!id(key) || !name || name.length > 200 || selections.length < 1 || selections.length > 200
     || new Set(selections.map(x => x.source.purchaseRequestLineId)).size !== selections.length) throw invalid();
@@ -143,12 +155,13 @@ export function createRfqCommand(title: string, selections: readonly RfqSelectio
   });
   if (selections.some(x => x.source.currencyCode !== selections[0].source.currencyCode || x.source.branchRef !== selections[0].source.branchRef)
     || sources.some(x => sources.some(y => x.purchaseRequestId === y.purchaseRequestId && x.expectedRequestVersion !== y.expectedRequestVersion))) throw invalid();
-  return { operation: "Create", key, eventId: null, body: JSON.stringify({ title: name, sources }) };
+  return { operation: "Create", key, eventId: null, body: JSON.stringify({ title: name, sources }), ...(mode === "principal" ? { mode } : {}) };
 }
-export function cancelRfqCommand(record: RfqDetail, reason: string, key: string): RfqCommand {
+export function cancelRfqCommand(record: RfqDetail, reason: string, key: string, mode: RfqSourceMode = "worker"): RfqCommand {
+  route(mode, "", "");
   const clean = reason.trim().replace(/\s+/g, " ");
   if (!id(key) || !id(record.id) || record.status !== "Draft" || !positive(record.version) || !sha(record.originalDraftFingerprint) || !clean || clean.length > 2000) throw invalid();
-  return { operation: "Cancel", key, eventId: record.id, body: JSON.stringify({ expectedEventVersion: record.version, originalDraftFingerprint: record.originalDraftFingerprint, reason: clean }) };
+  return { operation: "Cancel", key, eventId: record.id, body: JSON.stringify({ expectedEventVersion: record.version, originalDraftFingerprint: record.originalDraftFingerprint, reason: clean }), ...(mode === "principal" ? { mode } : {}) };
 }
 function response(body: unknown, command: RfqRecoveryReference): RfqReply {
   if (!object(body) || !id(body.eventId) || !text(body.number) || body.commandKey !== command.key || !positive(body.version) || !sha(body.originalDraftFingerprint)
@@ -161,18 +174,22 @@ function response(body: unknown, command: RfqRecoveryReference): RfqReply {
 }
 function validCommand(command: RfqCommand) {
   if (!id(command.key) || !(command.operation === "Create" || command.operation === "Cancel")
+    || command.mode !== undefined && command.mode !== "principal"
     || (command.operation === "Create" ? command.eventId !== null : !id(command.eventId))
     || !text(command.body) || command.body.length > 1048576) throw invalid();
 }
 export async function sendRfqCommand(company: string, command: RfqCommand): Promise<RfqReply> {
   const reference = rfqRecoveryReference(command);
-  const body = await request(company, command.operation === "Create" ? "/from-approved-sources" : `/${command.eventId}/source-cancel`,
+  const mode = command.mode ?? "worker";
+  const body = await request(company, command.operation === "Create" ? route(mode, "/from-approved-sources", "/from-approved-principal-sources")
+    : route(mode, `/${command.eventId}/source-cancel`, `/${command.eventId}/principal-source-cancel`),
     { method: "POST", headers: { "Idempotency-Key": command.key }, body: command.body });
   return response(body, reference);
 }
 export async function recoverRfqCommand(company: string, reference: RfqRecoveryReference | RfqCommand): Promise<RfqReply> {
   const command = validateRfqRecoveryReference("body" in reference ? rfqRecoveryReference(reference) : reference);
-  const body = await request(company, `/command-receipts/${command.operation}/${command.key}`);
+  const body = await request(company, route(command.mode ?? "worker", `/command-receipts/${command.operation}/${command.key}`,
+    `/principal-command-receipts/${command.operation}/${command.key}`));
   if (!object(body) || body.operation !== command.operation || body.commandKey !== command.key || body.recordedHistoricalResult !== true
     || body.canPublish !== false || body.originalStatusCode !== (command.operation === "Create" ? 201 : 200) || !text(body.responseJson) || body.responseJson.length > 1048576) throw invalid();
   let parsed: unknown; try { parsed = JSON.parse(body.responseJson); } catch { throw invalid(); }

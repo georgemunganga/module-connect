@@ -15,6 +15,7 @@ import {
   listOwnSourcingDrafts, updateOwnSourcingDraft,
   type SourcingDetail, type SourcingDraft, type SourcingLineDraft, type SourcingPage,
 } from "../../../src/platform/procurement-sourcing-api";
+import type { RfqSourceMode } from "../../../src/platform/procurement-sourcing-execution-api";
 
 const emptyLine = (): SourcingLineDraft => ({ description: "", unitCode: "each", quantity: 1 });
 const message = (error: unknown) => error instanceof Error ? error.message : "The quote action failed. Try again.";
@@ -34,24 +35,31 @@ function iso(value: string) { return value ? new Date(value).toISOString() : nul
 /** One reactive context boundary clears both governed and ad-hoc surfaces immediately. */
 function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
   const company = useCompany(); const { selection, authEpoch } = useErpShell(); const { id = "" } = useParams();
-  const [query] = useSearchParams(); const governed = query.get("source") === "approved";
+  const [query] = useSearchParams();
+  const source = query.get("source");
+  const principalDefault = source === null && company.capabilities.principalSourcingSourceDrafts
+    && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts;
+  const governed = source === "approved" || source === "principal-approved" || principalDefault;
+  const mode: RfqSourceMode = source === "principal-approved" || principalDefault ? "principal" : "worker";
   const key = JSON.stringify([authEpoch, company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
-    company.principalId, company.permissions, company.capabilities, governed, view, id]);
-  return <SourcingPageContent key={key} view={view} governed={governed} id={id} />;
+    company.principalId, company.permissions, company.capabilities, governed, mode, view, id]);
+  return <SourcingPageContent key={key} view={view} governed={governed} mode={mode} id={id} />;
 }
-function SourcingPageContent({ view, governed, id }: { view: "list" | "editor" | "detail"; governed: boolean; id: string }) {
+function SourcingPageContent({ view, governed, mode, id }: { view: "list" | "editor" | "detail"; governed: boolean; mode: RfqSourceMode; id: string }) {
   const { capabilities, permissions } = useCompany();
   const canConvert = permissions.includes("procurement-sourcing-convert");
   const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel");
-  const enabled = capabilities.sourcingSourceDrafts === true;
+  const enabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
+  const anyGoverned = capabilities.sourcingSourceDrafts || capabilities.principalSourcingSourceDrafts;
   return <>
-    {view === "list" && enabled && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">
-      <Link to="/rfqs?source=approved"><Button variant={governed ? "primary" : "secondary"}>From approved requests</Button></Link>
+    {view === "list" && anyGoverned && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">
+      {capabilities.principalSourcingSourceDrafts && <Link to="/rfqs?source=principal-approved"><Button variant={governed && mode === "principal" ? "primary" : "secondary"}>From approved requests</Button></Link>}
+      {capabilities.sourcingSourceDrafts && <Link to="/rfqs?source=approved"><Button variant={governed && mode === "worker" ? "primary" : "secondary"}>{capabilities.principalSourcingSourceDrafts ? "Earlier approved request drafts" : "From approved requests"}</Button></Link>}
       {capabilities.sourcingDraft && <Link to="/rfqs"><Button variant={!governed ? "primary" : "secondary"}>Ad hoc drafts</Button></Link>}
     </div>}
     {governed ? !enabled || !canReadGoverned || view === "editor" && (!canConvert || Boolean(id))
       ? <div className="p-5 sm:p-8" role="alert">This quote action is not available with your current access. <Link to="/rfqs">Back to quote requests</Link></div>
-      : view === "list" ? <GovernedSourcingList /> : view === "editor" ? <GovernedSourcingCreate /> : <GovernedSourcingDetail id={id} />
+      : view === "list" ? <GovernedSourcingList mode={mode} /> : view === "editor" ? <GovernedSourcingCreate mode={mode} /> : <GovernedSourcingDetail id={id} mode={mode} />
       : view === "editor" && (!permissions.includes(id ? "procurement-sourcing-edit" : "procurement-sourcing-create"))
         ? <div className="p-5 sm:p-8" role="alert">You do not have access to change this quote draft.</div>
         : !capabilities.sourcingDraft ? <div className="p-5 sm:p-8" role="status">Ad hoc quote drafts are not available yet.</div>

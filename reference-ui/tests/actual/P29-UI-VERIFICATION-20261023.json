@@ -1,0 +1,80 @@
+{
+  "status": "ACCEPTED_PRIVATE_NORMAL_COOKIE_RFQ_DRAFT_UI_AND_OWNER",
+  "applicationSource": "438c635aa9822e6bd69bdd14ca9c40e003d6a827",
+  "tests": 70,
+  "files": 3,
+  "failed": 0,
+  "scope": [
+    "RFQ API contract mode dispatch",
+    "worker/principal command journal isolation",
+    "capability absent/default false"
+  ],
+  "logPath": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run01/tests.log",
+  "logSha256": "2da00a02e4ce96553f22c5722f1fbad14d556eff21f08c8b7a7ac52734d01390",
+  "typescriptBuildPassed": true,
+  "realApiBrowserPassed": false,
+  "visualParityVerified": false,
+  "productionDeployed": false,
+  "remaining": [
+    "Paired source merge and production release",
+    "Supplier publication/quotations/award are separate successor milestones"
+  ],
+  "uiTests": 461,
+  "uiTestFiles": 49,
+  "stagedBuildPassed": true,
+  "applicationBuildSource": "08015a9b22bf3153a6c3e4b5ea7f660e7fe57e35",
+  "mockFullRun": {
+    "passed": 14,
+    "failed": 1,
+    "scope": "Retained unavailable-gate assertion expectedalert; page correctlyblocked saving"
+  },
+  "mockFocusedCorrection": {
+    "passed": 1,
+    "failed": 0,
+    "source": "d26406f",
+    "scope": "Correct shared unavailable UI, no create button/source calls"
+  },
+  "evidence": [
+    {
+      "path": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run02/result.json",
+      "sha256": "df35c81321ff79ac1a10d29ae82dbe2a0cb90abed453a94a1f8549095c3627da"
+    },
+    {
+      "path": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run02/mock-result.json",
+      "sha256": "272136cad31413ef9434c5e62adbef30ea1add2bf69074b68df1a66ed27dd90b"
+    },
+    {
+      "path": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run02/mock-followup/result.json",
+      "sha256": "e1f9448dd718cb9f07343806223365b3ec8241f9c214fc0ed00f8aa68d0b775b"
+    },
+    {
+      "path": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run02/staged-assets.json",
+      "sha256": "0cd3d2a7e6b13b2913530cb0f2e893cd01599dd2c447de1e5e8f151d1e2e35c8"
+    }
+  ],
+  "normalCookie": {
+    "applicationStagedBuildSource": "08015a9",
+    "browserSource": "1cf87ec",
+    "passed": 1,
+    "retries": 0,
+    "normalPasswordAndSessionCookie": true,
+    "noPrivateIdentityHeader": true,
+    "createReloadCancelReload": true,
+    "browserEvidence": {
+      "path": "/home/amizo/erp-backups/procurement-p29-normal-cookie-20261023_run05/p29-browser-result.private.json",
+      "sha256": "88374e59d0d12e85a00bbbbe355d9be5e980f606b64e7b190528a9cc2d0060a3"
+    },
+    "ownerEvidence": {
+      "path": "/home/amizo/erp-backups/procurement-p29-normal-cookie-20261023_run05/p29-owner-after-browser.private.json",
+      "sha256": "07b82268b6ad75c5cda24b22e9756a9e86c321c6e9095954e551c5f9a0365b97"
+    },
+    "originalBaselineAndBrowserResultsUnmodified": true,
+    "erpAcceptance": "docs/procurement/release/P29-ACCEPTANCE-20261023.json",
+    "productionTouched": false
+  },
+  "retainedRealBrowserFailures": [
+    "Native03 final readback failed after actual browser create/cancel; retained as failed",
+    "Native04 reload assertion timed out before readiness metadata; retained as failed",
+    "Native05 owner verifier original-maker comparison corrected under exact reviewed capture-compatible predecessor plus AST fingerprint; original prebrowser baseline retained"
+  ]
+}

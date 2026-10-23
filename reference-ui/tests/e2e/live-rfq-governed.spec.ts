@@ -7,7 +7,7 @@ const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
 type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
-async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean } = {}) {
+async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean } = {}) {
   const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
   let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false, status = "Draft", version = 1, selected: Selection[] = [], exists = Boolean(options.seed);
   const sources = [lineA, lineB].map((id, at) => ({ purchaseRequestId: at ? prB : prA, purchaseRequestLineId: id, requestNumber: `PR-${at + 1}`,
@@ -25,36 +25,45 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method();
     const json = (body: unknown, code = 200) => route.fulfill({ status: code, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.pathname === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_officer"] } });
+    if (url.pathname === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_officer"] } });
+    if (url.pathname === "/api/core/v1/workspace-context") return json({ schemaVersion: 1,
+      tenantId: "amizo", principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organisationWide: true,
+      companies: [{ id: company, code: "AMIZO", registeredName: "Amizo Power", currency: "ZMW", isDefault: true }],
+      branches: [{ id: branch, code: "HQ", name: "Lusaka", legalEntityId: company },
+        { id: otherBranch, code: "OTHER", name: "Other branch", legalEntityId: company }] });
     if (url.pathname === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: worker,
+    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: options.principal ? null : worker,
       permissions: ["procurement-access", ...(options.deny ? [] : ["procurement-sourcing-convert", "procurement-sourcing-cancel"])],
       company: { id: company, name: "Amizo Power", code: "AMIZO", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
       capabilities: { vendorDraft: true, itemDraft: true, requestDraft: true, approvals: false, sourcing: false, contracts: false, orders: false,
         receiving: false, invoiceIntake: false, invoiceValidation: false, financeHandoff: false, supplierPortal: false, planningDraft: true,
-        configurationDraft: true, contractDraft: true, sourcingDraft: true, ...(options.absent ? {} : { sourcingSourceDrafts: true }) } });
+        configurationDraft: true, contractDraft: true, sourcingDraft: !options.principal,
+        ...(options.principal ? { principalSourcingSourceDrafts: !options.principalUnavailable, sourcingSourceDrafts: false }
+          : options.absent ? {} : { sourcingSourceDrafts: true }) } });
     if (url.pathname.startsWith("/api/procurement/v1/sourcing")) {
       calls.push({ method, path: url.pathname, body: method === "POST" ? request.postDataJSON() : null, key: request.headers()["idempotency-key"] });
+      if (options.principal && !url.pathname.includes("principal-") && url.pathname !== "/api/procurement/v1/sourcing")
+        return json({ message: "Earlier worker workflow is unavailable" }, 404);
       if (request.headers()["x-shell-location"] === otherBranch) return json({ message: "Unavailable in this branch" }, 404);
-      if (url.pathname.endsWith("/approved-sources")) return json({ items: sources, candidateTotal: 2, page: 1, pageSize: 25, eligibilityMeaning: "CurrentPreviewOnly", canPublish: false });
-      if (url.pathname.endsWith("/source-drafts")) return json({ items: exists ? [{ ...record(), state: "VerifiedRetainedDraft" }] : [], total: exists ? 1 : 0, page: 1, pageSize: 25, canPublish: false });
-      if (url.pathname.endsWith("/from-approved-sources")) {
+      if (url.pathname.endsWith(options.principal ? "/approved-principal-sources" : "/approved-sources")) return json({ items: sources, candidateTotal: 2, page: 1, pageSize: 25, eligibilityMeaning: "CurrentPreviewOnly", canPublish: false });
+      if (url.pathname.endsWith(options.principal ? "/principal-source-drafts" : "/source-drafts")) return json({ items: exists ? [{ ...record(), state: "VerifiedRetainedDraft" }] : [], total: exists ? 1 : 0, page: 1, pageSize: 25, canPublish: false });
+      if (url.pathname.endsWith(options.principal ? "/from-approved-principal-sources" : "/from-approved-sources")) {
         const body = request.postDataJSON() as { sources: Selection[] }; selected = body.sources; exists = true;
         const saved = { eventId: event, number: "RF-1", status, version, originalDraftFingerprint: "a".repeat(64), commandKey: request.headers()["idempotency-key"],
           recordedHistoricalResult: true, canPublish: false, supplierDeliveryState: "NotStarted", financeReservationChanged: false };
         receipts.set(`Create/${saved.commandKey}`, saved);
         if (options.loseCreate && !lost) { lost = true; return route.abort("failed"); } return json(saved, 201);
       }
-      if (url.pathname.includes("/command-receipts/")) { const operationKey = url.pathname.split("/command-receipts/")[1]; const saved = receipts.get(operationKey);
+      if (url.pathname.includes(options.principal ? "/principal-command-receipts/" : "/command-receipts/")) { const operationKey = url.pathname.split(options.principal ? "/principal-command-receipts/" : "/command-receipts/")[1]; const saved = receipts.get(operationKey);
         const operation = operationKey.split("/")[0];
         if (operation === "Cancel" && options.cancelRecovery404Once && !cancelRecoveryMissed) { cancelRecoveryMissed = true; return json({}, 404); }
         return saved ? json({ operation, commandKey: operationKey.split("/")[1], originalStatusCode: operation === "Create" ? 201 : 200,
           responseJson: JSON.stringify(saved), recordedHistoricalResult: true, canPublish: false }) : json({}, 404); }
-      if (url.pathname.endsWith("/source-cancel")) {
+      if (url.pathname.endsWith(options.principal ? "/principal-source-cancel" : "/source-cancel")) {
         if (options.rejectCancelOnce && !cancelRejected) { cancelRejected = true; return json({ message: "Check the cancellation details" }, 422); }
         status = "Cancelled"; version++;
         const saved = { eventId: event, number: "RF-1", status, version, originalDraftFingerprint: "a".repeat(64), commandKey: request.headers()["idempotency-key"],
@@ -62,7 +71,7 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
         receipts.set(`Cancel/${saved.commandKey}`, saved);
         if (options.loseCancel && !cancelLost) { cancelLost = true; return route.abort("failed"); }
         return json(saved); }
-      if (url.pathname.endsWith("/source-draft")) return exists ? json(record()) : json({}, 404);
+      if (url.pathname.endsWith(options.principal ? "/principal-source-draft" : "/source-draft")) return exists ? json(record()) : json({}, 404);
       if (url.pathname === "/api/procurement/v1/sourcing") return json({ items: [], total: 0, page: 1, pageSize: 25 });
     }
     return json({}, 404);
@@ -125,6 +134,68 @@ test("branch change clears old governed detail immediately and reloads under cur
 test("governed capability does not substitute for explicit conversion permission", async ({ page }) => {
   const calls = await mock(page, { deny: true }); await page.goto("/procurement/workspace/rfqs/new?source=approved");
   await expect(page.getByRole("alert")).toContainText("not available"); expect(calls.some(x => x.path.endsWith("/approved-sources") || x.method === "POST")).toBe(false);
+});
+
+test("workerless principal capability keeps the full quote wizard, directory and detail on six distinct endpoints", async ({ page }) => {
+  const calls = await mock(page, { principal: true, loseCreate: true });
+  await page.goto("/procurement/workspace/rfqs");
+  await expect(page.getByRole("heading", { name: "Request for Quotes", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "From approved requests", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Use approved requests", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Use approved purchase requests", exact: true })).toBeVisible();
+  await selectTwo(page);
+  await page.getByRole("button", { name: "Create internal draft", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Check saved result", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Items (2)" }).click();
+  await expect(page.getByRole("cell", { name: "Office notebooks" })).toBeVisible();
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await page.getByRole("textbox", { name: "Reason", exact: true }).fill("No longer required");
+  await page.getByRole("button", { name: "Cancel draft and release its quantities" }).click();
+  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
+  await page.goto("/procurement/workspace/rfqs?source=principal-approved");
+  await expect(page.getByTestId("erp-record-table")).toBeVisible();
+  await expect(page.getByText("Office supplies", { exact: true })).toBeVisible();
+  const paths = calls.map(call => call.path);
+  for (const suffix of ["/approved-principal-sources", "/principal-source-drafts", "/from-approved-principal-sources",
+    `/${event}/principal-source-draft`, `/${event}/principal-source-cancel`, "/principal-command-receipts/Create/"])
+    expect(paths.some(path => path.includes(suffix)), suffix).toBe(true);
+  expect(calls.filter(call => call.method === "POST")).toHaveLength(2);
+  expect(paths.some(path => /\/(?:from-approved-sources|approved-sources|source-drafts|source-draft|source-cancel|command-receipts)\b/.test(path))).toBe(false);
+});
+
+test("absent principal capability or missing current conversion permission blocks principal saves", async ({ page }) => {
+  const calls = await mock(page, { principal: true, principalUnavailable: true });
+  await page.goto("/procurement/workspace/rfqs/new?source=principal-approved");
+  await expect(page.getByRole("main").getByRole("link", { name: "My requests", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create internal draft", exact: true })).toHaveCount(0);
+  expect(calls.some(call => call.path.includes("principal-") || call.method === "POST")).toBe(false);
+});
+
+test("principal capability alone cannot grant conversion to an unassigned buyer", async ({ page }) => {
+  const calls = await mock(page, { principal: true, deny: true });
+  await page.goto("/procurement/workspace/rfqs/new?source=principal-approved");
+  await expect(page.getByRole("alert")).toContainText("not available");
+  expect(calls.some(call => call.path.includes("principal-") || call.method === "POST")).toBe(false);
+});
+
+test("principal command journal does not become a worker command after mode change", async ({ page }) => {
+  const calls = await mock(page, { principal: true, loseCreate: true });
+  await page.goto("/procurement/workspace/rfqs/new?source=principal-approved"); await selectTwo(page);
+  await page.getByRole("button", { name: "Create internal draft", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+  const principalJournal = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("erp.rfq.recovery.v1:")));
+  expect(principalJournal).toHaveLength(1);
+  expect(JSON.parse(principalJournal[0].slice("erp.rfq.recovery.v1:".length))).toContain("principal");
+  await page.goto("/procurement/workspace/rfqs/new?source=approved");
+  await expect(page.getByRole("alert")).toContainText("not available");
+  expect(calls.filter(call => call.method === "POST")).toHaveLength(1);
+  await page.goto("/procurement/workspace/rfqs/new?source=principal-approved");
+  await expect(page.getByRole("heading", { name: "Check the saved result", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Check saved result", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
+  expect(calls.filter(call => call.method === "POST")).toHaveLength(1);
 });
 
 test("cancel validation permits correction while interrupted cancellation and recovery404 retain original GET-only key", async ({ page }) => {
