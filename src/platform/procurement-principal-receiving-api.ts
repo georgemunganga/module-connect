@@ -47,7 +47,7 @@ function taskRows(value: unknown, id: string, kind: string, offset: number): Rec
   if (!object(value) || value.purposeOnly !== true || value.executionVersion !== 2 || !Array.isArray(value.records) || !integer(value.total) || value.total > 100 || value.offset !== offset || value.limit !== 25 || value.records.length > 25) throw invalid();
   return value.records.map((row) => {
     if (!object(row) || row.id !== id || row.taskKind !== kind || row.isAuthority !== false || !integer(row.version) || !integer(row.sourceVersion)
-      || !uuid.test(String(row.lineId)) || !uuid.test(String(row.purchaseOrderLineId)) || !uuid.test(String(row.purchaseOrderId)) || !uuid.test(String(row.issuedVersionId)) || !uuid.test(String(row.siteId))
+      || row.version < 1 || !uuid.test(String(row.lineId)) || !uuid.test(String(row.purchaseOrderLineId)) || !uuid.test(String(row.purchaseOrderId)) || !uuid.test(String(row.issuedVersionId)) || !uuid.test(String(row.siteId))
       || !object(row.projection) || !Array.isArray(row.actionCandidates) || !row.actionCandidates.every((action) => action === (kind === "Inspection" ? "Inspect" : kind === "Acceptance" ? "Accept" : "Certify"))
       || !Array.isArray(row.blockers) || !row.blockers.every((blocker) => typeof blocker === "string")) throw invalid();
     // Reject broad owner/private data on the explicitly purpose-only surface.
@@ -74,7 +74,8 @@ export async function getPrincipalReceipt(company: string, id: string, inspectio
     const body = envelope(await receivingCall(company, `/receipts/${id}/principal-draft`, { signal }), id);
     if (body.kind !== "Goods") throw invalid();
     const result = readReceivingReceipt(body.receipt, id, false);
-    if (result.purchaseOrderId !== body.purchaseOrderId || result.issuedVersionId !== body.issuedVersionId || result.version !== body.version || result.status !== body.status || result.executionVersion !== 2) throw invalid();
+    if (result.purchaseOrderId !== body.purchaseOrderId || result.issuedVersionId !== body.issuedVersionId || result.version !== body.version || result.status !== body.status || result.executionVersion !== 2
+      || result.lines.some((line) => !uuid.test(line.purchaseOrderLineId) || line.version !== result.version)) throw invalid();
     return result;
   }
   const rows = await tasks(company, id, acceptance ? "Acceptance" : "Inspection", signal), first = rows[0];
