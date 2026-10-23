@@ -1,18 +1,24 @@
 import { isDefiniteHttpRejection } from "../lib/http-write-outcome";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { MoreHorizontal, Plus, Search } from "lucide-react";
+import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { useErpShell } from "../lib/erpShell";
 import { invoiceDecimal, invoicePreview } from "./invoice-values";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
 import { InvoiceUnitReviewOwner } from "./InvoiceUnitReviewOwner";
+import { StandardDataTable } from "../components/data/StandardDataTable";
 import { RecordTable } from "../components/data/RecordTable";
+import { ListTools, type ExportScope, type ListColumn, type ListFilterField } from "../components/data/ListTools";
+import { ActiveFilterChips } from "../components/data/ActiveFilterChips";
+import { downloadCsv } from "../lib/csv";
+import { invoicePageRows, type InvoiceSort, type InvoiceListFilters } from "./invoice-list-view";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import {
   captureInvoiceIntake, getInvoiceIntake, listInvoiceIntake, updateInvoiceIntake, cancelInvoiceIntake, invoiceAllows, invoiceEditInput, InvoiceIntakeError,
-  type InvoiceDetail, type InvoiceIntakeInput, type InvoiceLineInput, type InvoicePage,
+  type InvoiceDetail, type InvoiceIntakeInput, type InvoiceLineInput, type InvoicePage, type InvoiceSummary,
 } from "../../../src/platform/procurement-invoices-api";
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Try again. The invoice was not confirmed.";
@@ -28,6 +34,24 @@ function useCompany() {
   return readiness;
 }
 
+const invoiceColumns: ListColumn[] = [
+  { key: "date", label: "Date", width: 120 },
+  { key: "number", label: "Number / Description", width: 235 },
+  { key: "vendor", label: "Vendor", width: 210 },
+  { key: "status", label: "Status", width: 135 },
+  { key: "amount", label: "Amount", width: 170 },
+];
+const invoiceFilterFields: ListFilterField[] = [
+  { key: "number", label: "Number" }, { key: "vendor", label: "Vendor" },
+  { key: "date", label: "Date" }, { key: "status", label: "Status", type: "select", options: ["Received", "Cancelled"] },
+  { key: "amount", label: "Amount" },
+];
+const invoiceSortOptions: { key: InvoiceSort; label: string }[] = [
+  { key: "newest", label: "Date · Newest on this page" }, { key: "oldest", label: "Date · Oldest on this page" },
+  { key: "number", label: "Number on this page" }, { key: "vendor", label: "Vendor on this page" },
+  { key: "status", label: "Status on this page" }, { key: "amount", label: "Amount · Highest on this page" },
+];
+
 export function LiveInvoiceList() {
   const readiness = useCompany();
   const { selection } = useErpShell();
@@ -38,38 +62,136 @@ function InvoiceListRecord() {
   const navigate = useNavigate();
   const { legalEntityId, permissions } = useCompany();
   const [page, setPage] = useState(1);
+  const [revision, setRevision] = useState(0);
   const [data, setData] = useState<InvoicePage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const canCapture = permissions.includes("procurement-invoice-capture");
+  const [notice, setNotice] = useState("");
+  const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<InvoiceListFilters>({});
+  const [sort, setSort] = useState<InvoiceSort>("newest");
+  const [visibleColumns, setVisibleColumns] = useState(invoiceColumns.map(column => column.key));
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [clipText, setClipText] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [preview, setPreview] = useState<InvoiceSummary | null>(null);
+  const canRead = permissions.includes("procurement-invoice-read");
+  const canCapture = canRead && permissions.includes("procurement-invoice-capture");
+  const canExport = canRead && permissions.includes("procurement-invoice-export");
+  const rows = invoicePageRows(data?.items ?? [], query, filters, sort);
+  const selectPage = (next: number) => { setPreview(null); setSelected([]); setPage(next); };
+  const applyFilters = (next: InvoiceListFilters) => { setFilters(next); setSelected([]); setPreview(null); };
+  const exportPage = (scope: ExportScope) => {
+    const csvSafe = (value: string) => /^[=+\-@\t\r\n]/.test(value) ? `'${value}` : value;
+    if (!canExport) { setNotice("Invoice CSV export needs a separate export permission."); return; }
+    if (scope === "all") { setNotice("All-page export is not connected. Export this page or selected invoices."); return; }
+    const exported = scope === "selected" ? rows.filter(row => selected.includes(row.id)) : rows;
+    if (!exported.length) { setNotice("No loaded invoices are selected for export."); return; }
+    const shown = invoiceColumns.filter(column => visibleColumns.includes(column.key));
+    downloadCsv(`bills-${scope}-page-${page}.csv`, [shown.map(column => column.label), ...exported.map(row => shown.map(column => csvSafe(
+      column.key === "date" ? row.invoiceDate : column.key === "number" ? row.invoiceNumber
+        : column.key === "vendor" ? row.supplierName ?? "Vendor" : column.key === "status" ? row.status
+          : `${row.currencyCode} ${String(row.grossAmount)}`)))]);
+    setNotice(`Downloaded ${exported.length} invoice(s) from loaded page ${page}.`);
+  };
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError(""); setData(null);
+    setLoading(true); setError(""); setData(null); setSelected([]); setPreview(null);
+    if (!canRead) { setLoading(false); return () => controller.abort(); }
     listInvoiceIntake(legalEntityId, page, controller.signal).then(value => { if (!controller.signal.aborted) setData(value); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [legalEntityId, page]);
-  const action = canCapture ? <Button onClick={() => navigate("/bills/new")}>Record invoice</Button> : undefined;
+  }, [legalEntityId, page, revision, canRead]);
+  const action = canCapture ? <Button onClick={() => navigate("/bills/new")}><Plus size={16} /> Record invoice</Button> : undefined;
+  const pageSize = data?.pageSize || 25;
+  const first = data && data.total > (page - 1) * pageSize ? (page - 1) * pageSize + 1 : 0;
+  const last = data && first ? Math.min(page * pageSize, data.total) : 0;
+  const renderCell = (invoice: InvoiceSummary, column: ListColumn) => {
+    if (column.key === "date") return <span className="text-muted-foreground">{invoice.invoiceDate}</span>;
+    if (column.key === "number") return <Link className="block text-left" to={`/bills/${invoice.id}`}>
+      <span className="font-semibold text-primary">{invoice.invoiceNumber}</span>
+      <span className="mt-1 block text-xs text-muted-foreground">Supplier invoice</span>
+    </Link>;
+    if (column.key === "vendor") return invoice.supplierName || "Vendor";
+    if (column.key === "status") return <Badge>{invoice.status}</Badge>;
+    return <span className="font-medium">{money(invoice.grossAmount, invoice.currencyCode)}</span>;
+  };
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Bills" subtitle="Supplier invoices received for review. Payment is handled by Finance." actions={action} />
-    <Panel><div className="p-5">
-      {error && <p role="alert" className="mb-4 text-sm text-red-700">{error}</p>}
-      {loading ? <p role="status">Loading invoices…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
-        <thead><tr><th>Invoice</th><th>Vendor</th><th>Date</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.items.map((invoice) => <tr key={invoice.id}>
-          <td className="font-medium">{invoice.invoiceNumber}</td>
-          <td>{invoice.supplierName || "Vendor"}</td><td>{invoice.invoiceDate}</td>
-          <td>{money(invoice.grossAmount, invoice.currencyCode)}</td><td><Badge>{invoice.status}</Badge></td>
-          <td><Link className="text-sm text-primary hover:underline" to={`/bills/${invoice.id}`}>Open</Link></td>
-        </tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="No invoices received yet" description="Record a supplier invoice to start its review." action={action} />}
-      {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm">
-        <Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
-        <span>Page {page}</span>
-        <Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
-      </div>}
-    </div></Panel>
+    <PageHeader title="Bills" subtitle="Supplier invoices received for review. Payment is handled by Finance."
+      actions={<><ListTools entity="Bills" columns={invoiceColumns} visibleColumns={visibleColumns} onVisibleColumnsChange={setVisibleColumns}
+        columnWidths={columnWidths} onColumnWidthsChange={setColumnWidths} clipText={clipText} onClipTextChange={setClipText}
+        sortOptions={invoiceSortOptions} onSort={key => setSort(key as InvoiceSort)}
+        filterFields={invoiceFilterFields} activeFilters={filters} onApplyFilters={applyFilters}
+        currentView={filters.status || "All Bills"} viewOptions={["All Bills", "Received", "Cancelled"]}
+        onViewChange={view => applyFilters({ ...filters, status: view === "All Bills" ? "" : view })}
+        onExport={exportPage} selectedCount={selected.length} onRefresh={() => setRevision(value => value + 1)}
+        onResetWidths={() => setColumnWidths({})} notify={setNotice}
+        unavailableImportReason="Invoice import has no scoped server action yet. Record an invoice individually."
+        unavailableExportReason={!canExport ? "A separate invoice export permission is required." : undefined}
+        unavailableAllExportReason="Only the current server page is loaded."
+        viewExportLabel="Export Current Page View" />{action}</>} />
+    <Panel>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="flex items-center gap-3">
+          <Select aria-label="Filter bills by status on this page" value={filters.status || "All"}
+            onChange={event => applyFilters({ ...filters, status: event.target.value === "All" ? "" : event.target.value })}>
+            <option value="All">All Bills</option><option value="Received">Received</option><option value="Cancelled">Cancelled</option>
+          </Select>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{rows.length}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative"><Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input aria-label="Search bills on this page" placeholder="Search number or vendor on this page" className="w-48 pl-10 sm:w-60"
+              value={query} onChange={event => { setQuery(event.target.value); setSelected([]); }} /></div>
+          <Select aria-label="Sort bills on this page" value={sort} onChange={event => setSort(event.target.value as InvoiceSort)}>
+            <option value="newest">Newest first</option><option value="oldest">Oldest first</option>
+            <option value="amount">Highest amount</option><option value="number">Number</option><option value="vendor">Vendor</option>
+          </Select>
+        </div>
+      </div>
+      <ActiveFilterChips fields={invoiceFilterFields} filters={filters} onChange={applyFilters} />
+      <div className="px-5 pt-3"><p className="text-xs text-muted-foreground">Showing loaded page {page} for this company. Search, filters and sorting apply to this page only.</p>
+        {notice && <p role="status" className="mt-2 text-sm">{notice}</p>}
+        {!canRead && <p role="alert" className="mt-3 text-sm">You do not have invoice list access for this company.</p>}
+        {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+        {loading && canRead && <p role="status" className="my-5">Loading invoices…</p>}
+      </div>
+      {!loading && !error && canRead && <>
+        {selected.length > 0 && <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 bg-blue-50 px-5 py-3 text-sm text-blue-700">
+          <span>{selected.length} selected on this page</span>
+          {canExport ? <Button variant="secondary" onClick={() => exportPage("selected")}>Export selected</Button>
+            : <span className="text-xs">Export needs a separate invoice export permission.</span>}
+          <Button variant="ghost" className="ml-auto" onClick={() => setSelected([])}>Clear selection</Button>
+        </div>}
+        {rows.length ? <StandardDataTable rows={rows} columns={invoiceColumns} visibleColumns={visibleColumns}
+          columnWidths={columnWidths} clipText={clipText} selected={selected} onSelectedChange={setSelected}
+          onSort={key => setSort(key as InvoiceSort)} onOpen={invoice => setPreview(invoice)}
+          rowLabel={invoice => `Open ${invoice.invoiceNumber}`} renderCell={renderCell}
+          renderActions={invoice => <button type="button" aria-label={`Actions for ${invoice.invoiceNumber}`}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-primary-soft hover:text-primary"
+            onClick={() => setPreview(invoice)}><MoreHorizontal size={18} /></button>} />
+          : <div className="p-5"><EmptyState title={data?.items.length || data?.total ? "No matching bills on this page" : "No invoices received yet"}
+            description={data?.items.length || data?.total ? "Change this page's search or filters, or move to another page." : "Record a supplier invoice to start its review."}
+            action={data?.items.length || data?.total ? <Button variant="secondary" onClick={() => { setQuery(""); applyFilters({}); }}>Clear page filters</Button> : action} /></div>}
+      </>}
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-muted-foreground">
+        <span>{data ? `${first}–${last} of ${data.total} · ${rows.length} shown on this page` : "0 records shown"}</span>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" disabled={loading || page <= 1} onClick={() => selectPage(page - 1)}>Previous</Button>
+          <span>Page {page}{data ? ` of ${Math.max(1, Math.ceil(data.total / pageSize))}` : ""}</span>
+          <Button variant="secondary" disabled={loading || !data || page * pageSize >= data.total} onClick={() => selectPage(page + 1)}>Next</Button>
+        </div>
+      </footer>
+    </Panel>
+    <p className="mt-4 text-xs text-muted-foreground">Invoice intake is live ERP data. Full-dataset search, import, bulk changes, and Finance payment actions are not connected in this list.</p>
+    {preview && <Modal title={`${preview.invoiceNumber} · Bill`} onClose={() => setPreview(null)}>
+      <div className="space-y-3 text-sm"><p className="font-medium">{preview.supplierName || "Vendor"}</p>
+        <p>{preview.invoiceDate} · {money(preview.grossAmount, preview.currencyCode)} · <Badge>{preview.status}</Badge></p>
+        <p className="text-muted-foreground">Edit and cancellation availability is checked on the saved invoice detail, where server allowed actions and revision are available.</p>
+        <Link to={`/bills/${preview.id}`}><Button variant="secondary">View full details</Button></Link>
+      </div>
+    </Modal>}
   </div>;
 }
 

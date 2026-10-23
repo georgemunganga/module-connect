@@ -47,6 +47,10 @@ export function ListTools({
   showSavedView = true,
   onExport,
   onImport,
+  unavailableImportReason,
+  unavailableAllExportReason,
+  unavailableExportReason,
+  viewExportLabel = "Export Current View",
   selectedCount = 0,
   onPreferences,
   onRefresh,
@@ -76,6 +80,10 @@ export function ListTools({
     kind: ImportKind,
     duplicateMode: DuplicateMode,
   ) => ImportResult;
+  unavailableImportReason?: string;
+  unavailableAllExportReason?: string;
+  unavailableExportReason?: string;
+  viewExportLabel?: string;
   selectedCount?: number;
   onPreferences?: () => void;
   onRefresh: () => void;
@@ -203,9 +211,16 @@ export function ListTools({
                   )}
                 </>
               )}
+              {!onImport && unavailableImportReason && (
+                <div className="px-3 py-2 text-slate-500" role="note">
+                  <span className="flex items-center gap-2"><Upload size={14} /> Import unavailable</span>
+                  <span className="mt-1 block text-xs">{unavailableImportReason}</span>
+                </div>
+              )}
               <button
                 role="menuitem"
                 aria-expanded={submenu === "export"}
+                disabled={Boolean(unavailableExportReason)}
                 className="flex w-full items-center justify-between rounded px-3 py-2 hover:bg-slate-50"
                 onClick={() =>
                   setSubmenu(submenu === "export" ? null : "export")
@@ -217,21 +232,24 @@ export function ListTools({
                 </span>
                 <ChevronRight size={14} />
               </button>
-              {submenu === "export" && (
+              {unavailableExportReason && <p className="px-3 pb-2 text-xs text-slate-500" role="note">{unavailableExportReason}</p>}
+              {submenu === "export" && !unavailableExportReason && (
                 <div className="ml-3 border-l border-slate-200 pl-2">
-                  <button
+                  {unavailableAllExportReason ? <div className="px-3 py-2 text-xs text-slate-500" role="note">
+                    Export all unavailable: {unavailableAllExportReason}
+                  </div> : <button
                     role="menuitem"
                     className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
                     onClick={() => exportAction("all")}
                   >
                     Export {entity}
-                  </button>
+                  </button>}
                   <button
                     role="menuitem"
                     className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
                     onClick={() => exportAction("view")}
                   >
-                    Export Current View
+                    {viewExportLabel}
                   </button>
                   {selectedCount > 0 && (
                     <button
@@ -360,8 +378,8 @@ function ColumnSettings({
   return (
     <Modal title={`Customize ${entity} columns`} onClose={onClose}>
       <p className="mb-4 text-sm text-slate-500">
-        Choose which fields appear in this table. The change is local to this
-        browser preview.
+        Choose which fields appear in this table. The change stays in this
+        browser.
       </p>
       <div className="grid gap-2">
         {columns.map((column) => (

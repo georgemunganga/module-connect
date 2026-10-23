@@ -322,3 +322,37 @@ for (const status of [408, 429, 499]) {
     expect(posts).toBe(1);
   });
 }
+
+test("live Bills keeps the ERP-adapted list tools and current-page table without enabling unsupported actions", async ({ page }) => {
+  await mockErp(page, true, { seed: true });
+  await page.goto("/procurement/workspace/bills");
+  await expect(page.getByRole("heading", { name: "Bills", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Filter Bills by field" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Customize columns" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More Actions" })).toBeVisible();
+  await expect(page.getByRole("table")).toBeVisible();
+  await expect(page.getByRole("link", { name: /INV-DOC-1/ })).toBeVisible();
+  await expect(page.getByText("Search, filters and sorting apply to this page only.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "More Actions" }).click();
+  await expect(page.getByText("Import unavailable")).toBeVisible();
+  await expect(page.getByText("A separate invoice export permission is required.")).toBeVisible();
+  await page.getByRole("button", { name: "More Actions" }).click();
+  await page.getByRole("button", { name: "Customize columns" }).click();
+  await expect(page.getByText("Customize Bills columns")).toBeVisible();
+});
+
+test("live Bills filter and selection stay on the loaded page while opening saved details", async ({ page }) => {
+  await mockErp(page, true, { seed: true });
+  await page.goto("/procurement/workspace/bills");
+  await expect(page.getByRole("table")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Select all visible records" }).check();
+  await expect(page.getByText("1 selected on this page")).toBeVisible();
+  await page.getByLabel("Search bills on this page").fill("no such invoice");
+  await expect(page.getByText("No matching bills on this page")).toBeVisible();
+  await expect(page.getByText("1 selected on this page")).toHaveCount(0);
+  await page.getByRole("button", { name: "Clear page filters" }).click();
+  await page.getByRole("button", { name: "Actions for INV-DOC-1" }).click();
+  await expect(page.getByText("Edit and cancellation availability is checked on the saved invoice detail", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "View full details" }).click();
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
+});
