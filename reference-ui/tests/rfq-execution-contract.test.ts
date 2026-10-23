@@ -72,6 +72,28 @@ describe("governed quote draft adapter", () => {
     respond({ ...reply(command), eventId: pin }); await expect(sendRfqCommand(company, command)).rejects.toThrow("confirm");
     respond({ ...reply(command), version: 4 }); await expect(sendRfqCommand(company, command)).rejects.toThrow("confirm");
   });
+  it("isolates principal source paths and original receipts from worker drafts", async () => {
+    const principal = createRfqCommand("Office", [{ source: source(), quantity: "1.0001" }], key, "principal");
+    expect(principal.mode).toBe("principal");
+    let fetch = respond(page());
+    await listRfqSources(company, 1, "", undefined, "principal");
+    expect(fetch.mock.calls[0][0]).toContain("/approved-principal-sources?page=1");
+    fetch = respond({ items: [], total: 0, page: 1, pageSize: 25, canPublish: false });
+    await listGovernedRfq(company, 1, "", "Draft", undefined, "principal");
+    expect(fetch.mock.calls[0][0]).toContain("/principal-source-drafts?page=1&pageSize=25&state=Draft");
+    fetch = respond(reply(principal));
+    await sendRfqCommand(company, principal);
+    expect(fetch.mock.calls[0][0]).toContain("/from-approved-principal-sources");
+    expect(fetch.mock.calls[0][1].headers.get("Idempotency-Key")).toBe(key);
+    fetch = respond({ operation: "Create", commandKey: key, originalStatusCode: 201, responseJson: JSON.stringify(reply(principal)), recordedHistoricalResult: true, canPublish: false });
+    await recoverRfqCommand(company, principal);
+    expect(fetch.mock.calls[0][0]).toContain(`/principal-command-receipts/Create/${key}`);
+    const cancelled = cancelRfqCommand({ id: event, status: "Draft", version: 4, originalDraftFingerprint: "a".repeat(64) } as RfqDetail, "No need", key, "principal");
+    fetch = respond(reply(cancelled));
+    await sendRfqCommand(company, cancelled);
+    expect(fetch.mock.calls[0][0]).toContain(`/${event}/principal-source-cancel`);
+    expect(cancelled.mode).toBe("principal");
+  });
   it("rejects oversized search before transport and invalid detail allocations", async () => {
     const fetch = respond({}); await expect(listRfqSources(company, 1, "x".repeat(101))).rejects.toThrow(); expect(fetch).not.toHaveBeenCalled();
     respond({ id: event, number: "RF-1", title: "Own", method: "RFQ", currencyCode: "ZMW", status: "Draft", version: 1,

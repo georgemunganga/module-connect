@@ -8,7 +8,11 @@ export function readRfqRecovery(slot: string, storage: Storage = sessionStorage)
     if (raw === null) return null;
     if (raw.length > 1024) throw unavailable();
     const reference = validateRfqRecoveryReference(JSON.parse(raw));
-    const operation: unknown = JSON.parse(slot)[4];
+    const parts: unknown = JSON.parse(slot);
+    if (!Array.isArray(parts) || parts.length < 5 || parts.length > 6) throw unavailable();
+    const operation: unknown = parts[4];
+    const mode: unknown = parts[5] ?? "worker";
+    if (mode !== (reference.mode ?? "worker")) throw unavailable();
     if (operation !== (reference.operation === "Create" ? "Create" : `Cancel:${reference.eventId}`)) throw unavailable();
     return reference;
   } catch { throw unavailable(); }

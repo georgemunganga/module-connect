@@ -11,19 +11,22 @@ import { readRfqRecovery, writeRfqRecovery } from "../lib/rfq-command-journal";
 import { pendingRfqCommands } from "../lib/rfq-command-memory";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { cancelRfqCommand, createRfqCommand, getGovernedRfq, listGovernedRfq, listRfqSources, recoverRfqCommand, sendRfqCommand,
-  rfqRecoveryReference, RfqExecutionError, type RfqRecoveryReference, type RfqCommand, type RfqDetail, type RfqOwnedPage, type RfqSelection, type RfqSource, type RfqSourcePage, type RfqOwned } from "../../../src/platform/procurement-sourcing-execution-api";
+  rfqRecoveryReference, RfqExecutionError, type RfqRecoveryReference, type RfqCommand, type RfqDetail, type RfqOwnedPage, type RfqSelection, type RfqSource, type RfqSourcePage, type RfqOwned, type RfqSourceMode } from "../../../src/platform/procurement-sourcing-execution-api";
 const message = (error: unknown) => error instanceof Error ? error.message : "The quote action could not be confirmed.";
 function useCompany() { const value = useLiveReadiness(); if (!value) throw new Error("Choose an ERP company first."); return value; }
-function useCommandSlot(operation: string) {
+function useCommandSlot(operation: string, mode: RfqSourceMode) {
   const company = useCompany(); const { selection } = useErpShell();
-  return JSON.stringify([company.tenantId, company.legalEntityId, company.principalId, selection.branch ?? "", operation]);
+  return JSON.stringify([company.tenantId, company.legalEntityId, company.principalId, selection.branch ?? "", operation,
+    ...(mode === "principal" ? ["principal"] : [])]);
 }
-const detailLink = (id: string) => `/rfqs/${id}?source=approved`;
+const listLink = (mode: RfqSourceMode) => `/rfqs?source=${mode === "principal" ? "principal-approved" : "approved"}`;
+const createLink = (mode: RfqSourceMode) => `/rfqs/new?source=${mode === "principal" ? "principal-approved" : "approved"}`;
+const detailLink = (id: string, mode: RfqSourceMode) => `/rfqs/${id}?source=${mode === "principal" ? "principal-approved" : "approved"}`;
 function Pager({ page, total, size, change }: { page: number; total: number; size: number; change: (value: number) => void }) {
   return <div className="mt-4 flex items-center gap-3 text-sm"><Button type="button" variant="secondary" disabled={page === 1} onClick={() => change(page - 1)}>Previous</Button>
     <span>Page {page}</span><Button type="button" variant="secondary" disabled={page * size >= total} onClick={() => change(page + 1)}>Next</Button></div>;
 }
-export function GovernedSourcingList() {
+export function GovernedSourcingList({ mode = "worker" }: { mode?: RfqSourceMode }) {
   const { legalEntityId, permissions } = useCompany(); const [data, setData] = useState<RfqOwnedPage | null>(null);
   const [page, setPage] = useState(1), [search, setSearch] = useState(""), [state, setState] = useState(""), [error, setError] = useState("");
   const [revision, setRevision] = useState(0), [notice, setNotice] = useState("");
@@ -32,9 +35,9 @@ export function GovernedSourcingList() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const columns: ListColumn[] = [{ key: "number", label: "Reference / Description", width: 360 }, { key: "currency", label: "Currency", width: 160 }, { key: "status", label: "Status", width: 160 }];
   useEffect(() => { const controller = new AbortController(); setData(null); setError(""); setSelected([]); setPreviewId(null);
-    listGovernedRfq(legalEntityId, page, search, state, controller.signal).then(value => { if (!controller.signal.aborted) setData(value); })
+    listGovernedRfq(legalEntityId, page, search, state, controller.signal, mode).then(value => { if (!controller.signal.aborted) setData(value); })
       .catch(error => { if (!controller.signal.aborted) setError(message(error)); }); return () => controller.abort();
-  }, [legalEntityId, page, search, state, revision]);
+  }, [legalEntityId, page, search, state, revision, mode]);
   const rows = useMemo(() => (data?.items ?? []).slice().sort((left, right) => {
     const field = (row: RfqOwned) => sort === "currency" ? row.currencyCode || "" : sort === "status" ? row.status || row.state : row.number;
     return field(left).localeCompare(field(right)) || left.id.localeCompare(right.id);
@@ -52,7 +55,7 @@ export function GovernedSourcingList() {
       onResetWidths={() => setWidths({})} notify={setNotice} unavailableImportReason="Import is not available yet."
       unavailableExportReason="Export is not available yet." unavailableAllExportReason="Only the current page is loaded."
       viewExportLabel="Export Current Page View" selectedCount={currentSelection.length} />
-      {permissions.includes("procurement-sourcing-convert") && <Link to="/rfqs/new?source=approved"><Button>Use approved requests</Button></Link>}</>} />
+      {permissions.includes("procurement-sourcing-convert") && <Link to={createLink(mode)}><Button>Use approved requests</Button></Link>}</>} />
     <Panel><div className="flex flex-wrap items-end gap-3 border-b border-border p-5"><Field label="Find quote request" className="min-w-56 flex-1"><Input maxLength={100} value={search} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setSearch(e.target.value); }} /></Field>
       <Field label="Status" className="min-w-40"><Select value={state} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setState(e.target.value); }}><option value="">All statuses</option><option value="Draft">Draft</option><option value="Cancelled">Cancelled</option></Select></Field></div>
       <p className="px-5 pt-3 text-xs text-muted-foreground">Search and status work across pages you can access. Sorting and selection apply to this page only.</p>
@@ -60,14 +63,14 @@ export function GovernedSourcingList() {
       {error ? <p role="alert" className="p-5">{error}</p> : !data ? <p role="status" className="p-5">Loading your quote requests…</p> : !rows.length ? <div className="p-5"><EmptyState title="No drafts from approved requests" description="Use approved purchase requests to prepare a quote request." /></div>
         : <><StandardDataTable rows={rows} columns={columns} visibleColumns={visible} columnWidths={widths} clipText={clip}
           selected={currentSelection} onSelectedChange={ids => setSelected(ids.filter(id => currentIds.has(id)))} onSort={setSort} rowLabel={row => `Open ${row.number}`}
-          renderCell={(row, column) => column.key === "number" ? row.state === "VerifiedRetainedDraft" ? <Link to={detailLink(row.id)} className="block text-primary"><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm">{row.title || "Needs review"}</span></Link>
+          renderCell={(row, column) => column.key === "number" ? row.state === "VerifiedRetainedDraft" ? <Link to={detailLink(row.id, mode)} className="block text-primary"><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm">{row.title || "Needs review"}</span></Link>
             : <><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm text-muted-foreground">Needs review</span></>
             : column.key === "currency" ? row.currencyCode || "—" : <Badge>{row.status || "Needs review"}</Badge>}
-          renderActions={row => row.state === "VerifiedRetainedDraft" ? <span className="flex items-center gap-2"><Link to={detailLink(row.id)} className="text-primary">Open</Link><Button variant="ghost" onClick={() => setPreviewId(row.id)}>Preview</Button></span> : <span className="text-xs text-muted-foreground">Needs review</span>} />
+          renderActions={row => row.state === "VerifiedRetainedDraft" ? <span className="flex items-center gap-2"><Link to={detailLink(row.id, mode)} className="text-primary">Open</Link><Button variant="ghost" onClick={() => setPreviewId(row.id)}>Preview</Button></span> : <span className="text-xs text-muted-foreground">Needs review</span>} />
           {currentSelection.length > 0 && <div className="border-t border-border bg-primary/5 px-5 py-3 text-sm">{currentSelection.length} selected on this page · Bulk changes are not available yet. <Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}</>}
       {data && <div className="border-t border-border px-5 py-3"><Pager page={page} total={data.total} size={data.pageSize} change={next => { setSelected([]); setPreviewId(null); setPage(next); }} /></div>}
     </Panel>
-    {preview && <Modal title={`${preview.number} · Preview`} onClose={() => setPreviewId(null)}><div className="space-y-3 text-sm"><p className="font-medium">{preview.title}</p><Badge>{preview.status}</Badge><p>Currency: {preview.currencyCode}</p><Link to={detailLink(preview.id)}><Button variant="secondary">View full details</Button></Link></div></Modal>}
+    {preview && <Modal title={`${preview.number} · Preview`} onClose={() => setPreviewId(null)}><div className="space-y-3 text-sm"><p className="font-medium">{preview.title}</p><Badge>{preview.status}</Badge><p>Currency: {preview.currencyCode}</p><Link to={detailLink(preview.id, mode)}><Button variant="secondary">View full details</Button></Link></div></Modal>}
   </div>;
 }
 
@@ -77,9 +80,9 @@ function Pending({ command, busy, error, check }: { command: RfqRecoveryReferenc
     <Button type="button" variant="secondary" disabled={busy} onClick={check}>{busy ? "Checking…" : "Check saved result"}</Button>
     <p className="text-sm text-muted-foreground">Checking only reads the recorded result. It does not repeat the save or send anything to vendors.</p></div></Panel>;
 }
-export function GovernedSourcingCreate() {
+export function GovernedSourcingCreate({ mode = "worker" }: { mode?: RfqSourceMode }) {
   const { legalEntityId } = useCompany(); const navigate = useNavigate(); const live = useRef(true);
-  const slot = useCommandSlot("Create"); const working = useRef(false);
+  const slot = useCommandSlot("Create", mode); const working = useRef(false);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const [page, setPage] = useState(1), [search, setSearch] = useState(""), [title, setTitle] = useState(""), [refresh, setRefresh] = useState(0);
   const [data, setData] = useState<RfqSourcePage | null>(null), [selected, setSelected] = useState<RfqSelection[]>([]);
@@ -102,9 +105,9 @@ export function GovernedSourcingCreate() {
     if (live.current) setPendingState(reference);
   }
   useEffect(() => { const controller = new AbortController(); setData(null); setLoadError("");
-    listRfqSources(legalEntityId, page, search, controller.signal).then(value => { if (!controller.signal.aborted) setData(value); })
+    listRfqSources(legalEntityId, page, search, controller.signal, mode).then(value => { if (!controller.signal.aborted) setData(value); })
       .catch(error => { if (!controller.signal.aborted) setLoadError(message(error)); }); return () => controller.abort();
-  }, [legalEntityId, page, search, refresh]);
+  }, [legalEntityId, page, search, refresh, mode]);
   function choose(source: RfqSource) {
     setError(""); if (!source.canSelect || !source.availableQuantity) return;
     if (selected.some(row => row.source.purchaseRequestLineId === source.purchaseRequestLineId)) return;
@@ -117,10 +120,10 @@ export function GovernedSourcingCreate() {
   async function create(event: FormEvent) {
     event.preventDefault(); if (journal.error || pending || working.current) return; setError("");
     let command: RfqCommand;
-    try { command = createRfqCommand(title, selected, crypto.randomUUID()); } catch (error) { setError(message(error)); return; }
+    try { command = createRfqCommand(title, selected, crypto.randomUUID(), mode); } catch (error) { setError(message(error)); return; }
     try { setPending(command); } catch (error) { setError(message(error)); return; }
     working.current = true; setBusy(true);
-    try { const saved = await sendRfqCommand(legalEntityId, command); setPending(null); if (live.current) navigate(detailLink(saved.eventId)); }
+    try { const saved = await sendRfqCommand(legalEntityId, command); setPending(null); if (live.current) navigate(detailLink(saved.eventId, mode)); }
     catch (error) {
       if (error instanceof RfqExecutionError && (error.status === 400 || error.status === 422)) {
         try { setPending(null); } catch (journalError) { setError(message(journalError)); return; }
@@ -132,10 +135,10 @@ export function GovernedSourcingCreate() {
   }
   async function recover() {
     if (!pending || working.current) return; working.current = true; setBusy(true); setError("");
-    try { const saved = await recoverRfqCommand(legalEntityId, pending); setPending(null); if (live.current) navigate(detailLink(saved.eventId)); }
+    try { const saved = await recoverRfqCommand(legalEntityId, pending); setPending(null); if (live.current) navigate(detailLink(saved.eventId, mode)); }
     catch (error) { setError(message(error)); } finally { working.current = false; if (live.current) setBusy(false); }
   }
-  return <RfqWizardLayout title="Use approved purchase requests" back="/rfqs?source=approved" approved busy={busy}>
+  return <RfqWizardLayout title="Use approved purchase requests" back={listLink(mode)} approved busy={busy}>
     <p className="text-sm text-muted-foreground">Choose full or partial quantities. A draft holds quantities only after you explicitly create it.</p>
     {journal.error ? <p role="alert">{journal.error}</p> : pending ? <Pending command={pending} busy={busy} error={error} check={() => void recover()} /> : <form className="space-y-5" onSubmit={create}>
       {error && <p role="alert" className="text-red-600">{error}</p>}
@@ -154,12 +157,12 @@ export function GovernedSourcingCreate() {
         <div className="sm:col-span-2"><p>{row.source.description}</p><p className="text-sm text-muted-foreground">{row.source.requestNumber} · Available {row.source.availableQuantity} {row.source.unitCode}</p></div>
         <Field label={`Quantity for ${row.source.requestNumber}`}><Input required inputMode="decimal" value={row.quantity} onChange={e => setSelected(selected.map((item, at) => at === index ? { ...item, quantity: e.target.value } : item))} /></Field>
         <Button type="button" variant="ghost" onClick={() => setSelected(selected.filter((_, at) => at !== index))}>Remove line</Button></div>)}</div></Panel>
-      <div className="sticky bottom-8 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={busy || !selected.length}>Create internal draft</Button><Link to="/rfqs?source=approved" onClick={event => { if (busy) event.preventDefault(); }} aria-disabled={busy}><Button variant="secondary" type="button" disabled={busy}>Back</Button></Link></div>
+      <div className="sticky bottom-8 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={busy || !selected.length}>Create internal draft</Button><Link to={listLink(mode)} onClick={event => { if (busy) event.preventDefault(); }} aria-disabled={busy}><Button variant="secondary" type="button" disabled={busy}>Back</Button></Link></div>
     </form>}
   </RfqWizardLayout>;
 }
-export function GovernedSourcingDetail({ id }: { id: string }) {
-  const slot = useCommandSlot(`Cancel:${id}`); const working = useRef(false); const live = useRef(true);
+export function GovernedSourcingDetail({ id, mode = "worker" }: { id: string; mode?: RfqSourceMode }) {
+  const slot = useCommandSlot(`Cancel:${id}`, mode); const working = useRef(false); const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const { legalEntityId, permissions } = useCompany(); const [record, setRecord] = useState<RfqDetail | null>(null), [error, setError] = useState("");
   const [reason, setReason] = useState(""), [busy, setBusy] = useState(false), [refresh, setRefresh] = useState(0);
@@ -181,12 +184,12 @@ export function GovernedSourcingDetail({ id }: { id: string }) {
     if (live.current) setPendingState(reference);
   }
   useEffect(() => { const controller = new AbortController(); setRecord(null); setError("");
-    getGovernedRfq(legalEntityId, id, controller.signal).then(value => { if (!controller.signal.aborted) setRecord(value); })
+    getGovernedRfq(legalEntityId, id, controller.signal, mode).then(value => { if (!controller.signal.aborted) setRecord(value); })
       .catch(error => { if (!controller.signal.aborted) setError(message(error)); }); return () => controller.abort();
-  }, [legalEntityId, id, refresh]);
+  }, [legalEntityId, id, refresh, mode]);
   async function cancel() {
     if (journal.error || !record || pending || working.current || !permissions.includes("procurement-sourcing-cancel")) return; setError(""); let command: RfqCommand;
-    try { command = cancelRfqCommand(record, reason, crypto.randomUUID()); } catch (error) { setError(message(error)); return; }
+    try { command = cancelRfqCommand(record, reason, crypto.randomUUID(), mode); } catch (error) { setError(message(error)); return; }
     try { setPending(command); } catch (error) { setError(message(error)); return; }
     working.current = true; setBusy(true);
     try { await sendRfqCommand(legalEntityId, command); setPending(null); setReason(""); setRefresh(value => value + 1); }
@@ -210,7 +213,7 @@ export function GovernedSourcingDetail({ id }: { id: string }) {
   }
   if (journal.error) return <div className="p-5 sm:p-8"><p role="alert">{journal.error}</p></div>;
   if (!record) return <div className="p-5 sm:p-8">{error ? <p role="alert">{error}</p> : <p role="status">Loading quote request…</p>}{pending && <Pending command={pending} busy={busy} error={error} check={() => void recover()} />}</div>;
-  return <RfqDetailLayout title={record.title} number={record.number} method={record.method} currency={record.currencyCode} status={record.status} back="/rfqs?source=approved"
+  return <RfqDetailLayout title={record.title} number={record.number} method={record.method} currency={record.currencyCode} status={record.status} back={listLink(mode)}
     actions={<Button variant="secondary" disabled title="Publishing and invitations are not available yet">Publish</Button>}
     related={<div className="mb-4"><p className="mb-2 text-sm font-medium">Approved purchase requests</p><ul className="space-y-1 text-sm">{[...new Set(record.lines.map(line => line.purchaseRequestId))].map(sourceId =>
       <li key={sourceId}>{permissions.includes("procurement-request-read") ? <Link className="text-primary underline" to={`/requests/${sourceId}`}>{sourceId}</Link> : sourceId}</li>)}</ul></div>}

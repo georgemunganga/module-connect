@@ -67,3 +67,15 @@ it("never overwrites a different unresolved original reference or malformed jour
   expect(() => writeRfqRecovery(slot(), original, store)).toThrow("No new save");
   expect(store.getItem(rfqJournalPrefix + slot())).toBe("{broken");
 });
+
+it("keeps principal recovery in its own slot and refuses a worker locator there", () => {
+  const store = storage();
+  const principalSlot = JSON.stringify(["tenant", company, key, "", "Create", "principal"]);
+  const command: RfqCommand = { operation: "Create", key, eventId: null, mode: "principal", body: JSON.stringify({ title: "Private", sources: [] }) };
+  writeRfqRecovery(principalSlot, rfqRecoveryReference(command), store);
+  expect(readRfqRecovery(principalSlot, store)).toEqual({ operation: "Create", key, eventId: null, mode: "principal" });
+  expect(readRfqRecovery(slot(), store)).toBeNull();
+  store.setItem(rfqJournalPrefix + principalSlot, JSON.stringify({ operation: "Create", key, eventId: null }));
+  expect(() => readRfqRecovery(principalSlot, store)).toThrow("No new save");
+  expect(store.getItem(rfqJournalPrefix + principalSlot)).not.toBeNull();
+});
