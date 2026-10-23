@@ -1,3 +1,4 @@
+import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useErpShell } from "../lib/erpShell";
@@ -62,28 +63,27 @@ export function LiveSourcingDetail() { return <ScopedSourcingPage view="detail" 
 function LegacySourcingList() {
   const { legalEntityId, permissions } = useCompany();
   const [page, setPage] = useState(1);
+  const [revision, setRevision] = useState(0);
   const [data, setData] = useState<SourcingPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
-    listOwnSourcingDrafts(legalEntityId, page, controller.signal).then(setData)
+    setLoading(true); setError(""); setData(null);
+    listOwnSourcingDrafts(legalEntityId, page, controller.signal).then(result => { if (!controller.signal.aborted) setData(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [legalEntityId, page]);
-  return <div className="p-5 sm:p-8">
-    <PageHeader title="Request for Quotes" subtitle="Prepare a draft for your company. Sending it to vendors opens after approvals and supplier access are ready." actions={permissions.includes("procurement-sourcing-create") ? <Link to="/rfqs/new"><Button><Plus size={16} className="mr-2 inline" />New quote request</Button></Link> : undefined} />
-    <Panel><div className="p-5">
-      {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
-      {loading ? <p role="status">Loading quote requests…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
-        <thead><tr><th>Reference</th><th>Title</th><th>Method</th><th>Lines</th><th>Closes</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.items.map((item) => <tr key={item.id}><td>{item.number}</td><td><Link to={`/rfqs/${item.id}`} className="font-medium text-primary hover:underline">{item.title}</Link></td><td>{item.method}</td><td>{item.lineCount}</td><td>{item.closesAt ? new Date(item.closesAt).toLocaleString() : "—"}</td><td><Badge>{item.status}</Badge></td><td><Link to={`/rfqs/${item.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="No quote requests yet" description="Start a draft to prepare what you need from suppliers." action={permissions.includes("procurement-sourcing-create") ? <Link to="/rfqs/new"><Button>New quote request</Button></Link> : undefined} />}
-      {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
-    </div></Panel>
-  </div>;
+  }, [legalEntityId, page, revision]);
+  return <div className="p-5 sm:p-8"><LiveRecordDirectory key={page} title="Request for Quotes" entity="quote requests"
+    subtitle="Prepare a draft for your company. Sending it to vendors opens after approvals and supplier access are ready."
+    columns={[{ key: "number", label: "Reference / Description", width: 260 }, { key: "method", label: "Method", width: 95 }, { key: "lines", label: "Lines", width: 75 }, { key: "date", label: "Opens", width: 150 }, { key: "closes", label: "Closes", width: 150 }, { key: "status", label: "Status", width: 110 }]}
+    rows={(data?.items ?? []).map(item => ({ id: item.id, number: item.number, title: item.title, status: item.status,
+      path: `/rfqs/${item.id}`, fields: { method: item.method, lines: String(item.lineCount), date: item.opensAt || "", closes: item.closesAt || "" } }))}
+    loading={loading} error={error} total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25}
+    onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
+    action={permissions.includes("procurement-sourcing-create") ? <Link to="/rfqs/new"><Button><Plus size={16} className="mr-2 inline" />New quote request</Button></Link> : undefined}
+    emptyTitle="No quote requests yet" emptyDescription="Start a draft to prepare what you need from suppliers." /></div>;
 }
 
 function LegacySourcingEditor() {

@@ -1,8 +1,11 @@
 import { useRequestApprovalOperation } from "../lib/RequestApprovalJournal";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { Plus, Trash2 } from "lucide-react";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } from "../components/ui";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, FileText, Paperclip, Plus, Trash2, X } from "lucide-react";
+import { Badge, Button, Field, Input, Panel, Textarea, Modal } from "../components/ui";
+import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
+import { DetailTabs, DetailSection, DetailValue } from "../components/data/DetailPrimitives";
+import { useErpShell } from "../lib/erpShell";
 import { RequestApprovalPanel } from "./LiveApprovals";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -40,13 +43,20 @@ function context() {
   return readiness;
 }
 
-export function LiveRequestList() {
+function useRequestScopeKey() {
+  const readiness = context(); const { selection, authEpoch } = useErpShell(); const { id } = useParams(); const { pathname } = useLocation();
+  return [pathname, authEpoch, readiness.tenantId, readiness.legalEntityId, selection.branch, readiness.effectiveBranchId, readiness.principalId, readiness.permissions.join("|"), id].join(":");
+}
+export function LiveRequestList() { return <RequestListRecord key={useRequestScopeKey()} />; }
+function RequestListRecord() {
   const readiness = context();
   const { legalEntityId } = readiness;
   const canCreate = readiness.permissions.includes("procurement-request-create");
   const canCheckPolicy = readiness.permissions.includes("procurement-policy-evaluate");
   const canReturnRequest = readiness.permissions.includes("procurement-request-return");
   const [offset, setOffset] = useState(0);
+  const [revision, setRevision] = useState(0);
+  const procurement = useLocation().pathname.includes("procurement-requests");
   const [data, setData] = useState<RequestPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,16 +73,16 @@ export function LiveRequestList() {
   const [reviewLoading, setReviewLoading] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
-    listOwnRequestDrafts(legalEntityId, offset, controller.signal).then(setData)
+    setLoading(true); setError(""); setData(null);
+    listOwnRequestDrafts(legalEntityId, offset, controller.signal).then(result => { if (!controller.signal.aborted) setData(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [legalEntityId, offset]);
+  }, [legalEntityId, offset, revision]);
   useEffect(() => {
     if (!canCheckPolicy) return;
     const controller = new AbortController();
-    listRequestsWaitingForPolicy(legalEntityId, policyOffset, controller.signal).then(setPolicyQueue)
+    listRequestsWaitingForPolicy(legalEntityId, policyOffset, controller.signal).then(result => { if (!controller.signal.aborted) setPolicyQueue(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setPolicyError(errorText(cause)); });
     return () => controller.abort();
   }, [canCheckPolicy, legalEntityId, policyOffset]);
@@ -111,14 +121,16 @@ export function LiveRequestList() {
     finally { setReviewLoading(false); }
   }
   return <div className="p-5 sm:p-8">
-    <PageHeader title="My Requests" subtitle="Save a request, then send it for policy and budget review." actions={canCreate ? <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined} />
-    <Panel><div className="p-5">{error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
-      {loading ? <p role="status">Loading requests…</p> : data?.records.length ? <div className="overflow-x-auto"><RecordTable>
-        <thead><tr><th>Request</th><th>Purpose</th><th>Lines</th><th>Needed by</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.records.map((record) => <tr key={record.id}><td>{record.number}</td><td><Link to={`/requests/${record.id}`} className="font-medium text-primary hover:underline">{record.purpose}</Link></td><td>{record.lineCount}</td><td>{record.neededBy || "—"}</td><td><Badge>{record.status}</Badge></td><td><Link to={`/requests/${record.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="What do you need to buy?" description="Start with a draft request for goods or services." action={canCreate ? <Link to="/requests/new"><Button>New request</Button></Link> : undefined} />}
-      {data && data.count > data.limit && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - data.limit))}>Previous</Button><span>{offset + 1}–{Math.min(offset + data.limit, data.count)} of {data.count}</span><Button variant="secondary" disabled={offset + data.limit >= data.count} onClick={() => setOffset(offset + data.limit)}>Next</Button></div>}
-    </div></Panel>
+    <LiveRecordDirectory key={`${procurement}:${offset}`} title={procurement ? "Purchase Requests" : "My Requests"} entity="requests"
+      subtitle="Save a request, then send it for policy and budget review." tabs={!procurement}
+      columns={[{ key: "date", label: "Created", width: 125 }, { key: "number", label: "Request / Description", width: 260 },
+        { key: "lines", label: "Lines", width: 80 }, { key: "needed", label: "Needed by", width: 125 }, { key: "status", label: "Status", width: 130 }]}
+      rows={(data?.records ?? []).map(record => ({ id: record.id, number: record.number, title: record.purpose, status: record.status,
+        path: `/requests/${record.id}`, fields: { date: record.createdAt?.slice(0, 10) || "", lines: String(record.lineCount), needed: record.neededBy || "" } }))}
+      loading={loading} error={error} total={data?.count ?? 0} page={Math.floor(offset / (data?.limit || 50)) + 1} pageSize={data?.limit || 50}
+      onPage={page => setOffset((page - 1) * (data?.limit || 50))} onRefresh={() => setRevision(value => value + 1)}
+      action={canCreate ? <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined}
+      emptyTitle="What do you need to buy?" emptyDescription="Start with a draft request for goods or services." />
     {canCheckPolicy && <Panel title="Buying-rule checks and issues" className="mt-5"><div className="p-5">
       {policyError && <p role="alert" className="mb-3 text-sm text-red-700">{policyError}</p>}
       {policyNotice && <p role="status" className="mb-3 text-sm">{policyNotice}</p>}
@@ -154,12 +166,18 @@ export function LiveRequestList() {
   </div>;
 }
 
-export function LiveRequestEditor() {
+export function LiveRequestEditor() { return <RequestEditorRecord key={useRequestScopeKey()} />; }
+function RequestEditorRecord() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { legalEntityId, defaultCurrencyCode, permissions } = context();
   const canWrite = permissions.includes(id ? "procurement-request-edit" : "procurement-request-create");
   const [draft, setDraft] = useState<RequestDraft>(() => ({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }));
+  const [baseline, setBaseline] = useState(() => JSON.stringify(draft));
+  const [discardOpen, setDiscardOpen] = useState(false), [reconcileOpen, setReconcileOpen] = useState(false);
+  const returnPath = id ? `/requests/${id}` : "/requests";
+  const leave = () => { if (saving) return; if (saveBlock) { setReconcileOpen(true); return; }
+    if (JSON.stringify(draft) !== baseline) { setDiscardOpen(true); return; } navigate(returnPath); };
   const [version, setVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(Boolean(id));
   const [saving, setSaving] = useState(false);
@@ -190,13 +208,13 @@ export function LiveRequestEditor() {
   useEffect(() => {
     setVersion(null); setLoadedContext(null); setSaving(false); setError("");
     if (!canWrite) { setLoading(false); return; }
-    if (!id) { setLoading(false); setDraft({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }); return; }
+    if (!id) { setLoading(false); const initial = { purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }; setDraft(initial); setBaseline(JSON.stringify(initial)); return; }
     const controller = new AbortController();
     setLoading(true); setError("");
     getOwnRequestDraft(legalEntityId, id, controller.signal).then((record) => {
       if (controller.signal.aborted) return;
       const exactDraft = readExactRequestDraft(record);
-      setDraft(exactDraft); setVersion(record.version); setLoadedContext(editorContext);
+      setDraft(exactDraft); setBaseline(JSON.stringify(exactDraft)); setVersion(record.version); setLoadedContext(editorContext);
     }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -237,19 +255,23 @@ export function LiveRequestEditor() {
       if (isCurrentSave()) {
         setError(errorText(cause));
         if (cause instanceof RequestApiError && cause.status === 409) setSaveBlock("stale");
-        else if (!(cause instanceof RequestApiError) || cause.status === 0 || cause.status >= 500) setSaveBlock("unknown");
+        else if (!(cause instanceof RequestApiError) || cause.status === 0 || [408, 429, 499].includes(cause.status) || cause.status >= 500) setSaveBlock("unknown");
       }
     }
     finally { if (isCurrentSave()) setSaving(false); }
   }
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={id ? "Edit request" : "New request"} subtitle="Save a draft for the company shown in the top bar. No budget is reserved yet." />
+  return <div className="pb-20">
+    <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-5 sm:px-8">
+      <h1 className="flex items-center gap-2 text-2xl font-semibold"><FileText size={22} />{id ? "Edit request" : "New request"}</h1>
+      <Button variant="ghost" aria-label="Close request editor" disabled={saving} onClick={leave}><X size={20} /></Button>
+    </header>
+    <div className="border-b border-border bg-muted/30 px-5 py-4 sm:px-8"><p className="text-sm">Purchase request · {draft.currencyCode || defaultCurrencyCode}</p><p className="mt-1 text-xs text-muted-foreground">Save a draft for the company shown in the top bar. No budget is reserved yet.</p></div>
     {!canWrite ? <p role="alert">You do not have access to {id ? "edit this request" : "create a request"}.</p> : loading ? <p role="status">Loading request…</p> : id && (version === null || loadedContext !== editorContext)
       ? <p role="alert">{error || "This draft is unavailable. Return to the list."}</p>
-      : <form className="max-w-6xl space-y-5" onSubmit={save}>
+      : <form onSubmit={save}><div className="max-w-6xl space-y-6 px-5 py-6 sm:px-8">
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current request before retrying.</span>}</p>}
       {saveBlock && <p role="status" className="rounded-lg border border-border p-3 text-sm">{saveBlock === "stale" ? "The saved request changed. Review it before saving again." : "The save result was not confirmed. Review saved requests before trying again."} <Link className="text-primary underline" to={id ? `/requests/${id}` : "/requests"}>Review saved request{id ? "" : "s"}</Link></p>}
-      <Panel title="Request details"><div className="grid gap-4 p-5 sm:grid-cols-2">
+      <fieldset disabled={saving || !!saveBlock} className="min-w-0 space-y-6 border-0 p-0"><section aria-label="Request details"><div className="grid gap-4 sm:grid-cols-2">
         <Field label="What do you need?" className="sm:col-span-2"><Input required maxLength={1000} value={draft.purpose} onChange={(event) => field("purpose", event.target.value)} /></Field>
         <Field label="Needed by"><Input type="date" value={draft.neededBy ?? ""} onChange={(event) => field("neededBy", event.target.value)} /></Field>
         <Field label="Currency"><Input maxLength={3} value={draft.currencyCode ?? ""} onChange={(event) => field("currencyCode", event.target.value.toUpperCase())} /></Field>
@@ -258,8 +280,8 @@ export function LiveRequestEditor() {
         <Field label="Delivery address" className="sm:col-span-2"><Input value={draft.deliveryAddressText ?? ""} onChange={(event) => field("deliveryAddressText", event.target.value)} /></Field>
         <Field label="Funding source"><Input value={draft.fundingSourceRef ?? ""} onChange={(event) => field("fundingSourceRef", event.target.value)} /></Field>
         <Field label="Note for approver" className="sm:col-span-2"><Textarea rows={3} value={draft.notesToApprover ?? ""} onChange={(event) => field("notesToApprover", event.target.value)} /></Field>
-      </div></Panel>
-      <Panel title="What to buy"><div className="space-y-4 p-5">
+      </div></section>
+      <section aria-label="What to buy"><h2 className="mb-4 text-base font-semibold">What to buy</h2><div className="space-y-4">
         <div className="space-y-3 rounded-lg border border-border p-4">
           <Field label="Search approved items"><Input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search by name or item code" /></Field>
           {catalogLoading ? <p role="status" className="text-sm">Loading approved items…</p>
@@ -270,26 +292,37 @@ export function LiveRequestEditor() {
                 <Button type="button" variant="secondary" disabled={price.exactEstimatedUnitPrice === undefined} onClick={() => addCatalogPrice(price)}>Use item</Button>
               </div>)}</div> : <p className="text-sm text-muted-foreground">No approved items found. You can enter an item below.</p>}
         </div>
-        {draft.lines.map((line, index) => <div className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-6" key={line.id ?? `new-${index}`}>
-          {line.catalogEntryId && <div className="sm:col-span-6 flex items-center justify-between gap-3 text-sm"><span>From approved catalog · price checked when you send the request</span><Button type="button" variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: current.lines.map((value, at) => at === index ? { ...value, catalogEntryId: null, catalogItemId: null, catalogPublishedVersion: null, preferredSupplierId: null } : value) }))}>Switch to custom item</Button></div>}
-          <Field label={`Item or service ${index + 1}`} className="sm:col-span-3"><Input required readOnly={Boolean(line.catalogEntryId)} maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field>
-          <Field label="Quantity"><Input required inputMode="decimal" value={line.requestedQuantity} onChange={(event) => lineField(index, "requestedQuantity", event.target.value)} /></Field>
-          <Field label="Unit"><Input required readOnly={Boolean(line.catalogEntryId)} value={line.unitCode} onChange={(event) => lineField(index, "unitCode", event.target.value)} /></Field>
-          <Field label="Estimated unit price"><Input required readOnly={Boolean(line.catalogEntryId)} inputMode="decimal" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", event.target.value)} /></Field>
-          <Field label="Category"><Input readOnly={Boolean(line.catalogEntryId)} value={line.categoryCode ?? ""} onChange={(event) => lineField(index, "categoryCode", event.target.value)} /></Field>
-          <Field label="Type"><Input readOnly={Boolean(line.catalogEntryId)} value={line.purchaseType ?? ""} onChange={(event) => lineField(index, "purchaseType", event.target.value)} /></Field>
-          <Field label="Needed by"><Input type="date" value={line.neededBy ?? ""} onChange={(event) => lineField(index, "neededBy", event.target.value)} /></Field>
-          <div className="flex items-end">{draft.lines.length > 1 && <Button variant="ghost" aria-label={`Remove line ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((_, at) => at !== index) }))}><Trash2 size={16} /></Button>}</div>
-        </div>)}
+        <div className="relative overflow-x-auto rounded-lg border border-border"><RecordTable className="min-w-[800px]">
+          <thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th><th aria-label="Actions" /></tr></thead>
+          <tbody>{draft.lines.flatMap((line, index) => [
+            <tr key={`${line.id ?? index}-main`}>
+              <td><Field label={`Item or service ${index + 1}`}><Input required readOnly={Boolean(line.catalogEntryId)} maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field></td>
+              <td><Field label="Quantity"><Input required inputMode="decimal" value={line.requestedQuantity} onChange={(event) => lineField(index, "requestedQuantity", event.target.value)} /></Field></td>
+              <td><Field label="Unit"><Input required readOnly={Boolean(line.catalogEntryId)} value={line.unitCode} onChange={(event) => lineField(index, "unitCode", event.target.value)} /></Field></td>
+              <td><Field label="Estimated unit price"><Input required readOnly={Boolean(line.catalogEntryId)} inputMode="decimal" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", event.target.value)} /></Field></td>
+              <td>{draft.lines.length > 1 && <Button variant="ghost" aria-label={`Remove line ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((_, at) => at !== index) }))}><Trash2 size={16} /></Button>}</td>
+            </tr>,
+            <tr key={`${line.id ?? index}-details`}><td colSpan={5}><div className="grid gap-3 sm:grid-cols-3">
+              <Field label="Category"><Input readOnly={Boolean(line.catalogEntryId)} value={line.categoryCode ?? ""} onChange={(event) => lineField(index, "categoryCode", event.target.value)} /></Field>
+              <Field label="Type"><Input readOnly={Boolean(line.catalogEntryId)} value={line.purchaseType ?? ""} onChange={(event) => lineField(index, "purchaseType", event.target.value)} /></Field>
+              <Field label="Needed by"><Input type="date" value={line.neededBy ?? ""} onChange={(event) => lineField(index, "neededBy", event.target.value)} /></Field>
+              {line.catalogEntryId && <div className="sm:col-span-3 flex items-center justify-between gap-3 text-sm"><span>From approved catalog · price checked when you send the request</span><Button type="button" variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: current.lines.map((value, at) => at === index ? { ...value, catalogEntryId: null, catalogItemId: null, catalogPublishedVersion: null, preferredSupplierId: null } : value) }))}>Switch to custom item</Button></div>}
+            </div></td></tr>,
+          ])}</tbody></RecordTable></div>
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add line</Button>
         <p className="text-right text-sm font-semibold">Estimated amount before discounts, tax and delivery: {draft.currencyCode || defaultCurrencyCode} {total === null ? "Enter valid quantities and prices" : formatRequestBaseAmount(total)}</p>
-      </div></Panel>
-      <div className="flex gap-3"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/requests/${id}` : "/requests"}><Button variant="secondary">Cancel</Button></Link></div>
+      </div></section>
+      <section className="flex flex-wrap items-center gap-3 border-t border-border pt-5" aria-label="Request attachments"><Button variant="secondary" disabled title="Request file upload is not connected."><Paperclip size={15} /> Attach files</Button><p className="text-sm text-muted-foreground">File upload is not available yet.</p></section>
+      </fieldset></div>
+      <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-3 border-y border-border bg-card px-5 py-4 sm:px-8"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Button variant="secondary" disabled={saving} onClick={leave}>Cancel</Button></footer>
     </form>}
+    {discardOpen && <Modal title="Discard changes?" onClose={() => setDiscardOpen(false)}><p className="mb-5 text-sm">Your unsaved changes will be lost.</p><div className="flex gap-3"><Button variant="danger" onClick={() => { if (!saving) navigate(returnPath); }}>Discard changes</Button><Button variant="secondary" onClick={() => setDiscardOpen(false)}>Keep editing</Button></div></Modal>}
+    {reconcileOpen && <Modal title="Check the saved request" onClose={() => setReconcileOpen(false)}><p className="mb-5 text-sm">The last save needs review. Open saved requests to check its outcome before starting another save.</p><div className="flex gap-3"><Button variant="secondary" onClick={() => navigate(returnPath)}>Open saved requests</Button><Button variant="ghost" onClick={() => setReconcileOpen(false)}>Stay here</Button></div></Modal>}
   </div>;
 }
 
-export function LiveRequestDetail() {
+export function LiveRequestDetail() { return <RequestDetailRecord key={useRequestScopeKey()} />; }
+function RequestDetailRecord() {
   const { id } = useParams();
   const approvalRefresh = useRequestApprovalOperation(`request-detail:${id ?? ""}`);
   const { legalEntityId, permissions } = context();
@@ -299,6 +332,7 @@ export function LiveRequestDetail() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
+  const [tab, setTab] = useState("overview");
   const [budget, setBudget] = useState<OwnBudgetStatus | null>(null);
   const [budgetError, setBudgetError] = useState("");
   const [policy, setPolicy] = useState<OwnPolicyStatus | null>(null);
@@ -317,7 +351,7 @@ export function LiveRequestDetail() {
     if (!id || record?.status !== "Submitted") { setBudget(null); return; }
     const controller = new AbortController();
     setBudget(null); setBudgetError("");
-    getOwnRequestBudgetStatus(legalEntityId, id, controller.signal).then(setBudget)
+    getOwnRequestBudgetStatus(legalEntityId, id, controller.signal).then(result => { if (!controller.signal.aborted) setBudget(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setBudgetError(errorText(cause)); });
     return () => controller.abort();
   }, [legalEntityId, id, record?.status]);
@@ -325,7 +359,7 @@ export function LiveRequestDetail() {
     if (!id || record?.status !== "Submitted") { setPolicy(null); return; }
     const controller = new AbortController();
     setPolicy(null); setPolicyError("");
-    getOwnRequestPolicyStatus(legalEntityId, id, controller.signal).then(setPolicy)
+    getOwnRequestPolicyStatus(legalEntityId, id, controller.signal).then(result => { if (!controller.signal.aborted) setPolicy(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setPolicyError(errorText(cause)); });
     return () => controller.abort();
   }, [legalEntityId, id, record?.status]);
@@ -352,9 +386,18 @@ export function LiveRequestDetail() {
     || (record.status !== "ReturnedForChanges" && record.approvalState === "Returned");
   const approvalLocked = record.status === "ReturnPendingFinanceRelease" || (record.status !== "ReturnedForChanges"
     && (Boolean(record.approvalInstanceRef) || ["Pending", "Returned", "ReturnPendingFinanceRelease"].includes(record.approvalState || "")));
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={record.purpose} subtitle={`${record.number} · ${record.currencyCode}`} actions={<><Badge>{record.status}</Badge>{permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Link to={`/requests/${record.id}/edit`}><Button variant="secondary">Edit request</Button></Link>}</>} />
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background">
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-5 py-4 sm:px-8">
+      <div className="min-w-0"><Link to="/requests" className="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground"><ArrowLeft size={14} />My Requests</Link><p className="text-xs text-muted-foreground">{record.number} · {record.currencyCode}</p><h1 className="break-words text-2xl font-semibold">{record.purpose}</h1></div>
+      <div className="flex items-center gap-3"><Badge>{record.status}</Badge>{permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Link to={`/requests/${record.id}/edit`} onClick={event => { if (busy) event.preventDefault(); }}><Button variant="secondary" disabled={busy}>Edit request</Button></Link>}</div>
+    </header>
+    <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "items", label: `Items (${activeLines.length})` }, { key: "related", label: "Related" }, { key: "comments", label: "Comments" }, { key: "history", label: "History" }]} active={tab} onChange={setTab} />
+    <div className="space-y-5 px-5 py-5 sm:px-8">
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    {busy && <p role="status" className="text-sm text-muted-foreground">Saving request…</p>}
+    <div hidden={tab !== "overview"} inert={tab !== "overview"} className="space-y-5">
+    <DetailSection title="Request Overview"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><DetailValue label="Request" value={record.number} /><DetailValue label="Currency" value={record.currencyCode} /><DetailValue label="Needed by" value={record.neededBy} /><DetailValue label="Cost centre" value={record.costCenterRef} /><DetailValue label="Project" value={record.projectRef} /><DetailValue label="Revision" value={record.version} /></dl></DetailSection>
+
     {record.status === "Submitted" && !waitingForRelease && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">
       <p>Sent for policy and budget review. This request has not been approved and cannot create a purchase order yet.</p>
       {policyError ? <p role="alert" className="mt-2 text-red-700">Buying-rule status is unavailable. {policyError}</p>
@@ -363,12 +406,18 @@ export function LiveRequestDetail() {
         : <p className="mt-2 font-medium">Budget: {budget?.status === "Available" && budget.reservationConfirmed ? "Finance confirmed funds for this request" : budget?.status === "Insufficient" ? "Finance found insufficient funds" : budget?.status === "PartiallyAvailable" ? "Finance found only part of the funds" : budget?.status === "NotConfigured" ? "No budget is configured for this request" : "Waiting for Finance to check the budget"}.</p>}
     </div>}
     {record.status === "ReturnedForChanges" && <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm"><p className="font-medium">Please update this request and send it again.</p><p className="mt-2">{record.returnReason || "Procurement asked for changes."}</p></div>}
-    <Panel title="Requested lines"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th></tr></thead><tbody>{activeLines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.requestedQuantity}</td><td>{line.unitCode}</td><td>{record.currencyCode} {line.estimatedUnitPrice.toLocaleString()}</td></tr>)}</tbody></RecordTable></div></Panel>
+    <Panel title="Requested lines"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th></tr></thead><tbody>{activeLines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.exactAmounts?.requestedQuantity ?? String(line.requestedQuantity)}</td><td>{line.unitCode}</td><td>{record.currencyCode} {line.exactAmounts?.estimatedUnitPrice ?? String(line.estimatedUnitPrice)}</td></tr>)}</tbody></RecordTable></div></Panel>
     <div className="mt-5 grid gap-5 lg:grid-cols-2"><Panel title="Delivery"><p className="p-5 text-sm">{record.deliveryAddressText || "No delivery address added."}</p></Panel><Panel title="Note for approver"><p className="p-5 text-sm">{record.notesToApprover || "No note added."}</p></Panel></div>
     {permissions.includes("procurement-request-submit") && !approvalLocked && (record.status === "Draft" || record.status === "ReturnedForChanges") && <Panel title="Send for review" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Add a needed-by date to this request or every line before sending it. No budget is reserved by this step.</p><Button disabled={busy || !activeLines.length || (!record.neededBy && activeLines.some((line) => !line.neededBy))} onClick={() => void submit()}>Send for review</Button></div></Panel>}
     {permissions.includes("procurement-request-edit") && !approvalLocked && (record.status === "Draft" || record.status === "Submitted" || record.status === "ReturnedForChanges") && <Panel title="Withdraw request" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason" hint={record.status === "Submitted" ? "Required once a request has been sent for review." : "Optional before review."}><Textarea rows={2} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || (record.status === "Submitted" && !withdrawReason.trim())} onClick={() => void withdraw()}>Withdraw request</Button></div></Panel>}
     <RequestApprovalPanel requestId={record.id} version={record.version} status={waitingForRelease ? "ReturnPendingFinanceRelease" : record.status}
       onChanged={async () => { const captured = approvalRefresh; const updated = await getOwnRequestDraft(legalEntityId, record.id); if (captured.current()) setRecord(updated); }} />
+    </div>
+    {tab === "items" && <DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th><th>Category</th><th>Needed by</th></tr></thead><tbody>{activeLines.map(line => <tr key={line.id}><td>{line.description}</td><td>{line.exactAmounts?.requestedQuantity ?? String(line.requestedQuantity)}</td><td>{line.unitCode}</td><td>{record.currencyCode} {line.exactAmounts?.estimatedUnitPrice ?? String(line.estimatedUnitPrice)}</td><td>{line.categoryCode || "—"}</td><td>{line.neededBy || record.neededBy || "—"}</td></tr>)}</tbody></RecordTable></div></DetailSection>}
+    {tab === "related" && <DetailSection title="Related records"><p className="text-sm text-muted-foreground">Linked quote requests, orders and receipts will appear here when connected.</p></DetailSection>}
+    {tab === "comments" && <DetailSection title="All Comments"><p className="mb-3 text-sm text-muted-foreground">Record comments are not connected yet. The saved note for the approver is available in Overview.</p><Button variant="secondary" disabled>Add comment</Button></DetailSection>}
+    {tab === "history" && <DetailSection title="History"><dl className="grid gap-4 sm:grid-cols-2"><DetailValue label="Created" value={record.createdAt} /><DetailValue label="Saved revision" value={record.version} /><DetailValue label="Submitted" value={record.submittedAt} /><DetailValue label="Returned" value={record.returnedAt} /></dl><p className="mt-4 text-sm text-muted-foreground">These are saved record facts. Detailed activity history is not connected to this view yet.</p></DetailSection>}
     <Link to="/requests" className="mt-5 inline-block text-sm text-primary hover:underline">Back to my requests</Link>
+    </div>
   </div>;
 }
