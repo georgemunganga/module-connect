@@ -97,8 +97,12 @@ async function mutation(page: Page, method: string, suffix: string, action: () =
   await action();
   const response = await waiting;
   if (!response) throw new Error("Expected business response was not observed");
+  const body = await json(response);
+  evidence.lastObservedBusinessResponse = { status: response.status(), suffix,
+    requestVersion: Number.isSafeInteger(body.requestVersion) ? body.requestVersion : null };
+  retain();
   expect(response.status()).toBe(method === 'POST' && (suffix === '/requests' || suffix.endsWith('/approval-cases') || suffix.endsWith('/budget-checks')) ? 201 : 200);
-  return { response, body: await json(response) };
+  return { response, body };
 }
 
 // No route interception, private subject headers, fixture cookies, business
@@ -150,19 +154,20 @@ test('normal cookie users complete a real Core-only purchase request approval', 
     expect(submitted.body.status).toBe('Submitted');
     evidence.submittedVersion = submitted.body.version; retain();
 
-    step = 'independent-buying-rule-check';
-    const policyPage = await pageFor(configuration, '/procurement-requests', 'Purchase Requests');
-    const policyRow = policyPage.getByRole('row').filter({ hasText: purpose });
-    await expect(policyRow).toBeVisible();
-    const evaluated = await mutation(policyPage, 'POST', `/requests/${requestId}/policy-evaluations`, () =>
-      policyRow.getByRole('button', { name: 'Check buying rules' }).click());
-    expect(evaluated.body.requestId).toBe(requestId);
-    expect(evaluated.body.requestVersion).toBe(submitted.body.version + 1);
-    expect(evaluated.body.evaluation?.requestVersion).toBe(submitted.body.submittedVersion);
-    expect(evaluated.body.status).toBe('Matched');
-    expect(guid(evaluated.body.evaluation?.id)).toBe(true);
-    evidence.policyEvaluationId = evaluated.body.evaluation.id;
-    evidence.policyEvaluatedVersion = evaluated.body.requestVersion; retain();
+    step = 'automatic-buying-rule-check';
+    // Submission persists a matching evaluation. The manual review queue
+    // deliberately excludes Matched requests, so no redundant click is needed.
+    await expect(makerPage.getByText('Buying rules: Checked; this has not approved the request.', { exact: true })).toBeVisible();
+    const assessed = await api(() => maker.request.get(`/api/procurement/v1/requests/${requestId}/policy-status`, { headers: selection }));
+    expect(assessed.status()).toBe(200);
+    const evaluated = await json(assessed);
+    expect(evaluated.requestId).toBe(requestId);
+    expect(evaluated.requestVersion).toBe(submitted.body.version);
+    expect(evaluated.evaluation?.requestVersion).toBe(submitted.body.submittedVersion);
+    expect(evaluated.status).toBe('Matched'); expect(evaluated.isAuthority).toBe(false);
+    expect(guid(evaluated.evaluation?.id)).toBe(true);
+    evidence.policyEvaluationId = evaluated.evaluation.id;
+    evidence.policyEvaluationMode = 'AutomaticOnSubmission'; retain();
 
     step = 'independent-finance-check';
     const checker = await browser.newContext({ baseURL: proxy.origin, ignoreHTTPSErrors: true }); contexts.push(checker);
@@ -233,7 +238,16 @@ test('normal cookie users complete a real Core-only purchase request approval', 
     expect(source.requesterWorkerId).toBeNull();
     evidence.status = 'PASS_NORMAL_COOKIE_APPROVAL_UI_ONLY'; evidence.browserApprovalJourneyVerified = true;
     retain();
-  } catch { failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step; }
+  } catch (cause) {
+    failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step;
+    let detail = cause instanceof Error ? cause.message : 'Controlled non-Error failure';
+    for (const account of fixture.syntheticCredentials) {
+      for (const secret of [account.password, account.email]) {
+        if (secret) detail = detail.split(secret).join('<redacted>').split(encodeURIComponent(secret)).join('<redacted>');
+      }
+    }
+    evidence.sanitizedFailure = detail.slice(0, 4000);
+  }
   finally {
     for (const context of contexts.reverse()) await context.close().catch(() => undefined);
     retain();
