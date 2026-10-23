@@ -52,7 +52,7 @@ test("vendor directory keeps ERP layout and sends search, status and paging to t
   await expect(page.getByTestId("erp-record-table")).toBeVisible();
   await expect(page.getByRole("link", { name: "Add vendor" })).toBeVisible();
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(page.getByText("Second vendor")).toBeVisible();
+  await expect(page.getByText("Second vendor", { exact: true })).toBeVisible();
   await page.getByLabel("Search vendors", { exact: true }).fill("Copper");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
