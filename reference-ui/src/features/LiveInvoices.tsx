@@ -12,6 +12,7 @@ import { StandardDataTable } from "../components/data/StandardDataTable";
 import { RecordTable } from "../components/data/RecordTable";
 import { ListTools, type ExportScope, type ListColumn, type ListFilterField } from "../components/data/ListTools";
 import { ActiveFilterChips } from "../components/data/ActiveFilterChips";
+import { DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { downloadCsv } from "../lib/csv";
 import { invoicePageRows, type InvoiceSort, type InvoiceListFilters } from "./invoice-list-view";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -381,9 +382,9 @@ function InvoiceEditorRecord() {
 export function LiveInvoiceDetail() {
   const { id } = useParams();
   const readiness = useCompany();
-  const { selection } = useErpShell();
+  const { selection, authEpoch } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <InvoiceDetailRecord key={JSON.stringify([readiness.tenantId, readiness.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
+  return <InvoiceDetailRecord key={JSON.stringify([authEpoch, readiness.tenantId, readiness.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
     readiness.principalId, readiness.permissions, readiness.capabilities, id])} />;
 }
 function InvoiceDetailRecord() {
@@ -392,6 +393,8 @@ function InvoiceDetailRecord() {
   const { id } = useParams();
   const { legalEntityId, capabilities, permissions } = useCompany();
   const [reason, setReason] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [stale, setStale] = useState(false);
@@ -410,6 +413,7 @@ function InvoiceDetailRecord() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, refresh]);
+  const refreshSavedInvoice = () => { setError(""); setUncertain(false); setStale(false); setReason(""); setRefresh(value => value + 1); };
   async function cancel() {
     if (!permissions.includes("procurement-invoice-capture") || !invoice || busy || uncertain || stale || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
     setBusy(true); setError("");
@@ -428,34 +432,83 @@ function InvoiceDetailRecord() {
   }
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."}</div>;
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={`Invoice ${invoice.invoiceNumber}`} subtitle={`${invoice.supplierName || "Vendor"} · ${invoice.currencyCode}`} actions={<><Badge>{invoice.status}</Badge>{permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit") && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}</>} />
-    {notice && <p role="status" className="mb-5 text-sm">{notice}</p>}
-    {error && <div role="alert" className="mb-4 text-destructive">{error}<Button variant="secondary" onClick={() => window.location.reload()}>Refresh invoice</Button></div>}
-    {uncertain && <p role="status">The response was not confirmed. Refresh the invoice to check its saved status before trying another action.</p>}
-    <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">{invoice.nextStep}</p>
-    <div className="mb-5 grid gap-5 sm:grid-cols-2"><Panel title="Invoice details"><dl className="grid grid-cols-2 gap-3 p-5 text-sm">
-      <dt>Invoice date</dt><dd>{invoice.invoiceDate}</dd><dt>Due date</dt><dd>{invoice.dueDate || "—"}</dd>
-      <dt>Received via</dt><dd>{invoice.intakeChannel}</dd><dt>Purchase order</dt><dd>{invoice.purchaseOrderId || "Not linked"}</dd>
-    </dl></Panel><Panel title="Amounts"><dl className="grid grid-cols-2 gap-3 p-5 text-sm">
-      <dt>Net</dt><dd>{money(invoice.exactAmounts?.netAmount ?? invoice.netAmount, invoice.currencyCode)}</dd>
-      <dt>Tax</dt><dd>{money(invoice.exactAmounts?.taxAmount ?? invoice.taxAmount, invoice.currencyCode)}</dd>
-      <dt>Total</dt><dd className="font-semibold">{money(invoice.exactAmounts?.grossAmount ?? invoice.grossAmount, invoice.currencyCode)}</dd>
-    </dl></Panel></div>
-    <Panel title="Invoice lines"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Line</th><th>Description</th><th>Quantity</th><th>Unit price</th><th>Tax</th></tr></thead>
-      <tbody>{invoice.lines.map((line) => <tr key={line.id}><td>{line.lineNumber}</td><td>{line.description}</td>
-        <td>{line.exactAmounts?.quantity ?? line.quantity}</td><td>{money(line.exactAmounts?.unitPrice ?? line.unitPrice, invoice.currencyCode)}</td><td>{money(line.exactAmounts?.taxAmount ?? line.taxAmount, invoice.currencyCode)}</td></tr>)}</tbody>
-    </RecordTable></div></Panel>
-    {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
-    {capabilities.invoiceComparison && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
-      company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
-      comparisonAvailable={capabilities.invoiceComparison} refresh={(message) => { setNotice(message ?? ""); setRefresh((value) => value + 1); }} />}
-    {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
-    {permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel") && <Panel title="Cancel invoice" className="mt-5"><div className="space-y-3 p-5">
-      <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
-      <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>
-      <Button variant="danger" disabled={busy || uncertain || stale || !reason.trim()} onClick={() => { if (window.confirm("Cancel this invoice? Its saved history will be retained.")) void cancel(); }}>Cancel invoice</Button>
-    </div></Panel>}
-    <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/bills">Back to bills</Link>
+  const canEdit = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
+  const canCancel = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel");
+  const tabs = [
+    { key: "overview", label: "Overview" },
+    { key: "items", label: `Items (${invoice.lines.length})` },
+    { key: "related", label: "Related" },
+    { key: "comments", label: "Comments" },
+    { key: "history", label: "History" },
+  ];
+  return <div className="-mx-5 -mt-5 min-h-[calc(100dvh-5rem)] bg-background sm:-mx-8 sm:-mt-8">
+    <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/95 px-4 py-4 backdrop-blur sm:px-6">
+      <div className="min-w-0">
+        <Link to="/bills" className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><ArrowLeft size={13} /> Bills</Link>
+        <div className="flex flex-wrap items-center gap-2"><h1 className="truncate text-2xl font-semibold">Invoice {invoice.invoiceNumber}</h1><Badge>{invoice.status}</Badge></div>
+        <p className="mt-1 text-xs text-muted-foreground">{invoice.supplierName || "Vendor"} · {invoice.currencyCode} · Revision {invoice.version}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {canEdit && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}
+        <div className="relative"><Button variant="secondary" aria-label="More invoice actions" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={16} /> More</Button>
+          {menuOpen && <div role="menu" aria-label="Invoice actions" className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-card p-3 text-left text-xs shadow-lg">
+            <p className="font-medium">Available actions</p>
+            <p className="mt-1 text-muted-foreground">{canCancel ? "Cancel is available in Overview after a reason is entered." : "No cancellation action is allowed for this saved invoice."}</p>
+            <p className="mt-2 text-muted-foreground">Hard delete and payment are unavailable. Finance owns payment.</p>
+          </div>}
+        </div>
+      </div>
+    </header>
+    <DetailTabs tabs={tabs} active={activeTab} onChange={key => { setActiveTab(key); setMenuOpen(false); }} />
+    <div className="space-y-4 p-4 sm:p-6">
+      {notice && <p role="status" className="text-sm">{notice}</p>}
+      {error && <div role="alert" className="text-sm text-destructive">{error} <Button variant="secondary" onClick={refreshSavedInvoice}>Refresh invoice</Button></div>}
+      {uncertain && <p role="status" className="text-sm">The response was not confirmed. Refresh the invoice to check its saved status before trying another action.</p>}
+      {stale && <p role="status" className="text-sm">The invoice changed. Refresh the saved record before another action.</p>}
+      {activeTab === "overview" && <>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(270px,0.85fr)]">
+          <DetailSection title="Bill Overview" action={<Badge>{invoice.status}</Badge>}>
+            <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+              <DetailValue label="Invoice date" value={invoice.invoiceDate} />
+              <DetailValue label="Due date" value={invoice.dueDate || "—"} />
+              <DetailValue label="Vendor" value={invoice.supplierName || "Vendor"} />
+              <DetailValue label="Received via" value={invoice.intakeChannel} />
+              <DetailValue label="Purchase order" value={invoice.purchaseOrderId || "Not linked"} />
+              <DetailValue label="Revision" value={invoice.version} />
+            </dl>
+          </DetailSection>
+          <div className="space-y-4">
+            <DetailSection title="Amounts"><dl className="grid gap-4 sm:grid-cols-2">
+              <DetailValue label="Net" value={money(invoice.exactAmounts?.netAmount ?? invoice.netAmount, invoice.currencyCode)} />
+              <DetailValue label="Tax" value={money(invoice.exactAmounts?.taxAmount ?? invoice.taxAmount, invoice.currencyCode)} />
+              <DetailValue label="Total" value={<strong>{money(invoice.exactAmounts?.grossAmount ?? invoice.grossAmount, invoice.currencyCode)}</strong>} />
+            </dl></DetailSection>
+            <DetailSection title="Workflow context"><p className="text-sm">{invoice.nextStep}</p><p className="mt-3 text-xs text-muted-foreground">Procurement validates this invoice. Finance owns posting and payment.</p></DetailSection>
+          </div>
+        </div>
+        {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
+        {capabilities.invoiceComparison && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
+          company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
+          comparisonAvailable={capabilities.invoiceComparison} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
+        {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
+        {canCancel && <DetailSection title="Cancel invoice"><div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
+          <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>
+          <Button variant="danger" disabled={busy || uncertain || stale || !reason.trim()} onClick={() => { if (window.confirm("Cancel this invoice? Its saved history will be retained.")) void cancel(); }}>Cancel invoice</Button>
+        </div></DetailSection>}
+      </>}
+      {activeTab === "items" && <DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[700px] text-left text-sm">
+        <thead className="table-head"><tr><th className="table-cell">Line</th><th className="table-cell">Description</th><th className="table-cell">Quantity</th><th className="table-cell">Unit price</th><th className="table-cell">Tax</th></tr></thead>
+        <tbody>{invoice.lines.map(line => <tr key={line.id} className="border-b border-border"><td className="table-cell">{line.lineNumber}</td><td className="table-cell font-medium">{line.description}</td>
+          <td className="table-cell">{line.exactAmounts?.quantity ?? line.quantity}</td><td className="table-cell">{money(line.exactAmounts?.unitPrice ?? line.unitPrice, invoice.currencyCode)}</td>
+          <td className="table-cell">{money(line.exactAmounts?.taxAmount ?? line.taxAmount, invoice.currencyCode)}</td></tr>)}</tbody>
+      </RecordTable></div><div className="ml-auto mt-4 max-w-xs space-y-2 text-sm"><div className="flex justify-between"><span className="text-muted-foreground">Net</span><span>{money(invoice.exactAmounts?.netAmount ?? invoice.netAmount, invoice.currencyCode)}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{money(invoice.exactAmounts?.taxAmount ?? invoice.taxAmount, invoice.currencyCode)}</span></div><div className="flex justify-between border-t border-border pt-2 font-semibold"><span>Total</span><span>{money(invoice.exactAmounts?.grossAmount ?? invoice.grossAmount, invoice.currencyCode)}</span></div></div></DetailSection>}
+      {activeTab === "related" && <DetailSection title="Related Records"><dl className="grid gap-5 sm:grid-cols-2">
+        <DetailValue label="Purchase order reference" value={invoice.purchaseOrderId || "Not linked"} />
+        <DetailValue label="Vendor" value={invoice.supplierName || "Vendor"} />
+      </dl><p className="mt-4 text-sm text-muted-foreground">Related order, credit and payment records are not supplied by the invoice intake detail endpoint. Open their respective workspaces to review confirmed records.</p></DetailSection>}
+      {activeTab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not connected to this live invoice. No browser-only comment will be saved to an ERP record.</p></DetailSection>}
+      {activeTab === "history" && <DetailSection title="History"><dl className="grid gap-5 sm:grid-cols-2"><DetailValue label="Saved revision" value={invoice.version} /><DetailValue label="Created at" value={invoice.createdAt || "—"} /></dl><p className="mt-4 text-sm text-muted-foreground">The invoice intake API does not supply an audit event history on this screen. No events are inferred from the current status.</p></DetailSection>}
+    </div>
   </div>;
 }

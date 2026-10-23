@@ -381,3 +381,38 @@ test("read-only live inbox retains layout without offering manual invoice captur
   await expect(page.getByRole("button", { name: "Upload bill", exact: true })).toBeVisible();
   await expect(page.getByText("Your inbox is clear", { exact: true })).toBeVisible();
 });
+
+test("live bill detail keeps the ERP-adapted tabs while showing only saved invoice facts", async ({ page }) => {
+  await mockErp(page, true, { seed: true, crud: true, documents: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Items (1)" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Related" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Comments" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
+  await expect(page.getByText("ZMW 100.00").first()).toBeVisible();
+  await expect(page.getByText("No documents added yet.")).toBeVisible();
+  await page.getByRole("tab", { name: "Items (1)" }).click();
+  await expect(page.getByRole("heading", { name: "Items / Line Details" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Supplies" })).toBeVisible();
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(page.getByText("not supplied by the invoice intake detail endpoint", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "Comments" }).click();
+  await expect(page.getByText("No browser-only comment will be saved", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByText("No events are inferred", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "More invoice actions" }).click();
+  await expect(page.getByText("Hard delete and payment are unavailable", { exact: false })).toBeVisible();
+});
+
+test("read-only bill detail keeps tabs and documents without offering a write action", async ({ page }) => {
+  await mockErp(page, false, { seed: true, documents: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Items (1)" })).toBeVisible();
+  await expect(page.getByText("No documents added yet.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit invoice" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cancel invoice" })).toHaveCount(0);
+  await expect(page.getByLabel("Invoice document")).toHaveCount(0);
+});
