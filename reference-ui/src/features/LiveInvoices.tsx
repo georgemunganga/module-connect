@@ -408,12 +408,12 @@ function InvoiceDetailRecord() {
     const controller = new AbortController();
     setLoading(true); setError(""); setInvoice(null);
     getInvoiceIntake(legalEntityId, id, controller.signal)
-      .then((result) => { if (!controller.signal.aborted) setInvoice(result); })
+      .then((result) => { if (!controller.signal.aborted) { setInvoice(result); setUncertain(false); setStale(false); setReason(""); } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, refresh]);
-  const refreshSavedInvoice = () => { setError(""); setUncertain(false); setStale(false); setReason(""); setRefresh(value => value + 1); };
+  const refreshSavedInvoice = () => { setError(""); setRefresh(value => value + 1); };
   async function cancel() {
     if (!permissions.includes("procurement-invoice-capture") || !invoice || busy || uncertain || stale || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
     setBusy(true); setError("");
@@ -431,8 +431,8 @@ function InvoiceDetailRecord() {
     } finally { if (alive.current) setBusy(false); }
   }
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
-  if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."}</div>;
-  const canEdit = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
+  if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."} <Button variant="secondary" onClick={refreshSavedInvoice}>Try loading again</Button></div>;
+  const canEdit = !uncertain && !stale && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
   const canCancel = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel");
   const tabs = [
     { key: "overview", label: "Overview" },
@@ -441,8 +441,8 @@ function InvoiceDetailRecord() {
     { key: "comments", label: "Comments" },
     { key: "history", label: "History" },
   ];
-  return <div className="-mx-5 -mt-5 min-h-[calc(100dvh-5rem)] bg-background sm:-mx-8 sm:-mt-8">
-    <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/95 px-4 py-4 backdrop-blur sm:px-6">
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background">
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/95 px-4 py-4 backdrop-blur sm:px-6">
       <div className="min-w-0">
         <Link to="/bills" className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><ArrowLeft size={13} /> Bills</Link>
         <div className="flex flex-wrap items-center gap-2"><h1 className="truncate text-2xl font-semibold">Invoice {invoice.invoiceNumber}</h1><Badge>{invoice.status}</Badge></div>
@@ -450,11 +450,13 @@ function InvoiceDetailRecord() {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {canEdit && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}
+        <Button variant="secondary" disabled aria-describedby="invoice-payment-unavailable">Record payment</Button>
+        <span id="invoice-payment-unavailable" className="sr-only">Finance handles payments. This action is unavailable here.</span>
         <div className="relative"><Button variant="secondary" aria-label="More invoice actions" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={16} /> More</Button>
           {menuOpen && <div role="menu" aria-label="Invoice actions" className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-card p-3 text-left text-xs shadow-lg">
-            <p className="font-medium">Available actions</p>
-            <p className="mt-1 text-muted-foreground">{canCancel ? "Cancel is available in Overview after a reason is entered." : "No cancellation action is allowed for this saved invoice."}</p>
-            <p className="mt-2 text-muted-foreground">Hard delete and payment are unavailable. Finance owns payment.</p>
+            <p className="font-medium">More actions</p>
+            <p className="mt-1 text-muted-foreground">{canCancel && !uncertain && !stale ? "Cancel is available in Overview after a reason is entered." : uncertain || stale ? "Refresh the saved bill before another action." : "No cancellation action is allowed for this saved invoice."}</p>
+            <p className="mt-2 text-muted-foreground">Delete is unavailable. Finance handles payments.</p>
           </div>}
         </div>
       </div>
@@ -465,7 +467,7 @@ function InvoiceDetailRecord() {
       {error && <div role="alert" className="text-sm text-destructive">{error} <Button variant="secondary" onClick={refreshSavedInvoice}>Refresh invoice</Button></div>}
       {uncertain && <p role="status" className="text-sm">The response was not confirmed. Refresh the invoice to check its saved status before trying another action.</p>}
       {stale && <p role="status" className="text-sm">The invoice changed. Refresh the saved record before another action.</p>}
-      {activeTab === "overview" && <>
+      <div hidden={activeTab !== "overview"} inert={activeTab !== "overview"} className="space-y-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(270px,0.85fr)]">
           <DetailSection title="Bill Overview" action={<Badge>{invoice.status}</Badge>}>
             <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -496,7 +498,7 @@ function InvoiceDetailRecord() {
           <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>
           <Button variant="danger" disabled={busy || uncertain || stale || !reason.trim()} onClick={() => { if (window.confirm("Cancel this invoice? Its saved history will be retained.")) void cancel(); }}>Cancel invoice</Button>
         </div></DetailSection>}
-      </>}
+      </div>
       {activeTab === "items" && <DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[700px] text-left text-sm">
         <thead className="table-head"><tr><th className="table-cell">Line</th><th className="table-cell">Description</th><th className="table-cell">Quantity</th><th className="table-cell">Unit price</th><th className="table-cell">Tax</th></tr></thead>
         <tbody>{invoice.lines.map(line => <tr key={line.id} className="border-b border-border"><td className="table-cell">{line.lineNumber}</td><td className="table-cell font-medium">{line.description}</td>
@@ -506,9 +508,9 @@ function InvoiceDetailRecord() {
       {activeTab === "related" && <DetailSection title="Related Records"><dl className="grid gap-5 sm:grid-cols-2">
         <DetailValue label="Purchase order reference" value={invoice.purchaseOrderId || "Not linked"} />
         <DetailValue label="Vendor" value={invoice.supplierName || "Vendor"} />
-      </dl><p className="mt-4 text-sm text-muted-foreground">Related order, credit and payment records are not supplied by the invoice intake detail endpoint. Open their respective workspaces to review confirmed records.</p></DetailSection>}
-      {activeTab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not connected to this live invoice. No browser-only comment will be saved to an ERP record.</p></DetailSection>}
-      {activeTab === "history" && <DetailSection title="History"><dl className="grid gap-5 sm:grid-cols-2"><DetailValue label="Saved revision" value={invoice.version} /><DetailValue label="Created at" value={invoice.createdAt || "—"} /></dl><p className="mt-4 text-sm text-muted-foreground">The invoice intake API does not supply an audit event history on this screen. No events are inferred from the current status.</p></DetailSection>}
+      </dl><p className="mt-4 text-sm text-muted-foreground">Linked orders, credits and payments are not shown here yet. Open their workspaces to check the latest records.</p></DetailSection>}
+      {activeTab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not available for bills yet.</p></DetailSection>}
+      {activeTab === "history" && <DetailSection title="History"><dl className="grid gap-5 sm:grid-cols-2"><DetailValue label="Saved revision" value={invoice.version} /><DetailValue label="Created at" value={invoice.createdAt || "—"} /></dl><p className="mt-4 text-sm text-muted-foreground">A detailed activity log is not available here yet. The saved revision above is confirmed.</p></DetailSection>}
     </div>
   </div>;
 }

@@ -143,7 +143,8 @@ test("AP records a supplier invoice as received and sees no payment action", asy
   await expect(page.getByRole("heading", { name: "Invoice INV-001" })).toBeVisible();
   await expect(page.getByText("ZMW 275.00")).toBeVisible();
   await expect(page.getByText("Confirm source evidence")).toBeVisible();
-  await expect(page.getByRole("main").getByRole("button", { name: /pay|post|approve/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Record payment" })).toBeDisabled();
+  await expect(page.getByRole("main").getByRole("button", { name: /post|approve/i })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Invoice INV-001" })).toBeVisible();
 });
@@ -393,17 +394,21 @@ test("live bill detail keeps the ERP-adapted tabs while showing only saved invoi
   await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
   await expect(page.getByText("ZMW 100.00").first()).toBeVisible();
   await expect(page.getByText("No documents added yet.")).toBeVisible();
+  await page.getByLabel("Invoice document").setInputFiles({ name: "original invoice.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7 pending") });
+  await page.getByRole("tab", { name: "Items (1)" }).click();
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await expect(page.getByRole("button", { name: "Add document" })).toBeEnabled();
   await page.getByRole("tab", { name: "Items (1)" }).click();
   await expect(page.getByRole("heading", { name: "Items / Line Details" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Supplies" })).toBeVisible();
   await page.getByRole("tab", { name: "Related" }).click();
-  await expect(page.getByText("not supplied by the invoice intake detail endpoint", { exact: false })).toBeVisible();
+  await expect(page.getByText("Linked orders, credits and payments are not shown here yet", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Comments" }).click();
-  await expect(page.getByText("No browser-only comment will be saved", { exact: false })).toBeVisible();
+  await expect(page.getByText("Comments are not available for bills yet.")).toBeVisible();
   await page.getByRole("tab", { name: "History" }).click();
-  await expect(page.getByText("No events are inferred", { exact: false })).toBeVisible();
+  await expect(page.getByText("A detailed activity log is not available here yet", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "More invoice actions" }).click();
-  await expect(page.getByText("Hard delete and payment are unavailable", { exact: false })).toBeVisible();
+  await expect(page.getByText("Delete is unavailable. Finance handles payments.")).toBeVisible();
 });
 
 test("read-only bill detail keeps tabs and documents without offering a write action", async ({ page }) => {
