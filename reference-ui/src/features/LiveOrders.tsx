@@ -3,7 +3,9 @@ import { LiveOrderExecutionList, LiveOrderExecutionDetail } from "./LiveOrderExe
 import { LiveOrderSourceEditor } from "./LiveOrderSourceEditor";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { ArrowLeft, ShoppingBag, X } from "lucide-react";
+import { Badge, Button, Field, Input, Panel, Select, Textarea } from "../components/ui";
+import { ActivityTimeline, DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -159,11 +161,16 @@ function LiveOrderEditorRecord() {
   }
   if (!permissions.includes(id ? "procurement-po-edit" : "procurement-po-create"))
     return <div className="p-5 sm:p-8" role="alert">You do not have access to edit purchase orders for this company.</div>;
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={id ? "Edit order draft" : "New purchase order draft"} subtitle="This stays internal until approvals and budget checks are available." />
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background pb-20">
+    <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-5 py-5 sm:px-8">
+      <div className="min-w-0"><h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} strokeWidth={1.4} className="shrink-0" />{id ? "Edit order draft" : "New purchase order draft"}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">This stays internal until approvals and budget checks are available.</p></div>
+      <Button type="button" variant="ghost" aria-label="Close editor" disabled={saving} onClick={() => navigate(id ? `/purchase-orders/${id}` : "/purchase-orders")}><X size={20} /></Button>
+    </header>
+    <div className="max-w-[1260px] space-y-7 px-5 py-6 sm:px-8">
     {loading ? <p role="status">Loading order…</p> : loadedKey !== recordKey || id && version === null
       ? <p role="alert">{error || "This draft is unavailable. Return to the order list."}</p>
-      : <form onSubmit={save} className="max-w-5xl space-y-5">
+      : <form onSubmit={save} className="space-y-5">
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <fieldset disabled={saving || uncertain || stale} className="contents">
       <Panel title="Order details"><div className="grid gap-4 p-5 sm:grid-cols-2">
@@ -206,12 +213,18 @@ function LiveOrderEditorRecord() {
         <p className="text-right text-sm font-semibold">Estimated total {money(total, draft.currencyCode)}</p>
       </div></Panel>
       {id && <Field label="Reason for removing a saved line" hint="Required if you remove a line from an existing draft."><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>}
-      <div className="flex gap-3"><Button type="submit" disabled={saving || uncertain || stale}>{saving ? "Saving…" : "Save draft"}</Button>
-        <Button type="button" variant="secondary" onClick={() => navigate(id ? `/purchase-orders/${id}` : "/purchase-orders")}>Cancel</Button></div>
+      <Panel title="Notes and attachments"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Notes and attachments cannot be saved on this order draft yet. Add the order details and lines above, then review the saved record.</p><Button type="button" variant="secondary" disabled>Add attachment</Button></div></Panel>
       </fieldset>
       {stale && <p role="alert">This saved order changed. Your entries stay here. Open the saved draft to compare before making another correction. <Link to={`/purchase-orders/${id}`}>Open saved draft</Link></p>}
       {uncertain && <p role="alert">This save is unconfirmed. Check the order list before making another change; the save will not be repeated automatically. <Link to="/purchase-orders">Open purchase orders</Link></p>}
+      <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-3 border-y border-border bg-surface/95 px-5 py-4 backdrop-blur">
+        <Button type="submit" disabled={saving || uncertain || stale}>{saving ? "Saving…" : "Save draft"}</Button>
+        <Button type="button" variant="secondary" disabled title="Approval and vendor sending are separate workflows.">Save and send</Button>
+        <Button type="button" variant="secondary" disabled={saving} onClick={() => navigate(id ? `/purchase-orders/${id}` : "/purchase-orders")}>Cancel</Button>
+        <span className="ml-auto text-xs text-muted-foreground">Draft only · sending and payment are separate actions</span>
+      </footer>
     </form>}
+    </div>
   </div>;
 }
 
@@ -230,6 +243,7 @@ function LegacyOrderDetail() {
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -249,29 +263,37 @@ function LegacyOrderDetail() {
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading order…</div>;
   if (!record) return <div className="p-5 sm:p-8" role="alert">{error || "Order not found."}</div>;
   const canEdit = record.status === "Draft" && permissions.includes("procurement-po-edit");
-  return <div className="p-5 sm:p-8">
-    <PageHeader title={record.number} subtitle={`${record.supplierName || "Vendor"} · ${record.currencyCode}`} actions={canEdit
-      ? <Button onClick={() => navigate(`/purchase-orders/${record.id}/edit`)}>Edit draft</Button> : <Badge>{record.status}</Badge>} />
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background">
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-8">
+      <div className="min-w-0"><Link className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary" to="/purchase-orders"><ArrowLeft size={13} />Purchase Orders</Link>
+        <div className="flex min-w-0 flex-wrap items-center gap-2"><h1 title={record.number} className="max-w-3xl break-all text-2xl font-semibold line-clamp-2">{record.number}</h1><Badge>{record.status}</Badge></div>
+        <p className="mt-1 text-xs text-muted-foreground">{record.supplierName || "Vendor"} · {record.currencyCode}</p></div>
+      {canEdit && <Button onClick={() => navigate(`/purchase-orders/${record.id}/edit`)}>Edit draft</Button>}
+    </header>
+    <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "items", label: `Items (${record.lines.length})` }, { key: "related", label: "Related" },
+      { key: "comments", label: "Comments" }, { key: "history", label: "History" }]} active={activeTab} onChange={setActiveTab} />
+    <div className="space-y-5 px-5 py-6 sm:px-8">
     {error && <p role="alert" className="mb-4 text-sm text-red-700">{error}</p>}
-    <p className="mb-5 rounded-lg border border-border bg-surface-muted p-4 text-sm">{record.nextStep}</p>
-    <Panel title="Order details"><dl className="grid grid-cols-2 gap-3 p-5 text-sm">
-      <dt>Status</dt><dd><Badge>{record.status}</Badge></dd>
-      <dt>Expected delivery</dt><dd>{record.expectedDeliveryOn || "—"}</dd>
-      <dt>Deliver to</dt><dd>{record.shipToRef || "—"}</dd>
-      <dt>Bill to</dt><dd>{record.billToRef || "—"}</dd>
-      <dt>Payment terms</dt><dd>{record.paymentTermRef || "—"}</dd>
-      {record.closureReason && <><dt>Cancellation reason</dt><dd>{record.closureReason}</dd></>}
-    </dl></Panel>
-    <Panel title="Order lines" className="mt-5"><div className="overflow-x-auto p-5"><RecordTable>
+    {activeTab === "overview" && <><p className="rounded-lg border border-border bg-surface-muted p-4 text-sm">{record.nextStep}</p>
+    <DetailSection title="Purchase Order Overview" action={<Badge>{record.status}</Badge>}><dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <DetailValue label="Status" value={record.status} /><DetailValue label="Expected delivery" value={record.expectedDeliveryOn || "—"} />
+      <DetailValue label="Deliver to" value={record.shipToRef || "—"} /><DetailValue label="Bill to" value={record.billToRef || "—"} />
+      <DetailValue label="Payment terms" value={record.paymentTermRef || "—"} /><DetailValue label="Currency" value={record.currencyCode} />
+      {record.closureReason && <DetailValue label="Cancellation reason" value={record.closureReason} />}
+    </dl></DetailSection>
+    {canEdit && <Panel title="Cancel draft"><div className="space-y-3 p-5">
+      <Field label="Cancellation reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+      <Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button>
+    </div></Panel>}</>}
+    {activeTab === "items" && <DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable variant="compact">
       <thead><tr><th>Line</th><th>Description</th><th>Unit</th><th>Quantity</th><th>Unit price</th><th>Tax</th></tr></thead>
       <tbody>{record.lines.map((line) => <tr key={line.id}><td>{line.lineNumber}</td><td>{line.description}</td>
         <td>{line.unitCode}</td><td>{line.quantity}</td><td>{money(line.unitPrice, record.currencyCode)}</td>
         <td>{money(line.taxAmount, record.currencyCode)}</td></tr>)}</tbody>
-    </RecordTable><p className="mt-4 text-right font-semibold">Estimated total {money(record.total, record.currencyCode)}</p></div></Panel>
-    {canEdit && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5">
-      <Field label="Cancellation reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
-      <Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button>
-    </div></Panel>}
-    <Link className="mt-5 inline-block text-sm text-primary hover:underline" to="/purchase-orders">Back to purchase orders</Link>
+    </RecordTable></div><p className="mt-4 text-right font-semibold">Estimated total {money(record.total, record.currencyCode)}</p></DetailSection>}
+    {activeTab === "related" && <DetailSection title="Related Records"><p className="text-sm text-muted-foreground">Related receipts and bills are not connected to this draft view yet. Open their own ERP pages to review saved records.</p></DetailSection>}
+    {activeTab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments cannot be saved on this purchase order yet.</p></DetailSection>}
+    {activeTab === "history" && <DetailSection title="History"><ActivityTimeline items={[]} /><p className="mt-3 text-sm text-muted-foreground">Detailed order change history is not available from the draft API.</p></DetailSection>}
+    </div>
   </div>;
 }

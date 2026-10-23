@@ -105,6 +105,31 @@ test("item draft persists through create, refresh and edit without publishing", 
   await expect(page.getByRole("heading", { name: "Office chair deluxe" })).toBeVisible();
 });
 
+test("item editor retains grouped fields and guards deliberate discard", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/items/new");
+  await expect(page.getByRole("heading", { name: "Item details" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Purchase information" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sales information" })).toBeVisible();
+  await page.getByLabel("Item name").fill("Unsaved chair");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Discard item changes?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page.getByLabel("Item name")).toHaveValue("Unsaved chair");
+});
+
+test("item detail keeps profile and tabs while leaving unsupported sections honest", async ({ page }) => {
+  await mockErp(page, { activeItem: true });
+  await page.goto(`/procurement/workspace/items/${itemId}`);
+  await expect(page.getByRole("heading", { name: "Item Details" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Purchase Information" })).toBeVisible();
+  await page.getByRole("tab", { name: "Transactions" }).click();
+  await expect(page.getByText("Related purchase orders, receipts and bills are not available", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: /Catalog prices/ }).click();
+  await expect(page.getByRole("button", { name: "Add draft price" })).toBeVisible();
+});
+
 test("authorized reviewer activates an item after checking its category", async ({ page }) => {
   await mockErp(page, { canApprove: true });
   await page.goto("/procurement/workspace/items/new");
@@ -121,6 +146,7 @@ test("authorized reviewer activates an item after checking its category", async 
 test("authorized reviewer publishes an approved vendor price", async ({ page }) => {
   await mockErp(page, { activeItem: true, canApprove: true });
   await page.goto(`/procurement/workspace/items/${itemId}`);
+  await page.getByRole("tab", { name: /Catalog prices/ }).click();
   await page.getByRole("combobox", { name: "Vendor" }).click();
   await page.getByRole("option", { name: "Office Supply" }).click();
   await page.getByLabel("Unit price (ZMW)").fill("250");
@@ -155,4 +181,14 @@ test("stale item edit keeps the entered form and active item can be deactivated"
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("alert")).toContainText("changed");
   await expect(page.getByLabel("Item name")).toHaveValue("Unsaved laptop");
+});
+
+for (const width of [1440, 390]) test(`item detail fits ERP workspace at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 1000 }); await mockErp(page, { activeItem: true });
+  await page.goto(`/procurement/workspace/items/${itemId}`);
+  await expect(page.getByRole("heading", { name: "Purchase Information", exact: true })).toBeVisible();
+  await expect(page.locator("#erp-global-preloader")).toHaveCount(0);
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: info.outputPath(`item-detail-${width}.png`), fullPage: true });
 });

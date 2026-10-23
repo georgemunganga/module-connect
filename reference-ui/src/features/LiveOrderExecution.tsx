@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Switch, Textarea } from "../components/ui";
+import { ArrowLeft } from "lucide-react";
+import { Badge, Button, Field, Input, Modal, Panel, Select, Switch, Textarea } from "../components/ui";
+import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
 import { RecordTable } from "../components/data/RecordTable";
+import { ActivityTimeline, DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
 import type { ApprovalAction } from "../../../src/platform/procurement-approvals-api";
@@ -38,22 +41,24 @@ export function LiveOrderExecutionList() {
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [context.legalEntityId, view, page, status, revision, allowed]);
-  return <div className="p-5 sm:p-8"><PageHeader title="Purchase Orders" subtitle="Review the orders assigned to your buying, Finance or sending responsibilities." actions={context.permissions.includes("procurement-po-convert") ? <Link className="text-sm text-primary hover:underline" to="/purchase-orders/new">Create from approved requests</Link> : undefined} />
-    {!views.length ? <p role="alert">You do not have access to an order worklist.</p> : <>
-      <div role="tablist" aria-label="Order responsibilities" className="mb-5 flex flex-wrap gap-3">{views.map((item) => <Button key={item.code} role="tab" aria-selected={view === item.code}
-        variant={view === item.code ? "primary" : "secondary"} onClick={() => { setData(null); setView(item.code); setPage(1); }}>{item.label}</Button>)}</div>
-      <div className="mb-5 flex flex-wrap items-end gap-3"><Field label="Order status"><Select value={status} onChange={(event) => { setData(null); setStatus(event.target.value); setPage(1); }}>
-        <option value="">All statuses</option>{["Draft", "PendingApproval", "Approved", "Returned", "Rejected", "IssuePending", "Issued", "Cancelled"].map((value) => <option key={value}>{value}</option>)}</Select></Field>
-        <Button variant="secondary" onClick={() => setRevision((n) => n + 1)}>Refresh orders</Button></div>
-      {error && <p role="alert" className="mb-4 text-sm text-red-700">{error}</p>}
-      {loading ? <p role="status">Loading your order work…</p> : data?.items.length ? <Panel><div className="overflow-x-auto p-5"><RecordTable>
-        <thead><tr><th>Order</th><th>Vendor</th><th>Currency</th><th>Expected delivery</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.items.map((order) => <tr key={order.id}><td>{order.number}</td><td>{order.supplierName || "Vendor"}</td><td>{order.currencyCode}</td><td>{order.expectedDeliveryOn || "—"}</td><td><Badge>{order.status}</Badge></td>
-          <td><Link className="text-sm text-primary hover:underline" to={`/purchase-orders/${order.id}`}>Review order</Link></td></tr>)}</tbody>
-      </RecordTable></div></Panel> : !error && <EmptyState title="No orders need your attention" description="Orders within your current company, branch and responsibilities will appear here." />}
-      {data && data.total > data.pageSize && <div className="mt-5 flex items-center gap-3"><Button variant="secondary" disabled={page <= 1} onClick={() => { setData(null); setPage(page - 1); }}>Previous orders</Button><span>Page {page}</span>
-        <Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => { setData(null); setPage(page + 1); }}>Next orders</Button></div>}
-    </>}
+  const controls = <div className="mb-5 space-y-4">
+    <div role="tablist" aria-label="Order responsibilities" className="flex flex-wrap gap-3">{views.map(item => <Button key={item.code} role="tab" aria-selected={view === item.code}
+      variant={view === item.code ? "primary" : "secondary"} onClick={() => { setData(null); setView(item.code); setPage(1); }}>{item.label}</Button>)}</div>
+    <div className="flex flex-wrap items-end gap-3"><Field label="Order status"><Select value={status} onChange={event => { setData(null); setStatus(event.target.value); setPage(1); }}>
+      <option value="">All statuses</option>{["Draft", "PendingApproval", "Approved", "Returned", "Rejected", "IssuePending", "Issued", "Cancelled"].map(value => <option key={value}>{value}</option>)}</Select></Field>
+      <Button variant="secondary" onClick={() => { setData(null); setRevision(n => n + 1); }}>Refresh orders</Button>
+      <p className="text-xs text-muted-foreground">Responsibilities and order status filter the server worklist.</p></div>
+  </div>;
+  if (!views.length) return <div className="p-5 sm:p-8" role="alert">You do not have access to an order worklist.</div>;
+  return <div className="p-5 sm:p-8"><LiveRecordDirectory key={`${view}:${status}:${page}:${revision}`} title="Purchase Orders"
+    subtitle="Review orders within your buying, Finance or sending responsibilities." entity="orders" initialSort="number" contextControls={controls}
+    action={context.permissions.includes("procurement-po-convert") ? <Link to="/purchase-orders/new"><Button>Create from approved requests</Button></Link> : undefined}
+    columns={[{ key: "number", label: "Order / Vendor", width: 280 }, { key: "currency", label: "Currency", width: 100 }, { key: "delivery", label: "Expected delivery", width: 180 }, { key: "status", label: "Status", width: 170 }]}
+    rows={(data?.items ?? []).map(order => ({ id: order.id, number: order.number, title: order.supplierName || "Vendor", status: order.status,
+      path: `/purchase-orders/${order.id}`, fields: { currency: order.currencyCode, delivery: order.expectedDeliveryOn || "" } }))}
+    loading={loading} error={error} total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25}
+    onPage={next => { setData(null); setPage(next); }} onRefresh={() => { setData(null); setRevision(n => n + 1); }}
+    emptyTitle="No orders need your attention" emptyDescription="Orders within your current company, branch and responsibilities appear here." />
   </div>;
 }
 
@@ -66,6 +71,7 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
   const context = useLiveReadiness()!, company = context.legalEntityId;
   const [data, setData] = useState<ExecutionOrderDetail | null>(null), [loading, setLoading] = useState(true), [revision, setRevision] = useState(0);
   const [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false), [action, setAction] = useState<OrderAction | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
   const [pending, setPending] = useState<OrderCommand | null>(() => pendingCommands.get(scopeKey) ?? null);
   const [decision, setDecision] = useState<{ assignmentId: string; caseVersion: number; assignmentVersion: number; action: ApprovalAction; reason: string } | null>(null);
   const alive = useRef(true);
@@ -120,42 +126,53 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
     <p className="text-sm">Command reference: <code>{pending.key}</code>. Keep this browser tab open until the result is reconciled.</p>
     <details className="text-sm"><summary>Original action details</summary><pre className="overflow-auto whitespace-pre-wrap">{pending.operation}{"\n"}{pending.body}</pre></details>
     <Button disabled={busy} onClick={() => void recover()}>{busy ? "Checking…" : "Check saved result"}</Button></div></Panel>;
-  return <div className="p-5 sm:p-8"><PageHeader title={data?.order.number ?? "Purchase order"} subtitle={data ? `${data.order.supplierName || "Vendor"} · ${data.order.currencyCode}` : undefined} />
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background">
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-8"><div className="min-w-0">
+      <Link className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary" to="/purchase-orders"><ArrowLeft size={13} />Purchase Orders</Link>
+      <div className="flex min-w-0 flex-wrap items-center gap-2"><h1 title={data?.order.number ?? "Purchase order"} className="max-w-3xl break-all text-2xl font-semibold line-clamp-2">{data?.order.number ?? "Purchase order"}</h1>{data && <Badge>{data.order.status}</Badge>}</div>
+      {data && <p className="mt-1 text-xs text-muted-foreground">{data.order.supplierName || "Vendor"} · {data.order.currencyCode}</p>}
+    </div></header>
+    {data && <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "items", label: `Items (${data.order.lines.length})` }, { key: "related", label: "Related" },
+      { key: "comments", label: "Comments" }, { key: "history", label: "History" }]} active={activeTab} onChange={setActiveTab} />}
+    <div className="space-y-5 px-5 py-6 sm:px-8">
     {notice && <p role="status" className="mb-5 text-sm">{notice}</p>}{error && <p role="alert" className="mb-5 text-sm text-red-700">{error}</p>}{recovery}
     {loading ? <p role="status">Loading order review…</p> : data ? <>
-      <Panel title="Order details"><dl className="grid grid-cols-2 gap-3 p-5 text-sm"><dt>Status</dt><dd><Badge>{data.order.status}</Badge></dd><dt>Finance</dt><dd>{data.financeStatus === "CommitmentHeld" ? "Funds reserved for this order" : "No confirmed funds held"}</dd>
-        <dt>Deliver to</dt><dd>{data.order.shipToRef || "—"}</dd><dt>Bill to</dt><dd>{data.order.billToRef || "—"}</dd><dt>Payment terms</dt><dd>{data.order.paymentTermRef || "—"}</dd><dt>Commercial revision</dt><dd>{data.order.currentRevision}</dd></dl>
+      {activeTab === "overview" && <><DetailSection title="Purchase Order Overview" action={<Badge>{data.order.status}</Badge>}><dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <DetailValue label="Status" value={data.order.status} /><DetailValue label="Finance" value={data.financeStatus === "CommitmentHeld" ? "Funds reserved for this order" : "No confirmed funds held"} />
+        <DetailValue label="Deliver to" value={data.order.shipToRef || "—"} /><DetailValue label="Bill to" value={data.order.billToRef || "—"} />
+        <DetailValue label="Payment terms" value={data.order.paymentTermRef || "—"} /><DetailValue label="Commercial revision" value={data.order.currentRevision} /></dl>
         {(data.order.status === "Returned" || data.order.status === "Rejected") && data.financeStatus === "CommitmentHeld" && <p className="px-5 pb-5 text-sm">Finance must confirm the release or restoration of held funds before this order can be changed.</p>}
-      </Panel>
-      <Panel title="Order lines" className="mt-5"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Description</th><th>Unit</th><th>Quantity</th><th>Unit price</th><th>Tax</th><th>Received</th><th>Invoiced</th></tr></thead>
-        <tbody>{data.order.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.unitCode}</td><td>{line.quantity}</td><td>{data.order.currencyCode} {line.unitPrice}</td><td>{data.order.currencyCode} {line.taxAmount}</td><td>{line.acceptedQuantity}</td><td>{line.invoicedQuantity}</td></tr>)}</tbody></RecordTable>
-        <p className="mt-4 text-right">Before tax: {data.order.currencyCode} {data.totals.lineBaseAmount}</p><p className="text-right font-semibold">Total: {data.order.currencyCode} {data.totals.grossAmount}</p></div></Panel>
-      <Panel title="Next actions" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm">ERP checks your current access, amounts, approvals and evidence when you confirm. An available form does not guarantee approval.</p>
+      </DetailSection>
+      <Panel title="Next actions"><div className="space-y-3 p-5"><p className="text-sm">ERP checks your current access, amounts, approvals and evidence when you confirm. An available form does not guarantee approval.</p>
         {!evidenceSelection && <p role="status" className="text-sm">Current Finance and sending evidence is unavailable in this order view. Those actions are paused; approval and order history remain available.</p>}
         <div className="flex flex-wrap gap-3">{!pending && data.actionCandidates.some((candidate) => candidate.code === "SourceEdit" && candidate.canStart && context.permissions.includes(candidate.permission)) && <Link className="text-sm text-primary hover:underline" to={`/purchase-orders/${id}/edit`}>Edit linked draft</Link>}{data.actionCandidates.filter((candidate) => supported(candidate.code) && context.permissions.includes(candidate.permission)).map((candidate) => <div key={candidate.code}>
           <Button variant="secondary" disabled={busy || !!pending || !candidate.canStart || !canUseEvidence(candidate.code as OrderAction)} onClick={() => setAction(candidate.code as OrderAction)}>{labels[candidate.code as OrderAction]}</Button>
           {!candidate.canStart && <p className="mt-2 text-sm text-muted-foreground">Current requirements are not met. Review funding, policy and assigned responsibilities.</p>}</div>)}</div>
         {!data.actionCandidates.some((candidate) => supported(candidate.code) && context.permissions.includes(candidate.permission)) && <p className="text-sm text-muted-foreground">There are no connected actions for your current responsibilities.</p>}
       </div></Panel>
-      {context.permissions.includes("procurement-po-approve") && <Panel title="Your order approval" className="mt-5"><div className="space-y-3 p-5">
+      {context.permissions.includes("procurement-po-approve") && <Panel title="Your order approval"><div className="space-y-3 p-5">
         <p className="text-sm">Decide only on your active assignment. ERP rechecks current authority, funding and all source controls.</p>
         {data.actionCandidates.some((candidate) => candidate.code === "Decide" && candidate.canStart && context.permissions.includes(candidate.permission))
           ? data.cases.filter((workflow) => workflow.state === "Pending" && workflow.sourceVersion === data.order.currentRevision).flatMap((workflow) => workflow.stages.filter((stage) => stage.state === "Active")
             .flatMap((stage) => stage.assignments.filter((assignment) => assignment.assignedToMe && assignment.state === "Pending").map((assignment) => <div key={assignment.id} className="space-y-2"><p className="text-sm">Your decision · {stage.code}</p><div className="flex flex-wrap gap-3">{(["Approve", "Reject", "Return"] as const).map((action) => <Button key={action} variant={action === "Approve" ? "primary" : "secondary"}
               disabled={busy || !!pending || !!decision} onClick={() => { setError(""); setDecision({ assignmentId: assignment.id, caseVersion: workflow.version, assignmentVersion: assignment.version, action, reason: "" }); }}>{action === "Return" ? "Return for changes" : action}</Button>)}</div></div>)))
           : <p className="text-sm text-muted-foreground">No active decision is available for your current assignment and permissions.</p>}
-      </div></Panel>}
-      <Panel title="Finance evidence" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm">Evidence records Finance decisions; this page does not move money or create a Finance ledger entry.</p>
+      </div></Panel>}</>}
+      {activeTab === "items" && <DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable variant="compact"><thead><tr><th>Description</th><th>Unit</th><th>Quantity</th><th>Unit price</th><th>Tax</th><th>Received</th><th>Invoiced</th></tr></thead>
+        <tbody>{data.order.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.unitCode}</td><td>{line.quantity}</td><td>{data.order.currencyCode} {line.unitPrice}</td><td>{data.order.currencyCode} {line.taxAmount}</td><td>{line.acceptedQuantity}</td><td>{line.invoicedQuantity}</td></tr>)}</tbody></RecordTable>
+        <p className="mt-4 text-right">Before tax: {data.order.currencyCode} {data.totals.lineBaseAmount}</p><p className="text-right font-semibold">Total: {data.order.currencyCode} {data.totals.grossAmount}</p></div></DetailSection>}
+      {activeTab === "related" && <><Panel title="Finance evidence"><div className="space-y-3 p-5"><p className="text-sm">Evidence records Finance decisions; this page does not move money or create a Finance ledger entry.</p>
         {data.financeEvidence.length ? data.financeEvidence.map((entry) => <p key={entry.id} className="text-sm">{entry.commitmentReference} · {entry.currencyCode} {entry.confirmedGrossAmount} · {entry.releaseConfirmed ? "Released" : "Held"} · {entry.evidenceReference}</p>) : <p>No Finance confirmation recorded.</p>}
         {data.financeResolutions.map((entry) => <p key={entry.id} className="text-sm">{entry.outcome} · {entry.currencyCode} {entry.releasedGrossAmount} · {entry.evidenceReference} · {entry.reason}</p>)}
-      </div></Panel>
-      <Panel title="Approval and sending history" className="mt-5"><div className="space-y-3 p-5">
+      </div></Panel><DetailSection title="Related Records"><p className="text-sm text-muted-foreground">Receipt and invoice records are available in their own ERP workspaces. This view does not claim a linked payment.</p></DetailSection></>}
+      {activeTab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments cannot be saved on this purchase order yet.</p></DetailSection>}
+      {activeTab === "history" && <Panel title="Approval and sending history"><div className="space-y-3 p-5">
         {data.cases.map((entry) => <div key={entry.id}><p>Revision {entry.sourceVersion} · {entry.state}</p>{entry.stages.map((stage) => <p key={stage.id} className="text-sm">{stage.code}: {stage.state}</p>)}</div>)}
         {data.decisions.map((entry) => <p key={entry.id} className="text-sm">{entry.action} · {entry.reason || "No comment"} · {new Date(entry.decidedAt).toLocaleString()}</p>)}
         {data.issued.map((entry) => <p key={entry.id} className="text-sm">Revision {entry.revisionNumber} authorised for sending · {new Date(entry.authorizedAt).toLocaleString()}</p>)}
         {data.deliveries.map((entry) => <p key={entry.id} className="text-sm">{entry.outcome} · {entry.channel} · {entry.evidenceReference} · {new Date(entry.observedAt).toLocaleString()}</p>)}
-        {!data.cases.length && !data.issued.length && <p>No approval or sending history yet.</p>}
-      </div></Panel>
+        {!data.cases.length && !data.issued.length && <ActivityTimeline items={[]} />}
+      </div></Panel>}
       {decision && !pending && <ApprovalDecisionDialog action={decision.action} recordLabel="order" reason={decision.reason} busy={busy} error={error}
         onReason={(reason) => setDecision({ ...decision, reason })} onCancel={() => setDecision(null)} onConfirm={() => {
           if (decision.action !== "Approve" && !decision.reason.trim()) return;
@@ -164,7 +181,8 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
         }} />}
       {action && !pending && canUseEvidence(action) && <OrderActionForm key={`${action}:${data.order.version}`} action={action} data={data} selection={evidenceSelection} busy={busy} onClose={() => setAction(null)} onConfirm={execute} />}
     </> : !loading && !error && <p role="alert">This order is unavailable in your current scope.</p>}
-    <div className="mt-5 flex gap-3"><Link className="text-sm text-primary hover:underline" to="/purchase-orders">Back to purchase orders</Link><Button variant="secondary" disabled={busy} onClick={() => setRevision((n) => n + 1)}>Refresh order</Button></div>
+    <div className="flex gap-3"><Link className="text-sm text-primary hover:underline" to="/purchase-orders">Back to purchase orders</Link><Button variant="secondary" disabled={busy} onClick={() => setRevision((n) => n + 1)}>Refresh order</Button></div>
+    </div>
   </div>;
 }
 function OrderActionForm({ action, data, selection, busy, onClose, onConfirm }: { action: OrderAction; data: ExecutionOrderDetail; selection: ReturnType<typeof selectCurrentCommercialEvidence>; busy: boolean; onClose: () => void; onConfirm: (body: string, action: OrderAction) => Promise<void> }) {

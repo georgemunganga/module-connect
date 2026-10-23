@@ -51,7 +51,7 @@ async function fixture(page: Page, options: { lost?: boolean; stale?: boolean; i
 async function decide(page: Page, action: "Approve" | "Reject" | "Return") {
   await page.getByRole("button", { name: action === "Return" ? "Return for changes" : action, exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("textbox", { name: action === "Approve" ? "Comment (optional)" : "Reason Explain what needs to change.", exact: true }).fill("Current order and sources reviewed");
+  await dialog.getByRole("textbox", { name: action === "Approve" ? "Comment (optional)" : "Reason", exact: true }).fill("Current order and sources reviewed");
   await dialog.getByRole("button", { name: "Confirm decision", exact: true }).click();
 }
 test("PO-only approver uses existing Approvals entry with actual order queue/detail contracts", async ({ page }) => {
@@ -68,7 +68,7 @@ for (const action of ["Reject", "Return"] as const) test(`PO ${action} requires 
   const evidence = await fixture(page); await page.goto(`${root}/purchase-orders/${id}`);
   await page.getByRole("button", { name: action === "Return" ? "Return for changes" : action, exact: true }).click(); const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("button", { name: "Confirm decision", exact: true })).toBeDisabled();
-  await dialog.getByRole("textbox", { name: "Reason Explain what needs to change.", exact: true }).fill("Changes required before this order may proceed");
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).fill("Changes required before this order may proceed");
   await dialog.getByRole("button", { name: "Confirm decision", exact: true }).click();
   await expect(page.getByText("Finance must confirm the release or restoration of held funds", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "Edit linked draft", exact: true })).toHaveCount(0); expect(JSON.parse(evidence.writes[0].raw).action).toBe(action);
