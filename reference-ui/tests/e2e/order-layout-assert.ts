@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 export async function expectOrderWorkspaceBounds(page: Page, width: number, target: Locator) {
   await page.setViewportSize({ width, height: 1000 });
+  await expect(page.locator("#erp-global-preloader")).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
   const bounds = await page.evaluate(() => {
     const header = document.querySelector("main header")?.getBoundingClientRect();

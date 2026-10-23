@@ -187,6 +187,7 @@ for (const width of [1440, 390]) test(`item detail fits ERP workspace at ${width
   await page.setViewportSize({ width, height: 1000 }); await mockErp(page, { activeItem: true });
   await page.goto(`/procurement/workspace/items/${itemId}`);
   await expect(page.getByRole("heading", { name: "Purchase Information", exact: true })).toBeVisible();
+  await expect(page.locator("#erp-global-preloader")).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: info.outputPath(`item-detail-${width}.png`), fullPage: true });
