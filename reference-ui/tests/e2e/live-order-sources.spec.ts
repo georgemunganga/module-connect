@@ -56,6 +56,11 @@ async function prepare(page: Page, multiple = false) {
 }
 test("create one linked order with a partial exact quantity and pinned approved request version", async ({ page }) => {
   const evidence = await mock(page); await prepare(page);
+  await expect(page.getByRole("button", { name: "Close editor" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Notes and attachments" })).toBeVisible();
+  await expect(page.getByText("Notes and attachments cannot be saved through this linked order form", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add attachment" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save and send" })).toBeDisabled();
   await page.getByLabel("Quantity 1", { exact: true }).fill("2.1250"); await page.getByLabel("Unit price 1", { exact: true }).fill("99.1234");
   await page.getByRole("button", { name: "Create linked order", exact: true }).click();
   await expect(page.getByRole("heading", { name: "PO-LINKED", exact: true })).toBeVisible(); expect(evidence.writes).toHaveLength(1);

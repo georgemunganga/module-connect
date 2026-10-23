@@ -78,8 +78,22 @@ test("Finance-only operator discovers scoped orders and reviews exact amounts wi
   await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "My buying work", exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "Review order", exact: true }).click();
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText(`Total: ZMW ${gross}`, { exact: true })).toBeVisible();
   expect(evidence.reads.some((query) => query.includes("view=finance"))).toBe(true); expect(evidence.writes).toHaveLength(0); expect(evidence.unexpected).toEqual([]);
+});
+test("governed order retains imported detail tabs and independently recorded evidence", async ({ page }) => {
+  const evidence = await mock(page, { action: "FinanceRelease" }); await page.goto(`${root}/${id}`);
+  await expect(page.getByRole("heading", { name: "Purchase Order Overview" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record funds release", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(page.getByRole("heading", { name: "Finance evidence" })).toBeVisible();
+  await expect(page.getByText("FIN-HELD-1", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "Comments" }).click();
+  await expect(page.getByText("Comments cannot be saved", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByRole("heading", { name: "Approval and sending history" })).toBeVisible();
+  expect(evidence.writes).toHaveLength(0);
 });
 test("Finance interrupted write preserves exact payload/key and reconciles instead of posting twice", async ({ page }) => {
   const evidence = await mock(page, { lost: true }); await page.goto(`${root}/${id}`);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { Badge, Button, Field, Input, PageHeader, Panel, Select, Switch, Textarea } from "../components/ui";
+import { useNavigate, useParams } from "react-router-dom";
+import { ShoppingBag, X } from "lucide-react";
+import { Badge, Button, Field, Input, Panel, Select, Switch, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { pendingOrderCommands } from "../lib/order-command-memory";
@@ -108,12 +109,17 @@ function SourceEditor({ id, scopeKey }: { id?: string; scopeKey: string }) {
     finally { if (alive.current) setBusy(false); }
   }
   if (!canWrite) return <div className="p-5 sm:p-8" role="alert">You do not have access to {id ? "edit linked order drafts" : "create orders from approved requests"}.</div>;
-  return <div className="p-5 sm:p-8"><PageHeader title={id ? "Edit linked order draft" : "Create order from approved requests"} subtitle="Each line keeps its approved request. ERP rechecks sources, prices, quantities and access when you save." />
+  return <div className="-mx-5 -mt-5 min-h-[calc(100dvh-5rem)] bg-[#f7f8fb] pb-20 sm:-mx-8 sm:-mt-8">
+    <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-5 py-5 sm:px-8"><div>
+      <h1 className="flex items-center gap-2 text-xl font-medium tracking-tight"><ShoppingBag size={23} strokeWidth={1.4} />{id ? "Edit linked order draft" : "Create order from approved requests"}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Each line keeps its approved request. ERP rechecks sources, prices, quantities and access when you save.</p></div>
+      <Button type="button" variant="ghost" aria-label="Close editor" disabled={busy} onClick={() => navigate(id ? `/purchase-orders/${id}` : "/purchase-orders")}><X size={20} /></Button>
+    </header><div className="max-w-[1260px] space-y-7 px-5 py-6 sm:px-8">
     {error && <p role="alert" className="mb-5 text-sm text-red-700">{error}</p>}
     {pending && <Panel title="Check an unconfirmed save" className="mb-5"><div className="space-y-3 p-5"><p>New saves are paused. Keep this tab open and check the original result before creating or changing another order.</p>
       <p className="text-sm">Command reference: <code>{pending.key}</code></p><details className="text-sm"><summary>Original save details</summary><pre className="overflow-auto whitespace-pre-wrap">{pending.operation}{"\n"}{pending.body}</pre></details>
       <Button disabled={busy} onClick={() => void recover()}>{busy ? "Checking…" : "Check saved order"}</Button></div></Panel>}
-    {loading ? <p role="status">Loading linked draft…</p> : id && (version === null || blocked) ? <p className="mb-5 text-sm">Return to the order to review its latest state before editing.</p> : <form onSubmit={(event) => void save(event)} className="max-w-6xl space-y-5">
+    {loading ? <p role="status">Loading linked draft…</p> : id && (version === null || blocked) ? <p className="mb-5 text-sm">Return to the order to review its latest state before editing.</p> : <form onSubmit={(event) => void save(event)} className="space-y-5">
       <fieldset disabled={busy || !!pending || blocked} className="space-y-5">
         {!id && <Panel title="Approved request lines"><div className="space-y-4 p-5"><p className="text-sm">Choose available lines from the same branch and currency. You may order part of an available quantity. Server eligibility remains final.</p>
           <Button variant="secondary" onClick={() => setRefresh((n) => n + 1)}>Refresh source list</Button>{sourceError && <p role="alert" className="text-sm text-red-700">{sourceError}</p>}
@@ -145,9 +151,15 @@ function SourceEditor({ id, scopeKey }: { id?: string; scopeKey: string }) {
           </div>)}
         </div></Panel>
         {id && <Field label="Reason for changing this linked draft"><Textarea required maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>}
-        <Button type="submit" disabled={busy || !!pending || blocked || !draft.lines.length || !draft.supplierId || !id && !canReadVendors}>{busy ? "Saving…" : id ? "Save linked draft" : "Create linked order"}</Button>
+        <Panel title="Notes and attachments"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Notes and attachments cannot be saved through this linked order form yet. The approved request sources and order lines above are retained.</p><Button type="button" variant="secondary" disabled>Add attachment</Button></div></Panel>
       </fieldset>
+      <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-3 border-y border-border bg-surface/95 px-5 py-4 backdrop-blur">
+        <Button type="submit" disabled={busy || !!pending || blocked || !draft.lines.length || !draft.supplierId || !id && !canReadVendors}>{busy ? "Saving…" : id ? "Save linked draft" : "Create linked order"}</Button>
+        <Button type="button" variant="secondary" disabled title="Order approval and vendor sending are separate actions.">Save and send</Button>
+        <Button type="button" variant="secondary" disabled={busy} onClick={() => navigate(id ? `/purchase-orders/${id}` : "/purchase-orders")}>Cancel</Button>
+        <span className="ml-auto text-xs text-muted-foreground">Approved request lines stay linked · sending is separate</span>
+      </footer>
     </form>}
-    <Link className="mt-5 inline-block text-sm text-primary hover:underline" to={id ? `/purchase-orders/${id}` : "/purchase-orders"}>Back to {id ? "purchase order" : "purchase orders"}</Link>
+    </div>
   </div>;
 }

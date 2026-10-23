@@ -94,7 +94,10 @@ test("buyer creates, revises and cancels an internal order draft", async ({ page
   await page.getByLabel("Tax amount").fill("100");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("heading", { name: "PO-001" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
+  await page.getByRole("tab", { name: "Items (1)" }).click();
   await expect(page.getByText("Estimated total ZMW 1,100.00")).toBeVisible();
+  await page.getByRole("tab", { name: "Overview" }).click();
   await expect(page.getByText("Approval and issue require an approved source")).toBeVisible();
   await expect(page.getByRole("main").getByRole("button", { name: /issue|approve|send/i })).toHaveCount(0);
 
@@ -105,15 +108,39 @@ test("buyer creates, revises and cancels an internal order draft", async ({ page
   await page.getByRole("button", { name: "Remove line" }).first().click();
   await page.getByLabel("Reason for removing a saved line").fill("Need changed");
   await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("tab", { name: "Items (1)" }).click();
   await expect(page.getByText("Estimated total ZMW 250.00")).toBeVisible();
   await expect(page.getByText("Monitor")).toBeVisible();
   await expect(page.getByText("Laptop")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Overview" }).click();
   await page.getByLabel("Cancellation reason").fill("Request withdrawn");
   await page.getByRole("button", { name: "Cancel draft" }).click();
   await expect(page.getByText("Request withdrawn")).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit draft" })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("heading", { name: "PO-001" })).toBeVisible();
+});
+
+test("draft order keeps imported detail sections and shows unavailable controls honestly", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/purchase-orders/new");
+  await expect(page.getByRole("button", { name: "Close editor" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Notes and attachments" })).toBeVisible();
+  await expect(page.getByText("Notes and attachments cannot be saved", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add attachment" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save and send" })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Vendor" }).click();
+  await page.getByRole("option", { name: "Office Supplier" }).click();
+  await page.getByLabel("Description 1").fill("Laptop");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  for (const tab of ["Overview", "Items (1)", "Related", "Comments", "History"])
+    await expect(page.getByRole("tab", { name: tab, exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(page.getByText("Related receipts and bills are not connected", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "Comments" }).click();
+  await expect(page.getByText("Comments cannot be saved", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByText("Detailed order change history is not available", { exact: false })).toBeVisible();
 });
 
 test("read-only buyer cannot start or edit an order draft", async ({ page }) => {
