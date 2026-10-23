@@ -93,9 +93,10 @@ async function pageFor(context: BrowserContext, route: string, heading: string):
 }
 async function mutation(page: Page, method: string, suffix: string, action: () => Promise<unknown>) {
   const waiting = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(suffix)
-    && response.request().method() === method);
+    && response.request().method() === method).catch(() => null);
   await action();
   const response = await waiting;
+  if (!response) throw new Error("Expected business response was not observed");
   expect(response.status()).toBe(method === 'POST' && (suffix === '/requests' || suffix.endsWith('/approval-cases') || suffix.endsWith('/budget-checks')) ? 201 : 200);
   return { response, body: await json(response) };
 }
@@ -156,10 +157,12 @@ test('normal cookie users complete a real Core-only purchase request approval', 
     const evaluated = await mutation(policyPage, 'POST', `/requests/${requestId}/policy-evaluations`, () =>
       policyRow.getByRole('button', { name: 'Check buying rules' }).click());
     expect(evaluated.body.requestId).toBe(requestId);
-    expect(evaluated.body.requestVersion).toBe(submitted.body.version);
+    expect(evaluated.body.requestVersion).toBe(submitted.body.version + 1);
+    expect(evaluated.body.evaluation?.requestVersion).toBe(submitted.body.submittedVersion);
     expect(evaluated.body.status).toBe('Matched');
     expect(guid(evaluated.body.evaluation?.id)).toBe(true);
-    evidence.policyEvaluationId = evaluated.body.evaluation.id; retain();
+    evidence.policyEvaluationId = evaluated.body.evaluation.id;
+    evidence.policyEvaluatedVersion = evaluated.body.requestVersion; retain();
 
     step = 'independent-finance-check';
     const checker = await browser.newContext({ baseURL: proxy.origin, ignoreHTTPSErrors: true }); contexts.push(checker);
