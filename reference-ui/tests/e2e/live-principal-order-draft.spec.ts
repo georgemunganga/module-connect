@@ -12,10 +12,13 @@ async function fixture(page:Page,{lost=false}={}){
   await page.route("**/api/**",async route=>{
     const req=route.request(),url=new URL(req.url()),path=url.pathname;
     const json=(body:unknown,status=200)=>route.fulfill({status,contentType:"application/json",body:JSON.stringify(body)});
-    if(path==="/api/hrm/auth/me")return json({authenticated:true,user:{isActive:true,displayName:"Buyer",roles:["buyer"]}});
+    if(path==="/api/hrm/auth/me")return json({authenticated:true,user:{id:buyer,isActive:true,displayName:"Buyer",roles:["buyer"]}});
     if(path==="/api/hrm/branding")return json({displayName:"Amizo Power"});
+    if(path==="/api/core/v1/workspace-context")return json({schemaVersion:1,tenantId:"test-company",principalId:buyer,organisationWide:false,
+      companies:[{id:company,code:"AMIZO",registeredName:"Amizo Power",currency:"ZMW",isDefault:true}],
+      branches:[{id:branch,code:"HQ",name:"Main",legalEntityId:company}]});
     if(path==="/api/hrm/admin/legal-entities")return json({items:[{id:company,code:"AMIZO",registeredName:"Amizo Power"}]});
-    if(path==="/api/hrm/admin/locations")return json({items:[]});
+    if(path==="/api/hrm/admin/locations")return json({items:[{id:branch,code:"HQ",name:"Main",legalEntityId:company}]});
     if(path.startsWith("/api/hrm/shell/"))return json({assignedLocationIds:[branch],confined:true});
     if(path==="/api/procurement/v1/context")return json({principalId:buyer,tenantId:"test-company",legalEntityId:company,workerId:null,
       permissions:["procurement-access","procurement-po-convert","procurement-po-read"],
