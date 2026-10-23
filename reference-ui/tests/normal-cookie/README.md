@@ -144,3 +144,8 @@ The test creates one internal draft from the genuine remaining approved line,
 reloads, cancels, and reloads again. It records the observed create/cancel
 command keys for an independent owning-store verifier. A completion file only
 closes the private listener; it does not certify browser or database acceptance.
+The protected 0600 browser result also retains only the two PO command request
+bodies (no authentication request, cookies or headers) for possible independent
+fingerprint reconstruction. The test calls real local-auth logout, verifies
+the session is no longer authenticated, and records success only after that
+revocation check. Closing a browser context is not treated as logout.

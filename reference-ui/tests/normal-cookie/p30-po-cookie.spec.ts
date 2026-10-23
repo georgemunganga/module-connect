@@ -58,13 +58,22 @@ async function body(response: APIResponse): Promise<Record<string, unknown>> {
   try { return await response.json() as Record<string, unknown>; }
   catch { throw new Error('Private PO API returned invalid JSON'); }
 }
+function commandBody(response: APIResponse, allowed: readonly string[]): string {
+  const raw = response.request().postData();
+  if (!raw || raw.length > 65536) throw new Error('Bounded PO command body missing');
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+    || Object.keys(parsed).some(key => !allowed.includes(key)))
+    throw new Error('Unexpected PO command body');
+  return raw;
+}
 
 // Browser actions use real local login and session cookies. No route mocks,
 // private subject headers, demo transaction state or supplier dispatch occur.
 test('workerless buyer creates, reloads and cancels an internal purchase order', async ({ browser }) => {
   if (test.info().project.use.trace !== 'off' || test.info().project.use.screenshot !== 'off'
     || test.info().project.use.video !== 'off') throw new Error('Credential-safe proof requires capture disabled');
-  retain(); let step = 'buyer-login', failed = false;
+  retain(); let step = 'buyer-login', failed = false, loggedIn = false;
   const network: Array<{ path: string; method: string; status: number }> = [];
   const progress = (next: string) => { step = next; evidence.step = next; retain(); };
   const context = await browser.newContext({ baseURL: proxy.origin, ignoreHTTPSErrors: true });
@@ -72,6 +81,7 @@ test('workerless buyer creates, reloads and cancels an internal purchase order',
     const login = await api(() => context.request.post('/api/hrm/auth/login', {
       data: { email: account[0].email, password: account[0].password }, failOnStatusCode: false }));
     expect(login.status()).toBe(200);
+    loggedIn = true;
     const me = await api(() => context.request.get('/api/hrm/auth/me'));
     expect(me.status()).toBe(200); expect((await body(me)).user).toMatchObject({ id: fixture.buyerPrincipalId });
     const scope = await api(() => context.request.get('/api/procurement/v1/context', { headers: selection }));
@@ -129,7 +139,8 @@ test('workerless buyer creates, reloads and cancels an internal purchase order',
     const created = await createdResponse.json() as Record<string, unknown>;
     expect(guid(created.orderId)).toBe(true); expect(created.status).toBe('Draft');
     evidence.orderId = created.orderId; evidence.createdVersion = created.version;
-    evidence.createCommandKey = createCommandKey; retain();
+    evidence.createCommandKey = createCommandKey;
+    evidence.createRequestBody = commandBody(createdResponse, ['draft', 'sources']); retain();
     await expect(page.getByRole('heading', { name: String(created.number), exact: true })).toBeVisible();
     for (const tab of ['Overview', 'Items (1)', 'Related', 'Comments', 'History'])
       await expect(page.getByRole('tab', { name: tab, exact: true })).toBeVisible();
@@ -151,15 +162,37 @@ test('workerless buyer creates, reloads and cancels an internal purchase order',
     const cancelled = await cancelledResponse.json() as Record<string, unknown>;
     expect(cancelled.status).toBe('Cancelled');
     evidence.cancelledVersion = cancelled.version; evidence.cancelCommandKey = cancelCommandKey;
+    evidence.cancelRequestBody = commandBody(cancelledResponse,
+      ['expectedOrderVersion', 'originalDirectSourceSha256', 'reason']);
     progress('reload-cancelled-order');
     await reloadReady(); await expect(page.getByRole('heading', { name: String(created.number), exact: true })).toBeVisible();
     await expect(page.getByText('Cancelled', { exact: true }).first()).toBeVisible();
-    evidence.principalPoInternalDraftVerified = true; evidence.apiResponses = network;
-    evidence.status = 'PASS_NORMAL_COOKIE_P30_PO_INTERNAL_DRAFT_UI_ONLY'; retain();
+    evidence.principalPoInternalDraftVerified = true; evidence.apiResponses = network; retain();
   } catch {
     failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step;
     evidence.apiResponses = network; retain();
   } finally {
+    if (loggedIn) {
+      step = 'normal-session-logout-revocation';
+      try {
+        const logout = await api(() => context.request.post('/api/hrm/auth/logout'));
+        evidence.logoutStatus = logout.status(); retain();
+        expect(logout.status()).toBe(200);
+        const signedOut = await api(() => context.request.get('/api/hrm/auth/me'));
+        expect(signedOut.status()).toBe(200);
+        expect((await body(signedOut)).authenticated).toBe(false);
+        const revoked = await api(() => context.request.get('/api/procurement/v1/context', { headers: selection }));
+        expect(revoked.status()).toBe(401);
+        evidence.localSessionRevoked = true;
+      } catch {
+        failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step;
+        evidence.localSessionRevoked = false; retain();
+      }
+    }
+    if (!failed && evidence.principalPoInternalDraftVerified === true
+      && evidence.localSessionRevoked === true)
+      evidence.status = 'PASS_NORMAL_COOKIE_P30_PO_INTERNAL_DRAFT_UI_ONLY';
+    retain();
     await context.close().catch(() => undefined);
     writeFileSync(fixture.completionPath, JSON.stringify({ schemaVersion: 3, challenge: fixture.challenge, status: 'BrowserFinished' }) + '\n',
       { mode: 0o600, flag: 'wx' });
