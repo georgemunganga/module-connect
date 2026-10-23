@@ -1,23 +1,24 @@
 import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 import { RequestApiError } from "./procurement-requests-api";
+import { budgetAmountExact, sameBudgetAmount } from "./procurement-budget-amount";
 
 export type BudgetQueueRecord = {
   id: string; number: string; purpose: string; currencyCode: string;
   submittedAt: string; version: number; approvalState: string;
-  createdBy: string; estimatedAmount: number;
+  createdBy: string; estimatedAmount: number; estimatedAmountExact?: string;
 };
 export type BudgetQueuePage = { records: BudgetQueueRecord[]; count: number; limit: number; offset: number };
 export type BudgetCheck = {
   id: string; requestVersion: number; financeCheckRef: string;
   status: "Available" | "Insufficient" | "NotConfigured" | "PartiallyAvailable";
-  checkedAmount: number; currencyCode: string; checkedAt: string;
+  checkedAmount: number; checkedAmountExact?: string; currencyCode: string; checkedAt: string;
   checkedBySubjectId: string; evidenceRef: string; decisionReason: string | null;
   reservationRef: string | null; reservationStatus: string | null;
 };
 export type BudgetDecision = {
   requestVersion: number; financeCheckRef: string; status: BudgetCheck["status"];
-  checkedAmount: number; currencyCode: string; evidenceRef: string;
+  checkedAmount: string; currencyCode: string; evidenceRef: string;
   decisionReason: string | null; reservationRef: string | null; reservationStatus: string | null;
 };
 
@@ -56,7 +57,8 @@ export async function listBudgetQueue(companyId: string, offset = 0, signal?: Ab
     || body.records.some((row: unknown) => !object(row) || !guid.test(String(row.id))
       || typeof row.number !== "string" || typeof row.purpose !== "string"
       || typeof row.currencyCode !== "string" || typeof row.version !== "number"
-      || typeof row.estimatedAmount !== "number"))
+      || typeof row.estimatedAmount !== "number"
+      || (row.estimatedAmountExact !== undefined && !budgetAmountExact(row.estimatedAmountExact))))
     throw new RequestApiError(0, "The ERP returned an invalid Finance review list.");
   return body as BudgetQueuePage;
 }
@@ -66,18 +68,23 @@ export async function listBudgetChecks(companyId: string, id: string, signal?: A
   const body = await call(companyId, `/${id}/budget-checks`, { signal });
   if (!object(body) || !Array.isArray(body.records) || body.records.some((row: unknown) =>
     !object(row) || !guid.test(String(row.id)) || typeof row.financeCheckRef !== "string"
-    || typeof row.requestVersion !== "number" || typeof row.status !== "string"))
+    || typeof row.requestVersion !== "number" || typeof row.status !== "string"
+    || (row.checkedAmountExact !== undefined && !budgetAmountExact(row.checkedAmountExact))))
     throw new RequestApiError(0, "The ERP returned invalid Finance check history.");
   return body.records as BudgetCheck[];
 }
 
 export async function recordBudgetCheck(companyId: string, id: string, decision: BudgetDecision): Promise<BudgetCheck> {
   if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
+  if (!budgetAmountExact(decision.checkedAmount))
+    throw new RequestApiError(0, "The exact request amount is unavailable. Refresh before recording a Finance check.");
   const body = await call(companyId, `/${id}/budget-checks`, {
     method: "POST", body: JSON.stringify(decision),
   });
   if (!object(body) || !guid.test(String(body.id)) || body.requestVersion !== decision.requestVersion
-    || body.financeCheckRef !== decision.financeCheckRef || body.status !== decision.status)
+    || body.financeCheckRef !== decision.financeCheckRef || body.status !== decision.status
+    || !budgetAmountExact(body.checkedAmountExact)
+    || !sameBudgetAmount(body.checkedAmountExact, decision.checkedAmount))
     throw new RequestApiError(0, "The ERP did not confirm this Finance check. Refresh before retrying.");
   return body as BudgetCheck;
 }
