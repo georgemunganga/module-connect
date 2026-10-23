@@ -54,9 +54,9 @@ const invoiceSortOptions: { key: InvoiceSort; label: string }[] = [
 
 export function LiveInvoiceList() {
   const readiness = useCompany();
-  const { selection } = useErpShell();
+  const { selection, authEpoch } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <InvoiceListRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}`} />;
+  return <InvoiceListRecord key={`${authEpoch}:${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}`} />;
 }
 function InvoiceListRecord() {
   const navigate = useNavigate();
