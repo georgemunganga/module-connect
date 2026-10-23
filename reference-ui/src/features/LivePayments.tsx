@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus, Save } from "lucide-react";
 import { Badge, Button, Field, Input, Modal, Panel, Select, Textarea } from "../components/ui";
 import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
@@ -150,7 +150,10 @@ const blank = (branchId: string): Draft => ({ branchId, invoiceId: "", amountExa
   purpose: "", approverPrincipalId: "", recorderPrincipalId: "", confirmerPrincipalId: "" });
 type AssigneeRole = "approve" | "record" | "confirm";
 
-export function LivePaymentEditor() { return <PaymentBoundary><PaymentEditorRecord /></PaymentBoundary>; }
+export function LivePaymentEditor() {
+  const location = useLocation();
+  return <PaymentBoundary><PaymentEditorRecord key={`${location.pathname}${location.search}`} /></PaymentBoundary>;
+}
 function PaymentEditorRecord() {
   const { id } = useParams(); const navigate = useNavigate(); const [params] = useSearchParams();
   const { scope, readiness, branchId, key } = usePaymentContext();
@@ -168,7 +171,10 @@ function PaymentEditorRecord() {
   const [loading, setLoading] = useState(Boolean(id)), [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [dirty, setDirty] = useState(false), [discard, setDiscard] = useState(false);
   const [stale, setStale] = useState(false);
-  const current = useRef(key); current.current = key;
+  const [loadedKey, setLoadedKey] = useState("");
+  const routeHref = window.location.pathname + window.location.search;
+  const editorKey = JSON.stringify([id ?? "new", key, selectedInvoiceId, routeHref]);
+  const current = useRef(editorKey); current.current = editorKey;
   const lookup = useRef("");
   lookup.current = JSON.stringify([key, draft.branchId, invoiceSearch, selectedInvoiceId]);
   const update = (change: Partial<Draft>) => { setDraft(previous => ({ ...previous, ...change })); setDirty(true); };
@@ -182,16 +188,17 @@ function PaymentEditorRecord() {
   }, [key]);
   useEffect(() => {
     if (!id) return;
-    const abort = new AbortController(); setLoading(true); setError(""); setRecord(null);
+    const abort = new AbortController(); setLoading(true); setError(""); setRecord(null); setLoadedKey("");
     getManualPayment(scope, id, abort.signal).then(value => { if (!abort.signal.aborted && scope.current()) {
-      setRecord(value); setDraft({ branchId: value.request.branchId, invoiceId: value.request.supplierInvoiceId,
+      if (current.current !== editorKey || value.request.id !== id) return;
+      setRecord(value); setLoadedKey(editorKey); setDraft({ branchId: value.request.branchId, invoiceId: value.request.supplierInvoiceId,
         amountExact: value.request.amountExact, title: value.request.title || "", purpose: value.request.purpose || "",
         approverPrincipalId: value.request.approverPrincipalId, recorderPrincipalId: value.request.recorderPrincipalId,
         confirmerPrincipalId: value.request.confirmerPrincipalId }); setDirty(false);
     } }).catch(cause => { if (!abort.signal.aborted && scope.current()) setError(errorText(cause)); })
       .finally(() => { if (!abort.signal.aborted && scope.current()) setLoading(false); });
     return () => abort.abort();
-  }, [id, key]);
+  }, [id, key, editorKey]);
   useEffect(() => {
     if (!draft.branchId || id || branchLoading || !branchChoices.some(row => row.id === draft.branchId)) return;
     const abort = new AbortController();
@@ -218,11 +225,14 @@ function PaymentEditorRecord() {
   }, [key, draft.branchId, draft.recorderPrincipalId, nameSearch.approve, nameSearch.record, nameSearch.confirm, branchLoading, branchChoices]);
   const invoice = invoices.find(value => value.invoiceId === draft.invoiceId);
   const canSave = readiness.permissions.includes(id ? "procurement-payment-edit" : "procurement-payment-create")
-    && (!id || record?.request.status === "Draft" && record.request.creatorPrincipalId === readiness.principalId);
+    && (!id || record !== null && record.request.id === id && loadedKey === editorKey
+      && record.request.status === "Draft" && record.request.creatorPrincipalId === readiness.principalId);
   const close = () => { if (busy || journal.state().blocked) return;
     if (dirty) setDiscard(true); else navigate(id ? `/payments/${id}` : "/payments"); };
   const save = async () => {
-    if (!canSave || busy || stale || journal.state().blocked) return;
+    if (!canSave || busy || stale || loading || journal.state().blocked
+      || current.current !== editorKey || window.location.pathname + window.location.search !== routeHref
+      || id && (record?.request.id !== id || loadedKey !== editorKey)) return;
     if (branchLoading || !branchChoices.some(row => row.id === draft.branchId)) {
       setError("Choose a transaction branch available to your account."); return;
     }
@@ -240,12 +250,16 @@ function PaymentEditorRecord() {
         invoiceId: draft.invoiceId, amountExact: draft.amountExact, title: draft.title || null,
         purpose: draft.purpose || null, approverPrincipalId: draft.approverPrincipalId,
         recorderPrincipalId: draft.recorderPrincipalId, confirmerPrincipalId: draft.confirmerPrincipalId } };
-    try { const saved = await sendOnce(scope, journal, command); if (scope.current() && current.current === key) navigate(`/payments/${saved.id}`); }
-    catch (cause) { if (scope.current() && current.current === key) {
+    try { const saved = await sendOnce(scope, journal, command); if (scope.current() && current.current === editorKey
+      && window.location.pathname + window.location.search === routeHref) navigate(`/payments/${saved.id}`); }
+    catch (cause) { if (scope.current() && current.current === editorKey
+      && window.location.pathname + window.location.search === routeHref) {
       setError(errorText(cause)); if (isDefiniteManualPaymentRejection(cause) && cause.status === 409) setStale(true);
-    } } finally { if (scope.current() && current.current === key) setBusy(false); }
+    } } finally { if (scope.current() && current.current === editorKey
+      && window.location.pathname + window.location.search === routeHref) setBusy(false); }
   };
-  if (loading) return <p className="p-5 sm:p-8" role="status">Loading payment request…</p>;
+  if (loading || id && record && (record.request.id !== id || loadedKey !== editorKey))
+    return <p className="p-5 sm:p-8" role="status">Loading payment request…</p>;
   if (id && !record) return <div className="p-5 sm:p-8" role="alert">{error || "Payment request not found."} <Button variant="secondary" onClick={() => window.location.reload()}>Try again</Button></div>;
   if (!canSave) return <div className="p-5 sm:p-8" role="alert">This draft is not available to edit with your current account. <Link to={id ? `/payments/${id}` : "/payments"}>Back to payments</Link></div>;
   const selectedBill = invoice ?? (id && record ? { invoiceId: record.request.supplierInvoiceId,

@@ -210,3 +210,80 @@ test("refresh after stale CAS hides old actions until the current detail GET com
   await expect(page.getByRole("button", { name: "Record external payment" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Record external payment" })).toBeVisible();
 });
+
+test("switching draft editor IDs waits for the new owner before Revise", async ({ page }) => {
+  const nextPayment = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const writes = await fixture(page, true);
+  await page.goto(`/procurement/workspace/payments/${payment}/edit`);
+  await expect(page.getByRole("heading", { name: "Edit Manual Payment Request" })).toBeVisible();
+  await page.route(`**/api/procurement/v1/manual-payments/${nextPayment}`, async route => {
+    const request = route.request();
+    if (request.method() === "GET") {
+      await new Promise(resolve => setTimeout(resolve, 450));
+      const next = detail();
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...next,
+        request: { ...next.request, id: nextPayment, version: 7, amountExact: "9.0001",
+          title: "Second draft" } }) });
+    }
+    if (request.method() === "PUT") {
+      const input = request.postDataJSON() as Record<string, unknown>;
+      writes.push({ path: new URL(request.url()).pathname, body: input,
+        key: request.headers()["idempotency-key"] });
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({
+        id: nextPayment, version: 8, status: "Draft", action: "Revise",
+        commandKey: request.headers()["idempotency-key"], amountExact: input.amount }) });
+    }
+    return route.fulfill({ status: 405 });
+  });
+  await page.evaluate(next => {
+    history.pushState({}, "", `/procurement/workspace/payments/${next}/edit`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, nextPayment);
+  await expect(page.getByText("Loading payment request…")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save as Draft" })).toHaveCount(0);
+  await expect(page.getByLabel("Exact amount *")).toHaveValue("9.0001");
+  await page.getByLabel("Exact amount *").fill("9.5001");
+  await page.getByRole("button", { name: "Save as Draft" }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].path).toBe(`/api/procurement/v1/manual-payments/${nextPayment}`);
+  expect(writes[0].body).toMatchObject({ expectedVersion: 7, amount: "9.5001" });
+});
+
+test("an old draft save response cannot navigate away from a newly opened draft", async ({ page }) => {
+  const nextPayment = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  await fixture(page, true);
+  await page.goto(`/procurement/workspace/payments/${payment}/edit`);
+  await expect(page.getByRole("heading", { name: "Edit Manual Payment Request" })).toBeVisible();
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/procurement/v1/manual-payments/${payment}`, async route => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    await held;
+    const input = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+      id: payment, version: 2, status: "Draft", action: "Revise",
+      commandKey: route.request().headers()["idempotency-key"], amountExact: input.amount }) });
+  });
+  await page.route(`**/api/procurement/v1/manual-payments/${nextPayment}`, route => {
+    const next = detail();
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...next,
+      request: { ...next.request, id: nextPayment, version: 7, title: "Second draft" } }) });
+  });
+  const sent = page.waitForRequest(request => request.method() === "PUT"
+    && new URL(request.url()).pathname.endsWith(`/manual-payments/${payment}`));
+  await page.getByLabel("Exact amount *").fill("1.1001");
+  await page.getByRole("button", { name: "Save as Draft" }).click();
+  await sent;
+  await page.evaluate(next => {
+    history.pushState({}, "", `/procurement/workspace/payments/${next}/edit`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, nextPayment);
+  await expect(page.getByLabel("Exact amount *")).toHaveValue("1.0001");
+  const completed = page.waitForResponse(response => response.request().method() === "PUT"
+    && new URL(response.url()).pathname.endsWith(`/manual-payments/${payment}`));
+  release();
+  await completed;
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(new RegExp(`/payments/${nextPayment}/edit$`));
+  await expect(page.getByRole("heading", { name: "Edit Manual Payment Request" })).toBeVisible();
+});
