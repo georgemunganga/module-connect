@@ -83,7 +83,7 @@ function displayLines(value: unknown): value is PrincipalDisplayLine[] {
     &&exact.test(String(line.quantity))&&exact.test(String(line.unitPrice))&&exact.test(String(line.taxAmount)));
 }
 function orderLines(value: unknown): value is PrincipalOrderLine[] {
-  return displayLines(value) && value.every(line => obj(line)
+  return displayLines(value) && value.every((line: unknown) => obj(line)
     && uuid.test(String(line.purchaseRequestId)) && typeof line.allocationStatus === "string");
 }
 export async function listPrincipalOrders(company: string, pageNumber: number, state: string, signal?: AbortSignal): Promise<PrincipalOrderPage> {
