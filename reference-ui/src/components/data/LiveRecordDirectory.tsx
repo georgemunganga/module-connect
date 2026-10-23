@@ -10,13 +10,15 @@ export type DirectoryRow = { id: string; number: string; title: string; status: 
 export type DirectoryServerQuery = { search: string; onSearch: (value: string) => void;
   status?: string; statuses?: ReadonlyArray<{ value: string; label: string }>;
   onStatusChange?: (value: string) => void };
+export type DirectorySortComparators = Record<string, (left: DirectoryRow, right: DirectoryRow) => number>;
 /** Shared imported directory presentation. The adapter owns server scope, paging and all mutations. */
 export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, loading, error, total, page, pageSize,
-  onPage, onRefresh, action, emptyTitle, emptyDescription, tabs = false, serverQuery }: {
+  onPage, onRefresh, action, emptyTitle, emptyDescription, tabs = false, serverQuery, sortComparators }: {
   title: string; subtitle: string; entity: string; rows: DirectoryRow[]; columns: ListColumn[];
   loading: boolean; error: string; total: number; page: number; pageSize: number;
   onPage: (page: number) => void; onRefresh: () => void; action?: ReactNode;
   emptyTitle: string; emptyDescription: string; tabs?: boolean; serverQuery?: DirectoryServerQuery;
+  sortComparators?: DirectorySortComparators;
 }) {
   const [query, setQuery] = useState(""), [serverInput, setServerInput] = useState(serverQuery?.search ?? "");
   const [sort, setSort] = useState(serverQuery ? "server" : "newest");
@@ -34,9 +36,13 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
   const filtered = useMemo(() => rows.filter(row => {
     if (!serverQuery && query.trim() && ![row.number, row.title, row.status, ...Object.values(row.fields)].join(" ").toLowerCase().includes(query.trim().toLowerCase())) return false;
     return Object.entries(filters).every(([key, expected]) => !expected || (key === "status" ? row.status === expected : value(row, key).toLowerCase().includes(expected.toLowerCase())));
-  }).slice().sort((a, b) => sort === "server" ? 0 : sort === "oldest" ? value(a, "date").localeCompare(value(b, "date")) || a.number.localeCompare(b.number)
-    : sort === "newest" ? value(b, "date").localeCompare(value(a, "date")) || b.number.localeCompare(a.number)
-    : value(a, sort).localeCompare(value(b, sort), undefined, { numeric: true })), [rows, query, filters, sort, serverQuery]);
+  }).slice().sort((a, b) => {
+    const compare = sortComparators?.[sort];
+    if (compare) return compare(a, b) || a.id.localeCompare(b.id);
+    return sort === "server" ? 0 : sort === "oldest" ? value(a, "date").localeCompare(value(b, "date")) || a.number.localeCompare(b.number)
+      : sort === "newest" ? value(b, "date").localeCompare(value(a, "date")) || b.number.localeCompare(a.number)
+        : value(a, sort).localeCompare(value(b, sort), undefined, { numeric: true });
+  }), [rows, query, filters, sort, serverQuery, sortComparators]);
   const currentIds = new Set(filtered.map(row => row.id)), selection = selected.filter(id => currentIds.has(id));
   const preview = !loading && !error ? filtered.find(row => row.id === previewId) : undefined;
   const first = rows.length ? (page - 1) * pageSize + 1 : 0;
