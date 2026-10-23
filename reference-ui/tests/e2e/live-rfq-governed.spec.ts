@@ -388,14 +388,32 @@ test("buyer records outside contact and an exact internal quotation Draft withou
   await page.getByLabel("External reference").fill("outside-ref-1");
   await page.getByLabel("When contact occurred (your local time)").fill("2026-10-23T12:00");
   await page.getByRole("button", { name: "Record contact", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Related" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Enter quotation Draft" })).toBeVisible();
   await page.getByRole("button", { name: "Enter quotation Draft" }).click();
   await page.getByLabel("Unit price").fill("0.0001");
   await page.getByRole("button", { name: "Create quotation Draft" }).click();
+  await expect(page.getByRole("tab", { name: "Related" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Open Draft" })).toBeVisible();
   const contact = calls.find(call => call.path.endsWith("/manual-contact") && call.method === "POST");
   expect(contact?.body).toMatchObject({ channel: "EmailOutsideSystem", reference: "outside-ref-1" });
   const quote = calls.find(call => call.path.endsWith("/principal-manual-quotes") && call.method === "POST");
   expect(quote?.body).toMatchObject({ invitationId: lineA, lines: [{ unitPrice: "0.0001" }] });
   expect(calls.some(call => /dispatch|email-send|quote-submit|award/.test(call.path))).toBe(false);
+});
+
+test("principal RFQ detail clears the related tab and old record on branch change", async ({ page }) => {
+  await mock(page, { principal: true, publication: true, published: true, seed: true });
+  await page.goto(`/procurement/workspace/rfqs/${event}?source=principal-approved`);
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(page.getByRole("tab", { name: "Related" })).toHaveAttribute("aria-selected", "true");
+  await page.evaluate(({ company, branch }) => {
+    const key = "erp.shell.state.v1", oldValue = localStorage.getItem(key);
+    const newValue = JSON.stringify({ entityId: company, branch });
+    localStorage.setItem(key, newValue);
+    window.dispatchEvent(new StorageEvent("storage", { key, oldValue, newValue }));
+  }, { company, branch: otherBranch });
+  await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Record manual contact" })).toHaveCount(0);
+  await expect(page.getByRole("alert")).toContainText("not available");
 });

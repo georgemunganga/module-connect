@@ -73,6 +73,9 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
   id: string; company: string; permissions: string[]; slot: string; cancelSlot: string;
 }) {
   const [record, setRecord] = useState<PublicationDetail | null>(null);
+  // The route scopes this parent by tenant, company, branch, principal and RFQ.
+  // Keep the selected section while a successful command reloads its record.
+  const [activeTab, setActiveTab] = useState("overview");
   const [loadError, setLoadError] = useState(""), [actionError, setActionError] = useState("");
   const [refresh, setRefresh] = useState(0), [busy, setBusy] = useState(false);
   const running = useRef(false), live = useRef(true);
@@ -121,7 +124,8 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
     running.current = true; setBusy(true); setActionError("");
     try {
       await execute(reference.key); store(null);
-      if (live.current) { setRecord(null); setRefresh(value => value + 1); setQuote(null); setQuoteInvitation(null); }
+      if (live.current) { setRecord(null); setRefresh(value => value + 1); setQuote(null); setQuoteInvitation(null);
+        if (reference.type === "contact") setContactInvitation(null); }
     } catch (error) {
       if (error instanceof PublicationApiError && (error.status === 400 || error.status === 422)) {
         try { store(null); } catch (storageError) { setActionError(explain(storageError)); return; }
@@ -134,7 +138,8 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
     running.current = true; setBusy(true); setActionError("");
     try {
       await recoverPublicationCommand(company, pending);
-      store(null); if (live.current) { setRecord(null); setRefresh(value => value + 1); }
+      store(null); if (live.current) { setRecord(null); setRefresh(value => value + 1);
+        if (pending.type === "contact") setContactInvitation(null); }
     } catch (error) { if (live.current) setActionError(explain(error)); }
     finally { running.current = false; if (live.current) setBusy(false); }
   }
@@ -219,6 +224,7 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
   const activeAssignment = record.publication?.assignments.find(x => x.state === "Pending");
   return <RfqDetailLayout title={record.title} number={record.number} method={record.method}
     currency={record.currencyCode} status={record.status} back="/rfqs?source=principal-approved"
+    activeTab={activeTab} onTabChange={setActiveTab}
     actions={<Button variant="secondary" disabled title={record.status === "Draft"
       ? "Choose approved suppliers and request independent publication review below"
       : "Supplier dispatch and award are not available"}>{record.status === "Draft" ? "Publish" : "Send to suppliers"}</Button>}
