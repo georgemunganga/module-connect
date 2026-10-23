@@ -1,5 +1,5 @@
 {
-  "status": "UI_UNIT_TYPE_BUILD_PASSED_BROWSER_PENDING",
+  "status": "UI_UNIT_TYPE_BUILD_AND_MOCKED_BROWSER_PASSED_ACTUAL_COOKIE_PENDING",
   "source": "873b64844b87e5c4895d3cc756cb77762c202694",
   "unitPassed": 484,
   "unitFailed": 0,
@@ -21,9 +21,17 @@
   "deployed": false,
   "evidence": "procurement-p30-ui-20261023_run05",
   "remaining": [
-    "Rerun corrected mocked browser workflows",
     "Actual PostgreSQL/HTTP and normal-cookie browser proof",
     "Independent owner reconciliation",
     "Production migration/configuration/deployment/UAT"
-  ]
+  ],
+  "mockedBrowser": {
+    "passed": 31,
+    "failed": 0,
+    "skipped": 0,
+    "proofSource": "2474bddc2305d5dc6fe1844a4bb1daeeef0453c1",
+    "evidence": "procurement-p30-ui-20261023_run06",
+    "routeMocks": true,
+    "actualPersistenceClaim": false
+  }
 }
