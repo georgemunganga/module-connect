@@ -281,8 +281,8 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     : failedStorage || selectorDenied || !validSelection ? "selection-required"
     : resolution.kind === "ready" ? "ready" : resolution.kind === "waiting" || resolution.kind === "canonicalize" ? "resolving" : "selection-required";
   const scopeMessage = selectorDenied ? "Your ERP account could not open verified organisation choices. Sign in again or contact your administrator."
-    : !validSelection ? "Your saved company or branch is no longer available to this ERP account. Choose an authorised organisation context."
     : failedStorage ? "Your branch could not be saved in this browser. Allow local storage, then choose your branch again."
+    : !validSelection ? "Your saved company or branch is no longer available to this ERP account. Choose an authorised organisation context."
     : procurementScopeStatus === "resolving" ? "Checking the branch saved by your ERP workspace…"
       : "Choose your company and branch from Organisation context in the top bar. Your saved branch could not be matched safely, so no purchase records have been opened or changed.";
   useEffect(() => {
