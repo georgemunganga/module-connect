@@ -128,7 +128,16 @@ test('workerless buyer creates, reloads and cancels an internal purchase order',
     const candidateSection = page.getByRole('region', { name: 'Approved requests' }).getByText(String(requestNumber), { exact: false });
     await expect(candidateSection).toBeVisible();
     await candidateSection.locator('xpath=../..').getByRole('button', { name: 'Add line' }).click();
-    await page.getByRole('combobox', { name: /Vendor Name/ }).selectOption(fixture.supplierId);
+    const supplierPage = await api(() => context.request.get(
+      '/api/procurement/v1/orders/principal-direct-suppliers?page=1&pageSize=25', { headers: selection }));
+    expect(supplierPage.status()).toBe(200);
+    const supplierChoices = await body(supplierPage);
+    if (!Array.isArray(supplierChoices.items)) throw new Error('Private supplier choices invalid');
+    const supplierChoice = supplierChoices.items.find((item: Record<string, unknown>) => item.id === fixture.supplierId);
+    if (typeof supplierChoice?.displayName !== 'string' || !supplierChoice.displayName)
+      throw new Error('Exact approved supplier label missing');
+    await page.getByRole('combobox', { name: /Vendor Name/ }).click();
+    await page.getByRole('option', { name: supplierChoice.displayName, exact: true }).click();
     await expect(page.getByRole('region', { name: 'Order lines' }).getByRole('table')).toBeVisible();
     const createdWaiting = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/from-approved-principal-direct-sources')
       && response.request().method() === 'POST');

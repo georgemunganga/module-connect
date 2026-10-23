@@ -57,7 +57,8 @@ async function prepare(page:Page){await page.goto(root+"/new?workflow=principal"
   await expect(page.getByRole("region",{name:"Order lines"}).getByRole("table")).toBeVisible();
   await expect(page.getByRole("region",{name:"Notes and attachments"})).toBeVisible();
   await expect(page.getByRole("textbox",{name:"Terms and conditions"})).toHaveAttribute("readonly","");
-  await page.getByRole("combobox",{name:/Vendor Name/}).selectOption(supplier);
+  await page.getByRole("combobox",{name:/Vendor Name/}).click();
+  await page.getByRole("option",{name:"Approved vendor",exact:true}).click();
   await page.getByRole("textbox",{name:"Line 1 quantity"}).fill("1.0001");
   await expect(page.getByText("1.00020001")).toBeVisible();}
 
