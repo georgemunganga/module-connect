@@ -18,7 +18,8 @@ if (!result || !path.isAbsolute(result) || (statSync(path.dirname(result)).mode 
   || receipt.fixtureSha256 !== createHash('sha256').update(bytes).digest('hex'))
   throw new Error('Exact new P29 fixture and protected result required');
 const origin = new URL(receipt.origin);
-if (receipt.transport !== 'normal-local-cookie-https-v1' || origin.protocol !== 'https:' || origin.hostname !== '127.0.0.1'
+if (receipt.schemaVersion !== 2 || receipt.transport !== 'normal-local-cookie-https-v1'
+  || origin.protocol !== 'https:' || origin.hostname !== '127.0.0.1'
   || !origin.port || origin.pathname !== '/' || origin.username || origin.password || origin.search || origin.hash
   || receipt.injectsIdentityHeaders !== false || receipt.mocksBusinessResponses !== false)
   throw new Error('Private normal-cookie HTTPS transport required');

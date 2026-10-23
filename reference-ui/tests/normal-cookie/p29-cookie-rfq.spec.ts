@@ -22,7 +22,7 @@ if (fixtureBytes.length > 65536) throw new Error('Invalid protected fixture');
 const fixture = JSON.parse(fixtureBytes.toString('utf8')) as Fixture;
 const proxy = JSON.parse(readFileSync(protectedFile('P29_COOKIE_PROXY_RECEIPT'), 'utf8'));
 const output = process.env.P29_COOKIE_BROWSER_RESULT;
-if (fixture.schemaVersion !== 2 || fixture.controlPlaneOnly !== true
+if (fixture.schemaVersion !== 2 || proxy.schemaVersion !== 2 || fixture.controlPlaneOnly !== true
   || fixture.browserAuthenticationRequired !== 'NORMAL_LOCAL_PASSWORD_AND_SESSION_COOKIE'
   || fixture.database !== process.env.P29_COOKIE_EXPECTED_DATABASE
   || proxy.fixtureSha256 !== createHash('sha256').update(fixtureBytes).digest('hex')
