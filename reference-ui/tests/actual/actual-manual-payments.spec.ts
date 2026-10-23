@@ -61,6 +61,7 @@ async function mutation(page: Page, method: string, suffix: string, action: () =
 // No route interception, synthetic identity headers, fixture storage injection or
 // browser-side transaction stores: each step goes through the actual local host.
 test('real cookie roles complete one independently reviewed manual payment', async ({ page }) => {
+  const requestTitle = 'Private browser manual payment ' + crypto.randomUUID().slice(0, 8);
   await login(page, 'maker');
   await expect(page.getByRole('heading', { name: 'Payments Made' })).toBeVisible();
   await page.getByRole('link', { name: 'New manual payment request' }).click();
@@ -70,7 +71,7 @@ test('real cookie roles complete one independently reviewed manual payment', asy
   await page.getByRole('option', { name: 'Synthetic purchase branch (PAY-A)' }).click();
   await page.getByRole('combobox', { name: 'Bill to Pay *' }).click();
   await page.getByRole('option', { name: /PAY-HTTP-001.*Synthetic payment supplier/ }).click();
-  await page.getByLabel('Request title').fill('Private browser manual payment');
+  await page.getByLabel('Request title').fill(requestTitle);
   await page.getByLabel('Exact amount *').fill('1.0001');
   await page.getByLabel('Purpose / notes').fill('Actual browser acceptance against a synthetic supplier bill');
   for (const [role, label] of [
@@ -90,9 +91,9 @@ test('real cookie roles complete one independently reviewed manual payment', asy
   expect(uuid.test(String(receipt.id))).toBe(true);
   expect(receipt.status).toBe('Draft');
   const id = String(receipt.id);
-  await expect(page.getByRole('heading', { name: 'Private browser manual payment' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: requestTitle })).toBeVisible();
   await page.getByRole('link', { name: 'Payments Made' }).click();
-  const listed = page.getByRole('row').filter({ hasText: 'Private browser manual payment' });
+  const listed = page.getByRole('row').filter({ hasText: requestTitle });
   await expect(listed).toBeVisible();
   await listed.getByRole('link').first().click();
   await page.reload();
