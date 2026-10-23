@@ -51,6 +51,8 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
           : options.absent ? {} : { sourcingSourceDrafts: true }) } });
     if (url.pathname.startsWith("/api/procurement/v1/sourcing")) {
       calls.push({ method, path: url.pathname, body: method === "POST" ? request.postDataJSON() : null, key: request.headers()["idempotency-key"] });
+      if (request.headers()["x-shell-location"] === otherBranch)
+        return json({ message: "Unavailable in this branch" }, 404);
       if (options.publication) {
         const fingerprint = "a".repeat(64), opening = prA, caseId = prB, supplierId = lineB, invitationId = lineA;
         const publication = { openingId: opening, coreCaseId: caseId,
@@ -103,7 +105,6 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
       }
       if (options.principal && !url.pathname.includes("principal-") && url.pathname !== "/api/procurement/v1/sourcing")
         return json({ message: "Earlier worker workflow is unavailable" }, 404);
-      if (request.headers()["x-shell-location"] === otherBranch) return json({ message: "Unavailable in this branch" }, 404);
       if (url.pathname.endsWith(options.principal ? "/approved-principal-sources" : "/approved-sources")) return json({ items: sources, candidateTotal: 2, page: 1, pageSize: 25, eligibilityMeaning: "CurrentPreviewOnly", canPublish: false });
       if (url.pathname.endsWith(options.principal ? "/principal-source-drafts" : "/source-drafts")) return json({ items: exists ? [{ ...record(), state: "VerifiedRetainedDraft" }] : [], total: exists ? 1 : 0, page: 1, pageSize: 25, canPublish: false });
       if (url.pathname.endsWith(options.principal ? "/from-approved-principal-sources" : "/from-approved-sources")) {
