@@ -19,6 +19,7 @@ import { LiveRecurringPurchaseList, LiveRecurringPurchaseEditor, LiveRecurringPu
 import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePlans";
 import { LiveVendorCreditList, LiveVendorCreditDetail, LiveVendorCreditEditor } from "../features/LiveVendorCredits";
 import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
+import { LiveInbox } from "../features/LiveInbox";
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
 import { LiveReceivingList, LiveReceivingDetail } from "../features/LiveReceiving";
 import { LiveReceivingEditor } from "../features/LiveReceivingEditor";
@@ -239,7 +240,7 @@ export function App() {
             />
             <Route
               path="/inbox"
-              element={isProcurementLiveMode ? <LiveInvoiceList />
+              element={isProcurementLiveMode ? <LiveInbox />
                 : <div className="p-5 sm:p-8"><PayablesInbox /></div>}
             />
             <Route
