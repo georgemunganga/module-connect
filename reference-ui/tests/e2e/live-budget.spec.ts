@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 test.setTimeout(120_000);
 const companyId = "11111111-1111-4111-8111-111111111111";
+const principalId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const branchId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const workerId = "22222222-2222-4222-8222-222222222222";
 const requestId = "33333333-3333-4333-8333-333333333333";
 const checkId = "44444444-4444-4444-8444-444444444444";
@@ -22,13 +24,18 @@ async function mockErp(page: Page, canReview: boolean) {
     const json = (body: unknown, status = 200) => route.fulfill({ status,
       contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/api/hrm/auth/me") return json({ authenticated: true,
-      user: { isActive: true, displayName: "Finance reviewer", email: "finance@example.test", roles: [] } });
+      user: { id: principalId, isActive: true, displayName: "Finance reviewer", email: "finance@example.test", roles: [] } });
+    if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1,
+      tenantId: "amizo", principalId, organisationWide: true,
+      companies: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power", currencyCode: "ZMW", isDefault: true }],
+      branches: [{ id: branchId, code: "HQ", name: "Lusaka", legalEntityId: companyId }] });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId,
       code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo",
+    if (path === "/api/procurement/v1/context") return json({ principalId, tenantId: "amizo",
+      workLocationId: branchId, branch: { id: branchId, code: "HQ", name: "Lusaka" },
       legalEntityId: companyId, workerId,
       permissions: canReview ? ["procurement-access", "procurement-budget-check"] : ["procurement-access"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
