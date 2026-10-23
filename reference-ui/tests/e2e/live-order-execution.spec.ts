@@ -200,7 +200,7 @@ test("operational PO worklist retains imported tools without losing its responsi
   const evidence = await mock(page); await page.goto(root);
   await expect(page.getByRole("button", { name: "Filter Purchase Orders by field" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Sort current page" })).toHaveValue("number");
+  await expect(page.getByRole("combobox", { name: "Sort orders on this page" })).toContainText("Order / Vendor");
   await page.getByRole("button", { name: /Preview PO/ }).click();
   await expect(page.getByRole("dialog")).toBeVisible(); expect(evidence.writes).toHaveLength(0);
 });
