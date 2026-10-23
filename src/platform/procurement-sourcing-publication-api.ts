@@ -147,7 +147,7 @@ export async function getPublication(company: string, eventId: string, signal?: 
     currencyCode: body.currencyCode, status, version: body.version,
     originalDraftFingerprint: body.originalDraftFingerprint, lines, invitations,
     publication: { openingId: body.publication.openingId, coreCaseId: body.publication.coreCaseId,
-      caseState: body.publication.caseState, coreCaseVersion: body.publication.coreCaseVersion,
+      caseState: status === "Published" ? "Approved" : "Pending", coreCaseVersion: body.publication.coreCaseVersion,
       policyVersionId: body.publication.policyVersionId, policyVersionNumber: body.publication.policyVersionNumber,
       supplierDeliveryState: "PerInvitation", reviewer: body.publication.reviewer === true, assignments } };
 }
