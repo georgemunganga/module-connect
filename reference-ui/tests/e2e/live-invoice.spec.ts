@@ -143,7 +143,8 @@ test("AP records a supplier invoice as received and sees no payment action", asy
   await expect(page.getByRole("heading", { name: "Invoice INV-001" })).toBeVisible();
   await expect(page.getByText("ZMW 275.00")).toBeVisible();
   await expect(page.getByText("Confirm source evidence")).toBeVisible();
-  await expect(page.getByRole("main").getByRole("button", { name: /pay|post|approve/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Record payment" })).toBeDisabled();
+  await expect(page.getByRole("main").getByRole("button", { name: /post|approve/i })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Invoice INV-001" })).toBeVisible();
 });
@@ -165,6 +166,11 @@ test("invoice document upload recovers a lost response without duplicating evide
     buffer: Buffer.from("%PDF-1.7 synthetic evidence") });
   await page.getByRole("button", { name: "Add document", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("not confirmed");
+  await page.getByRole("button", { name: "More invoice actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Refresh invoice", exact: true }).click();
+  await expect(page.getByText("Refreshing invoice…", { exact: true })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
   await page.getByRole("button", { name: "Refresh status", exact: true }).click();
   await expect(page.getByRole("cell", { name: "original invoice.pdf", exact: true })).toHaveCount(1);
   await expect(page.getByText("File limit reached.", { exact: false })).toBeVisible();
@@ -233,14 +239,16 @@ test("bill edit saves through the scoped API and survives refresh, then cancella
   await page.getByLabel("Reason for change").fill("Correct original amount");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText("Corrected original supplies", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByText("ZMW 125.1234", { exact: true }).first()).toBeVisible();
   await page.getByLabel("Cancellation reason").fill("Duplicate received document");
   page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "Cancel invoice", exact: true }).click();
-  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
+  await expect(page.getByText("Cancelled", { exact: true }).first()).toBeVisible();
   await page.reload();
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText("Corrected original supplies", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Edit invoice", exact: true })).toHaveCount(0);
   expect(setup.mutations).toEqual([
@@ -270,7 +278,8 @@ test("lost edit response does not resend and GET refresh shows the actual saved 
   await expect(page.getByText("The response was not confirmed.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
   await page.getByRole("link", { name: "Open bills", exact: true }).click();
-  await page.getByRole("link", { name: "Open", exact: true }).click();
+  await page.getByRole("link", { name: "INV-DOC-1", exact: true }).click();
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText("Saved despite lost response", { exact: true })).toBeVisible();
   expect(setup.mutations).toHaveLength(1);
 });
@@ -322,3 +331,143 @@ for (const status of [408, 429, 499]) {
     expect(posts).toBe(1);
   });
 }
+
+test("live Bills keeps the ERP-adapted list tools and current-page table without enabling unsupported actions", async ({ page }) => {
+  await mockErp(page, true, { seed: true });
+  await page.goto("/procurement/workspace/bills");
+  await expect(page.getByRole("heading", { name: "Bills", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Filter Bills by field" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Customize columns" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More Actions" })).toBeVisible();
+  await expect(page.getByRole("table")).toBeVisible();
+  await expect(page.getByRole("link", { name: /INV-DOC-1/ })).toBeVisible();
+  await expect(page.getByText("Search, filters and sorting apply to this page only.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "More Actions" }).click();
+  await expect(page.getByText("Import unavailable")).toBeVisible();
+  await expect(page.getByText("A separate invoice export permission is required.")).toBeVisible();
+  await page.getByRole("button", { name: "More Actions" }).click();
+  await page.getByRole("button", { name: "Customize columns" }).click();
+  await expect(page.getByText("Customize Bills columns")).toBeVisible();
+});
+
+test("live Bills filter and selection stay on the loaded page while opening saved details", async ({ page }) => {
+  await mockErp(page, true, { seed: true });
+  await page.goto("/procurement/workspace/bills");
+  await expect(page.getByRole("table")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Select all visible records" }).check();
+  await expect(page.getByText("1 selected on this page")).toBeVisible();
+  await page.getByLabel("Search bills on this page").fill("no such invoice");
+  await expect(page.getByText("No matching bills on this page")).toBeVisible();
+  await expect(page.getByText("1 selected on this page")).toHaveCount(0);
+  await page.getByRole("button", { name: "Clear page filters" }).click();
+  await page.getByRole("button", { name: "Actions for INV-DOC-1" }).click();
+  await expect(page.getByText("Edit and cancellation availability is checked on the saved invoice detail", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "View full details" }).click();
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
+});
+
+
+test("live inbox preserves the imported upload layout without creating local files", async ({ page }) => {
+  const { mutations } = await mockErp(page, true, { seed: true, crud: true });
+  await page.goto("/procurement/workspace/inbox");
+  await expect(page.getByRole("heading", { name: "Payables inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Upload bills", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Received bills", exact: true })).toBeVisible();
+  await expect(page.getByText("INV-DOC-1", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Choose file", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("File intake is not connected");
+  expect(mutations).toHaveLength(0);
+  expect(await page.evaluate(() => localStorage.getItem("payables.inbox.v1"))).toBeNull();
+  await page.getByRole("button", { name: "Open invoice", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toBeVisible();
+});
+
+test("read-only live inbox retains layout without offering manual invoice capture", async ({ page }) => {
+  await mockErp(page, false);
+  await page.goto("/procurement/workspace/inbox");
+  await expect(page.getByRole("heading", { name: "Payables inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record invoice", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Upload bill", exact: true })).toBeVisible();
+  await expect(page.getByText("Your inbox is clear", { exact: true })).toBeVisible();
+});
+
+test("live bill detail keeps the ERP-adapted tabs while showing only saved invoice facts", async ({ page }) => {
+  await mockErp(page, true, { seed: true, crud: true, documents: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Items (1)" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Related" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Comments" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
+  await expect(page.getByText("ZMW 100.00").first()).toBeVisible();
+  await expect(page.getByText("No documents added yet.")).toBeVisible();
+  await page.getByLabel("Invoice document").setInputFiles({ name: "original invoice.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7 pending") });
+  await page.getByRole("tab", { name: "Items (1)" }).click();
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await expect(page.getByRole("button", { name: "Add document" })).toBeEnabled();
+  await page.getByRole("tab", { name: "Items (1)" }).click();
+  await expect(page.getByRole("heading", { name: "Items / Line Details" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Supplies" })).toBeVisible();
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(page.getByText("Linked orders, credits and payments are not shown here yet", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "Comments" }).click();
+  await expect(page.getByText("Comments are not available for bills yet.")).toBeVisible();
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByText("A detailed activity log is not available here yet", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "More invoice actions" }).click();
+  await expect(page.getByText("Saved bills cannot be deleted. Payment recording is not connected yet.")).toBeVisible();
+});
+
+test("read-only bill detail keeps tabs and documents without offering a write action", async ({ page }) => {
+  await mockErp(page, false, { seed: true, documents: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Items (1)" })).toBeVisible();
+  await expect(page.getByText("No documents added yet.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit invoice" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cancel invoice" })).toHaveCount(0);
+  await expect(page.getByLabel("Invoice document")).toHaveCount(0);
+});
+
+
+test("restored bill editor confirms discarded input and keeps the original form sections", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/bills/new");
+  await expect(page.getByRole("heading", { name: "New Bill", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Payment Terms", { exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Notes", { exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Attach Files", exact: true })).toBeDisabled();
+  await page.getByLabel("Invoice number", { exact: true }).fill("UNSAVED-ORIGINAL");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing", exact: true }).click();
+  await expect(page.getByLabel("Invoice number", { exact: true })).toHaveValue("UNSAVED-ORIGINAL");
+  await page.getByRole("button", { name: "Close editor", exact: true }).click();
+  await page.getByRole("button", { name: "Discard and leave", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Bills", exact: true })).toBeVisible();
+});
+
+
+test("restored Bills screens retain the ERP layout at desktop and phone widths", async ({ page }, testInfo) => {
+  await mockErp(page, true, { seed: true, crud: true });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/procurement/workspace/bills");
+    await expect(page.getByRole("heading", { name: "Bills", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "INV-DOC-1", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`bills-${width}.png`), fullPage: true });
+    await page.goto("/procurement/workspace/bills/new");
+    await expect(page.getByRole("heading", { name: "New Bill", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Invoice number", { exact: true })).toBeVisible();
+    const editorLayout = await page.evaluate(() => ({
+      width: window.innerWidth, scrollWidth: document.documentElement.scrollWidth,
+      overflowing: Array.from(document.querySelectorAll("main *")).filter(element => element.getBoundingClientRect().right > window.innerWidth + 1)
+        .slice(0, 12).map(element => ({ tag: element.tagName, className: element.className })),
+    }));
+    await testInfo.attach(`editor-layout-${width}`, { body: JSON.stringify(editorLayout), contentType: "application/json" });
+    expect(editorLayout.scrollWidth).toBeLessThanOrEqual(editorLayout.width + 1);
+    await page.screenshot({ path: testInfo.outputPath(`bill-editor-${width}.png`), fullPage: true });
+  }
+});
