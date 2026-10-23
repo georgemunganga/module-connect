@@ -62,7 +62,7 @@ async function call(company: string, path: string, init: RequestInit = {}): Prom
     : obj(body) && typeof body.message === "string" ? body.message : "This order action is unavailable.");
   return body;
 }
-function summary(value: unknown): value is PrincipalOrderSummary {
+function summary(value: unknown): value is PrincipalOrderSummary & Record<string, unknown> {
   return obj(value) && uuid.test(String(value.id)) && typeof value.number === "string"
     && typeof value.status === "string" && positiveInt(value.version) && uuid.test(String(value.supplierId))
     && uuid.test(String(value.branchRef)) && typeof value.currencyCode === "string";
@@ -93,8 +93,8 @@ export async function listPrincipalApprovals(company: string, pageNumber: number
     && typeof row.number === "string" && typeof row.status === "string")
     || !Number.isSafeInteger(value.total) || Number(value.total)<0
     || !positiveInt(value.page) || !positiveInt(value.pageSize)) throw invalid();
-  const rows = value as { items: Array<Record<string, unknown>>; total: number; page: number; pageSize: number };
-  return { ...rows, items: rows.items.map(row => ({ ...row, id: row.orderId })) as PrincipalApprovalSummary[] };
+  const rows = value as unknown as { items: Array<Record<string, unknown>>; total: number; page: number; pageSize: number };
+  return { ...rows, items: rows.items.map(row => ({ ...row, id: row.orderId })) as unknown as PrincipalApprovalSummary[] };
 }
 export async function listPrincipalSources(company: string, pageNumber: number, signal?: AbortSignal): Promise<PrincipalSourcePage> {
   const value = await call(company, `/approved-principal-direct-sources?page=${pageNumber}&pageSize=25`, { signal });
