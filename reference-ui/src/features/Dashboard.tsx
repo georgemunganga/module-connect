@@ -11,10 +11,29 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { useApp, money } from "../lib/store";
-import { Panel, Select, Badge } from "../components/ui";
+import { Button, Panel, Select, Badge } from "../components/ui";
 
-export function Dashboard() {
+export type HomeMetric = { label: string; state: "ready" | "loading" | "error" | "unavailable"; count?: number; path: string };
+export type HomeRow = { id: string; title: string; reference: string; status: string; path: string };
+export type LiveDashboardData = {
+  companyName: string; canCreateRequest: boolean; refresh: () => void;
+  stats: HomeMetric[]; personal: HomeMetric[];
+  attention: HomeMetric & { rows: HomeRow[] };
+  recent: { state: HomeMetric["state"]; rows: HomeRow[] };
+};
+const metricMessage = (state: HomeMetric["state"]) => state === "loading" ? "Loading…"
+  : state === "error" ? "Could not load. Refresh to try again."
+  : state === "unavailable" ? "Unavailable for your access" : "Saved records you can access";
+
+/** Original imported layout. Live data is supplied explicitly; demo records are never a live fallback. */
+export function Dashboard({ live }: { live?: LiveDashboardData } = {}) {
+  return live ? <DashboardLayout live={live} records={[]} /> : <DemoDashboard />;
+}
+function DemoDashboard() {
   const { records } = useApp();
+  return <DashboardLayout records={records} />;
+}
+function DashboardLayout({ live, records }: { live?: LiveDashboardData; records: ReturnType<typeof useApp>["records"] }) {
   const [period, setPeriod] = useState("This Year");
   const pending = records.filter(
     (record) =>
@@ -43,47 +62,52 @@ export function Dashboard() {
     .join(" ");
   return (
     <div>
-      <div className="border-b border-slate-200 px-5 pt-7 sm:px-8">
+      <div className="border-b border-border px-5 pt-7 sm:px-8">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400">
+              <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground">
                 <ShoppingBag size={20} />
               </span>
               <div>
-                <h1 className="text-xl font-semibold tracking-tight">
-                  Hello, Alex
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  {live ? "Welcome" : "Hello, Alex"}
                 </h1>
-                <p className="mt-1 text-xs text-slate-400">
-                  Meridian Procurement Demo · Your workspace at a glance
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {live ? `${live.companyName} · Your workspace at a glance` : "Meridian Procurement Demo · Your workspace at a glance"}
                 </p>
               </div>
             </div>
           </div>
-          <Link
+          <div className="flex flex-wrap items-center justify-end gap-3">
+          {live && <Button variant="secondary" onClick={live.refresh}>Refresh</Button>}
+          {(!live || live.canCreateRequest) && <Link
             to="/requests/new"
-            className="hidden items-center gap-2 text-xs font-medium text-blue-500 sm:flex"
+            className="hidden items-center gap-2 text-xs font-medium text-primary sm:flex"
           >
             Create a purchase request <ArrowUpRight size={14} />
-          </Link>
+          </Link>}
+          </div>
         </div>
         <div className="mt-6 flex gap-7 text-sm">
-          <span className="border-b-2 border-blue-500 pb-3 font-medium text-slate-800">
+          <span className="border-b-2 border-primary pb-3 font-medium text-foreground">
             Dashboard
           </span>
-          <Link to="/requests" className="pb-3 text-slate-500">
+          <Link to="/requests" className="pb-3 text-muted-foreground">
             My Requests
           </Link>
         </div>
       </div>
       <div className="px-5 py-6 sm:px-8">
         <div className="mb-5 flex items-center gap-3">
-          <CalendarDays size={15} className="text-slate-400" />
-          <span className="text-xs text-slate-500">Date Range:</span>
+          <CalendarDays size={15} className="text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Date Range:</span>
           <div className="w-36">
             <Select
               aria-label="Dashboard date range"
               value={period}
+              disabled={Boolean(live)}
+              title={live ? "Date filtering will be available with spend reporting." : undefined}
               onChange={(event) => setPeriod(event.target.value)}
             >
               <option>This Year</option>
@@ -91,36 +115,40 @@ export function Dashboard() {
               <option>This Month</option>
             </Select>
           </div>
-          <span className="ml-auto hidden text-[10px] text-slate-400 sm:block">
-            Illustrative trend · Live demo totals
+          <span className="ml-auto hidden text-[10px] text-muted-foreground sm:block">
+            {live ? "Record counts cover all dates" : "Illustrative trend · Live demo totals"}
           </span>
         </div>
         <div className="flex flex-col gap-5 xl:flex-row">
           <Panel title="Spend Summary" className="min-w-0 flex-1">
             <div className="flex flex-wrap justify-between gap-4 px-5 pt-5">
               <div>
-                <p className="text-xs text-slate-400">Total committed spend</p>
+                <p className="text-xs text-muted-foreground">Total committed spend</p>
                 <p className="mt-1.5 text-2xl font-semibold tracking-tight">
-                  {money((poSpend + billSpend) * factor)}
+                  {live ? "—" : money((poSpend + billSpend) * factor)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">PO Spend</p>
+                <p className="text-xs text-muted-foreground">PO Spend</p>
                 <p className="mt-2 flex items-center gap-2 text-sm font-semibold">
                   <span className="h-2 w-2 rounded-sm bg-blue-400" />
-                  {money(poSpend * factor)}
+                  {live ? "—" : money(poSpend * factor)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">Non-PO Spend</p>
+                <p className="text-xs text-muted-foreground">Non-PO Spend</p>
                 <p className="mt-2 flex items-center gap-2 text-sm font-semibold">
                   <span className="h-2 w-2 rounded-sm bg-amber-300" />
-                  {money(billSpend * factor)}
+                  {live ? "—" : money(billSpend * factor)}
                 </p>
               </div>
             </div>
             <div className="overflow-x-auto px-3 pb-4 pt-4">
-              <svg
+              {live ? <div className="flex h-[220px] flex-col items-center justify-center gap-3 rounded-lg bg-muted/30 px-5 text-center" role="status">
+                <ShoppingBag size={28} className="text-muted-foreground" />
+                <p className="text-sm font-medium">Your spending overview will appear here</p>
+                <p className="max-w-sm text-sm text-muted-foreground">Spend reporting is not connected yet. You can still manage your purchasing records below.</p>
+              </div> : <svg
                 viewBox="0 0 680 205"
                 className="h-[220px] w-full min-w-[420px]"
                 role="img"
@@ -201,12 +229,20 @@ export function Dashboard() {
                     {month}
                   </text>
                 ))}
-              </svg>
+              </svg>}
             </div>
           </Panel>
           <Panel title="Attention Required" className="xl:w-[31%]">
             <div className="p-5">
-              {pending.length ? (
+              {live ? <>
+                <p className="mb-4 text-sm text-muted-foreground" role={live.attention.state === "error" ? "alert" : "status"}>
+                  {live.attention.state === "ready" ? `${live.attention.count} requests waiting for your decision` : live.attention.state === "unavailable" ? "Approval updates will appear here when available." : metricMessage(live.attention.state)}
+                </p>
+                {live.attention.rows.map(row => <Link key={row.id} to={row.path} className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-4">
+                  <div className="min-w-0"><span className="text-xs text-primary">{row.reference}</span><p className="mt-1 break-words text-sm">{row.title}</p></div><ChevronRight size={16} className="shrink-0 text-muted-foreground" />
+                </Link>)}
+                {live.attention.state === "ready" && <Link to="/approvals" className="text-sm font-medium text-primary">View all approvals →</Link>}
+              </> : pending.length ? (
                 <>
                   <div className="mb-5 flex items-center gap-3 rounded-lg border border-amber-100 bg-amber-50/50 p-4">
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-600">
@@ -216,7 +252,7 @@ export function Dashboard() {
                       <p className="text-sm font-semibold">
                         {pending.length} pending approval
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Requests need your attention
                       </p>
                     </div>
@@ -225,16 +261,16 @@ export function Dashboard() {
                     <Link
                       to="/approvals"
                       key={record.id}
-                      className="mb-4 flex items-center justify-between gap-3 border-b border-slate-100 pb-4"
+                      className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-4"
                     >
                       <div>
-                        <span className="text-[11px] text-blue-500">
+                        <span className="text-[11px] text-primary">
                           {record.id}
                         </span>
-                        <p className="mt-1 text-sm text-slate-600">
+                        <p className="mt-1 text-sm text-foreground">
                           {record.title}
                         </p>
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {money(record.amount)}
                         </p>
                       </div>
@@ -246,13 +282,13 @@ export function Dashboard() {
                   ))}
                   <Link
                     to="/approvals"
-                    className="text-xs font-medium text-blue-500"
+                    className="text-xs font-medium text-primary"
                   >
                     View all approvals →
                   </Link>
                 </>
               ) : (
-                <p className="py-16 text-center text-sm text-slate-400">
+                <p className="py-16 text-center text-sm text-muted-foreground">
                   No attention required.
                 </p>
               )}
@@ -260,7 +296,7 @@ export function Dashboard() {
           </Panel>
         </div>
         <div className="my-5 grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-5">
-          {[
+          {(live ? live.stats.map((stat, index) => ({ ...stat, value: stat.state === "ready" ? stat.count : "—", icon: [FileText, ShoppingBag, Package, Store][index], to: stat.path })) : [
             {
               label: "Orders Issued",
               value: purchaseOrders.length,
@@ -286,18 +322,23 @@ export function Dashboard() {
               icon: Store,
               to: "/vendors",
             },
-          ].map((stat) => (
+          ]).map((stat) => (
             <Link
               key={stat.label}
               to={stat.to}
-              className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-blue-200 sm:p-5"
+              onClick={event => { if (live && live.stats.find(item => item.label === stat.label)?.state !== "ready") event.preventDefault(); }}
+              aria-disabled={live && live.stats.find(item => item.label === stat.label)?.state !== "ready" || undefined}
+              tabIndex={live && live.stats.find(item => item.label === stat.label)?.state !== "ready" ? -1 : undefined}
+              aria-label={live ? `${stat.label}: ${live.stats.find(item => item.label === stat.label)?.state === "ready" ? stat.value : live.stats.find(item => item.label === stat.label)?.state}` : undefined}
+              className="flex min-w-0 flex-col items-start gap-3 rounded-lg sm:flex-row sm:items-center border border-border bg-card p-4 transition-colors hover:border-blue-200 sm:p-5"
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#e0e5f2] bg-[#f4f6fd] text-blue-400">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/5 text-primary">
                 <stat.icon size={20} />
               </span>
               <div>
-                <p className="text-xs text-slate-400">{stat.label}</p>
+                <p className="text-xs text-muted-foreground">{stat.label}</p>
                 <p className="mt-1 text-xl font-semibold">{stat.value}</p>
+                {live && <p className="mt-1 text-xs text-muted-foreground">{metricMessage(live.stats.find(item => item.label === stat.label)!.state)}</p>}
               </div>
             </Link>
           ))}
@@ -306,16 +347,16 @@ export function Dashboard() {
           <Panel
             title="Payables Summary"
             action={
-              <Link to="/bills" className="text-xs text-blue-500">
+              <Link to="/bills" className="text-xs text-primary">
                 View bills →
               </Link>
             }
           >
             <div className="flex justify-between gap-3 p-5">
               <div>
-                <p className="text-xs text-slate-400">Outstanding bills</p>
+                <p className="text-xs text-muted-foreground">Outstanding bills</p>
                 <p className="mt-2 text-xl font-semibold">
-                  {money(
+                  {live ? "—" : money(
                     bills
                       .filter((record) => record.status !== "Paid")
                       .reduce((sum, record) => sum + record.amount, 0),
@@ -323,28 +364,34 @@ export function Dashboard() {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">Recorded payments</p>
-                <p className="mt-2 text-xl font-semibold">{money(paid)}</p>
+                <p className="text-xs text-muted-foreground">Recorded payments</p>
+                <p className="mt-2 text-xl font-semibold">{live ? "—" : money(paid)}</p>
               </div>
             </div>
-            <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400">
-              Local demo records. Amounts do not represent a real account.
+            <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+              {live ? "Payment and outstanding-balance updates are not connected yet." : "Local demo records. Amounts do not represent a real account."}
             </p>
           </Panel>
           <Panel title="Recent Activity">
             <div className="divide-y divide-slate-100">
-              {records
+              {live ? <>
+                <p className="px-5 py-3 text-xs text-muted-foreground">Saved purchase requests from the current page.</p>
+                {live.recent.rows.map(row => <Link key={row.id} to={row.path} className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-muted/50">
+                  <div className="min-w-0"><p className="break-words text-sm">{row.title}</p><p className="mt-1 text-xs text-muted-foreground">{row.reference}</p></div><Badge>{row.status}</Badge>
+                </Link>)}
+                {!live.recent.rows.length && <p className="px-5 py-10 text-center text-sm text-muted-foreground" role={live.recent.state === "error" ? "alert" : "status"}>{live.recent.state === "ready" ? "No purchase requests to show yet." : metricMessage(live.recent.state)}</p>}
+              </> : records
                 .filter((record) => !["items", "vendors"].includes(record.kind))
                 .slice(0, 3)
                 .map((record) => (
                   <Link
                     key={record.id}
                     to={`/${record.kind}/${record.id}/edit`}
-                    className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50"
+                    className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-muted/50"
                   >
                     <div>
-                      <p className="text-sm text-slate-600">{record.title}</p>
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="text-sm text-foreground">{record.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {record.id} · {record.party}
                       </p>
                     </div>
@@ -354,6 +401,14 @@ export function Dashboard() {
             </div>
           </Panel>
         </div>
+        {live && <section aria-label="My purchasing records" className="mt-5">
+          <h2 className="mb-3 text-base font-semibold">My purchasing records</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{live.personal.map(metric => <Panel key={metric.label} title={metric.label}>
+            <div className="space-y-2 p-5"><p className="text-2xl font-semibold" aria-label={`${metric.label}: ${metric.state === "ready" ? metric.count : metric.state}`}>{metric.state === "ready" ? metric.count : "—"}</p>
+              <p className="text-sm text-muted-foreground" role={metric.state === "error" ? "alert" : "status"}>{metricMessage(metric.state)}</p>
+              {metric.state === "ready" && <Link to={metric.path} className="text-sm text-primary">Open records</Link>}
+            </div></Panel>)}</div>
+        </section>}
       </div>
     </div>
   );

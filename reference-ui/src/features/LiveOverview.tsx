@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Dashboard, type HomeRow, type HomeMetric } from "./Dashboard";
+import { listVendorDrafts } from "../../../src/platform/procurement-vendors-api";
+import { listInvoiceIntake } from "../../../src/platform/procurement-invoices-api";
+import { listPublishedCatalog } from "../../../src/platform/procurement-catalog-api";
+import { listAssignedApprovals } from "../../../src/platform/procurement-approvals-api";
+import { requestApprovalsAvailable } from "../lib/request-approval-availability";
 import { Button, PageHeader, Panel } from "../components/ui";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { useErpShell } from "../lib/erpShell";
@@ -10,46 +16,67 @@ import { listOwnPlans } from "../../../src/platform/procurement-plans-api";
 import { listOwnContractDrafts } from "../../../src/platform/procurement-contracts-api";
 
 type Metric = { label: string; permission: string; capability: ProcurementCapability; path: string;
-  load: (company: string, signal: AbortSignal) => Promise<number> };
-type Result = { state: "ready"; count: number } | { state: "unavailable" | "error" | "loading" };
+  load: (company: string, signal: AbortSignal) => Promise<{ count: number; rows?: HomeRow[] }> };
+type Result = { state: "ready"; count: number; rows?: HomeRow[] } | { state: "unavailable" | "error" | "loading" };
 const metrics: Metric[] = [
   { label: "My purchase requests", permission: "procurement-request-read", capability: "requestDraft", path: "/requests",
-    load: async (company, signal) => (await listOwnRequestDrafts(company, 0, signal)).count },
+    load: async (company, signal) => {
+      const page = await listOwnRequestDrafts(company, 0, signal);
+      return { count: page.count, rows: page.records.slice().sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)).slice(0, 3)
+        .map(row => ({ id: row.id, reference: row.number, title: row.purpose, status: row.status, path: `/requests/${row.id}` })) };
+    } },
   { label: "My purchase orders", permission: "procurement-po-read", capability: "orderDraft", path: "/purchase-orders",
-    load: async (company, signal) => (await listOwnOrderDrafts(company, 1, signal)).total },
+    load: async (company, signal) => ({ count: (await listOwnOrderDrafts(company, 1, signal)).total }) },
   { label: "My purchase plans", permission: "procurement-plan-read", capability: "planningDraft", path: "/plans",
-    load: async (company, signal) => (await listOwnPlans(company, 1, signal)).total },
+    load: async (company, signal) => ({ count: (await listOwnPlans(company, 1, signal)).total }) },
   { label: "My contracts", permission: "procurement-contract-read", capability: "contractDraft", path: "/contracts",
-    load: async (company, signal) => (await listOwnContractDrafts(company, 1, signal)).total },
+    load: async (company, signal) => ({ count: (await listOwnContractDrafts(company, 1, signal)).total }) },
+];
+
+const homeMetrics: Metric[] = [
+  ...metrics,
+  { label: "Supplier bills", permission: "procurement-invoice-read", capability: "invoiceIntake", path: "/bills",
+    load: async (company, signal) => ({ count: (await listInvoiceIntake(company, 1, signal)).total }) },
+  { label: "Catalog entries", permission: "procurement-item-read", capability: "itemDraft", path: "/items",
+    load: async (company, signal) => ({ count: (await listPublishedCatalog(company, "", signal)).total }) },
+  { label: "Vendors", permission: "procurement-vendor-read", capability: "vendorDraft", path: "/vendors",
+    load: async (company, signal) => ({ count: (await listVendorDrafts(company, { page: 1, signal })).total }) },
+  { label: "Approvals", permission: "procurement-approval-read", capability: "approvals", path: "/approvals",
+    load: async (company, signal) => {
+      const page = await listAssignedApprovals(company, 0, signal);
+      return { count: page.count, rows: page.records.slice(0, 3).map(row => ({ id: row.caseId, reference: row.requestNumber,
+        title: row.purpose, status: row.state, path: `/approvals/${row.caseId}` })) };
+    } },
 ];
 
 /** Counts returned by the scoped ERP list contracts. No invented spend or payment figures. */
 export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
   const readiness = useLiveReadiness();
-  const { selection } = useErpShell();
+  const { selection, authEpoch, entities, branding } = useErpShell();
+  const visibleMetrics = analytics ? metrics : homeMetrics;
   if (!readiness) throw new Error("Procurement overview requires ERP company context.");
   const { legalEntityId, permissions } = readiness;
   const permissionKey = permissions.slice().sort().join("|");
-  const capabilityKey = metrics.map(metric => `${metric.capability}:${readiness.capabilities[metric.capability] === true}`).join("|");
-  const contextKey = `${readiness.tenantId}:${legalEntityId}:${selection.entityId ?? ""}:${selection.branch ?? ""}:${readiness.principalId}:${permissionKey}:${capabilityKey}`;
+  const capabilityKey = visibleMetrics.map(metric => `${metric.capability}:${readiness.capabilities[metric.capability] === true}`).concat(`principalApprovals:${readiness.capabilities.principalApprovals === true}`).join("|");
+  const contextKey = `${authEpoch}:${analytics}:${readiness.effectiveBranchId ?? ""}:${readiness.tenantId}:${legalEntityId}:${selection.entityId ?? ""}:${selection.branch ?? ""}:${readiness.principalId}:${permissionKey}:${capabilityKey}`;
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{ key: string; values: Record<string, Result> }>({ key: "", values: {} });
 
   useEffect(() => {
     const controller = new AbortController();
     const allowed = new Set(permissions);
-    const available = (metric: Metric) => allowed.has(metric.permission) && readiness.capabilities[metric.capability] === true
+    const available = (metric: Metric) => allowed.has(metric.permission) && (metric.capability === "approvals" ? requestApprovalsAvailable(readiness.capabilities) : readiness.capabilities[metric.capability] === true)
       && (!selection.entityId || selection.entityId === legalEntityId);
-    setResult({ key: contextKey, values: Object.fromEntries(metrics.map(metric =>
+    setResult({ key: contextKey, values: Object.fromEntries(visibleMetrics.map(metric =>
       [metric.permission, { state: available(metric) ? "loading" : "unavailable" }])) });
-    for (const metric of metrics) {
+    for (const metric of visibleMetrics) {
       if (!available(metric)) continue;
       metric.load(legalEntityId, controller.signal)
-        .then(count => {
+        .then(({ count, rows }) => {
           if (!controller.signal.aborted)
             setResult(current => current.key === contextKey ? { ...current,
               values: { ...current.values, [metric.permission]: Number.isSafeInteger(count) && count >= 0
-                ? { state: "ready", count } : { state: "error" } } } : current);
+                ? { state: "ready", count, rows } : { state: "error" } } } : current);
         })
         .catch(() => {
           if (!controller.signal.aborted)
@@ -62,6 +89,21 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
 
   const values = result.key === contextKey ? result.values : {};
   if (selection.entityId && selection.entityId !== legalEntityId) return <p role="status">Checking the selected company…</p>;
+  if (!analytics) {
+    const metric = (index: number): HomeMetric => {
+      const definition = homeMetrics[index], result = values[definition.permission] ?? { state: "loading" };
+      return { label: definition.label, path: definition.path, state: result.state, count: result.state === "ready" ? result.count : undefined };
+    };
+    const requests = values[metrics[0].permission], approvals = values["procurement-approval-read"];
+    return <Dashboard live={{
+      companyName: entities.find(entity => entity.id === legalEntityId)?.name || branding?.displayName || "Your company",
+      canCreateRequest: readiness.capabilities.requestDraft && permissions.includes("procurement-request-create"),
+      refresh: () => setRevision(value => value + 1),
+      stats: [{ ...metric(1), label: "Purchase orders" }, metric(4), metric(5), metric(6)], personal: metrics.map((_, index) => metric(index)),
+      attention: { ...metric(7), rows: approvals?.state === "ready" ? approvals.rows ?? [] : [] },
+      recent: { state: requests?.state ?? "loading", rows: requests?.state === "ready" ? requests.rows ?? [] : [] },
+    }} />;
+  }
   return <div className="p-5 sm:p-8">
     <PageHeader title={analytics ? "Procurement activity" : "Procurement home"}
       subtitle="Your saved purchasing records in the selected company. These counts do not represent company spend or Finance balances."
