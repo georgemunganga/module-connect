@@ -10,10 +10,12 @@ const invalid = () => new PrincipalOrderError(0, "ERP returned incomplete order 
 export class PrincipalOrderError extends Error { constructor(readonly status: number, message: string) { super(message); } }
 
 export type PrincipalOrderSummary = { id: string; number: string; status: string; version: number; supplierId: string;
-  branchRef: string; currencyCode: string; originalDirectSourceSha256?: string; issuedVersionId?: string | null };
+  branchRef: string; currencyCode: string; supplierDisplayName?: string; branchDisplayName?: string;
+  originalDirectSourceSha256?: string; issuedVersionId?: string | null };
 export type PrincipalOrderPage = { items: PrincipalOrderSummary[]; total: number; page: number; pageSize: number };
-export type PrincipalOrderLine = { id: string; lineNumber: number; description: string; unitCode: string;
-  quantity: string; unitPrice: string; taxAmount: string; purchaseRequestId: string; allocationStatus: string };
+export type PrincipalDisplayLine = { id: string; lineNumber: number; description: string; unitCode: string;
+  quantity: string; unitPrice: string; taxAmount: string };
+export type PrincipalOrderLine = PrincipalDisplayLine & { purchaseRequestId: string; allocationStatus: string };
 export type PrincipalOrderDetail = PrincipalOrderSummary & { originalDirectSourceSha256: string;
   shipToRef: string | null; billToRef: string | null; paymentTermRef: string | null;
   expectedDeliveryOn: string | null; fundingRecorded: boolean; lines: PrincipalOrderLine[];
@@ -27,18 +29,20 @@ export type PrincipalSupplier = { id: string; displayName: string; number: strin
 export type PrincipalSupplierPage = { items: PrincipalSupplier[]; candidateTotal: number; page: number; pageSize: number;
   nextPage: number | null; previewOnly: true };
 export type PrincipalFinanceDetail = PrincipalOrderSummary & { originalDirectSourceSha256: string;
-  grossAmountExact: string; sourceReservationReferences: string[];
+  grossAmountExact: string; sourceReservationReferences: string[]; lines: PrincipalDisplayLine[];
   funding: { id: string; manualCommitmentReference: string; externalEvidenceReference: string;
     attestedGrossAmountExact: string; observedAt: string } | null;
   release: { id: string; reason: string; requestedAt: string } | null;
   canRecordFunding: boolean; canConfirmRelease: boolean };
 export type PrincipalReview = PrincipalOrderSummary & { grossAmountExact: string;
-  lineBaseAmountExact: string; commercialSnapshotJson: string; manualCommitmentReference: string;
+  lineBaseAmountExact: string; commercialSnapshotJson: string; lines: PrincipalDisplayLine[];
+  manualCommitmentReference: string;
   externalEvidenceReference: string; approvedManualPolicyReference: string;
   caseVersion: number; assignmentId: string; assignmentVersion: number; canDecide: boolean };
 export type PrincipalApprovalSummary = PrincipalOrderSummary & { orderId: string; assignmentId: string;
   assignmentVersion: number; caseVersion: number; grossAmountExact: string; openedAt: string };
 export type PrincipalFulfilmentDetail = PrincipalOrderSummary & { grossAmountExact: string;
+  lines: PrincipalDisplayLine[];
   issuedVersionId: string | null; issuedAuthorizedAt: string | null;
   allowedManualResponseChannels: string[]; canIssue: boolean; canRecordSupplierResponse: boolean };
 export type PrincipalOperation = "Create" | "Cancel" | "Funding" | "Submit" | "Decide" | "Issue" | "Ack" | "ReleaseRequest" | "ReleaseConfirm";
@@ -71,6 +75,12 @@ function page(value: unknown): value is PrincipalOrderPage {
   return obj(value) && Array.isArray(value.items) && value.items.every(summary)
     && Number.isSafeInteger(value.total) && Number(value.total) >= 0
     && positiveInt(value.page) && positiveInt(value.pageSize);
+}
+function displayLines(value: unknown): value is PrincipalDisplayLine[] {
+  return Array.isArray(value)&&value.length>0&&value.every(line=>obj(line)
+    &&uuid.test(String(line.id))&&positiveInt(line.lineNumber)
+    &&typeof line.description==="string"&&typeof line.unitCode==="string"
+    &&exact.test(String(line.quantity))&&exact.test(String(line.unitPrice))&&exact.test(String(line.taxAmount)));
 }
 export async function listPrincipalOrders(company: string, pageNumber: number, state: string, signal?: AbortSignal): Promise<PrincipalOrderPage> {
   const value = await call(company, `/principal-direct-drafts?page=${pageNumber}&pageSize=25${state ? `&state=${encodeURIComponent(state)}` : ""}`, { signal });
@@ -118,15 +128,17 @@ export async function listPrincipalSuppliers(company: string, pageNumber: number
 export async function getPrincipalOrder(company: string, id: string, signal?: AbortSignal): Promise<PrincipalOrderDetail> {
   if (!uuid.test(id)) throw invalid();
   const value = await call(company, `/${id}/principal-direct-draft`, { signal });
-  if (!summary(value) || value.id !== id || !Array.isArray(value.lines)
+  if (!summary(value) || value.id !== id || typeof value.supplierDisplayName !== "string"
+    || typeof value.branchDisplayName !== "string" || !displayLines(value.lines)
     || typeof value.fundingRecorded !== "boolean"
-    || !value.lines.every(row => obj(row) && uuid.test(String(row.id)) && exact.test(String(row.quantity))
-      && exact.test(String(row.unitPrice)) && exact.test(String(row.taxAmount)))) throw invalid();
+    || !value.lines.every(row => uuid.test(String(row.purchaseRequestId))&&typeof row.allocationStatus==="string")) throw invalid();
   return value as PrincipalOrderDetail;
 }
 export async function getPrincipalFinanceDetail(company: string, id: string, signal?: AbortSignal): Promise<PrincipalFinanceDetail> {
   const value = await call(company, `/${id}/principal-finance-detail`, { signal });
-  if (!summary(value) || value.id !== id || !exact.test(String(value.grossAmountExact))
+  if (!summary(value) || value.id !== id || typeof value.supplierDisplayName !== "string"
+    || typeof value.branchDisplayName !== "string" || !exact.test(String(value.grossAmountExact))
+    || !displayLines(value.lines)
     || !stringList(value.sourceReservationReferences) || !obj(value.funding) && value.funding !== null
     || !obj(value.release) && value.release !== null || typeof value.canRecordFunding !== "boolean"
     || typeof value.canConfirmRelease !== "boolean") throw invalid();
@@ -135,6 +147,8 @@ export async function getPrincipalFinanceDetail(company: string, id: string, sig
 export async function getPrincipalReview(company: string, id: string, assignmentId: string, signal?: AbortSignal): Promise<PrincipalReview> {
   const value = await call(company, `/${id}/principal-review/${assignmentId}`, { signal });
   if (!summary(value) || value.id !== id || value.assignmentId !== assignmentId
+    || typeof value.supplierDisplayName !== "string" || typeof value.branchDisplayName !== "string"
+    || !displayLines(value.lines)
     || !positiveInt(value.caseVersion) || !positiveInt(value.assignmentVersion)
     || !exact.test(String(value.grossAmountExact)) || typeof value.commercialSnapshotJson !== "string"
     || typeof value.canDecide !== "boolean") throw invalid();
@@ -142,7 +156,9 @@ export async function getPrincipalReview(company: string, id: string, assignment
 }
 export async function getPrincipalFulfilmentDetail(company: string, id: string, view: "issue" | "ack", signal?: AbortSignal): Promise<PrincipalFulfilmentDetail> {
   const value = await call(company, `/${id}/principal-fulfilment-detail?view=${view}`, { signal });
-  if (!summary(value) || value.id !== id || !exact.test(String(value.grossAmountExact))
+  if (!summary(value) || value.id !== id || typeof value.supplierDisplayName !== "string"
+    || typeof value.branchDisplayName !== "string" || !exact.test(String(value.grossAmountExact))
+    || !displayLines(value.lines)
     || !stringList(value.allowedManualResponseChannels) || typeof value.canIssue !== "boolean"
     || typeof value.canRecordSupplierResponse !== "boolean"
     || view === "ack" && !uuid.test(String(value.issuedVersionId))) throw invalid();

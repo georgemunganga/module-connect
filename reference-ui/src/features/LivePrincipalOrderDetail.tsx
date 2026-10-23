@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ShoppingBag } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "../components/ui";
 import { DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { RecordTable } from "../components/data/RecordTable";
@@ -135,24 +135,28 @@ function PrincipalDetail({id,view,assignmentId,scopeKey}:{id:string;view:View;as
   if(loading)return <div className="p-5 sm:p-8" role="status">Loading order…</div>;
   if(!data)return <div className="p-5 sm:p-8"><p role="alert">{error||"This order is unavailable in your current company and branch."}</p>
     <Link to="/purchase-orders?workflow=principal">Back to purchase orders</Link></div>;
-  return <div className="min-h-[calc(100dvh-5rem)] bg-background pb-20">
-    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 py-5 sm:px-8">
-      <div className="min-w-0"><Link className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground" to="/purchase-orders?workflow=principal"><ArrowLeft size={13}/>Purchase Orders</Link>
-        <h1 className="flex min-w-0 items-center gap-2 truncate text-2xl font-semibold"><ShoppingBag size={23}/>{record.number}</h1>
-        <p className="text-sm text-muted-foreground">Internal purchasing · {record.currencyCode} · version {record.version}</p></div>
-      <Badge>{record.status}</Badge>
-    </header>
-    <div className="max-w-[1260px] space-y-6 px-5 py-6 sm:px-8">
-      <DetailTabs tabs={[{key:"overview",label:"Overview"},{key:"related",label:"Related"},{key:"history",label:"History"}]} active={activeTab} onChange={setActiveTab} />
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background">
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-8"><div className="min-w-0">
+      <Link className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary" to="/purchase-orders?workflow=principal"><ArrowLeft size={13}/>Purchase Orders</Link>
+      <div className="flex min-w-0 flex-wrap items-center gap-2"><h1 title={record.number} className="max-w-3xl break-all text-2xl font-semibold line-clamp-2">{record.number}</h1><Badge>{record.status}</Badge></div>
+      <p className="mt-1 text-xs text-muted-foreground">{record.supplierDisplayName} · {record.currencyCode}</p>
+    </div></header>
+    <DetailTabs tabs={[{key:"overview",label:"Overview"},{key:"items",label:`Items (${data.record.lines.length})`},
+      {key:"related",label:"Related"},{key:"comments",label:"Comments"},{key:"history",label:"History"}]} active={activeTab} onChange={setActiveTab} />
+    <div className="space-y-5 px-5 py-6 sm:px-8">
       {error&&<p role="alert" className="text-sm text-destructive">{error}</p>}{notice&&<p role="status">{notice}</p>}
       {pending&&<Panel title="Check previous action"><div className="space-y-3 p-5"><p>This action may already have succeeded. Command reference: {pending.key}.</p>
         <Button disabled={busy} onClick={()=>void recover()}>Check saved result</Button></div></Panel>}
-      {activeTab==="overview"&&<><DetailSection title="Order"><div className="grid gap-4 sm:grid-cols-3"><DetailValue label="Order number" value={record.number}/>
-        <DetailValue label="Status" value={record.status}/><DetailValue label="Currency" value={record.currencyCode}/>
-        <DetailValue label="Vendor reference" value={record.supplierId}/><DetailValue label="Branch reference" value={record.branchRef}/></div></DetailSection>
-      {data.view==="buyer"&&<><Panel title="Order lines"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit price</th><th>Tax</th><th>Request</th><th>Allocation</th></tr></thead>
-        <tbody>{data.record.lines.map(row=><tr key={row.id}><td>{row.description}</td><td>{row.quantity} {row.unitCode}</td><td>{row.unitPrice}</td><td>{row.taxAmount}</td><td>{row.purchaseRequestId}</td><td>{row.allocationStatus}</td></tr>)}</tbody></RecordTable></div></Panel>
-        <p className="text-sm">External commitment evidence: {data.record.fundingRecorded?"Recorded. Ready for buyer submission when permitted.":"Waiting for independent Finance recording."}</p>
+      {activeTab==="overview"&&<><DetailSection title="Purchase Order Overview" action={<Badge>{record.status}</Badge>}><dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <DetailValue label="Status" value={record.status}/><DetailValue label="Vendor" value={record.supplierDisplayName}/>
+        <DetailValue label="Branch" value={record.branchDisplayName}/><DetailValue label="Currency" value={record.currencyCode}/>
+        <DetailValue label="Commercial version" value={record.version}/>
+        {data.view==="buyer"&&<><DetailValue label="Deliver to" value={data.record.shipToRef||"—"}/>
+          <DetailValue label="Bill to" value={data.record.billToRef||"—"}/>
+          <DetailValue label="Payment terms" value={data.record.paymentTermRef||"—"}/>
+          <DetailValue label="External commitment" value={data.record.fundingRecorded?"Recorded":"Awaiting independent Finance recording"}/></>}
+      </dl></DetailSection>
+      {data.view==="buyer"&&<>
         {data.record.release&&<Panel title="External release"><div className="space-y-2 p-5"><p>Requested: {data.record.release.reason}</p><p>{data.record.release.state}</p>
           {data.record.releaseConfirmation&&<p>External release recorded: {data.record.releaseConfirmation.releasedGrossAmountExact} {record.currencyCode}</p>}</div></Panel>}</>}
       {data.view==="finance"&&<Panel title="External commitment"><div className="space-y-3 p-5"><p>Commercial gross: {record.currencyCode} {data.record.grossAmountExact}</p>
@@ -185,7 +189,14 @@ function PrincipalDetail({id,view,assignmentId,scopeKey}:{id:string;view:View;as
             <Button type="button" variant="secondary" disabled={busy} onClick={()=>setAction(null)}>Close</Button></div>
         </fieldset></form>}</div></Panel>}
       </>}
-      {activeTab==="related"&&<DetailSection title="Related records"><p className="text-sm text-muted-foreground">Approved request references appear on the order lines. Receipts and supplier invoices belong to their own workspaces. No Finance ledger posting or supplier send is asserted here.</p></DetailSection>}
+      {activeTab==="items"&&<DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable variant="compact"><thead><tr><th>Description</th><th>Unit</th><th>Quantity</th><th>Unit price</th><th>Tax</th>{data.view==="buyer"&&<><th>Source request</th><th>Allocation</th></>}</tr></thead>
+        <tbody>{data.record.lines.map(row=><tr key={row.id}><td>{row.description}</td><td>{row.unitCode}</td><td>{row.quantity}</td><td>{record.currencyCode} {row.unitPrice}</td><td>{record.currencyCode} {row.taxAmount}</td>{data.view==="buyer"&&"purchaseRequestId" in row&&<><td>{row.purchaseRequestId}</td><td>{row.allocationStatus}</td></>}</tr>)}</tbody></RecordTable></div></DetailSection>}
+      {activeTab==="related"&&<><Panel title="Finance evidence"><div className="space-y-3 p-5"><p className="text-sm">The recorded commitment and release references describe external evidence. This page does not move money or post a Finance entry.</p>
+        {data.view==="finance"&&data.record.funding?<p>{data.record.funding.manualCommitmentReference} · {data.record.funding.attestedGrossAmountExact} {record.currencyCode}</p>
+          :data.view==="buyer"&&data.record.releaseConfirmation?<p>Release confirmed: {data.record.releaseConfirmation.externalReleaseEvidenceReference}</p>
+          :<p>No commitment reference is visible in this responsibility view.</p>}</div></Panel>
+        <DetailSection title="Related Records"><p className="text-sm text-muted-foreground">Approved request references appear on the order lines. Receipts and supplier invoices belong to their own workspaces. No supplier send or payment is asserted here.</p></DetailSection></>}
+      {activeTab==="comments"&&<DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments cannot be saved on this purchase order yet.</p></DetailSection>}
       {activeTab==="history"&&<DetailSection title="Recorded activity"><p className="text-sm">Current saved state: {record.status}, version {record.version}.</p>
         {data.view==="buyer"&&data.record.release&&<p className="mt-2 text-sm">External release requested {data.record.release.requestedAt}: {data.record.release.reason}</p>}
         <p className="mt-2 text-sm text-muted-foreground">The complete audit trail is held by ERP. This view shows only the history returned by this order API.</p></DetailSection>}

@@ -39,7 +39,8 @@ async function fixture(page:Page,{lost=false}={}){
           originalDirectSourceSha256:"a".repeat(64),commandKey:writes[0].key,recordedHistoricalResult:true})});
     }
     if(path===`${api}/${order}/principal-direct-draft`)return json({id:order,number:"PO-1",status:"Draft",version:1,supplierId:supplier,
-      branchRef:branch,currencyCode:"ZMW",originalDirectSourceSha256:"a".repeat(64),fundingRecorded:false,
+      branchRef:branch,supplierDisplayName:"Approved vendor",branchDisplayName:"Main",currencyCode:"ZMW",
+      originalDirectSourceSha256:"a".repeat(64),fundingRecorded:false,
       shipToRef:"",billToRef:"",paymentTermRef:"",expectedDeliveryOn:null,release:null,releaseConfirmation:null,
       lines:[{id:line,lineNumber:1,description:"Laptop",unitCode:"EA",quantity:"1.0001",unitPrice:"1.0001",
         taxAmount:"0",purchaseRequestId:request,allocationStatus:"Reserved"}]});
@@ -56,6 +57,15 @@ test("workerless buyer converts approved direct demand using purpose supplier lo
   const result=await fixture(page);await prepare(page);
   await page.getByRole("button",{name:"Save internal draft"}).click();
   await expect(page.getByRole("heading",{name:"PO-1"})).toBeVisible();
+  await expect(page.getByText("Approved vendor · ZMW")).toBeVisible();
+  await expect(page.getByRole("tab",{name:"Overview"})).toBeVisible();
+  await expect(page.getByRole("tab",{name:"Items (1)"})).toBeVisible();
+  await expect(page.getByRole("tab",{name:"Related"})).toBeVisible();
+  await expect(page.getByRole("tab",{name:"Comments"})).toBeVisible();
+  await expect(page.getByRole("tab",{name:"History"})).toBeVisible();
+  await page.getByRole("tab",{name:"Items (1)"}).click();
+  await expect(page.getByRole("heading",{name:"Items / Line Details"})).toBeVisible();
+  await expect(page.getByRole("cell",{name:"Laptop"})).toBeVisible();
   expect(result.writes).toHaveLength(1);expect(result.writes[0].raw).toContain('"quantity":1.0001');
   expect(JSON.parse(result.writes[0].raw).sources[0]).toMatchObject({purchaseRequestId:request,purchaseRequestLineId:requestLine,expectedRequestVersion:9});
   expect(result.reads).toHaveLength(0);
