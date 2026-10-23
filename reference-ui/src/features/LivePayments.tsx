@@ -415,7 +415,7 @@ function PaymentDetailRecord() {
       {available.includes("Cancel") && <Button variant="ghost" disabled={writeBlocked} onClick={() => openAction("Cancel")}>Cancel request</Button>}
     </>}>
     <RecoveryNotice scope={scope} onRecovered={() => setRevision(value => value + 1)} />
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {error && !action && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {(stale || uncertain) && <Button variant="secondary" disabled={busy} onClick={() => setRevision(value => value + 1)}>Refresh saved request</Button>}
     {tab === "overview" && <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(270px,0.85fr)]">
       <DetailSection title="Payment request overview" action={<Badge>{statusLabels[request.status]}</Badge>}>
