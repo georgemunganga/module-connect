@@ -234,6 +234,7 @@ test("bill edit saves through the scoped API and survives refresh, then cancella
   await page.getByLabel("Reason for change").fill("Correct original amount");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Invoice INV-DOC-1", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText("Corrected original supplies", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByText("ZMW 125.1234", { exact: true }).first()).toBeVisible();
@@ -242,6 +243,7 @@ test("bill edit saves through the scoped API and survives refresh, then cancella
   await page.getByRole("button", { name: "Cancel invoice", exact: true }).click();
   await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
   await page.reload();
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText("Corrected original supplies", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Edit invoice", exact: true })).toHaveCount(0);
   expect(setup.mutations).toEqual([
@@ -271,7 +273,8 @@ test("lost edit response does not resend and GET refresh shows the actual saved 
   await expect(page.getByText("The response was not confirmed.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
   await page.getByRole("link", { name: "Open bills", exact: true }).click();
-  await page.getByRole("link", { name: "Open", exact: true }).click();
+  await page.getByRole("link", { name: "INV-DOC-1", exact: true }).click();
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText("Saved despite lost response", { exact: true })).toBeVisible();
   expect(setup.mutations).toHaveLength(1);
 });
@@ -408,7 +411,7 @@ test("live bill detail keeps the ERP-adapted tabs while showing only saved invoi
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByText("A detailed activity log is not available here yet", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "More invoice actions" }).click();
-  await expect(page.getByText("Delete is unavailable. Finance handles payments.")).toBeVisible();
+  await expect(page.getByText("Saved bills cannot be deleted. Payment recording is not connected yet.")).toBeVisible();
 });
 
 test("read-only bill detail keeps tabs and documents without offering a write action", async ({ page }) => {
@@ -420,4 +423,22 @@ test("read-only bill detail keeps tabs and documents without offering a write ac
   await expect(page.getByRole("button", { name: "Edit invoice" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cancel invoice" })).toHaveCount(0);
   await expect(page.getByLabel("Invoice document")).toHaveCount(0);
+});
+
+
+test("restored bill editor confirms discarded input and keeps the original form sections", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/bills/new");
+  await expect(page.getByRole("heading", { name: "New Bill", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Payment Terms", { exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Notes", { exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Attach Files", exact: true })).toBeDisabled();
+  await page.getByLabel("Invoice number", { exact: true }).fill("UNSAVED-ORIGINAL");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing", exact: true }).click();
+  await expect(page.getByLabel("Invoice number", { exact: true })).toHaveValue("UNSAVED-ORIGINAL");
+  await page.getByRole("button", { name: "Close editor", exact: true }).click();
+  await page.getByRole("button", { name: "Discard and leave", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Bills", exact: true })).toBeVisible();
 });

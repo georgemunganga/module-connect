@@ -300,7 +300,7 @@ function InvoiceEditorRecord() {
           <div className="-mx-5 bg-surface-muted px-5 py-5 sm:-mx-8 sm:px-8">
             <div className="max-w-xl space-y-3">
               <Field label="Find vendor"><Input value={vendorSearch} disabled={!!id} onChange={event => setVendorSearch(event.target.value)} placeholder="Search vendor name" /></Field>
-              <Field label="Vendor Name *"><Select required value={input.supplierId} disabled={loadingVendors || !!id}
+              <Field label="Vendor Name *"><Select aria-label="Vendor" required value={input.supplierId} disabled={loadingVendors || !!id}
                 onChange={event => setInput({ ...input, supplierId: event.target.value })}>
                 <option value="">{loadingVendors ? "Loading vendors…" : "Choose vendor"}</option>
                 {id && original && !vendors.some(vendor => vendor.id === original.supplierId) && <option value={original.supplierId}>{original.supplierName || "Saved vendor"}</option>}
@@ -312,13 +312,13 @@ function InvoiceEditorRecord() {
             </div>
           </div>
           <div className="grid max-w-4xl gap-x-8 gap-y-5 sm:grid-cols-2">
-            <Field label="Bill Date *"><Input required type="date" value={input.invoiceDate} onChange={event => setInput({ ...input, invoiceDate: event.target.value })} /></Field>
-            <Field label="Bill # *"><Input required maxLength={120} value={input.invoiceNumber} onChange={event => setInput({ ...input, invoiceNumber: event.target.value })} /></Field>
-            <Field label="Due Date"><Input type="date" min={input.invoiceDate} value={input.dueDate || ""} onChange={event => setInput({ ...input, dueDate: event.target.value || null })} /></Field>
-            <Field label="Currency *"><Input required maxLength={3} value={input.currencyCode} onChange={event => setInput({ ...input, currencyCode: event.target.value.toUpperCase() })} /></Field>
-            <Field label="Payment Terms"><Select disabled value="unavailable"><option value="unavailable">Not captured by invoice intake</option></Select></Field>
+            <Field label="Bill Date *"><Input aria-label="Invoice date" required type="date" value={input.invoiceDate} onChange={event => setInput({ ...input, invoiceDate: event.target.value })} /></Field>
+            <Field label="Bill # *"><Input aria-label="Invoice number" required maxLength={120} value={input.invoiceNumber} onChange={event => setInput({ ...input, invoiceNumber: event.target.value })} /></Field>
+            <Field label="Due Date"><Input aria-label="Due date" type="date" min={input.invoiceDate} value={input.dueDate || ""} onChange={event => setInput({ ...input, dueDate: event.target.value || null })} /></Field>
+            <Field label="Currency *"><Input aria-label="Currency" required maxLength={3} value={input.currencyCode} onChange={event => setInput({ ...input, currencyCode: event.target.value.toUpperCase() })} /></Field>
+            <Field label="Payment Terms"><Select disabled value="unavailable"><option value="unavailable">Not available yet</option></Select></Field>
           </div>
-          <p className="text-xs text-muted-foreground">Payment terms are shown for continuity with the original bill form. The current intake API does not save them; use the due date above.</p>
+          <p className="text-xs text-muted-foreground">Payment terms cannot be saved on bills yet. Use the due date above.</p>
           <section className="rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-4 py-3"><h2 className="text-sm font-medium">Item Table</h2><span className="text-xs text-muted-foreground">Goods and services on this invoice</span></div>
             <div className="overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[760px] text-left">
@@ -326,13 +326,13 @@ function InvoiceEditorRecord() {
               <tbody>{input.lines.map((line, index) => {
                 let lineTotal = "—"; try { lineTotal = money(invoicePreview([line]).total, input.currencyCode); } catch { /* Wait for valid input. */ }
                 return <tr key={index}>
-                  <td className="min-w-56 p-3"><Input required aria-label={`Item details ${index + 1}`} maxLength={500} value={line.description}
+                  <td className="min-w-56 p-3"><Input required aria-label={`Description ${index + 1}`} maxLength={500} value={line.description}
                     onChange={event => setLine(index, { description: event.target.value })} /></td>
-                  <td className="w-32 p-3"><Input required aria-label={`Quantity ${index + 1}`} type="number" min="0.0001" step="0.0001" value={line.quantity}
+                  <td className="w-32 p-3"><Input required aria-label="Quantity" type="number" min="0.0001" step="0.0001" value={line.quantity}
                     onChange={event => setLine(index, { quantity: event.target.value })} /></td>
-                  <td className="w-36 p-3"><Input required aria-label={`Rate ${index + 1}`} type="number" min="0" step="0.0001" value={line.unitPrice}
+                  <td className="w-36 p-3"><Input required aria-label="Unit price" type="number" min="0" step="0.0001" value={line.unitPrice}
                     onChange={event => setLine(index, { unitPrice: event.target.value })} /></td>
-                  <td className="w-36 p-3"><Input required aria-label={`Tax amount ${index + 1}`} type="number" min="0" step="0.0001" value={line.taxAmount}
+                  <td className="w-36 p-3"><Input required aria-label="Tax amount" type="number" min="0" step="0.0001" value={line.taxAmount}
                     onChange={event => setLine(index, { taxAmount: event.target.value })} /></td>
                   <td className="whitespace-nowrap px-3 text-right text-sm font-medium">{lineTotal}</td>
                   <td className="p-3"><Button type="button" variant="ghost" aria-label={`Remove item ${index + 1}`} disabled={input.lines.length === 1}
@@ -350,8 +350,8 @@ function InvoiceEditorRecord() {
             {!preview && <p className="text-xs text-muted-foreground">Complete valid quantities and amounts to preview totals.</p>}
           </div>
           <div className="grid gap-6 border-t border-border pt-6 sm:grid-cols-2">
-            <Field label="Notes"><Textarea disabled value="" placeholder="Notes are not captured by invoice intake." /></Field>
-            <Field label="Terms and Conditions"><Textarea disabled value="" placeholder="Terms are not captured by invoice intake." /></Field>
+            <Field label="Notes"><Textarea disabled value="" placeholder="Notes are not available on bills yet." /></Field>
+            <Field label="Terms and Conditions"><Textarea disabled value="" placeholder="Terms are not available on bills yet." /></Field>
             <div className="sm:col-span-2"><Button type="button" variant="secondary" disabled><Paperclip size={16} /> Attach Files</Button>
               <p className="mt-2 text-xs text-muted-foreground">Save the invoice first, then use its Documents panel to attach supplier files. No attachment is silently stored from this form.</p>
             </div>
@@ -451,12 +451,12 @@ function InvoiceDetailRecord() {
       <div className="flex flex-wrap items-center gap-2">
         {canEdit && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}
         <Button variant="secondary" disabled aria-describedby="invoice-payment-unavailable">Record payment</Button>
-        <span id="invoice-payment-unavailable" className="sr-only">Finance handles payments. This action is unavailable here.</span>
+        <span id="invoice-payment-unavailable" className="sr-only">Manual payment recording is not connected yet.</span>
         <div className="relative"><Button variant="secondary" aria-label="More invoice actions" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={16} /> More</Button>
           {menuOpen && <div role="menu" aria-label="Invoice actions" className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-card p-3 text-left text-xs shadow-lg">
             <p className="font-medium">More actions</p>
             <p className="mt-1 text-muted-foreground">{canCancel && !uncertain && !stale ? "Cancel is available in Overview after a reason is entered." : uncertain || stale ? "Refresh the saved bill before another action." : "No cancellation action is allowed for this saved invoice."}</p>
-            <p className="mt-2 text-muted-foreground">Delete is unavailable. Finance handles payments.</p>
+            <p className="mt-2 text-muted-foreground">Saved bills cannot be deleted. Payment recording is not connected yet.</p>
           </div>}
         </div>
       </div>
