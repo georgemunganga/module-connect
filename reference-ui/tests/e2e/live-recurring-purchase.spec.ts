@@ -184,11 +184,45 @@ test("unconfirmed create locks repeat submission and retains entered values", as
   await page.getByRole("button", { name: "Save recurring purchase" }).click();
   await expect(page.getByText("The save result was not confirmed.")).toBeVisible();
   await expect(page.getByLabel("Purchase name")).toHaveValue("Cloud subscription");
+  await expect(page.getByLabel("Purchase name")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+  await page.getByRole("button", { name: "Back to list" }).click();
+  const review = page.getByRole("dialog", { name: "Review saved recurring purchases" });
+  await expect(review).toBeVisible();
+  await expect(review).not.toContainText("changes have not been saved");
+  await expect(page.getByRole("dialog", { name: "Discard unsaved changes?" })).toHaveCount(0);
+  await review.getByRole("button", { name: "Stay on this page" }).click();
+  await expect(page).toHaveURL(/\/recurring-bills\/new$/);
   expect(state.writes).toHaveLength(1);
   await page.reload();
   await expect(page.getByText("The save result was not confirmed.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+  await page.getByRole("button", { name: "Recurring purchases", exact: true }).click();
+  await expect(review).toBeVisible();
+  await review.getByRole("button", { name: "Review saved records" }).click();
+  await expect(page).toHaveURL(/\/recurring-bills$/);
+  expect(state.writes).toHaveLength(1);
+});
+
+test("stale create offers read-only review from Back without discarding or retrying", async ({ page }) => {
+  const state = await fixture(page, { createStatus: 409 });
+  await page.goto("/procurement/workspace/recurring-bills/new");
+  await page.getByRole("combobox", { name: "Supplier", exact: true }).click();
+  await page.getByRole("option", { name: "Copper Services (Active)", exact: true }).click();
+  await page.getByLabel("Purchase name").fill("Cloud subscription");
+  await page.getByLabel("Expected each time").fill("10.0001");
+  await page.getByLabel("First expected date").fill("2026-11-01");
+  await page.getByLabel("Next expected date").fill("2026-11-01");
+  await page.getByRole("button", { name: "Save recurring purchase" }).click();
+  await expect(page.getByText("This purchase changed.")).toBeVisible();
+  await expect(page.getByLabel("Purchase name")).toBeDisabled();
+  await page.getByRole("button", { name: "Recurring purchases", exact: true }).click();
+  const review = page.getByRole("dialog", { name: "Review saved recurring purchases" });
+  await expect(review).toBeVisible();
+  await expect(review).toContainText("saved purchase changed");
+  await expect(page.getByRole("dialog", { name: "Discard unsaved changes?" })).toHaveCount(0);
+  await review.getByRole("button", { name: "Review saved records" }).click();
+  await expect(page).toHaveURL(/\/recurring-bills$/);
   expect(state.writes).toHaveLength(1);
 });
 

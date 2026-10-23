@@ -110,13 +110,13 @@ function RecurringPurchaseEditorRecord() {
   const [saveBlock, setSaveBlock] = useState<"unknown" | "stale" | null>(null);
   const [error, setError] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [discard, setDiscard] = useState(false);
+  const [leaveDialog, setLeaveDialog] = useState<"discard" | "review" | null>(null);
   useEffect(() => {
     generation.current += 1;
     const controller = new AbortController();
     pending.current = false;
     setLoaded(null); setVersion(null); setRecordStatus(null); setSaving(false); setError(""); setSaveBlock(recurringWriteLocked(writeScope) ? "unknown" : null); setLoading(Boolean(id));
-    setDirty(false); setDiscard(false);
+    setDirty(false); setLeaveDialog(null);
     setVendors([]); setContracts([]); setSearch(""); setDraft(emptyDraft(scope.defaultCurrencyCode));
     if (id && scope.companyReady && canRead(scope)) getRecurringPurchase(scope.legalEntityId, id, controller.signal)
       .then((record) => { if (!controller.signal.aborted) {
@@ -150,11 +150,18 @@ function RecurringPurchaseEditorRecord() {
     return () => controller.abort();
   }, [context, scope.legalEntityId]);
   const field = <K extends keyof RecurringPurchaseDraft>(key: K, value: RecurringPurchaseDraft[K]) =>
-    { setDraft((before) => ({ ...before, [key]: value })); setDirty(true); };
+    { if (saving || saveBlock) return; setDraft((before) => ({ ...before, [key]: value })); setDirty(true); };
   const writable = id ? canEdit(scope) : canCreate(scope);
+  const reviewPath = id ? `/recurring-bills/${id}` : "/recurring-bills";
+  function leave() {
+    if (pending.current || saving) return;
+    if (saveBlock) { setLeaveDialog("review"); return; }
+    if (dirty) { setLeaveDialog("discard"); return; }
+    navigate("/recurring-bills");
+  }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!writable || pending.current || saveBlock || discard) return;
+    if (!writable || pending.current || saveBlock || leaveDialog) return;
     if (id && (loaded !== context || version === null || recordStatus !== "Draft")) { setError("This purchase cannot be edited. Open the saved record."); return; }
     const issue = validateRecurringPurchase(draft);
     if (issue) { setError(issue); return; }
@@ -180,7 +187,7 @@ function RecurringPurchaseEditorRecord() {
     } finally { if (active()) { pending.current = false; setSaving(false); } }
   }
   return <div className="p-5 sm:p-8">
-    <Button variant="ghost" className="mb-3" disabled={saving} onClick={() => dirty ? setDiscard(true) : navigate("/recurring-bills")}><ArrowLeft size={15} className="mr-1 inline" />Recurring purchases</Button>
+    <Button variant="ghost" className="mb-3" disabled={saving} onClick={leave}><ArrowLeft size={15} className="mr-1 inline" />Recurring purchases</Button>
     <PageHeader title={id ? "Edit recurring purchase" : "New recurring purchase"} subtitle="Record an expected repeat purchase. Bills and payments stay with Finance." />
     {!scope.companyReady ? <p role="status">Checking the selected company…</p>
       : !writable ? <p role="alert">You cannot {id ? "edit" : "create"} recurring purchases for this company.</p>
@@ -189,7 +196,8 @@ function RecurringPurchaseEditorRecord() {
           : id && recordStatus !== "Draft" ? <p role="status">This recurring purchase is closed. <Link className="text-primary underline" to={`/recurring-bills/${id}`}>Open its saved history</Link>.</p>
           : <form onSubmit={save} className="max-w-6xl space-y-5">
             {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-            {saveBlock && <p role="status" className="rounded-lg border p-3 text-sm">{saveBlock === "unknown" ? "The save result was not confirmed." : "This purchase changed."} Review the saved {id ? "purchase" : "list"} to confirm the outcome. Unconfirmed writes stay blocked for this browser session. <Link className="text-primary underline" to={id ? `/recurring-bills/${id}` : "/recurring-bills"}>Review saved records</Link></p>}
+            {saveBlock && <p role="status" className="rounded-lg border p-3 text-sm">{saveBlock === "unknown" ? "The save result was not confirmed." : "This purchase changed."} Review the saved {id ? "purchase" : "list"} to confirm the outcome. {saveBlock === "unknown" ? "Unconfirmed writes stay blocked for this browser session." : "Reload the saved record before making changes."} <Link className="text-primary underline" to={reviewPath}>Review saved records</Link></p>}
+            <fieldset disabled={saving || !!saveBlock} className="space-y-5">
             <Panel title="Supplier and purchase"><div className="grid gap-4 bg-muted/30 p-5 sm:grid-cols-2">
               {!scope.permissions.includes("procurement-vendor-read") && <p className="sm:col-span-2 text-sm">Supplier browsing is not assigned to your account. A saved supplier link remains unchanged.</p>}
               <Field label="Search suppliers" className="sm:col-span-2"><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search supplier name" /></Field>
@@ -206,11 +214,13 @@ function RecurringPurchaseEditorRecord() {
               <Field label="Last expected date (optional)"><Input type="date" value={draft.lastCycleOn || ""} onChange={(e) => field("lastCycleOn", e.target.value || null)} /></Field>
               <Field label="Related contract (optional)" className="sm:col-span-2"><Select value={draft.supplierContractId || ""} onChange={(e) => field("supplierContractId", e.target.value || null)}><option value="">No contract selected</option>{draft.supplierContractId && !contracts.some((c) => c.id === draft.supplierContractId) && <option value={draft.supplierContractId}>Selected contract</option>}{contracts.filter((c) => c.supplierId === draft.supplierId && c.status !== "Cancelled").map((c) => <option key={c.id} value={c.id}>{c.title} ({c.status})</option>)}</Select></Field>
             </div></Panel>
+            </fieldset>
             <Panel title="Items and charges"><div className="p-5 text-sm text-muted-foreground">Item lines, tax and discounts are not available for recurring purchase schedules yet. The expected amount above is saved exactly as entered.</div></Panel>
             <Panel title="Terms and notes"><div className="grid gap-4 p-5 sm:grid-cols-2"><Field label="Payment terms"><Input disabled value="" placeholder="Not saved for recurring purchases" /></Field><Field label="Notes"><Textarea disabled value="" placeholder="Not saved for recurring purchases" /></Field><p className="sm:col-span-2 text-sm text-muted-foreground">Terms and notes are not part of the current recurring purchase record.</p></div></Panel>
-            <footer className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-y border-border bg-card/95 px-5 py-4 backdrop-blur"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save recurring purchase"}</Button><Button type="button" variant="secondary" disabled={saving} onClick={() => dirty ? setDiscard(true) : navigate("/recurring-bills")}>Back to list</Button><span className="ml-auto text-xs text-muted-foreground">Planned purchase only · no bill or payment created</span></footer>
+            <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-3 border-y border-border bg-card/95 px-5 py-4 backdrop-blur"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save recurring purchase"}</Button><Button type="button" variant="secondary" disabled={saving} onClick={leave}>Back to list</Button><span className="ml-auto text-xs text-muted-foreground">Planned purchase only · no bill or payment created</span></footer>
           </form>}
-    {discard && <Modal title="Discard unsaved changes?" onClose={() => setDiscard(false)}><p className="text-sm text-muted-foreground">Changes on this page have not been saved to ERP.</p><div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setDiscard(false)}>Keep editing</Button><Button variant="danger" disabled={saving} onClick={() => navigate("/recurring-bills")}>Discard changes</Button></div></Modal>}
+    {leaveDialog === "discard" && <Modal title="Discard unsaved changes?" onClose={() => setLeaveDialog(null)}><p className="text-sm text-muted-foreground">These changes have not been submitted to ERP.</p><div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setLeaveDialog(null)}>Keep editing</Button><Button variant="danger" disabled={saving} onClick={() => navigate("/recurring-bills")}>Discard changes</Button></div></Modal>}
+    {leaveDialog === "review" && <Modal title="Review saved recurring purchases" onClose={() => setLeaveDialog(null)}><p className="text-sm text-muted-foreground">{saveBlock === "unknown" ? "The save result is unconfirmed." : "The saved purchase changed while you were editing."} Open saved records to check the outcome. {saveBlock === "unknown" ? "This does not retry the save or clear its browser safety lock." : "This does not retry the save."}</p><div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setLeaveDialog(null)}>Stay on this page</Button><Button onClick={() => navigate(reviewPath)}>Review saved records</Button></div></Modal>}
   </div>;
 }
 
