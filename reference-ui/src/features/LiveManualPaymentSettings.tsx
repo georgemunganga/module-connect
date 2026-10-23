@@ -6,12 +6,13 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { claimAuthorityCreateGuard, clearAuthorityCreateGuard, readAuthorityCreateGuard } from "../lib/authority-create-guard";
 import { emptyManualPaymentLimit, parseManualPaymentPolicy, serializeManualPaymentPolicy,
   type ManualPaymentLimit } from "../lib/manual-payment-policy-editor";
+import { samePolicyInstant, selectedPolicyInstant, utcPolicyDay } from "../lib/policy-effective-instant";
 import { createPolicy, decidePolicy, getEffectivePolicy, getPolicy, listPolicies, submitPolicyReview,
   updatePolicy, validateManualPaymentPolicy, PolicyActionError,
   type PolicyPage, type PolicyRecord } from "../../../src/platform/procurement-policy-api";
 
 const KEY = "MANUAL_PAYMENT_REVIEW" as const;
-const day = (value: string | null) => value?.slice(0, 10) ?? "";
+const day = utcPolicyDay;
 const explain = (cause: unknown) => cause instanceof Error ? cause.message : "Manual payment review settings are unavailable.";
 type Pending = { item: PolicyPage["items"][number]; action: "review" | "publish" | "return" };
 
@@ -97,9 +98,12 @@ function ManualPaymentSettingsRecord() {
     event.preventDefault();
     if (!canEdit || !schemaReady || !editing || busy.current || guard !== "clear") return;
     let rulesJson: string;
+    let effectiveFrom: string, effectiveTo: string | null;
     try {
       rulesJson = serializeManualPaymentPolicy(rows);
       if (!start || end && end <= start) throw new Error("Choose an end date after the start date. Effective dates use UTC.");
+      effectiveFrom = selectedPolicyInstant(start, editing === "new" ? null : editing.effectiveFrom)!;
+      effectiveTo = selectedPolicyInstant(end, editing === "new" ? null : editing.effectiveTo);
     } catch (cause) { setError(explain(cause)); return; }
     busy.current = true; setWorking(true); setError("");
     try {
@@ -110,12 +114,12 @@ function ManualPaymentSettingsRecord() {
           || "Set explicit currency limits before saving review rules.");
       busy.current = false; setWorking(false);
       if (!claim()) return;
-      const draft = { policyKey: KEY, effectiveFrom: `${start}T00:00:00.000Z`,
-        effectiveTo: end ? `${end}T00:00:00.000Z` : null, rulesJson };
+      const draft = { policyKey: KEY, effectiveFrom, effectiveTo, rulesJson };
       const result = editing === "new" ? await createPolicy(company, draft)
         : await updatePolicy(company, editing.id, editing.version, draft);
       if (result.policyKey !== KEY || result.state !== "Draft" || result.rulesJson !== rulesJson
-        || day(result.effectiveFrom) !== start || day(result.effectiveTo) !== end
+        || !samePolicyInstant(result.effectiveFrom, effectiveFrom)
+        || !samePolicyInstant(result.effectiveTo, effectiveTo)
         || editing !== "new" && (result.id !== editing.id || result.version <= editing.version))
         throw new PolicyActionError("ERP did not confirm the saved payment review rules. Check the saved record.", 0);
       settle(); if (alive.current) { setEditing(null); setRefresh(value => value + 1); }
