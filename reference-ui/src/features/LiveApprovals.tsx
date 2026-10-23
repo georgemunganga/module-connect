@@ -7,10 +7,12 @@ import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
 import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
 import { LiveOrderApprovalQueue } from "./LiveOrderApprovalQueue";
+import { LivePrincipalOrderApprovalQueue } from "./LivePrincipalOrders";
 import { InvoiceUnitReviewQueue } from "./InvoiceUnitReviewTasks";
 import { ApprovalOpeningPanel } from "./ApprovalOpeningPanel";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { useErpShell } from "../lib/erpShell";
 import { ApprovalApiError, decideApproval, getApproval, getApprovalHistory, listAssignedApprovals, openApproval,
   type ApprovalAction, type ApprovalCommand, type ApprovalDetail, type ApprovalHistory, type ApprovalQueue } from "../../../src/platform/procurement-approvals-api";
 const message = (error: unknown) => error instanceof Error ? error.message : "The approval action could not be confirmed.";
@@ -24,18 +26,24 @@ function useApprovalContext() {
 }
 export function LiveApprovalQueue() {
   const context = useApprovalContext();
+  const {selection,authEpoch}=useErpShell();
   const requests = requestApprovalsAvailable(context.capabilities) && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
   const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
+  const principalOrders = context.capabilities.principalOrderGovernance && context.capabilities.principalDirectOrderDrafts
+    && context.permissions.includes("procurement-po-approve");
   const units = context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
-  const available = ([requests && "requests", orders && "orders", units && "units"].filter(Boolean) as ("requests" | "orders" | "units")[]);
-  const [type, setType] = useState<"requests" | "orders" | "units">(() => available[0] ?? "requests");
+  const available = ([requests && "requests", orders && "orders", principalOrders && "principalOrders", units && "units"].filter(Boolean) as ("requests" | "orders" | "principalOrders" | "units")[]);
+  const [type, setType] = useState<"requests" | "orders" | "principalOrders" | "units">(() => available[0] ?? "requests");
   const selected = available.includes(type) ? type : available[0];
   if (!selected) return <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
-  const queue = selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "units" ? <InvoiceUnitReviewQueue /> : <RequestApprovalQueue />;
+  const queue = selected === "orders" ? <LiveOrderApprovalQueue /> : selected==="principalOrders"
+    ? <LivePrincipalOrderApprovalQueue key={[authEpoch,context.tenantId,context.legalEntityId,context.principalId,selection.branch,context.permissions.join("|")].join(":")}/>
+    : selected === "units" ? <InvoiceUnitReviewQueue /> : <RequestApprovalQueue />;
   if (available.length === 1) return queue;
   return <><div className="flex gap-3 px-5 pt-5 sm:px-8" role="tablist" aria-label="Approval records">
     {requests && <Button role="tab" aria-selected={selected === "requests"} variant={selected === "requests" ? "primary" : "secondary"} onClick={() => setType("requests")}>Purchase requests</Button>}
     {orders && <Button role="tab" aria-selected={selected === "orders"} variant={selected === "orders" ? "primary" : "secondary"} onClick={() => setType("orders")}>Purchase orders</Button>}
+    {principalOrders && <Button role="tab" aria-selected={selected === "principalOrders"} variant={selected === "principalOrders" ? "primary" : "secondary"} onClick={() => setType("principalOrders")}>Internal order approvals</Button>}
     {units && <Button role="tab" aria-selected={selected === "units"} variant={selected === "units" ? "primary" : "secondary"} onClick={() => setType("units")}>Original invoice units</Button>}
   </div>{queue}</>;
 }

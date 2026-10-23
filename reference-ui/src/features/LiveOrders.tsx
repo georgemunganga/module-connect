@@ -2,13 +2,14 @@ import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
 import { LiveOrderExecutionList, LiveOrderExecutionDetail } from "./LiveOrderExecution";
 import { LiveOrderSourceEditor } from "./LiveOrderSourceEditor";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ShoppingBag, X } from "lucide-react";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "../components/ui";
 import { ActivityTimeline, DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { LivePrincipalOrderDetail, LivePrincipalOrderEditor, LivePrincipalOrderList } from "./LivePrincipalOrders";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import {
   OrderDraftError, cancelOwnOrderDraft, createOwnOrderDraft, getOwnOrderDraft, listOwnOrderDrafts,
@@ -31,9 +32,13 @@ function useCompany() {
 }
 
 export function LiveOrderList() {
-  const context = useCompany(); const { selection, authEpoch } = useErpShell();
+  const context = useCompany(); const { selection, authEpoch } = useErpShell(); const [params]=useSearchParams();
   if (selection.entityId && selection.entityId !== context.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
+  if(params.get("workflow")==="principal"&&!context.capabilities.principalDirectOrderDrafts)
+    return <p className="p-5 sm:p-8" role="alert">This order workflow is unavailable.</p>;
+  if(context.capabilities.principalDirectOrderDrafts&&(params.get("workflow")==="principal"||!context.workerId))
+    return <LivePrincipalOrderList key={[authEpoch,context.tenantId,context.legalEntityId,selection.branch,context.principalId,context.permissions.join("|")].join(":")}/>;
   return context.capabilities.orders
     ? <LiveOrderExecutionList key={[context.tenantId, context.legalEntityId, selection.branch, context.principalId].join(":")} />
     : <LegacyOrderList key={[authEpoch, context.tenantId, context.legalEntityId, selection.branch, context.principalId, context.permissions.join("|")].join(":")} />;
@@ -67,9 +72,13 @@ function LegacyOrderList() {
 }
 
 export function LiveOrderEditor() {
-  const { id } = useParams(); const readiness = useCompany(); const { selection } = useErpShell();
+  const { id } = useParams(); const readiness = useCompany(); const { selection } = useErpShell(); const [params]=useSearchParams();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
+  if(params.get("workflow")==="principal"&&!readiness.capabilities.principalDirectOrderDrafts)
+    return <p className="p-5 sm:p-8" role="alert">This order workflow is unavailable.</p>;
+  if(readiness.capabilities.principalDirectOrderDrafts&&(params.get("workflow")==="principal"||!readiness.workerId))
+    return <LivePrincipalOrderEditor />;
   if (readiness.capabilities.orders) return <LiveOrderSourceEditor />;
   return <LiveOrderEditorRecord key={[readiness.tenantId, readiness.legalEntityId, selection.branch,
     readiness.principalId, id ?? "new"].join(":")} />;
@@ -229,9 +238,13 @@ function LiveOrderEditorRecord() {
 }
 
 export function LiveOrderDetail() {
-  const context = useCompany(); const { selection } = useErpShell();
+  const context = useCompany(); const { selection } = useErpShell(); const [params]=useSearchParams();
   if (selection.entityId && selection.entityId !== context.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
+  if(params.get("workflow")==="principal"&&!context.capabilities.principalDirectOrderDrafts)
+    return <p className="p-5 sm:p-8" role="alert">This order workflow is unavailable.</p>;
+  if(context.capabilities.principalDirectOrderDrafts&&(params.get("workflow")==="principal"||!context.workerId))
+    return <LivePrincipalOrderDetail />;
   return context.capabilities.orders ? <LiveOrderExecutionDetail /> : <LegacyOrderDetail />;
 }
 function LegacyOrderDetail() {
