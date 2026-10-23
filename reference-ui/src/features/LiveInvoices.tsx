@@ -207,16 +207,16 @@ function InvoiceEditorRecord() {
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const navigate = useNavigate();
   const { legalEntityId, defaultCurrencyCode, permissions } = useCompany();
-  const [input, setInput] = useState<InvoiceIntakeInput>({ supplierId: "", invoiceNumber: "",
-    invoiceDate: new Date().toISOString().slice(0, 10), currencyCode: defaultCurrencyCode, lines: [blankLine()] });
-  const [baseline, setBaseline] = useState(() => JSON.stringify({ supplierId: "", invoiceNumber: "",
+  const [input, setInput] = useState<InvoiceIntakeInput>(() => ({ supplierId: "", invoiceNumber: "",
     invoiceDate: new Date().toISOString().slice(0, 10), currencyCode: defaultCurrencyCode, lines: [blankLine()] }));
+  const [baseline, setBaseline] = useState(() => JSON.stringify(input));
   const [original, setOriginal] = useState<InvoiceDetail | null>(null);
   const [loadingInvoice, setLoadingInvoice] = useState(!!id);
   const [reason, setReason] = useState("");
   const [uncertain, setUncertain] = useState(false);
   const [stale, setStale] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
   useEffect(() => {
     if (!id) return;
     const abort = new AbortController();
@@ -237,7 +237,11 @@ function InvoiceEditorRecord() {
   const [error, setError] = useState("");
   const dirty = JSON.stringify(input) !== baseline || reason.trim().length > 0;
   const backTo = id ? `/bills/${id}` : "/bills";
-  const leave = () => { if (dirty) setDiscardOpen(true); else navigate(backTo); };
+  const leave = () => {
+    if (saving) return;
+    if (uncertain) { setReconcileOpen(true); return; }
+    if (dirty) setDiscardOpen(true); else navigate(backTo);
+  };
   useEffect(() => {
     const controller = new AbortController();
     setLoadingVendors(true);
@@ -280,7 +284,7 @@ function InvoiceEditorRecord() {
   return <div className="pb-20">
     <header className="flex items-center justify-between border-b border-border px-5 py-5 sm:px-8">
       <h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} strokeWidth={1.4} />{id ? "Edit" : "New"} Bill</h1>
-      <Button type="button" variant="ghost" aria-label="Close editor" onClick={leave}><X size={21} /></Button>
+      <Button type="button" variant="ghost" aria-label="Close editor" disabled={saving} onClick={leave}><X size={21} /></Button>
     </header>
     {loadingInvoice ? <p className="px-5 py-6 sm:px-8" role="status">Loading invoice…</p>
       : id && !original ? <p className="px-5 py-6 sm:px-8" role="alert">{error || "Invoice not found."}</p>
@@ -302,7 +306,8 @@ function InvoiceEditorRecord() {
                 {vendors.map(vendor => <option key={vendor.id} value={vendor.id}>{vendor.displayName}{vendor.status !== "Active" ? ` · ${vendor.status}` : ""}</option>)}
               </Select></Field>
               {id ? <p className="text-xs text-muted-foreground">The saved supplier cannot be changed on this invoice.</p>
-                : <Link className="block text-sm text-primary hover:underline" to={`/vendors/new?returnTo=${encodeURIComponent("/bills/new")}`}>+ Add a vendor in the shared directory</Link>}
+                : dirty || saving || uncertain ? <p className="text-xs text-muted-foreground">Finish or discard this bill before opening the vendor directory.</p>
+                  : <Link className="block text-sm text-primary hover:underline" to={`/vendors/new?returnTo=${encodeURIComponent("/bills/new")}`}>+ Add a vendor in the shared directory</Link>}
             </div>
           </div>
           <div className="grid max-w-4xl gap-x-8 gap-y-5 sm:grid-cols-2">
@@ -354,7 +359,7 @@ function InvoiceEditorRecord() {
         </div>
         <footer className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 border-y border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-8">
           <Button type="submit" disabled={saving || uncertain || stale}><Save size={14} />{saving ? "Saving…" : id ? "Save changes" : "Record as received"}</Button>
-          <Button type="button" variant="ghost" onClick={leave}><ArrowLeft size={14} /> Cancel</Button>
+          <Button type="button" variant="ghost" disabled={saving} onClick={leave}><ArrowLeft size={14} /> Cancel</Button>
         </footer>
       </fieldset>
       {stale && <p className="px-5 py-4 sm:px-8" role="alert">The saved invoice changed. Your entries are kept here. <Button type="button" variant="secondary" onClick={() => { if (window.confirm("Reload the saved invoice and discard these changes?")) window.location.reload(); }}>Reload saved invoice</Button></p>}
@@ -362,7 +367,12 @@ function InvoiceEditorRecord() {
       {discardOpen && <Modal title="Discard unsaved changes?" onClose={() => setDiscardOpen(false)}>
         <p className="text-sm text-muted-foreground">Your entries have not been saved to the ERP. Leave this bill editor?</p>
         <div className="mt-5 flex gap-2"><Button type="button" variant="secondary" onClick={() => setDiscardOpen(false)}>Keep editing</Button>
-          <Button type="button" variant="danger" onClick={() => navigate(backTo)}>Discard and leave</Button></div>
+          <Button type="button" variant="danger" disabled={saving} onClick={() => { if (!saving && !uncertain) navigate(backTo); }}>Discard and leave</Button></div>
+      </Modal>}
+      {reconcileOpen && <Modal title="Check whether this invoice was saved" onClose={() => setReconcileOpen(false)}>
+        <p className="text-sm text-muted-foreground">The ERP response was not confirmed. Check the saved invoice list before making another change or recording the invoice again.</p>
+        <div className="mt-5 flex gap-2"><Button type="button" variant="secondary" onClick={() => setReconcileOpen(false)}>Stay on editor</Button>
+          <Button type="button" onClick={() => navigate("/bills")}>Open bills to check</Button></div>
       </Modal>}
     </form>}
   </div>;
