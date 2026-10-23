@@ -56,9 +56,12 @@ async function login(page: Page, role: string, record = '/payments') {
   expect(company?.registeredName).toBeTruthy();
   // Wait for the live shell, rather than the temporary loading shell whose
   // local menu state is discarded once Core context has been verified.
-  const landing = role.startsWith('policy_') ? '/settings/modules/payments-made/approvals' : '/payments';
+  const landing = '/payments';
   await page.goto(`/procurement/workspace${landing}`);
-  await expect(page.getByRole('heading', { name: landing === '/payments' ? 'Payments Made' : 'Payments Made settings', exact: true })).toBeVisible();
+  if (role.startsWith('policy_'))
+    await expect(page.getByText('You do not have permission to open this Procurement page', { exact: false })).toBeVisible();
+  else
+    await expect(page.getByRole('heading', { name: 'Payments Made', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Organisation context' }).click();
   await page.getByRole('button', {
     name: `${company!.registeredName}${landing.startsWith('/payments') ? ' · All branches' : ''}`,
