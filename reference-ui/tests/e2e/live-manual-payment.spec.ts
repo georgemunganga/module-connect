@@ -26,12 +26,13 @@ function detail() { return { request: { ...base, purpose: "Externally reported t
   transitions: [], coreCases: [], coreDecisions: [] }; }
 
 async function fixture(page: Page, enabled: boolean, options: {
-  principalId?: string; paymentStatus?: string; permissions?: string[];
+  principalId?: string; paymentStatus?: string; permissions?: string[]; allBranches?: boolean;
 } = {}) {
   const writes: { path: string; body: Record<string, unknown>; key: string | undefined }[] = [];
   let status = options.paymentStatus ?? "Draft", version = status === "Approved" ? 3 : 1;
-  await page.addInitScript(({ company, branch }) => localStorage.setItem("erp.shell.state.v1",
-    JSON.stringify({ entityId: company, branch })), { company, branch });
+  await page.addInitScript(({ company, branch, allBranches }) => localStorage.setItem("erp.shell.state.v1",
+    JSON.stringify({ entityId: company, ...(allBranches ? {} : { branch }) })),
+    { company, branch, allBranches: options.allBranches ?? false });
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -141,4 +142,69 @@ test("original payment editor layout creates one exact draft, then detail shows 
     confirmerPrincipalId: confirmer });
   expect(writes[0].key).toMatch(/^[0-9a-f-]{36}$/);
   expect(JSON.stringify(writes[0].body)).not.toMatch(/bank|account|fee|advance/i);
+});
+
+test("all-branches header keeps its read scope while the form chooses an explicit transaction branch", async ({ page }) => {
+  const writes = await fixture(page, true, { allBranches: true });
+  await page.goto(`/procurement/workspace/payments/new?invoiceId=${invoice}`);
+  await page.getByRole("combobox", { name: "Transaction branch *" }).click();
+  await page.getByRole("option", { name: "Lusaka" }).click();
+  await expect(page.getByText("Original bill gross: ZMW 100.0000", { exact: false })).toBeVisible();
+  await page.getByLabel("Exact amount *").fill("1.0001");
+  await page.getByRole("combobox", { name: "Approver *" }).click();
+  await page.getByRole("option", { name: "Approval officer" }).click();
+  await page.getByRole("combobox", { name: "Recorder *" }).click();
+  await page.getByRole("option", { name: "Payment recorder" }).click();
+  await page.getByRole("combobox", { name: "Confirmer *" }).click();
+  await page.getByRole("option", { name: "Independent confirmer" }).click();
+  await page.getByRole("button", { name: "Save as Draft" }).click();
+  await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toBeVisible();
+  expect(writes[0].body.branchId).toBe(branch);
+});
+
+test("switching payment detail IDs never exposes the previous record while the next GET waits", async ({ page }) => {
+  const nextPayment = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const writes = await fixture(page, true, { principalId: recorder, paymentStatus: "Approved",
+    permissions: ["procurement-access", "procurement-payment-read", "procurement-payment-record"] });
+  await page.goto(`/procurement/workspace/payments/${payment}`);
+  await expect(page.getByRole("button", { name: "Record external payment" })).toBeVisible();
+  await page.route(`**/api/procurement/v1/manual-payments/${nextPayment}`, async route => {
+    await new Promise(resolve => setTimeout(resolve, 450));
+    const next = detail();
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...next,
+      request: { ...next.request, id: nextPayment, status: "Approved", version: 7,
+        title: "Second payment request", approvedAmountExact: "1.0001" } }) });
+  });
+  await page.evaluate(next => {
+    history.pushState({}, "", `/procurement/workspace/payments/${next}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, nextPayment);
+  await expect(page.getByText("Loading payment request…")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record external payment" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Second payment request" })).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
+test("refresh after stale CAS hides old actions until the current detail GET completes", async ({ page }) => {
+  await fixture(page, true, { principalId: recorder, paymentStatus: "Approved",
+    permissions: ["procurement-access", "procurement-payment-read", "procurement-payment-record"] });
+  await page.goto(`/procurement/workspace/payments/${payment}`);
+  await page.route(`**/api/procurement/v1/manual-payments/${payment}/record`, route =>
+    route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ code: "stale" }) }));
+  await page.getByRole("button", { name: "Record external payment" }).click();
+  await page.getByLabel("External payment date *").fill("2026-10-22");
+  await page.getByLabel("External method *").fill("External transfer");
+  await page.getByLabel("External reference *").fill("BANK-1");
+  await page.getByRole("button", { name: "Record evidence" }).click();
+  await expect(page.getByText("The payment or approval task changed", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Keep reviewing" }).click();
+  await page.route(`**/api/procurement/v1/manual-payments/${payment}`, async route => {
+    await new Promise(resolve => setTimeout(resolve, 450));
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...detail(),
+      request: { ...detail().request, status: "Approved", version: 4,
+        approvedAmountExact: "1.0001" } }) });
+  });
+  await page.getByRole("button", { name: "Refresh saved request" }).click();
+  await expect(page.getByRole("button", { name: "Record external payment" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Record external payment" })).toBeVisible();
 });

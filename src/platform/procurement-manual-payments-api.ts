@@ -28,7 +28,9 @@ export type ManualPaymentDetail = { request: ManualPaymentSummary & { purpose: s
     assigneePrincipalId: string; policyVersionId: string; policyVersionNumber: number;
     openedAt: string; state: string; version: number }[];
   coreDecisions: { id: string; manualPaymentDecisionId: string; coreApprovalDecisionId: string;
-    manualAction: ManualPaymentAction; actorPrincipalId: string; decidedAt: string; coreAction: string }[] };
+    manualAction: ManualPaymentAction; actorPrincipalId: string; decidedAt: string; coreAction: string }[];
+  people: { principalId: string; displayName: string }[];
+  companyClock: { date: string; timeZoneId: string; observedAtUtc: string } | null };
 export type ManualPaymentReceipt = { id: string; version: number; status: ManualPaymentStatus;
   action: ManualPaymentAction; commandKey: string };
 export type ManualPaymentCommandResult = ManualPaymentReceipt & { amountExact: string };
@@ -253,7 +255,17 @@ export async function getManualPayment(scope: ManualPaymentScope, requestId: str
   if (!body.coreDecisions.every(row => obj(row) && id(row.id) && id(row.manualPaymentDecisionId)
     && id(row.coreApprovalDecisionId) && validAction(row.manualAction) && id(row.actorPrincipalId)
     && iso(row.decidedAt) && ["Approve", "Return", "Reject", "Cancel"].includes(String(row.coreAction)))) throw invalid();
-  return body as unknown as ManualPaymentDetail;
+  if (body.people !== undefined && (!Array.isArray(body.people)
+    || !body.people.every(row => obj(row) && id(row.principalId)
+      && typeof row.displayName === "string" && row.displayName.trim().length > 0
+      && row.displayName.length <= 300)
+    || new Set(body.people.map(row => (row as { principalId: string }).principalId)).size !== body.people.length)) throw invalid();
+  if (body.companyClock !== undefined && body.companyClock !== null
+    && (!obj(body.companyClock) || typeof body.companyClock.date !== "string" || !date(body.companyClock.date)
+      || typeof body.companyClock.timeZoneId !== "string"
+      || !body.companyClock.timeZoneId.trim() || body.companyClock.timeZoneId.length > 100
+      || !iso(body.companyClock.observedAtUtc))) throw invalid();
+  return { ...body, people: body.people ?? [], companyClock: body.companyClock ?? null } as unknown as ManualPaymentDetail;
 }
 
 function statusAfter(action: ManualPaymentAction): ManualPaymentStatus {

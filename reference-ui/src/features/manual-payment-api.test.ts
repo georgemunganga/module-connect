@@ -83,6 +83,21 @@ describe("manual payment API client", () => {
     expect(fetcher.mock.calls.every(([, init]) => !init.method || init.method === "GET")).toBe(true);
   });
 
+  it("uses optional Core people and company clock facts while accepting older detail hosts", async () => {
+    const captured = scope();
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ ...detail, people: [
+      { principalId: approver, displayName: "Current approval officer" }],
+      companyClock: { date: "2026-10-23", timeZoneId: "Africa/Lusaka", observedAtUtc: at } }))
+      .mockResolvedValueOnce(Response.json(detail));
+    vi.stubGlobal("fetch", fetcher);
+    const named = await getManualPayment(captured, payment);
+    expect(named.people).toEqual([{ principalId: approver, displayName: "Current approval officer" }]);
+    expect(named.companyClock?.date).toBe("2026-10-23");
+    const older = await getManualPayment(captured, payment);
+    expect(older.people).toEqual([]);
+    expect(older.companyClock).toBeNull();
+  });
+
   it("does not retry an interrupted mutation or invent a saved result", async () => {
     const captured = scope();
     const fetcher = vi.fn().mockRejectedValue(new Error("offline")); vi.stubGlobal("fetch", fetcher);

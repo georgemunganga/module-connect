@@ -23,7 +23,8 @@ import {
 const statuses = Object.keys(statusLabels) as ManualPaymentStatus[];
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : "Payment information is unavailable. Try again.";
 type PaymentContext = { scope: ManualPaymentScope; readiness: NonNullable<ReturnType<typeof useLiveReadiness>>;
-  branchId: string | null; branches: { id: string; name: string; legalEntityId: string }[]; key: string };
+  branchId: string | null; branches: { id: string; name: string; legalEntityId: string }[];
+  verifiedBranch: { id: string; name: string; legalEntityId: string } | null; key: string };
 
 function usePaymentContext(): PaymentContext {
   const readiness = useLiveReadiness();
@@ -36,7 +37,7 @@ function usePaymentContext(): PaymentContext {
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   return { scope: captureManualPaymentScope(identity, () => alive.current ? current.current : null), readiness,
-    branchId: identity.branchId, branches: shell.branches,
+    branchId: identity.branchId, branches: shell.branches, verifiedBranch: shell.verifiedContext?.branch ?? null,
     key: JSON.stringify([identity.tenantId, identity.legalEntityId, identity.principalId,
       identity.branchId, identity.authEpoch, readiness.permissions, readiness.capabilities.manualPaymentWorkflow]) };
 }
@@ -153,7 +154,7 @@ type AssigneeRole = "approve" | "record" | "confirm";
 export function LivePaymentEditor() { return <PaymentBoundary><PaymentEditorRecord /></PaymentBoundary>; }
 function PaymentEditorRecord() {
   const { id } = useParams(); const navigate = useNavigate(); const [params] = useSearchParams();
-  const { scope, readiness, branchId, branches, key } = usePaymentContext();
+  const { scope, readiness, branchId, branches, verifiedBranch, key } = usePaymentContext();
   const selectedInvoiceId = params.get("invoiceId") || "";
   const journal = createManualPaymentRecoveryJournal(scope);
   const [draft, setDraft] = useState<Draft>(() => blank(branchId ?? ""));
@@ -241,8 +242,8 @@ function PaymentEditorRecord() {
     grossExact: "", invoiceDate: "", branchId: record.request.branchId } : null);
   const branchChoices = branches.filter(row => row.legalEntityId === readiness.legalEntityId
     && (!branchId || row.id === branchId));
-  if (branchId && !branchChoices.some(row => row.id === branchId))
-    branchChoices.push({ id: branchId, name: "Selected branch", legalEntityId: readiness.legalEntityId });
+  if (branchId && verifiedBranch?.id === branchId && !branchChoices.some(row => row.id === branchId))
+    branchChoices.push(verifiedBranch);
   return <TransactionEditorFrame title={`${id ? "Edit" : "New"} Manual Payment Request`} close={close}
     closeDisabled={busy || journal.state().blocked} footer={<>
       <Button type="button" disabled={busy || stale || journal.state().blocked} onClick={() => void save()}><Save size={14} /> Save as Draft</Button>
@@ -255,8 +256,11 @@ function PaymentEditorRecord() {
     <div className="-mx-5 bg-muted px-5 py-5 sm:-mx-8 sm:px-8"><div className="max-w-xl space-y-4">
       <Field label="Transaction branch *"><Select value={draft.branchId} disabled={Boolean(id) || Boolean(branchId)} onChange={event => {
         update({ branchId: event.target.value, invoiceId: "", approverPrincipalId: "", recorderPrincipalId: "", confirmerPrincipalId: "" });
-        setInvoices([]);
+        setInvoices([]); setInvoiceCursor(null); setInvoiceSearch("");
+        setAssignees({ approve: [], record: [], confirm: [] });
+        setNameSearch({ approve: "", record: "", confirm: "" });
       }}><option value="">Choose branch</option>{branchChoices.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</Select></Field>
+      {!branchId && branchChoices.length === 0 && <p role="alert" className="text-sm">No authorized branch choices are available. Ask your ERP administrator to make your Core branch access available.</p>}
       <Field label="Vendor Name *"><Input value={selectedBill?.supplierDisplayName ?? "Select a bill first"} readOnly /></Field>
       <Field label="Bill to Pay *"><Input aria-label="Search supplier bills" placeholder="Search bill number or supplier" value={invoiceSearch}
         disabled={Boolean(id) || !draft.branchId || Boolean(selectedInvoiceId)} onChange={event => setInvoiceSearch(event.target.value)} />
@@ -328,21 +332,34 @@ function PaymentDetailRecord() {
   const [detail, setDetail] = useState<ManualPaymentDetail | null>(null), [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [stale, setStale] = useState(false);
   const [uncertain, setUncertain] = useState(false), [revision, setRevision] = useState(0);
+  const [loadedKey, setLoadedKey] = useState("");
   const [tab, setTab] = useState("overview"), [action, setAction] = useState<ManualPaymentAction | null>(null);
   const [reason, setReason] = useState(""), [paidOn, setPaidOn] = useState(""), [method, setMethod] = useState(""), [reference, setReference] = useState("");
+  const fetchKey = JSON.stringify([id, key, revision]);
+  const currentFetch = useRef(fetchKey); currentFetch.current = fetchKey;
   useEffect(() => {
     if (!id) return; const abort = new AbortController(); setLoading(true); setError("");
-    getManualPayment(scope, id, abort.signal).then(value => { if (!abort.signal.aborted && scope.current()) {
-      setDetail(value); setUncertain(false); setStale(false); setAction(null);
-    } }).catch(cause => { if (!abort.signal.aborted && scope.current()) { setError(errorText(cause)); setStale(true); } })
-      .finally(() => { if (!abort.signal.aborted && scope.current()) setLoading(false); });
+    setDetail(null); setLoadedKey(""); setBusy(false); setAction(null); setReason(""); setPaidOn(""); setMethod(""); setReference("");
+    getManualPayment(scope, id, abort.signal).then(value => { if (!abort.signal.aborted && scope.current() && currentFetch.current === fetchKey) {
+      setDetail(value); setLoadedKey(fetchKey); setUncertain(false); setStale(false);
+    } }).catch(cause => { if (!abort.signal.aborted && scope.current() && currentFetch.current === fetchKey) { setError(errorText(cause)); setStale(true); } })
+      .finally(() => { if (!abort.signal.aborted && scope.current() && currentFetch.current === fetchKey) setLoading(false); });
     return () => abort.abort();
   }, [id, key, revision]);
-  if (!detail && loading) return <div className="p-5 sm:p-8" role="status">Loading payment request…</div>;
+  if (loading || detail && (loadedKey !== fetchKey || detail.request.id !== id))
+    return <div className="p-5 sm:p-8" role="status">Loading payment request…</div>;
   if (!detail) return <div className="p-5 sm:p-8" role="alert">{error || "Payment request not found."} <Button variant="secondary" onClick={() => setRevision(value => value + 1)}>Try again</Button></div>;
   const request = detail.request, current = readiness.principalId, permissions = readiness.permissions;
   const available = manualPaymentVisibleActions(request, current, permissions);
-  const writeBlocked = busy || stale || uncertain || journal.state().blocked;
+  const writeBlocked = busy || stale || uncertain || loading || loadedKey !== fetchKey
+    || request.id !== id || journal.state().blocked;
+  const person = (principalId: string) => detail.people.find(value => value.principalId === principalId)?.displayName ?? principalId;
+  const openAction = (next: ManualPaymentAction) => {
+    if (writeBlocked) return;
+    setReason(""); setMethod(""); setReference("");
+    setPaidOn(next === "Record" ? detail.companyClock?.date ?? "" : "");
+    setAction(next);
+  };
   const execute = async () => {
     if (!action || !available.includes(action) || writeBlocked) return;
     const input = action === "Record" ? { expectedVersion: request.version, paidOn,
@@ -353,11 +370,11 @@ function PaymentDetailRecord() {
     try {
       await sendOnce(scope, journal, command);
       const fresh = await getManualPayment(scope, request.id);
-      if (scope.current()) { setDetail(fresh); setAction(null); setReason(""); setPaidOn(""); setMethod(""); setReference(""); setStale(false); setUncertain(false); }
-    } catch (cause) { if (scope.current()) {
+      if (scope.current() && currentFetch.current === fetchKey) { setDetail(fresh); setAction(null); setReason(""); setPaidOn(""); setMethod(""); setReference(""); setStale(false); setUncertain(false); }
+    } catch (cause) { if (scope.current() && currentFetch.current === fetchKey) {
       setError(errorText(cause)); if (isDefiniteManualPaymentRejection(cause) && cause.status === 409) setStale(true);
       if (journal.state().blocked || !isDefiniteManualPaymentRejection(cause)) setUncertain(true);
-    } } finally { if (scope.current()) setBusy(false); }
+    } } finally { if (scope.current() && currentFetch.current === fetchKey) setBusy(false); }
   };
   const tabs = [{ key: "overview", label: "Overview" }, { key: "items", label: "Bill" },
     { key: "related", label: "Related" }, { key: "comments", label: "Comments" }, { key: "history", label: "History" }];
@@ -367,10 +384,10 @@ function PaymentDetailRecord() {
       {request.status === "Draft" && current === request.creatorPrincipalId && permissions.includes("procurement-payment-edit") && !writeBlocked
         && <Link to={`/payments/${request.id}/edit`}><Button variant="secondary">Edit draft</Button></Link>}
       {available.filter(value => value !== "Cancel").map(value => <Button key={value} disabled={writeBlocked}
-        variant={value === "Reject" || value === "Dispute" ? "danger" : "secondary"} onClick={() => setAction(value)}>
+        variant={value === "Reject" || value === "Dispute" ? "danger" : "secondary"} onClick={() => openAction(value)}>
         {value === "Submit" ? "Submit for review" : value === "Record" ? "Record external payment" : value === "Confirm" ? "Confirm manually" : value}
       </Button>)}
-      {available.includes("Cancel") && <Button variant="ghost" disabled={writeBlocked} onClick={() => setAction("Cancel")}>Cancel request</Button>}
+      {available.includes("Cancel") && <Button variant="ghost" disabled={writeBlocked} onClick={() => openAction("Cancel")}>Cancel request</Button>}
     </>}>
     <RecoveryNotice scope={scope} onRecovered={() => setRevision(value => value + 1)} />
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -384,7 +401,10 @@ function PaymentDetailRecord() {
           <DetailValue label="Recorded amount" value={request.recordedAmountExact ? `${request.currencyCode} ${request.recordedAmountExact}` : undefined} />
           <DetailValue label="External payment date" value={request.paidOn} /><DetailValue label="External method" value={request.externalMethod} />
           <DetailValue label="External reference" value={request.externalReference} /><DetailValue label="Branch ID" value={request.branchId} />
-          <DetailValue label="Paid through" value="Finance controlled" />
+          <DetailValue label="Requested by" value={person(request.creatorPrincipalId)} />
+          <DetailValue label="Approver" value={person(request.approverPrincipalId)} />
+          <DetailValue label="Recorder" value={person(request.recorderPrincipalId)} />
+          <DetailValue label="Confirmer" value={person(request.confirmerPrincipalId)} />
         </dl>{request.purpose && <p className="mt-5 whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{request.purpose}</p>}
       </DetailSection><div className="space-y-4">
         <DetailSection title="Record Activity"><ActivityTimeline items={detail.transitions.map(value => ({ id: value.id,
@@ -410,6 +430,7 @@ function PaymentDetailRecord() {
       <div className="space-y-4">{action === "Record" ? <>
         <p className="text-sm">Approved amount: {request.currencyCode} {request.approvedAmountExact || "—"}. This records evidence; it does not execute a payment.</p>
         <Field label="External payment date *"><Input type="date" value={paidOn} onChange={event => setPaidOn(event.target.value)} /></Field>
+        {detail.companyClock && <p className="text-xs text-muted-foreground">Company date: {detail.companyClock.date} ({detail.companyClock.timeZoneId}). The server checks its current company date when recording.</p>}
         <Field label="External method *"><Input maxLength={100} value={method} onChange={event => setMethod(event.target.value)} /></Field>
         <Field label="External reference *"><Input maxLength={200} value={reference} onChange={event => setReference(event.target.value)} /></Field>
         <Button variant="secondary" disabled title={manualPaymentActionAvailability("payment-upload").reason}>Attach evidence unavailable</Button>
