@@ -288,7 +288,7 @@ function PaymentEditorRecord() {
       <Field label="Vendor Name *"><Input value={selectedBill?.supplierDisplayName ?? "Select a bill first"} readOnly /></Field>
       <Field label="Bill to Pay *"><Input aria-label="Search supplier bills" placeholder="Search bill number or supplier" value={invoiceSearch}
         disabled={Boolean(id) || !draft.branchId || Boolean(selectedInvoiceId)} onChange={event => setInvoiceSearch(event.target.value)} />
-        <Select value={draft.invoiceId} disabled={Boolean(id) || !draft.branchId || Boolean(selectedInvoiceId)}
+        <Select aria-label="Bill to Pay *" value={draft.invoiceId} disabled={Boolean(id) || !draft.branchId || Boolean(selectedInvoiceId)}
           onChange={event => update({ invoiceId: event.target.value })}><option value="">Choose one bill</option>
           {selectedBill && !invoices.some(row => row.invoiceId === selectedBill.invoiceId) && <option value={selectedBill.invoiceId}>{selectedBill.invoiceNumber} · {selectedBill.supplierDisplayName}</option>}
           {invoices.map(row => <option key={row.invoiceId} value={row.invoiceId}>{row.invoiceNumber} · {row.supplierDisplayName}</option>)}</Select>
@@ -328,7 +328,8 @@ function PaymentEditorRecord() {
           <Input aria-label={`Search ${role} assignees`} placeholder="Search current accounts" value={nameSearch[role]}
             disabled={!draft.branchId || role === "confirm" && !draft.recorderPrincipalId}
             onChange={event => setNameSearch(previous => ({ ...previous, [role]: event.target.value }))} />
-          <Select value={chosen} disabled={!draft.branchId || role === "confirm" && !draft.recorderPrincipalId}
+          <Select aria-label={role === "approve" ? "Approver *" : role === "record" ? "Recorder *" : "Confirmer *"}
+            value={chosen} disabled={!draft.branchId || role === "confirm" && !draft.recorderPrincipalId}
             onChange={event => update(role === "record" ? { recorderPrincipalId: event.target.value, confirmerPrincipalId: "" }
               : { [field]: event.target.value } as Partial<Draft>)}>
             <option value="">Choose current account</option>
