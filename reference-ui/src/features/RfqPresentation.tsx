@@ -12,7 +12,7 @@ export function RfqWizardLayout({ title, back, children, footer, approved = fals
 }) {
   return <div className="min-h-[calc(100dvh-5rem)] bg-muted/30">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 py-4 sm:px-8">
-      <div><p className="text-xs font-semibold uppercase tracking-wide text-primary">Procurement / RFQs</p><h1 className="mt-1 text-xl font-semibold">{title}</h1></div>
+      <div><p className="text-xs font-semibold uppercase tracking-wide text-primary">Procurement / RFQs</p><h1 className="mt-1 text-2xl font-semibold">{title}</h1></div>
       <Link to={back} onClick={event => { if (busy) event.preventDefault(); }} aria-disabled={busy}><Button type="button" variant="secondary" disabled={busy}>Back to quote requests</Button></Link>
     </header>
     <div className="mx-auto flex max-w-[1480px] flex-col lg:flex-row">
@@ -45,7 +45,7 @@ export function RfqDetailLayout({ title, number, method, currency, status, back,
   return <div className="min-h-[calc(100dvh-5rem)] bg-muted/30">
     <header className="sticky top-14 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 py-4 sm:px-8">
       <div className="min-w-0"><Link to={back} className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><ArrowLeft size={13} />Request for Quotes</Link>
-        <h1 className="truncate text-xl font-semibold">{title}</h1><p className="text-sm text-muted-foreground">{number} · {method} · {currency}</p></div>
+        <h1 className="line-clamp-2 break-words text-2xl font-semibold">{title}</h1><p className="text-sm text-muted-foreground">{number} · {method} · {currency}</p></div>
       <div className="flex flex-wrap items-center gap-2"><Badge>{status}</Badge>{actions}</div>
     </header>
     <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "items", label: `Items (${itemCount})` }, { key: "related", label: "Related" }, { key: "comments", label: "Comments" }, { key: "history", label: "History" }]} active={active} onChange={setActive} />
