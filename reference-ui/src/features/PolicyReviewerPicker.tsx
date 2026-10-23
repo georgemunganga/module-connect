@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { Badge, Button, Field, Input, Select } from "../components/ui";
 import { lookupSelectedSourcingReviewers, lookupSourcingReviewers, type SourcingReviewerPage } from "../../../src/platform/procurement-policy-api";
 
-/** Shared per-step named picker. Search/page changes never replace or clear retained selected IDs. */
-export function PolicyReviewerPicker({ company, label, selected, disabled, onChange }: {
+/** Scoped Core reviewer picker. Schema-1 rows retain the linked-worker requirement. */
+export function PolicyReviewerPicker({ company, label, selected, disabled, onChange, schemaVersion = 1 }: {
   company: string; label: string; selected: string[]; disabled?: boolean; onChange: (ids: string[]) => void;
+  schemaVersion?: 1 | 2;
 }) {
   const [search, setSearch] = useState(""), [offset, setOffset] = useState(0);
   const [page, setPage] = useState<SourcingReviewerPage | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
@@ -41,7 +42,7 @@ export function PolicyReviewerPicker({ company, label, selected, disabled, onCha
     <Field label={`Find ${label.toLowerCase()}`}><Input maxLength={100} disabled={disabled} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} /></Field>
     <Field label={label}><Select value="" disabled={disabled || loading || !!error || selected.length >= 100} onChange={event => {
       if (event.target.value && !selected.includes(event.target.value)) onChange([...selected, event.target.value]);
-    }}><option value="">{loading ? "Loading names…" : "Add a named reviewer"}</option>{page?.items.filter(item => !selected.includes(item.principalId)).map(item =>
+    }}><option value="">{loading ? "Loading names…" : "Add a named reviewer"}</option>{page?.items.filter(item => !selected.includes(item.principalId) && (schemaVersion === 2 || item.workerId !== null)).map(item =>
       <option key={item.principalId} value={item.principalId}>{item.displayName}</option>)}</Select></Field>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {!loading && !error && !page?.items.length && <p className="text-sm text-muted-foreground">No matching names. Your selected reviewers are unchanged.</p>}
