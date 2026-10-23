@@ -166,6 +166,11 @@ test("invoice document upload recovers a lost response without duplicating evide
     buffer: Buffer.from("%PDF-1.7 synthetic evidence") });
   await page.getByRole("button", { name: "Add document", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("not confirmed");
+  await page.getByRole("button", { name: "More invoice actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Refresh invoice", exact: true }).click();
+  await expect(page.getByText("Refreshing invoice…", { exact: true })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
   await page.getByRole("button", { name: "Refresh status", exact: true }).click();
   await expect(page.getByRole("cell", { name: "original invoice.pdf", exact: true })).toHaveCount(1);
   await expect(page.getByText("File limit reached.", { exact: false })).toBeVisible();
@@ -441,4 +446,22 @@ test("restored bill editor confirms discarded input and keeps the original form 
   await page.getByRole("button", { name: "Close editor", exact: true }).click();
   await page.getByRole("button", { name: "Discard and leave", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Bills", exact: true })).toBeVisible();
+});
+
+
+test("restored Bills screens retain the ERP layout at desktop and phone widths", async ({ page }, testInfo) => {
+  await mockErp(page, true, { seed: true, crud: true });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/procurement/workspace/bills");
+    await expect(page.getByRole("heading", { name: "Bills", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "INV-DOC-1", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`bills-${width}.png`), fullPage: true });
+    await page.goto("/procurement/workspace/bills/new");
+    await expect(page.getByRole("heading", { name: "New Bill", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Invoice number", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`bill-editor-${width}.png`), fullPage: true });
+  }
 });

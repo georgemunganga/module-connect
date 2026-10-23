@@ -358,7 +358,7 @@ function InvoiceEditorRecord() {
           </div>
           {id && <Field label="Reason for change *"><Textarea required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
         </div>
-        <footer className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 border-y border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-8">
+        <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-2 border-y border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-8">
           <Button type="submit" disabled={saving || uncertain || stale}><Save size={14} />{saving ? "Saving…" : id ? "Save changes" : "Record as received"}</Button>
           <Button type="button" variant="ghost" disabled={saving} onClick={leave}><ArrowLeft size={14} /> Cancel</Button>
         </footer>
@@ -406,16 +406,16 @@ function InvoiceDetailRecord() {
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
-    setLoading(true); setError(""); setInvoice(null);
+    setLoading(true); setError("");
     getInvoiceIntake(legalEntityId, id, controller.signal)
       .then((result) => { if (!controller.signal.aborted) { setInvoice(result); setUncertain(false); setStale(false); setReason(""); } })
-      .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
+      .catch((cause: unknown) => { if (!controller.signal.aborted) { setError(errorText(cause)); setStale(true); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, refresh]);
-  const refreshSavedInvoice = () => { setError(""); setRefresh(value => value + 1); };
+  const refreshSavedInvoice = () => { if (busy || loading) return; setLoading(true); setError(""); setRefresh(value => value + 1); };
   async function cancel() {
-    if (!permissions.includes("procurement-invoice-capture") || !invoice || busy || uncertain || stale || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
+    if (!permissions.includes("procurement-invoice-capture") || !invoice || busy || loading || uncertain || stale || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
     setBusy(true); setError("");
     try {
       await cancelInvoiceIntake(legalEntityId, invoice.id, invoice.version, reason);
@@ -430,9 +430,9 @@ function InvoiceDetailRecord() {
       if (!(cause instanceof InvoiceIntakeError) || !isDefiniteHttpRejection(cause.status)) setUncertain(true);
     } finally { if (alive.current) setBusy(false); }
   }
-  if (loading) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
+  if (loading && !invoice) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."} <Button variant="secondary" onClick={refreshSavedInvoice}>Try loading again</Button></div>;
-  const canEdit = !uncertain && !stale && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
+  const canEdit = !loading && !busy && !uncertain && !stale && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
   const canCancel = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel");
   const tabs = [
     { key: "overview", label: "Overview" },
@@ -455,6 +455,7 @@ function InvoiceDetailRecord() {
         <div className="relative"><Button variant="secondary" aria-label="More invoice actions" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={16} /> More</Button>
           {menuOpen && <div role="menu" aria-label="Invoice actions" className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-card p-3 text-left text-xs shadow-lg">
             <p className="font-medium">More actions</p>
+            <Button role="menuitem" variant="ghost" disabled={loading || busy} onClick={() => { setMenuOpen(false); refreshSavedInvoice(); }}>Refresh invoice</Button>
             <p className="mt-1 text-muted-foreground">{canCancel && !uncertain && !stale ? "Cancel is available in Overview after a reason is entered." : uncertain || stale ? "Refresh the saved bill before another action." : "No cancellation action is allowed for this saved invoice."}</p>
             <p className="mt-2 text-muted-foreground">Saved bills cannot be deleted. Payment recording is not connected yet.</p>
           </div>}
@@ -463,6 +464,7 @@ function InvoiceDetailRecord() {
     </header>
     <DetailTabs tabs={tabs} active={activeTab} onChange={key => { setActiveTab(key); setMenuOpen(false); }} />
     <div className="space-y-4 p-4 sm:p-6">
+      {loading && <p role="status" className="text-sm text-muted-foreground">Refreshing invoice…</p>}
       {notice && <p role="status" className="text-sm">{notice}</p>}
       {error && <div role="alert" className="text-sm text-destructive">{error} <Button variant="secondary" onClick={refreshSavedInvoice}>Refresh invoice</Button></div>}
       {uncertain && <p role="status" className="text-sm">The response was not confirmed. Refresh the invoice to check its saved status before trying another action.</p>}
@@ -495,8 +497,8 @@ function InvoiceDetailRecord() {
         {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
         {canCancel && <DetailSection title="Cancel invoice"><div className="space-y-3">
           <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
-          <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>
-          <Button variant="danger" disabled={busy || uncertain || stale || !reason.trim()} onClick={() => { if (window.confirm("Cancel this invoice? Its saved history will be retained.")) void cancel(); }}>Cancel invoice</Button>
+          <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || loading || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>
+          <Button variant="danger" disabled={busy || loading || uncertain || stale || !reason.trim()} onClick={() => { if (window.confirm("Cancel this invoice? Its saved history will be retained.")) void cancel(); }}>Cancel invoice</Button>
         </div></DetailSection>}
       </div>
       {activeTab === "items" && <DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[700px] text-left text-sm">
