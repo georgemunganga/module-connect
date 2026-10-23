@@ -461,7 +461,13 @@ test("restored Bills screens retain the ERP layout at desktop and phone widths",
     await page.goto("/procurement/workspace/bills/new");
     await expect(page.getByRole("heading", { name: "New Bill", exact: true })).toBeVisible();
     await expect(page.getByLabel("Invoice number", { exact: true })).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    const editorLayout = await page.evaluate(() => ({
+      width: window.innerWidth, scrollWidth: document.documentElement.scrollWidth,
+      overflowing: Array.from(document.querySelectorAll("main *")).filter(element => element.getBoundingClientRect().right > window.innerWidth + 1)
+        .slice(0, 12).map(element => ({ tag: element.tagName, className: element.className })),
+    }));
+    await testInfo.attach(`editor-layout-${width}`, { body: JSON.stringify(editorLayout), contentType: "application/json" });
+    expect(editorLayout.scrollWidth).toBeLessThanOrEqual(editorLayout.width + 1);
     await page.screenshot({ path: testInfo.outputPath(`bill-editor-${width}.png`), fullPage: true });
   }
 });

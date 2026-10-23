@@ -291,7 +291,7 @@ function InvoiceEditorRecord() {
       : id && !original ? <p className="px-5 py-6 sm:px-8" role="alert">{error || "Invoice not found."}</p>
         : id && !invoiceAllows(original!, "Edit") ? <div className="px-5 py-6 sm:px-8" role="alert">This invoice cannot be edited. <Link className="text-primary underline" to={backTo}>Open its saved details</Link>.</div>
           : <form onSubmit={save}>
-      <fieldset disabled={saving || uncertain || stale} className="contents">
+      <fieldset disabled={saving || uncertain || stale} className="min-w-0 border-0 p-0">
         <div className="max-w-[1260px] space-y-7 px-5 py-6 sm:px-8">
           <p className="text-sm text-muted-foreground">Record the supplier invoice as received. Review and matching happen after intake.</p>
           {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}
@@ -316,7 +316,7 @@ function InvoiceEditorRecord() {
             <Field label="Bill # *"><Input aria-label="Invoice number" required maxLength={120} value={input.invoiceNumber} onChange={event => setInput({ ...input, invoiceNumber: event.target.value })} /></Field>
             <Field label="Due Date"><Input aria-label="Due date" type="date" min={input.invoiceDate} value={input.dueDate || ""} onChange={event => setInput({ ...input, dueDate: event.target.value || null })} /></Field>
             <Field label="Currency *"><Input aria-label="Currency" required maxLength={3} value={input.currencyCode} onChange={event => setInput({ ...input, currencyCode: event.target.value.toUpperCase() })} /></Field>
-            <Field label="Payment Terms"><Select disabled value="unavailable"><option value="unavailable">Not available yet</option></Select></Field>
+            <Field label="Payment Terms"><Select aria-label="Payment Terms" disabled value="unavailable"><option value="unavailable">Not available yet</option></Select></Field>
           </div>
           <p className="text-xs text-muted-foreground">Payment terms cannot be saved on bills yet. Use the due date above.</p>
           <section className="rounded-xl border border-border bg-card">
