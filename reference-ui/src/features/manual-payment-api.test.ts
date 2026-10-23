@@ -123,8 +123,10 @@ describe("manual payment API client", () => {
     expect(journal.claim(locator)).toBe(true);
     expect(journal.claim(locator)).toBe(false);
     expect([...map.values()].join(" ")).not.toMatch(/supplier|transfer|amount|reason|bank/i);
-    expect(journal.confirm({ ...locator, key: payment })).toBe(false);
-    expect(journal.confirm(locator)).toBe(true);
+    const receipt = { id: payment, version: 1, status: "Draft" as const, action: "Create" as const, commandKey: key };
+    expect(journal.confirm({ ...locator, key: payment }, receipt)).toBe(false);
+    expect(journal.confirm(locator, { ...receipt, commandKey: payment })).toBe(false);
+    expect(journal.confirm(locator, receipt)).toBe(true);
     expect(journal.state().blocked).toBe(false);
     identity = { ...identity, authEpoch: 2 };
     expect(journal.state().blocked).toBe(true);

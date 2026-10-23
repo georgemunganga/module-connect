@@ -1,5 +1,5 @@
 import { approvalBrowserTabNonce } from "./request-approval-journal";
-import type { ManualPaymentAction, ManualPaymentScope } from "../../../src/platform/procurement-manual-payments-api";
+import type { ManualPaymentAction, ManualPaymentReceipt, ManualPaymentScope } from "../../../src/platform/procurement-manual-payments-api";
 
 /** Browser recovery metadata only. Never store payment amount, reason, external
  * reference, bank data, request JSON, or credentials. */
@@ -53,10 +53,12 @@ export function createManualPaymentRecoveryJournal(scope: ManualPaymentScope,
         return store.getItem(slot) === text && saved !== null && JSON.stringify(saved) === JSON.stringify(locator);
       } catch { return false; }
     },
-    /** Clear only after a receipt or command response was strictly bound to this key/action/id. */
-    confirm(locator: ManualPaymentRecoveryLocator): boolean {
+    /** Clear only after a parsed server result is bound to this key/action/id. */
+    confirm(locator: ManualPaymentRecoveryLocator, receipt: ManualPaymentReceipt): boolean {
       const saved = state().pending;
-      if (!valid(locator) || !saved || JSON.stringify(saved) !== JSON.stringify(locator) || !slot) return false;
+      if (!valid(locator) || !saved || JSON.stringify(saved) !== JSON.stringify(locator) || !slot
+        || receipt.commandKey !== locator.key || receipt.action !== locator.action || !id(receipt.id)
+        || locator.id !== null && receipt.id !== locator.id) return false;
       try { store.removeItem(slot); return store.getItem(slot) === null; }
       catch { return false; }
     },
