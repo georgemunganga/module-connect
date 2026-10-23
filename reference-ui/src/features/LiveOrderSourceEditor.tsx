@@ -119,8 +119,8 @@ function SourceEditor({ id, scopeKey }: { id?: string; scopeKey: string }) {
     {pending && <Panel title="Check an unconfirmed save" className="mb-5"><div className="space-y-3 p-5"><p>New saves are paused. Keep this tab open and check the original result before creating or changing another order.</p>
       <p className="text-sm">Command reference: <code>{pending.key}</code></p><details className="text-sm"><summary>Original save details</summary><pre className="overflow-auto whitespace-pre-wrap">{pending.operation}{"\n"}{pending.body}</pre></details>
       <Button disabled={busy} onClick={() => void recover()}>{busy ? "Checking…" : "Check saved order"}</Button></div></Panel>}
-    {loading ? <p role="status">Loading linked draft…</p> : id && (version === null || blocked) ? <p className="mb-5 text-sm">Return to the order to review its latest state before editing.</p> : <form onSubmit={(event) => void save(event)} className="space-y-5">
-      <fieldset disabled={busy || !!pending || blocked} className="space-y-5">
+    {loading ? <p role="status">Loading linked draft…</p> : id && (version === null || blocked) ? <p className="mb-5 text-sm">Return to the order to review its latest state before editing.</p> : <form onSubmit={(event) => void save(event)} className="min-w-0 space-y-5">
+      <fieldset disabled={busy || !!pending || blocked} className="min-w-0 space-y-5">
         {!id && <Panel title="Approved request lines"><div className="space-y-4 p-5"><p className="text-sm">Choose available lines from the same branch and currency. You may order part of an available quantity. Server eligibility remains final.</p>
           <Button variant="secondary" onClick={() => setRefresh((n) => n + 1)}>Refresh source list</Button>{sourceError && <p role="alert" className="text-sm text-red-700">{sourceError}</p>}
           {sourcesLoading ? <p role="status">Loading approved request lines…</p> : sourcePage?.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Select</th><th>Request</th><th>Description</th><th>Available</th><th>Approved unit price</th><th>Status</th></tr></thead>

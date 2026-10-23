@@ -86,7 +86,7 @@ test("Finance-only operator discovers scoped orders and reviews exact amounts wi
   const evidence = await mock(page); await page.goto(root);
   await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "My buying work", exact: true })).toHaveCount(0);
-  await page.getByRole("link", { name: "Review order", exact: true }).click();
+  await page.getByRole("link", { name: "Open", exact: true }).click();
   await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText(`Total: ZMW ${gross}`, { exact: true })).toBeVisible();
   expect(evidence.reads.some((query) => query.includes("view=finance"))).toBe(true); expect(evidence.writes).toHaveLength(0); expect(evidence.unexpected).toEqual([]);
@@ -118,7 +118,7 @@ test("Finance interrupted write preserves exact payload/key and reconciles inste
 test("dispatch operator sees only its worklist and records issued revision via configured channel", async ({ page }) => {
   const evidence = await mock(page, { action: "Delivery" }); await page.goto(root);
   await expect(page.getByRole("tab", { name: "Sending orders", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Review order", exact: true }).click();
+  await page.getByRole("link", { name: "Open", exact: true }).click();
   await expect(page.getByRole("button", { name: "Record Finance confirmation", exact: true })).toHaveCount(0);
   await confirm(page, "Record sending outcome", { reference: "SENT-1", delivery: true });
   await expect(page.getByRole("status")).toContainText("Saved: Issued");
@@ -136,7 +136,7 @@ for (const status of [403, 404]) test(`detail navigation clears prior order acti
   await mock(page, { deniedId: status }); await page.goto(`${root}/${id}`);
   await expect(page.getByRole("button", { name: "Record Finance confirmation", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Back to purchase orders", exact: true }).click();
-  await page.getByRole("row").filter({ hasText: "PO-DENIED" }).getByRole("link", { name: "Review order", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "PO-DENIED" }).getByRole("link", { name: "Open", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible(); await expect(page.getByRole("button", { name: "Record Finance confirmation", exact: true })).toHaveCount(0);
   await expect(page.getByText(`Total: ZMW ${gross}`, { exact: true })).toHaveCount(0);
 });
@@ -166,7 +166,7 @@ test("unready order capabilities do not expose demo or live execution records", 
   const evidence = await mock(page, { enabled: false, draftEnabled: false }); await page.goto(root);
   await expect(page.getByText("This workflow is being connected to your ERP.", { exact: false })).toBeVisible();
   await expect(page.getByText("no sample transactions are shown here.", { exact: false })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Review order", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "New order draft", exact: true })).toHaveCount(0);
   expect(evidence.reads).toEqual([]); expect(evidence.writes).toHaveLength(0);
 });
@@ -194,4 +194,13 @@ for (const action of ["FinanceRelease", "DraftFinanceRelease"] as const) test(`$
   await confirm(page, action === "FinanceRelease" ? "Record funds release" : "Record draft funds release", { reason: "Independently verified restored funds" });
   await expect(page.getByRole("status").filter({ hasText: /^Saved:/ })).toContainText("Saved:");
   expect(evidence.writes[0].body).toContain(`"releasedGrossAmount":${gross}`); expect(evidence.writes[0].body).toContain('"restoredReservationReferences":["RES-PR-1"]');
+});
+
+test("operational PO worklist retains imported tools without losing its responsibility scope", async ({ page }) => {
+  const evidence = await mock(page); await page.goto(root);
+  await expect(page.getByRole("button", { name: "Filter Purchase Orders by field" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Sort current page" })).toHaveValue("number");
+  await page.getByRole("button", { name: /Preview PO/ }).click();
+  await expect(page.getByRole("dialog")).toBeVisible(); expect(evidence.writes).toHaveLength(0);
 });

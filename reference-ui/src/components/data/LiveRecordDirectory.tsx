@@ -13,15 +13,15 @@ export type DirectoryServerQuery = { search: string; onSearch: (value: string) =
 export type DirectorySortComparators = Record<string, (left: DirectoryRow, right: DirectoryRow) => number>;
 /** Shared imported directory presentation. The adapter owns server scope, paging and all mutations. */
 export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, loading, error, total, page, pageSize,
-  onPage, onRefresh, action, emptyTitle, emptyDescription, tabs = false, serverQuery, sortComparators }: {
+  onPage, onRefresh, action, emptyTitle, emptyDescription, tabs = false, serverQuery, sortComparators, contextControls, initialSort }: {
   title: string; subtitle: string; entity: string; rows: DirectoryRow[]; columns: ListColumn[];
   loading: boolean; error: string; total: number; page: number; pageSize: number;
   onPage: (page: number) => void; onRefresh: () => void; action?: ReactNode;
   emptyTitle: string; emptyDescription: string; tabs?: boolean; serverQuery?: DirectoryServerQuery;
-  sortComparators?: DirectorySortComparators;
+  sortComparators?: DirectorySortComparators; contextControls?: ReactNode; initialSort?: string;
 }) {
   const [query, setQuery] = useState(""), [serverInput, setServerInput] = useState(serverQuery?.search ?? "");
-  const [sort, setSort] = useState(serverQuery ? "server" : "newest");
+  const [sort, setSort] = useState(initialSort ?? (serverQuery ? "server" : "newest"));
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [visible, setVisible] = useState(() => columns.map(column => column.key));
   const [widths, setWidths] = useState<Record<string, number>>({}), [clip, setClip] = useState(false);
@@ -64,6 +64,7 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
         unavailableExportReason="Export is not available for this page yet."
         unavailableAllExportReason="Only the current page is loaded." viewExportLabel="Export Current Page View" />
       {action}</>} />
+    {contextControls}
     {tabs && <nav aria-label="Request views" className="mb-4 flex flex-wrap gap-2 border-b border-border">
       {["", "Submitted"].map(status => <Button key={status} variant="ghost" aria-pressed={(filters.status || "") === status}
         className={(filters.status || "") === status ? "rounded-none border-b-2 border-primary text-primary" : "rounded-none text-muted-foreground"}

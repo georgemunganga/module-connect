@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Switch, Textarea } from "../components/ui";
+import { Badge, Button, Field, Input, Modal, Panel, Select, Switch, Textarea } from "../components/ui";
+import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
 import { RecordTable } from "../components/data/RecordTable";
 import { ActivityTimeline, DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -40,22 +41,24 @@ export function LiveOrderExecutionList() {
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [context.legalEntityId, view, page, status, revision, allowed]);
-  return <div className="p-5 sm:p-8"><PageHeader title="Purchase Orders" subtitle="Review the orders assigned to your buying, Finance or sending responsibilities." actions={context.permissions.includes("procurement-po-convert") ? <Link className="text-sm text-primary hover:underline" to="/purchase-orders/new">Create from approved requests</Link> : undefined} />
-    {!views.length ? <p role="alert">You do not have access to an order worklist.</p> : <>
-      <div role="tablist" aria-label="Order responsibilities" className="mb-5 flex flex-wrap gap-3">{views.map((item) => <Button key={item.code} role="tab" aria-selected={view === item.code}
-        variant={view === item.code ? "primary" : "secondary"} onClick={() => { setData(null); setView(item.code); setPage(1); }}>{item.label}</Button>)}</div>
-      <div className="mb-5 flex flex-wrap items-end gap-3"><Field label="Order status"><Select value={status} onChange={(event) => { setData(null); setStatus(event.target.value); setPage(1); }}>
-        <option value="">All statuses</option>{["Draft", "PendingApproval", "Approved", "Returned", "Rejected", "IssuePending", "Issued", "Cancelled"].map((value) => <option key={value}>{value}</option>)}</Select></Field>
-        <Button variant="secondary" onClick={() => setRevision((n) => n + 1)}>Refresh orders</Button></div>
-      {error && <p role="alert" className="mb-4 text-sm text-red-700">{error}</p>}
-      {loading ? <p role="status">Loading your order work…</p> : data?.items.length ? <Panel><div className="overflow-x-auto p-5"><RecordTable>
-        <thead><tr><th>Order</th><th>Vendor</th><th>Currency</th><th>Expected delivery</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.items.map((order) => <tr key={order.id}><td>{order.number}</td><td>{order.supplierName || "Vendor"}</td><td>{order.currencyCode}</td><td>{order.expectedDeliveryOn || "—"}</td><td><Badge>{order.status}</Badge></td>
-          <td><Link className="text-sm text-primary hover:underline" to={`/purchase-orders/${order.id}`}>Review order</Link></td></tr>)}</tbody>
-      </RecordTable></div></Panel> : !error && <EmptyState title="No orders need your attention" description="Orders within your current company, branch and responsibilities will appear here." />}
-      {data && data.total > data.pageSize && <div className="mt-5 flex items-center gap-3"><Button variant="secondary" disabled={page <= 1} onClick={() => { setData(null); setPage(page - 1); }}>Previous orders</Button><span>Page {page}</span>
-        <Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => { setData(null); setPage(page + 1); }}>Next orders</Button></div>}
-    </>}
+  const controls = <div className="mb-5 space-y-4">
+    <div role="tablist" aria-label="Order responsibilities" className="flex flex-wrap gap-3">{views.map(item => <Button key={item.code} role="tab" aria-selected={view === item.code}
+      variant={view === item.code ? "primary" : "secondary"} onClick={() => { setData(null); setView(item.code); setPage(1); }}>{item.label}</Button>)}</div>
+    <div className="flex flex-wrap items-end gap-3"><Field label="Order status"><Select value={status} onChange={event => { setData(null); setStatus(event.target.value); setPage(1); }}>
+      <option value="">All statuses</option>{["Draft", "PendingApproval", "Approved", "Returned", "Rejected", "IssuePending", "Issued", "Cancelled"].map(value => <option key={value}>{value}</option>)}</Select></Field>
+      <Button variant="secondary" onClick={() => { setData(null); setRevision(n => n + 1); }}>Refresh orders</Button>
+      <p className="text-xs text-muted-foreground">Responsibilities and order status filter the server worklist.</p></div>
+  </div>;
+  if (!views.length) return <div className="p-5 sm:p-8" role="alert">You do not have access to an order worklist.</div>;
+  return <div className="p-5 sm:p-8"><LiveRecordDirectory key={`${view}:${status}:${page}:${revision}`} title="Purchase Orders"
+    subtitle="Review orders within your buying, Finance or sending responsibilities." entity="orders" initialSort="number" contextControls={controls}
+    action={context.permissions.includes("procurement-po-convert") ? <Link to="/purchase-orders/new"><Button>Create from approved requests</Button></Link> : undefined}
+    columns={[{ key: "number", label: "Order / Vendor", width: 280 }, { key: "currency", label: "Currency", width: 100 }, { key: "delivery", label: "Expected delivery", width: 180 }, { key: "status", label: "Status", width: 170 }]}
+    rows={(data?.items ?? []).map(order => ({ id: order.id, number: order.number, title: order.supplierName || "Vendor", status: order.status,
+      path: `/purchase-orders/${order.id}`, fields: { currency: order.currencyCode, delivery: order.expectedDeliveryOn || "" } }))}
+    loading={loading} error={error} total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25}
+    onPage={next => { setData(null); setPage(next); }} onRefresh={() => { setData(null); setRevision(n => n + 1); }}
+    emptyTitle="No orders need your attention" emptyDescription="Orders within your current company, branch and responsibilities appear here." />
   </div>;
 }
 
