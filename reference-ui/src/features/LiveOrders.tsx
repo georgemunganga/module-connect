@@ -1,3 +1,4 @@
+import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
 import { LiveOrderExecutionList, LiveOrderExecutionDetail } from "./LiveOrderExecution";
 import { LiveOrderSourceEditor } from "./LiveOrderSourceEditor";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -28,49 +29,39 @@ function useCompany() {
 }
 
 export function LiveOrderList() {
-  const context = useCompany(); const { selection } = useErpShell();
+  const context = useCompany(); const { selection, authEpoch } = useErpShell();
   if (selection.entityId && selection.entityId !== context.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
   return context.capabilities.orders
     ? <LiveOrderExecutionList key={[context.tenantId, context.legalEntityId, selection.branch, context.principalId].join(":")} />
-    : <LegacyOrderList />;
+    : <LegacyOrderList key={[authEpoch, context.tenantId, context.legalEntityId, selection.branch, context.principalId, context.permissions.join("|")].join(":")} />;
 }
 function LegacyOrderList() {
   const navigate = useNavigate();
   const { legalEntityId, permissions } = useCompany();
   const [page, setPage] = useState(1);
+  const [revision, setRevision] = useState(0);
   const [data, setData] = useState<OrderPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const canCreate = permissions.includes("procurement-po-create");
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
-    listOwnOrderDrafts(legalEntityId, page, controller.signal).then(setData)
+    setLoading(true); setError(""); setData(null);
+    listOwnOrderDrafts(legalEntityId, page, controller.signal).then(result => { if (!controller.signal.aborted) setData(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [legalEntityId, page]);
+  }, [legalEntityId, page, revision]);
   const action = canCreate ? <Button onClick={() => navigate("/purchase-orders/new")}>New order draft</Button> : undefined;
-  return <div className="p-5 sm:p-8">
-    <PageHeader title="Purchase Orders" subtitle="Prepare orders here. Approval and sending to vendors happen after the buying controls are connected." actions={action} />
-    <Panel><div className="p-5">
-      {error && <p role="alert" className="mb-4 text-sm text-red-700">{error}</p>}
-      {loading ? <p role="status">Loading orders…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
-        <thead><tr><th>Order</th><th>Vendor</th><th>Currency</th><th>Expected delivery</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.items.map((order) => <tr key={order.id}>
-          <td className="font-medium">{order.number}</td><td>{order.supplierName || "Vendor"}</td>
-          <td>{order.currencyCode}</td><td>{order.expectedDeliveryOn || "—"}</td><td><Badge>{order.status}</Badge></td>
-          <td><Link className="text-sm text-primary hover:underline" to={`/purchase-orders/${order.id}`}>Open</Link></td>
-        </tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title="No purchase orders yet" description="Create an internal draft to prepare the vendor and order lines." action={action} />}
-      {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm">
-        <Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
-        <span>Page {page}</span>
-        <Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
-      </div>}
-    </div></Panel>
-  </div>;
+  return <div className="p-5 sm:p-8"><LiveRecordDirectory key={page} title="Purchase Orders" entity="orders"
+    subtitle="Prepare orders here. Approval and sending to vendors happen after the buying controls are connected."
+    columns={[{ key: "date", label: "Created", width: 125 }, { key: "number", label: "Order", width: 230 }, { key: "vendor", label: "Vendor", width: 180 }, { key: "currency", label: "Currency", width: 90 }, { key: "delivery", label: "Expected delivery", width: 140 }, { key: "status", label: "Status", width: 110 }]}
+    rows={(data?.items ?? []).map(order => ({ id: order.id, number: order.number, title: order.supplierName || "Vendor", status: order.status,
+      path: `/purchase-orders/${order.id}`, fields: { date: order.createdAt?.slice(0, 10) || "", vendor: order.supplierName || "Vendor", currency: order.currencyCode, delivery: order.expectedDeliveryOn || "" } }))}
+    loading={loading} error={error} total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25}
+    onPage={setPage} onRefresh={() => setRevision(value => value + 1)} action={action}
+    emptyTitle="No purchase orders yet" emptyDescription="Create an internal draft to prepare the vendor and order lines." /></div>;
 }
 
 export function LiveOrderEditor() {

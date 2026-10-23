@@ -84,7 +84,8 @@ test("quote request list denial does not show demo records", async ({ page }) =>
   await mockErp(page, { denyList: true });
   await page.goto("/procurement/workspace/rfqs");
   await expect(page.getByRole("alert")).toContainText("do not have access");
-  await expect(page.getByText("No quote requests yet")).toBeVisible();
+  await expect(page.getByText("No quote requests yet")).toHaveCount(0);
+  await expect(page.getByTestId("erp-record-table")).toHaveCount(0);
 });
 
 test("stale quote edit preserves entered values", async ({ page }) => {
