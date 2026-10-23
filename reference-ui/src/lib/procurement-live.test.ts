@@ -79,6 +79,13 @@ describe("Procurement system-user readiness", () => {
     expect(result.capabilities.invoiceComparison).toBe(flag === true);
     expect(result.capabilities.vendorCreditDraft).toBe(flag === true);
   });
+  it.each([undefined, false, true, "true", 1, null])("keeps typed issued-order bill matching off without its own server flag (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { principalInvoiceMatching: flag, invoiceComparison: true, invoiceOriginalUnitReview: true }));
+    expect(result.capabilities.principalInvoiceMatching).toBe(flag === true);
+    expect(result.capabilities.invoiceComparison).toBe(true);
+    expect(result.capabilities.invoiceOriginalUnitReview).toBe(true);
+  });
   it.each([undefined, false, true, "true"])("requires explicit recurring planning availability (%s)", async flag => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { recurringPurchaseDraft: flag }));
     expect(result.capabilities.recurringPurchaseDraft).toBe(flag === true);
