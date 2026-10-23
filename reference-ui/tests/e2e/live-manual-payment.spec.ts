@@ -47,6 +47,8 @@ async function fixture(page: Page, enabled: boolean, options: {
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company,
       schemaReady: true, capabilities: Object.fromEntries([...requiredCapabilities, "manualPaymentWorkflow"]
         .map(name => [name, name === "manualPaymentWorkflow" && enabled])) });
+    if (path === "/api/procurement/v1/manual-payments/lookups/branches")
+      return json({ items: [{ id: branch, code: "HQ", name: "Lusaka" }] });
     if (path === "/api/procurement/v1/manual-payments/lookups/invoices") return json({ items: [{ invoiceId: invoice,
       invoiceNumber: "BILL-1042", supplierId: supplier, supplierDisplayName: "Northwind Devices",
       currencyCode: "ZMW", grossExact: "100.0000", invoiceDate: "2026-10-20", branchId: branch }],
@@ -148,7 +150,7 @@ test("all-branches header keeps its read scope while the form chooses an explici
   const writes = await fixture(page, true, { allBranches: true });
   await page.goto(`/procurement/workspace/payments/new?invoiceId=${invoice}`);
   await page.getByRole("combobox", { name: "Transaction branch *" }).click();
-  await page.getByRole("option", { name: "Lusaka" }).click();
+  await page.getByRole("option", { name: "Lusaka (HQ)" }).click();
   await expect(page.getByText("Original bill gross: ZMW 100.0000", { exact: false })).toBeVisible();
   await page.getByLabel("Exact amount *").fill("1.0001");
   await page.getByRole("combobox", { name: "Approver *" }).click();

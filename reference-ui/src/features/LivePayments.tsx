@@ -13,9 +13,9 @@ import { TransactionEditorFrame } from "./TransactionEditor";
 import { manualPaymentStatusLabels as statusLabels, manualPaymentVisibleActions } from "./manual-payment-view";
 import {
   captureManualPaymentScope, getManualPayment, listManualPayments, lookupManualPaymentAssignees,
-  lookupManualPaymentInvoices, recoverManualPaymentCommand, recoverManualPaymentCreate,
+  lookupManualPaymentBranches, lookupManualPaymentInvoices, recoverManualPaymentCommand, recoverManualPaymentCreate,
   sendManualPaymentCommand, isDefiniteManualPaymentRejection, manualPaymentActionAvailability,
-  type ManualPaymentAction, type ManualPaymentAssignee, type ManualPaymentCommand,
+  type ManualPaymentAction, type ManualPaymentAssignee, type ManualPaymentBranch, type ManualPaymentCommand,
   type ManualPaymentDetail, type ManualPaymentIdentity, type ManualPaymentInvoiceChoice,
   type ManualPaymentPage, type ManualPaymentReceipt, type ManualPaymentScope, type ManualPaymentStatus,
 } from "../../../src/platform/procurement-manual-payments-api";
@@ -23,8 +23,7 @@ import {
 const statuses = Object.keys(statusLabels) as ManualPaymentStatus[];
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : "Payment information is unavailable. Try again.";
 type PaymentContext = { scope: ManualPaymentScope; readiness: NonNullable<ReturnType<typeof useLiveReadiness>>;
-  branchId: string | null; branches: { id: string; name: string; legalEntityId: string }[];
-  verifiedBranch: { id: string; name: string; legalEntityId: string } | null; key: string };
+  branchId: string | null; key: string };
 
 function usePaymentContext(): PaymentContext {
   const readiness = useLiveReadiness();
@@ -37,7 +36,7 @@ function usePaymentContext(): PaymentContext {
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   return { scope: captureManualPaymentScope(identity, () => alive.current ? current.current : null), readiness,
-    branchId: identity.branchId, branches: shell.branches, verifiedBranch: shell.verifiedContext?.branch ?? null,
+    branchId: identity.branchId,
     key: JSON.stringify([identity.tenantId, identity.legalEntityId, identity.principalId,
       identity.branchId, identity.authEpoch, readiness.permissions, readiness.capabilities.manualPaymentWorkflow]) };
 }
@@ -154,7 +153,7 @@ type AssigneeRole = "approve" | "record" | "confirm";
 export function LivePaymentEditor() { return <PaymentBoundary><PaymentEditorRecord /></PaymentBoundary>; }
 function PaymentEditorRecord() {
   const { id } = useParams(); const navigate = useNavigate(); const [params] = useSearchParams();
-  const { scope, readiness, branchId, branches, verifiedBranch, key } = usePaymentContext();
+  const { scope, readiness, branchId, key } = usePaymentContext();
   const selectedInvoiceId = params.get("invoiceId") || "";
   const journal = createManualPaymentRecoveryJournal(scope);
   const [draft, setDraft] = useState<Draft>(() => blank(branchId ?? ""));
@@ -163,6 +162,8 @@ function PaymentEditorRecord() {
   const [invoiceCursor, setInvoiceCursor] = useState<string | null>(null);
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [assignees, setAssignees] = useState<Record<AssigneeRole, ManualPaymentAssignee[]>>({ approve: [], record: [], confirm: [] });
+  const [branchChoices, setBranchChoices] = useState<ManualPaymentBranch[]>([]);
+  const [branchLoading, setBranchLoading] = useState(true), [branchError, setBranchError] = useState("");
   const [nameSearch, setNameSearch] = useState<Record<AssigneeRole, string>>({ approve: "", record: "", confirm: "" });
   const [loading, setLoading] = useState(Boolean(id)), [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [dirty, setDirty] = useState(false), [discard, setDiscard] = useState(false);
@@ -171,6 +172,14 @@ function PaymentEditorRecord() {
   const lookup = useRef("");
   lookup.current = JSON.stringify([key, draft.branchId, invoiceSearch, selectedInvoiceId]);
   const update = (change: Partial<Draft>) => { setDraft(previous => ({ ...previous, ...change })); setDirty(true); };
+  useEffect(() => {
+    const abort = new AbortController(); setBranchLoading(true); setBranchError(""); setBranchChoices([]);
+    lookupManualPaymentBranches(scope, abort.signal)
+      .then(value => { if (!abort.signal.aborted && scope.current()) setBranchChoices(value); })
+      .catch(cause => { if (!abort.signal.aborted && scope.current()) setBranchError(errorText(cause)); })
+      .finally(() => { if (!abort.signal.aborted && scope.current()) setBranchLoading(false); });
+    return () => abort.abort();
+  }, [key]);
   useEffect(() => {
     if (!id) return;
     const abort = new AbortController(); setLoading(true); setError(""); setRecord(null);
@@ -184,7 +193,7 @@ function PaymentEditorRecord() {
     return () => abort.abort();
   }, [id, key]);
   useEffect(() => {
-    if (!draft.branchId || id) return;
+    if (!draft.branchId || id || branchLoading || !branchChoices.some(row => row.id === draft.branchId)) return;
     const abort = new AbortController();
     const lookupKey = lookup.current;
     lookupManualPaymentInvoices(scope, { branchId: draft.branchId, q: invoiceSearch,
@@ -194,9 +203,9 @@ function PaymentEditorRecord() {
         if (selectedInvoiceId && value.items.length === 1) setDraft(previous => ({ ...previous, invoiceId: value.items[0].invoiceId }));
       } }).catch(cause => { if (!abort.signal.aborted && scope.current()) setError(errorText(cause)); });
     return () => abort.abort();
-  }, [key, draft.branchId, invoiceSearch, selectedInvoiceId, id]);
+  }, [key, draft.branchId, invoiceSearch, selectedInvoiceId, id, branchLoading, branchChoices]);
   useEffect(() => {
-    if (!draft.branchId) return;
+    if (!draft.branchId || branchLoading || !branchChoices.some(row => row.id === draft.branchId)) return;
     const abort = new AbortController();
     for (const role of ["approve", "record", "confirm"] as const) {
       if (role === "confirm" && !draft.recorderPrincipalId) { setAssignees(previous => ({ ...previous, confirm: [] })); continue; }
@@ -206,7 +215,7 @@ function PaymentEditorRecord() {
         .catch(cause => { if (!abort.signal.aborted && scope.current()) setError(errorText(cause)); });
     }
     return () => abort.abort();
-  }, [key, draft.branchId, draft.recorderPrincipalId, nameSearch.approve, nameSearch.record, nameSearch.confirm]);
+  }, [key, draft.branchId, draft.recorderPrincipalId, nameSearch.approve, nameSearch.record, nameSearch.confirm, branchLoading, branchChoices]);
   const invoice = invoices.find(value => value.invoiceId === draft.invoiceId);
   const canSave = readiness.permissions.includes(id ? "procurement-payment-edit" : "procurement-payment-create")
     && (!id || record?.request.status === "Draft" && record.request.creatorPrincipalId === readiness.principalId);
@@ -214,6 +223,9 @@ function PaymentEditorRecord() {
     if (dirty) setDiscard(true); else navigate(id ? `/payments/${id}` : "/payments"); };
   const save = async () => {
     if (!canSave || busy || stale || journal.state().blocked) return;
+    if (branchLoading || !branchChoices.some(row => row.id === draft.branchId)) {
+      setError("Choose a transaction branch available to your account."); return;
+    }
     if (!draft.branchId || !draft.invoiceId || !draft.amountExact || !draft.approverPrincipalId
       || !draft.recorderPrincipalId || !draft.confirmerPrincipalId) {
       setError("Choose a branch, one bill, an exact amount, and three named participants."); return;
@@ -239,11 +251,8 @@ function PaymentEditorRecord() {
   const selectedBill = invoice ?? (id && record ? { invoiceId: record.request.supplierInvoiceId,
     invoiceNumber: record.request.invoiceNumber, supplierId: record.request.supplierId,
     supplierDisplayName: record.request.supplierDisplayName, currencyCode: record.request.currencyCode,
-    grossExact: "", invoiceDate: "", branchId: record.request.branchId } : null);
-  const branchChoices = branches.filter(row => row.legalEntityId === readiness.legalEntityId
-    && (!branchId || row.id === branchId));
-  if (branchId && verifiedBranch?.id === branchId && !branchChoices.some(row => row.id === branchId))
-    branchChoices.push(verifiedBranch);
+    grossExact: record.sourceInvoice?.grossExact ?? "", invoiceDate: record.sourceInvoice?.invoiceDate ?? "",
+    branchId: record.request.branchId } : null);
   return <TransactionEditorFrame title={`${id ? "Edit" : "New"} Manual Payment Request`} close={close}
     closeDisabled={busy || journal.state().blocked} footer={<>
       <Button type="button" disabled={busy || stale || journal.state().blocked} onClick={() => void save()}><Save size={14} /> Save as Draft</Button>
@@ -254,13 +263,14 @@ function PaymentEditorRecord() {
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {stale && <p role="alert" className="text-sm">The saved draft changed. Your entries remain here. Review the current request before saving again.</p>}
     <div className="-mx-5 bg-muted px-5 py-5 sm:-mx-8 sm:px-8"><div className="max-w-xl space-y-4">
-      <Field label="Transaction branch *"><Select value={draft.branchId} disabled={Boolean(id) || Boolean(branchId)} onChange={event => {
+      <Field label="Transaction branch *"><Select value={draft.branchId} disabled={Boolean(id) || Boolean(branchId) || branchLoading || Boolean(branchError)} onChange={event => {
         update({ branchId: event.target.value, invoiceId: "", approverPrincipalId: "", recorderPrincipalId: "", confirmerPrincipalId: "" });
         setInvoices([]); setInvoiceCursor(null); setInvoiceSearch("");
         setAssignees({ approve: [], record: [], confirm: [] });
         setNameSearch({ approve: "", record: "", confirm: "" });
-      }}><option value="">Choose branch</option>{branchChoices.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</Select></Field>
-      {!branchId && branchChoices.length === 0 && <p role="alert" className="text-sm">No authorized branch choices are available. Ask your ERP administrator to make your Core branch access available.</p>}
+      }}><option value="">Choose branch</option>{branchChoices.map(row => <option key={row.id} value={row.id}>{row.name}{row.code ? ` (${row.code})` : ""}</option>)}</Select></Field>
+      {branchError && <p role="alert" className="text-sm">Could not load your transaction branches. {branchError}</p>}
+      {!branchLoading && !branchError && branchChoices.length === 0 && <p role="alert" className="text-sm">No transaction branches are available to your account.</p>}
       <Field label="Vendor Name *"><Input value={selectedBill?.supplierDisplayName ?? "Select a bill first"} readOnly /></Field>
       <Field label="Bill to Pay *"><Input aria-label="Search supplier bills" placeholder="Search bill number or supplier" value={invoiceSearch}
         disabled={Boolean(id) || !draft.branchId || Boolean(selectedInvoiceId)} onChange={event => setInvoiceSearch(event.target.value)} />
@@ -416,6 +426,7 @@ function PaymentDetailRecord() {
     {tab === "items" && <DetailSection title="Supplier bill"><dl className="grid gap-4 sm:grid-cols-2">
       <DetailValue label="Bill number" value={request.invoiceNumber} /><DetailValue label="Vendor" value={request.supplierDisplayName} />
       <DetailValue label="Invoice ID" value={request.supplierInvoiceId} /><DetailValue label="Currency" value={request.currencyCode} />
+      {detail.sourceInvoice && <DetailValue label="Original bill gross" value={`${request.currencyCode} ${detail.sourceInvoice.grossExact}`} />}
     </dl></DetailSection>}
     {tab === "related" && <DetailSection title="Related records"><p className="text-sm">This request is linked to one supplier bill and its Core approval cases.</p>
       {permissions.includes("procurement-invoice-read") && <Link className="mt-2 inline-block text-primary underline" to={`/bills/${request.supplierInvoiceId}`}>Open supplier bill</Link>}

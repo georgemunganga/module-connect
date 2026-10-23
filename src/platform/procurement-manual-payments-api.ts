@@ -30,7 +30,9 @@ export type ManualPaymentDetail = { request: ManualPaymentSummary & { purpose: s
   coreDecisions: { id: string; manualPaymentDecisionId: string; coreApprovalDecisionId: string;
     manualAction: ManualPaymentAction; actorPrincipalId: string; decidedAt: string; coreAction: string }[];
   people: { principalId: string; displayName: string }[];
-  companyClock: { date: string; timeZoneId: string; observedAtUtc: string } | null };
+  companyClock: { date: string; timeZoneId: string; observedAtUtc: string } | null;
+  sourceInvoice: { invoiceId: string; invoiceNumber: string; supplierId: string;
+    displayName: string; currencyCode: string; grossExact: string; invoiceDate: string; branchId: string } | null };
 export type ManualPaymentReceipt = { id: string; version: number; status: ManualPaymentStatus;
   action: ManualPaymentAction; commandKey: string };
 export type ManualPaymentCommandResult = ManualPaymentReceipt & { amountExact: string };
@@ -46,6 +48,7 @@ export type ManualPaymentCommand =
   | { action: Exclude<ManualPaymentAction, "Create" | "Revise">; key: string; id: string; input: ManualPaymentTransition };
 export type ManualPaymentAssignee = { principalId: string; displayName: string };
 export type ManualPaymentAssigneePage = { items: ManualPaymentAssignee[]; nextCursor: string | null; hasMore: boolean };
+export type ManualPaymentBranch = { id: string; code: string; name: string };
 export type ManualPaymentInvoiceChoice = { invoiceId: string; invoiceNumber: string; supplierId: string;
   supplierDisplayName: string; currencyCode: string; grossExact: string; invoiceDate: string; branchId: string };
 export type ManualPaymentInvoiceChoices = { items: ManualPaymentInvoiceChoice[];
@@ -200,6 +203,19 @@ export async function lookupManualPaymentAssignees(scope: ManualPaymentScope, in
   return body as unknown as ManualPaymentAssigneePage;
 }
 
+/** Core transaction branches authorized for this payment actor and current header scope. */
+export async function lookupManualPaymentBranches(scope: ManualPaymentScope,
+  signal?: AbortSignal): Promise<ManualPaymentBranch[]> {
+  const body = await request(scope, "/lookups/branches", { signal });
+  if (!obj(body) || !Array.isArray(body.items) || body.items.length > 10000
+    || !body.items.every(row => obj(row) && id(row.id)
+      && typeof row.code === "string" && row.code.length <= 100
+      && typeof row.name === "string" && row.name.trim().length > 0 && row.name.length <= 300)
+    || new Set(body.items.map(row => (row as ManualPaymentBranch).id)).size !== body.items.length)
+    throw invalid();
+  return body.items as ManualPaymentBranch[];
+}
+
 /** Payment-scoped invoice picker. Gross is informational, never remaining capacity. */
 export async function lookupManualPaymentInvoices(scope: ManualPaymentScope, input: {
   branchId: string; q?: string; cursor?: string; limit?: number; invoiceId?: string;
@@ -265,7 +281,18 @@ export async function getManualPayment(scope: ManualPaymentScope, requestId: str
       || typeof body.companyClock.timeZoneId !== "string"
       || !body.companyClock.timeZoneId.trim() || body.companyClock.timeZoneId.length > 100
       || !iso(body.companyClock.observedAtUtc))) throw invalid();
-  return { ...body, people: body.people ?? [], companyClock: body.companyClock ?? null } as unknown as ManualPaymentDetail;
+  if (body.sourceInvoice !== undefined && body.sourceInvoice !== null
+    && (!obj(body.sourceInvoice) || !id(body.sourceInvoice.invoiceId)
+      || body.sourceInvoice.invoiceId !== requestRow.supplierInvoiceId
+      || !id(body.sourceInvoice.supplierId) || body.sourceInvoice.supplierId !== requestRow.supplierId
+      || !id(body.sourceInvoice.branchId) || body.sourceInvoice.branchId !== requestRow.branchId
+      || typeof body.sourceInvoice.invoiceNumber !== "string"
+      || typeof body.sourceInvoice.displayName !== "string"
+      || body.sourceInvoice.currencyCode !== requestRow.currencyCode
+      || !exact(body.sourceInvoice.grossExact, true)
+      || typeof body.sourceInvoice.invoiceDate !== "string" || !date(body.sourceInvoice.invoiceDate))) throw invalid();
+  return { ...body, people: body.people ?? [], companyClock: body.companyClock ?? null,
+    sourceInvoice: body.sourceInvoice ?? null } as unknown as ManualPaymentDetail;
 }
 
 function statusAfter(action: ManualPaymentAction): ManualPaymentStatus {

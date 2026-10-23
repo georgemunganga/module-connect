@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   captureManualPaymentScope, getManualPayment, listManualPayments, lookupManualPaymentAssignees,
-  lookupManualPaymentInvoices, manualPaymentActionAvailability, ManualPaymentApiError,
+  lookupManualPaymentBranches, lookupManualPaymentInvoices, manualPaymentActionAvailability, ManualPaymentApiError,
   recoverManualPaymentCreate, sendManualPaymentCommand, type ManualPaymentIdentity,
 } from "../../../src/platform/procurement-manual-payments-api";
 import { createManualPaymentRecoveryJournal } from "../lib/manual-payment-command-journal";
@@ -96,6 +96,22 @@ describe("manual payment API client", () => {
     const older = await getManualPayment(captured, payment);
     expect(older.people).toEqual([]);
     expect(older.companyClock).toBeNull();
+  });
+
+  it("loads payment-scoped Core branches and validates the optional source bill", async () => {
+    const captured = scope();
+    const sourceInvoice = { invoiceId: invoice, invoiceNumber: "BILL-1042", supplierId: supplier,
+      displayName: "Northwind Devices", currencyCode: "ZMW", grossExact: "100.0000",
+      invoiceDate: "2026-10-20", branchId: branch };
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(Response.json({ items: [{ id: branch, code: "HQ", name: "Head office" }] }))
+      .mockResolvedValueOnce(Response.json({ ...detail, sourceInvoice }))
+      .mockResolvedValueOnce(Response.json({ ...detail, sourceInvoice: { ...sourceInvoice, supplierId: approver } }));
+    vi.stubGlobal("fetch", fetcher);
+    expect(await lookupManualPaymentBranches(captured)).toEqual([{ id: branch, code: "HQ", name: "Head office" }]);
+    expect(fetcher.mock.calls[0][0]).toBe("/api/procurement/v1/manual-payments/lookups/branches");
+    expect((await getManualPayment(captured, payment)).sourceInvoice?.grossExact).toBe("100.0000");
+    await expect(getManualPayment(captured, payment)).rejects.toMatchObject({ status: 0 });
   });
 
   it("does not retry an interrupted mutation or invent a saved result", async () => {
