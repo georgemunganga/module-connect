@@ -1,0 +1,24 @@
+{
+  "status": "PASS_FOCUSED_UNITS_ONLY",
+  "applicationSource": "438c635aa9822e6bd69bdd14ca9c40e003d6a827",
+  "tests": 70,
+  "files": 3,
+  "failed": 0,
+  "scope": [
+    "RFQ API contract mode dispatch",
+    "worker/principal command journal isolation",
+    "capability absent/default false"
+  ],
+  "logPath": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run01/tests.log",
+  "logSha256": "2da00a02e4ce96553f22c5722f1fbad14d556eff21f08c8b7a7ac52734d01390",
+  "typescriptBuildPassed": false,
+  "realApiBrowserPassed": false,
+  "visualParityVerified": false,
+  "productionDeployed": false,
+  "remaining": [
+    "TypeScript and production build",
+    "Generated P29 schema and exact backend readiness",
+    "Real API/PostgreSQL and browser journey",
+    "Desktop/mobile parity verification"
+  ]
+}
