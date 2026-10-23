@@ -128,3 +128,19 @@ graph read before claiming a full end-to-end acceptance. The lifecycle
 completion file remains root-owned and is never written by this test.
 
 Current happy-path correction: request submission itself persists a matching buying-rule evaluation. Verify its displayed status and the own `policy-status` response; a matched request is intentionally absent from the manual review queue. That queue is for missing/blocked checks, not a compulsory extra approval click. The accepted current journey uses this automatic path before independent funding and final approval. The additional private buyer-role fixture permissions are not a prerequisite to re-evaluate an already matched submission.
+# P30 principal purchase order draft
+
+`p30-po-cookie.spec.ts` is an opt-in real local-cookie browser proof for the
+existing purchase-order editor and five-tab detail. It requires the protected
+P30 PO fixture produced after actual private HTTP/owner setup, a separate HTTPS
+loopback proxy receipt bound to those fixture bytes, and a fresh protected
+result path. Use `playwright.p30-po-cookie.config.ts` with `P30_PO_COOKIE_FIXTURE`,
+`P30_PO_COOKIE_PROXY_RECEIPT`, `P30_PO_COOKIE_EXPECTED_DATABASE`, and
+`P30_PO_COOKIE_BROWSER_RESULT`. The proxy script additionally requires its
+private TLS files, built UI directory, and the API runtime PID in the same
+network namespace. No browser route mocking or identity headers are used.
+
+The test creates one internal draft from the genuine remaining approved line,
+reloads, cancels, and reloads again. It records the observed create/cancel
+command keys for an independent owning-store verifier. A completion file only
+closes the private listener; it does not certify browser or database acceptance.
