@@ -1,0 +1,28 @@
+{
+  "status": "UI_UNIT_TYPE_BUILD_PASSED_BROWSER_PENDING",
+  "buildSource": "819842432c122c49b52d845112f0633aa1c6a03d",
+  "unitEvidence": "procurement-p30-ui-20261023_run03",
+  "unitSource": "46c333d52ac52adc1282e7aaa40dea558b2fabce",
+  "unitPassed": 484,
+  "unitFailed": 0,
+  "typecheckExit": 0,
+  "buildExit": 0,
+  "stagedFiles": 5,
+  "liveMode": true,
+  "browserAcceptance": false,
+  "deployed": false,
+  "limits": "Unit suite ran before erased-only TypeScript annotation and private browser-proof changes; final type/build cover current source. Actual API/cookie acceptance pending.",
+  "stagedEvidence": "procurement-p30-ui-20261023_run04",
+  "priorFailuresRetained": [
+    "run01: two unit transport contract failures",
+    "run02: TypeScript integration errors",
+    "run03: two untrusted extension-field type errors"
+  ],
+  "remaining": [
+    "Playwright original-layout workflow checks",
+    "Actual PostgreSQL API and local-cookie persistence",
+    "Independent owner reconciliation",
+    "ERP migration/finite-role release",
+    "Production deployment and UAT"
+  ]
+}
