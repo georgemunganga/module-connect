@@ -60,7 +60,8 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
   if (test.info().project.use.trace !== 'off' || test.info().project.use.screenshot !== 'off'
     || test.info().project.use.video !== 'off') throw new Error('Credential-safe proof requires capture disabled');
   retain(); let step = 'buyer-login', failed = false;
-  const network: Array<{ path: string; method: string; status: number }> = [];
+  const network: Array<{ path: string; method: string; status: number; elapsedMs: number }> = [];
+  const requests = new Map<import('@playwright/test').Request, number>();
   const progress = (next: string) => { step = next; evidence.step = next; retain(); };
   let inspectedPage: import('@playwright/test').Page | undefined;
   const context = await browser.newContext({ baseURL: proxy.origin, ignoreHTTPSErrors: true });
@@ -96,13 +97,21 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
 
     progress('create-principal-draft');
     const page = await context.newPage(); inspectedPage = page;
+    page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) requests.set(request, Date.now()); });
+    page.on('requestfailed', request => { requests.delete(request); });
     page.on('response', response => {
       const url = new URL(response.url());
       if (url.pathname.startsWith('/api/') && network.length < 100) network.push({
         path: url.pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id'),
-        method: response.request().method(), status: response.status(),
+        method: response.request().method(), status: response.status(), elapsedMs: Date.now() - (requests.get(response.request()) ?? Date.now()),
       });
+      requests.delete(response.request());
     });
+    const reloadReady = async () => {
+      const meta = page.waitForResponse(response => new URL(response.url()).pathname === '/api/procurement/v1/meta', { timeout: 90_000 });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      expect((await meta).status()).toBe(200);
+    };
     // Candidate shell selection is checked by Core before each business call.
     await page.addInitScript(value => localStorage.setItem('erp.shell.state.v1', JSON.stringify(value)),
       { entityId: fixture.companyId, branch: fixture.branchId });
@@ -127,7 +136,7 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
     await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
 
     progress('reload-draft-detail');
-    await page.reload({ waitUntil: 'domcontentloaded' }); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    await reloadReady(); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Items (1)' }).click();
     await expect(page.getByRole('cell', { name: candidate!.description })).toBeVisible();
     await page.getByRole('tab', { name: 'Overview' }).click();
@@ -145,9 +154,10 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
     progress('cancelled-ui-readback');
     await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
     progress('reload-cancelled-detail');
-    await page.reload({ waitUntil: 'domcontentloaded' }); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    await reloadReady(); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
     await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
     evidence.principalRfqDraftVerified = true;
+    evidence.apiResponses = network;
     evidence.status = 'PASS_NORMAL_COOKIE_P29_INTERNAL_DRAFT_UI_ONLY'; retain();
   } catch (error) {
     failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step;
@@ -155,10 +165,16 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
     const matcher = (error as { matcherResult?: { name?: unknown } })?.matcherResult?.name;
     evidence.assertion = typeof matcher === 'string' && /^[A-Za-z]+$/.test(matcher) ? matcher : 'Unclassified';
     evidence.apiResponses = network;
+    evidence.pendingRequests = [...requests.entries()].map(([request, started]) => ({
+      path: new URL(request.url()).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id'),
+      method: request.method(), elapsedMs: Date.now() - started,
+    }));
     if (inspectedPage && !inspectedPage.isClosed()) {
       evidence.cancelledTextMatches = await inspectedPage.getByText('Cancelled', { exact: true }).count().catch(() => -1);
       evidence.alertCount = await inspectedPage.getByRole('alert').count().catch(() => -1);
       evidence.headingCount = await inspectedPage.getByRole('heading').count().catch(() => -1);
+      evidence.headingLabels = await inspectedPage.getByRole('heading').allTextContents().then(values => values.map(value => value.slice(0, 200))).catch(() => []);
+      evidence.currentPath = new URL(inspectedPage.url()).pathname;
     }
   }
   finally {

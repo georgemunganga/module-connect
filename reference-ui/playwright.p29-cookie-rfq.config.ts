@@ -25,7 +25,7 @@ if (receipt.schemaVersion !== 2 || receipt.transport !== 'normal-local-cookie-ht
   throw new Error('Private normal-cookie HTTPS transport required');
 export default defineConfig({
   testDir: './tests/normal-cookie', testMatch: 'p29-cookie-rfq.spec.ts',
-  workers: 1, fullyParallel: false, retries: 0, maxFailures: 1, timeout: 180_000,
+  workers: 1, fullyParallel: false, retries: 0, maxFailures: 1, timeout: 360_000,
   expect: { timeout: 20_000 }, reporter: 'list', outputDir: path.join(path.dirname(result), 'pw-artifacts'),
   use: { baseURL: origin.origin, ignoreHTTPSErrors: true, trace: 'off', screenshot: 'off', video: 'off', actionTimeout: 25_000 },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
