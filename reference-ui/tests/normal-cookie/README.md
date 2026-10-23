@@ -126,3 +126,5 @@ normal-cookie journey. `fullApprovalFlowVerified` remains false: root must bind
 the Playwright exit, exact static bundle/runtime, and independent owning-store
 graph read before claiming a full end-to-end acceptance. The lifecycle
 completion file remains root-owned and is never written by this test.
+
+Current happy-path correction: request submission itself persists a matching buying-rule evaluation. Verify its displayed status and the own `policy-status` response; a matched request is intentionally absent from the manual review queue. That queue is for missing/blocked checks, not a compulsory extra approval click. The accepted current journey uses this automatic path before independent funding and final approval. The additional private buyer-role fixture permissions are not a prerequisite to re-evaluate an already matched submission.
