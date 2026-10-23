@@ -1,5 +1,5 @@
 {
-  "status": "PASS_FOCUSED_UNITS_ONLY",
+  "status": "UNITS_TYPES_BUILD_AND_MOCK_BROWSER_ACCEPTED_REAL_COOKIE_PENDING",
   "applicationSource": "438c635aa9822e6bd69bdd14ca9c40e003d6a827",
   "tests": 70,
   "files": 3,
@@ -11,14 +11,47 @@
   ],
   "logPath": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run01/tests.log",
   "logSha256": "2da00a02e4ce96553f22c5722f1fbad14d556eff21f08c8b7a7ac52734d01390",
-  "typescriptBuildPassed": false,
+  "typescriptBuildPassed": true,
   "realApiBrowserPassed": false,
   "visualParityVerified": false,
   "productionDeployed": false,
   "remaining": [
-    "TypeScript and production build",
-    "Generated P29 schema and exact backend readiness",
-    "Real API/PostgreSQL and browser journey",
-    "Desktop/mobile parity verification"
+    "Fresh canonical P29 API/constraint proof",
+    "Real normal-cookie browser and independent owner proof",
+    "Review and source merge",
+    "Production release"
+  ],
+  "uiTests": 461,
+  "uiTestFiles": 49,
+  "stagedBuildPassed": true,
+  "applicationBuildSource": "08015a9b22bf3153a6c3e4b5ea7f660e7fe57e35",
+  "mockFullRun": {
+    "passed": 14,
+    "failed": 1,
+    "scope": "Retained unavailable-gate assertion expectedalert; page correctlyblocked saving"
+  },
+  "mockFocusedCorrection": {
+    "passed": 1,
+    "failed": 0,
+    "source": "d26406f",
+    "scope": "Correct shared unavailable UI, no create button/source calls"
+  },
+  "evidence": [
+    {
+      "path": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run02/result.json",
+      "sha256": "df35c81321ff79ac1a10d29ae82dbe2a0cb90abed453a94a1f8549095c3627da"
+    },
+    {
+      "path": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run02/mock-result.json",
+      "sha256": "272136cad31413ef9434c5e62adbef30ea1add2bf69074b68df1a66ed27dd90b"
+    },
+    {
+      "path": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run02/mock-followup/result.json",
+      "sha256": "e1f9448dd718cb9f07343806223365b3ec8241f9c214fc0ed00f8aa68d0b775b"
+    },
+    {
+      "path": "/home/amizo/erp-backups/procurement-p29-ui-20261023_run02/staged-assets.json",
+      "sha256": "0cd3d2a7e6b13b2913530cb0f2e893cd01599dd2c447de1e5e8f151d1e2e35c8"
+    }
   ]
 }
