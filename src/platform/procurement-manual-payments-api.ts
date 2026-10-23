@@ -1,4 +1,4 @@
-import { procurementScopeHeaders } from "../../shared/shell-scope";
+import { ERP_SHELL_STORAGE_KEY, procurementScopeHeaders } from "../../shared/shell-scope";
 import { invoiceDecimal } from "../../shared/procurement-decimal";
 
 /** Procurement records an externally reported payment; Finance still owns posting and Paid. */
@@ -84,6 +84,20 @@ const optionalExact = (x: unknown): x is string | null => x === null || exact(x,
 const invalid = () => new ManualPaymentApiError(0,
   "The payment response was incomplete. Check the saved request and command result before another action.");
 
+function paymentScopeHeaders(identity: ManualPaymentIdentity): Record<string, string> {
+  const headers = procurementScopeHeaders(identity.legalEntityId);
+  if (identity.branchId !== null) return headers;
+  // A missing shell selection is legacy default-branch behavior. Company-wide
+  // payment reads/writes require a company explicitly chosen in this browser.
+  let selected: unknown;
+  try { selected = JSON.parse(localStorage.getItem(ERP_SHELL_STORAGE_KEY) || "null"); }
+  catch { throw new ManualPaymentApiError(0, "Choose an ERP company before opening all payment branches."); }
+  if (!obj(selected) || selected.entityId !== identity.legalEntityId || selected.branch)
+    throw new ManualPaymentApiError(0, "Choose an ERP company before opening all payment branches.");
+  headers["X-Shell-Branch-Scope"] = "all";
+  return headers;
+}
+
 /** Capture the Core identity and shell selection when a request starts. The caller's
  * current() must read its live shell/auth epoch, never return this captured object. */
 export function captureManualPaymentScope(identity: ManualPaymentIdentity,
@@ -94,7 +108,7 @@ export function captureManualPaymentScope(identity: ManualPaymentIdentity,
     || identity.branchId !== null && !id(identity.branchId)
     || !(typeof identity.authEpoch === "number" && Number.isSafeInteger(identity.authEpoch)
       || typeof identity.authEpoch === "string" && identity.authEpoch.length > 0 && identity.authEpoch.length <= 100)) throw invalid();
-  const headers = procurementScopeHeaders(identity.legalEntityId);
+  const headers = paymentScopeHeaders(identity);
   if ((headers["X-Shell-Location"] ?? null) !== identity.branchId) throw new ManualPaymentApiError(0,
     "The selected branch changed. Refresh the payment workspace.");
   const snapshot = JSON.stringify([identity.tenantId, identity.legalEntityId, identity.principalId,
@@ -103,7 +117,7 @@ export function captureManualPaymentScope(identity: ManualPaymentIdentity,
     const latest = current();
     if (!latest) return false;
     try {
-      const liveHeaders = procurementScopeHeaders(identity.legalEntityId);
+      const liveHeaders = paymentScopeHeaders(identity);
       return JSON.stringify([latest.tenantId, latest.legalEntityId, latest.principalId,
         latest.branchId, latest.authEpoch, liveHeaders]) === snapshot;
     } catch { return false; }

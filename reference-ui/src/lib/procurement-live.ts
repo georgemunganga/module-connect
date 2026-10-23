@@ -52,8 +52,13 @@ export async function fetchProcurementReadiness(
   selection: ShellSelection,
   signal?: AbortSignal,
   fetcher: typeof fetch = fetch,
+  paymentAllBranches = false,
 ): Promise<ProcurementReadiness> {
   const headers = scopeHeaders(selection);
+  // Only the payment workspace requests an explicit company-wide context.
+  // The ordinary omitted-branch contract still resolves the user's default.
+  const contextHeaders = paymentAllBranches && selection.entityId && !selection.branch
+    ? { ...headers, "X-Shell-Branch-Scope": "all" } : headers;
   const common: RequestInit = { credentials: "include", cache: "no-store", signal };
   let auth: Response;
   try { auth = await fetcher("/api/hrm/auth/me", common); }
@@ -68,7 +73,7 @@ export async function fetchProcurementReadiness(
   if (!object(authBody.user) || authBody.user.isActive !== true)
     throw new ProcurementLiveError("access");
 
-  const scoped: RequestInit = { ...common, headers };
+  const scoped: RequestInit = { ...common, headers: contextHeaders };
   let contextResponse: Response;
   try { contextResponse = await fetcher("/api/procurement/v1/context", scoped); }
   catch { throw new ProcurementLiveError("unavailable"); }
@@ -101,9 +106,11 @@ export async function fetchProcurementReadiness(
       effectiveBranchId = context.branch.id as string;
     }
   }
+  if (paymentAllBranches && selection.entityId && !selection.branch && effectiveBranchId !== null)
+    throw new ProcurementLiveError("invalid-response");
 
   let metaResponse: Response;
-  try { metaResponse = await fetcher("/api/procurement/v1/meta", scoped); }
+  try { metaResponse = await fetcher("/api/procurement/v1/meta", { ...common, headers }); }
   catch { throw new ProcurementLiveError("unavailable"); }
   if (!metaResponse.ok) throw new ProcurementLiveError(metaResponse.status === 403 ? "access" : "unavailable");
   let meta: unknown;

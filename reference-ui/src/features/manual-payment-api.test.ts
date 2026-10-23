@@ -36,6 +36,36 @@ function scope() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("manual payment API client", () => {
+  it("marks an explicitly selected company's All payment scope without changing transaction branch", async () => {
+    let selected: Record<string, unknown> = { entityId: company, branch: "" };
+    identity = { tenantId: "test-tenant", legalEntityId: company, principalId: principal,
+      branchId: null, authEpoch: 1 };
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify(selected) });
+    const captured = captureManualPaymentScope(identity, () => identity);
+    expect(captured.headers).toEqual({ "X-Shell-Entity": company, "X-Shell-Branch-Scope": "all" });
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ items: [], total: 0, page: 1, pageSize: 25 }))
+      .mockResolvedValueOnce(Response.json({ id: payment, version: 1, status: "Draft",
+        action: "Create", commandKey: key, amountExact: "1.0001" }, { status: 201 }));
+    vi.stubGlobal("fetch", fetcher);
+    await listManualPayments(captured);
+    await sendManualPaymentCommand(captured, { action: "Create", key,
+      input: { branchId: branch, invoiceId: invoice, amountExact: "1.0001",
+        approverPrincipalId: approver, recorderPrincipalId: recorder, confirmerPrincipalId: confirmer,
+        purpose: null, title: null } });
+    expect(fetcher.mock.calls.every(([, init]) => init.headers.get("X-Shell-Branch-Scope") === "all"
+      && init.headers.get("X-Shell-Location") === null)).toBe(true);
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).branchId).toBe(branch);
+    selected = { entityId: company, branch };
+    expect(captured.current()).toBe(false);
+  });
+
+  it("does not treat an unselected shell company as All branches", () => {
+    identity = { tenantId: "test-tenant", legalEntityId: company, principalId: principal,
+      branchId: null, authEpoch: 1 };
+    vi.stubGlobal("localStorage", { getItem: () => "{}" });
+    expect(() => captureManualPaymentScope(identity, () => identity)).toThrow(/Choose an ERP company/);
+  });
+
   it("reads a scoped server page with exact amount strings and no Finance Paid status", async () => {
     const captured = scope();
     const fetcher = vi.fn().mockResolvedValue(Response.json({ items: [summary], total: 1, page: 1, pageSize: 25 }));

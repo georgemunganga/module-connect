@@ -14,7 +14,8 @@ export const isProcurementLiveMode = liveMode;
 export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, blockedShell }: { children: ReactNode; unavailable?: ReactNode; scopeUnavailable?: ReactNode; blockedShell?: (content: ReactNode) => ReactNode }) {
   const { selection,authEpoch,procurementScopeStatus } = useErpShell();
   const location = useLocation();
-  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",procurementScopeStatus]);
+  const paymentPath = /^\/payments(?:\/|$)/.test(location.pathname);
+  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",procurementScopeStatus,paymentPath]);
   const currentKey=useRef(readinessKey);currentKey.current=readinessKey;
   const [storedState, setState] = useState<{ key:string; readiness?: ProcurementReadiness; error?: string }>({key:""});
   // Never render old scope readiness for even the render before passive effect cleanup.
@@ -24,14 +25,14 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     const controller = new AbortController();
     const capturedKey=readinessKey;
     setState({key:capturedKey});
-    fetchProcurementReadiness(selection, controller.signal)
+    fetchProcurementReadiness(selection, controller.signal, fetch, paymentPath)
       .then((readiness) => { if (!controller.signal.aborted && currentKey.current===capturedKey) setState({ key:capturedKey,readiness }); })
       .catch((error: unknown) => {
         if (!controller.signal.aborted && currentKey.current===capturedKey)
           setState({ key:capturedKey,error: error instanceof ProcurementLiveError ? error.message : "Procurement data is not ready. Please try again later." });
       });
     return () => controller.abort();
-  }, [selection.entityId, selection.branch,authEpoch,readinessKey,procurementScopeStatus]);
+  }, [selection.entityId, selection.branch,authEpoch,readinessKey,procurementScopeStatus,paymentPath]);
 
   if (!liveMode) return <>{children}</>;
   if (procurementScopeStatus !== "ready") return <>{scopeUnavailable ?? <ProcurementScopeSelectionState />}</>;
@@ -45,7 +46,6 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const planPath = /^\/plans(?:\/|$)/.test(location.pathname);
   const creditPath = /^\/vendor-credits(?:\/|$)/.test(location.pathname);
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
-  const paymentPath = /^\/payments(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);

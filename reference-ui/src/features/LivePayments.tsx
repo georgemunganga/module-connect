@@ -31,7 +31,7 @@ function usePaymentContext(): PaymentContext {
   if (!readiness) throw new Error("Choose an ERP company first.");
   const identity: ManualPaymentIdentity = { tenantId: readiness.tenantId,
     legalEntityId: readiness.legalEntityId, principalId: readiness.principalId,
-    branchId: shell.selection.branch ?? null, authEpoch: shell.authEpoch };
+    branchId: shell.selection.branch || null, authEpoch: shell.authEpoch };
   const current = useRef(identity); current.current = identity;
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -45,6 +45,8 @@ function PaymentBoundary({ children }: { children: ReactNode }) {
   const readiness = useLiveReadiness(); const shell = useErpShell();
   if (!readiness || shell.procurementScopeStatus !== "ready" || shell.selection.entityId && shell.selection.entityId !== readiness.legalEntityId)
     return <div className="p-5 sm:p-8" role="status">Checking the selected company and branch…</div>;
+  if (shell.selection.entityId !== readiness.legalEntityId)
+    return <div className="p-5 sm:p-8" role="status">Choose your company from Organisation context to open Payments Made.</div>;
   if (!readiness.capabilities.manualPaymentWorkflow || !readiness.permissions.includes("procurement-payment-read"))
     return <div className="p-5 sm:p-8" role="alert">Manual payment review is not available for this account and company.</div>;
   return <div key={JSON.stringify([shell.authEpoch, readiness.tenantId, readiness.legalEntityId,

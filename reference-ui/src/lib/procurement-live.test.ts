@@ -31,6 +31,25 @@ describe("Procurement system-user readiness", () => {
     expect(fetcher.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity, "X-Shell-Location": branch });
     expect(fetcher.mock.calls[2][1].credentials).toBe("include");
   });
+  it("requests explicit All branches only for a selected company's payment workspace", async () => {
+    const all = fixture({ branch: null });
+    const result = await fetchProcurementReadiness({ entityId: entity }, undefined, all, true);
+    expect(result.effectiveBranchId).toBeNull();
+    expect(all.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity,
+      "X-Shell-Branch-Scope": "all" });
+    expect(all.mock.calls[2][1].headers).toEqual({ "X-Shell-Entity": entity });
+    const selected = fixture({ branch: { id: branch } });
+    await fetchProcurementReadiness({ entityId: entity, branch }, undefined, selected, true);
+    expect(selected.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity,
+      "X-Shell-Location": branch });
+    const legacy = fixture({ branch: { id: branch } });
+    await fetchProcurementReadiness({}, undefined, legacy, true);
+    expect(legacy.mock.calls[1][1].headers).toEqual({});
+  });
+  it("refuses a default branch response for an explicit payment All request", async () => {
+    await expect(fetchProcurementReadiness({ entityId: entity }, undefined,
+      fixture({ branch: { id: branch } }), true)).rejects.toMatchObject({ code: "invalid-response" });
+  });
   it("preserves an optional employee projection without using it as the acting principal", async () => {
     const result = await fetchProcurementReadiness({ entityId: entity }, undefined, fixture({ workerId: worker }));
     expect(result.workerId).toBe(worker);

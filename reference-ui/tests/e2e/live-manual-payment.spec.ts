@@ -43,7 +43,7 @@ async function fixture(page: Page, enabled: boolean, options: {
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "test", legalEntityId: company,
       principalId: options.principalId ?? requester, workerId: null, company: { id: company, currencyCode: "ZMW" },
-      permissions: options.permissions ?? permissions });
+      branch: options.allBranches ? null : { id: branch }, permissions: options.permissions ?? permissions });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company,
       schemaReady: true, capabilities: Object.fromEntries([...requiredCapabilities, "manualPaymentWorkflow"]
         .map(name => [name, name === "manualPaymentWorkflow" && enabled])) });
@@ -148,6 +148,12 @@ test("original payment editor layout creates one exact draft, then detail shows 
 
 test("all-branches header keeps its read scope while the form chooses an explicit transaction branch", async ({ page }) => {
   const writes = await fixture(page, true, { allBranches: true });
+  const scoped: { path: string; headers: Record<string, string> }[] = [];
+  page.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/procurement/v1/context" || path.startsWith("/api/procurement/v1/manual-payments"))
+      scoped.push({ path, headers: request.headers() });
+  });
   await page.goto(`/procurement/workspace/payments/new?invoiceId=${invoice}`);
   await page.getByRole("combobox", { name: "Transaction branch *" }).click();
   await page.getByRole("option", { name: "Lusaka (HQ)" }).click();
@@ -162,6 +168,15 @@ test("all-branches header keeps its read scope while the form chooses an explici
   await page.getByRole("button", { name: "Save as Draft" }).click();
   await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toBeVisible();
   expect(writes[0].body.branchId).toBe(branch);
+  expect(scoped.some(request => request.path === "/api/procurement/v1/context"
+    && request.headers["x-shell-branch-scope"] === "all"
+    && request.headers["x-shell-location"] === undefined)).toBe(true);
+  expect(scoped.some(request => request.path === "/api/procurement/v1/manual-payments"
+    && request.headers["x-shell-branch-scope"] === "all"
+    && request.headers["x-shell-location"] === undefined)).toBe(true);
+  expect(scoped.filter(request => request.path.startsWith("/api/procurement/v1/manual-payments"))
+    .every(request => request.headers["x-shell-branch-scope"] === "all"
+      && request.headers["x-shell-location"] === undefined)).toBe(true);
 });
 
 test("switching payment detail IDs never exposes the previous record while the next GET waits", async ({ page }) => {

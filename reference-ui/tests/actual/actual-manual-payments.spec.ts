@@ -41,12 +41,18 @@ async function login(page: Page, role: string, record = '/payments') {
   });
   expect(response.status(), `real Core login for ${role}`).toBe(200);
   const context = await page.request.get('/api/procurement/v1/context', {
-    headers: { 'X-Shell-Entity': f().companyId }, failOnStatusCode: false,
+    headers: { 'X-Shell-Entity': f().companyId,
+      ...(record.startsWith('/payments') ? { 'X-Shell-Branch-Scope': 'all' } : {}) }, failOnStatusCode: false,
   });
   expect(context.status(), `real Procurement context for ${role}`).toBe(200);
   const scope = await context.json() as { principalId?: string; legalEntityId?: string; workerId?: string | null };
   expect(scope).toMatchObject({ principalId: account.principalId, legalEntityId: f().companyId, workerId: null });
   await page.goto(`/procurement/workspace${record}`);
+  if (record.startsWith('/payments')) {
+    await page.getByRole('button', { name: 'Organisation context' }).click();
+    await page.getByRole('button', { name: /All branches/ }).first().click();
+    await page.getByRole('button', { name: 'Organisation context' }).click();
+  }
 }
 async function mutation(page: Page, method: string, suffix: string, action: () => Promise<unknown>): Promise<Response> {
   const waiting = page.waitForResponse(response => response.request().method() === method
@@ -87,12 +93,13 @@ test('real cookie roles complete one independently reviewed manual payment', asy
   expect(createBody.invoiceId).toBe(f().invoiceId);
   expect(createBody.amount).toBe('1.0001');
   expect(created.request().headers()['x-shell-location']).toBeUndefined();
+  expect(created.request().headers()['x-shell-branch-scope']).toBe('all');
   const receipt = await created.json() as { id?: string; status?: string };
   expect(uuid.test(String(receipt.id))).toBe(true);
   expect(receipt.status).toBe('Draft');
   const id = String(receipt.id);
   await expect(page.getByRole('heading', { name: requestTitle })).toBeVisible();
-  await page.getByRole('link', { name: 'Payments Made' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Payments Made', exact: true }).click();
   const listed = page.getByRole('row').filter({ hasText: requestTitle });
   await expect(listed).toBeVisible();
   await listed.getByRole('link').first().click();
@@ -137,7 +144,7 @@ test('real cookie roles complete one independently reviewed manual payment', asy
   await page.getByRole('tab', { name: 'History' }).click();
   await expect(page.getByText('Core review history')).toBeVisible();
   const detail = await page.request.get(`/api/procurement/v1/manual-payments/${id}`, {
-    headers: { 'X-Shell-Entity': f().companyId }, failOnStatusCode: false });
+    headers: { 'X-Shell-Entity': f().companyId, 'X-Shell-Branch-Scope': 'all' }, failOnStatusCode: false });
   expect(detail.status()).toBe(200);
   expect((await detail.json() as { request: { status: string } }).request.status).toBe('ConfirmedManually');
 });
