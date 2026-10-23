@@ -46,3 +46,8 @@ test("late create acknowledgement after same-worker branch switch cannot navigat
 });
 
 test("system user without item management permission has no mutation surface",async({page})=>{const f=await fixture(page,{readonly:true,active:true});await page.goto(`/procurement/workspace/items/${item}`);await expect(page.getByRole("button",{name:"Add draft price",exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"Make inactive",exact:true})).toHaveCount(0);expect(f.writes).toHaveLength(0);});
+
+test("late old create response cannot navigate after SPA record unmount",async({page})=>{
+ let release!:()=>void;let entered!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});const pending=new Promise<void>(resolve=>{entered=resolve;});const f=await fixture(page,{held,onWrite:entered});await page.goto("/procurement/workspace/items/new");await fillItem(page);await page.getByRole("button",{name:"Save draft",exact:true}).click();await pending;
+ await page.getByRole("link",{name:"Items",exact:true}).first().click();await page.getByRole("link",{name:/Saved item/}).click();await page.getByRole("link",{name:"Edit item",exact:true}).click();await expect(page.getByLabel("Item name",{exact:true})).toHaveValue("Saved item");const response=page.waitForResponse(value=>value.request().method()==="POST"&&new URL(value.url()).pathname.endsWith("/items"));release();await (await response).finished();await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve())));await expect(page).toHaveURL(new RegExp(`/items/${item}/edit$`));expect(f.writes).toHaveLength(1);
+});

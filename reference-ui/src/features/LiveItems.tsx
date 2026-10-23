@@ -183,7 +183,7 @@ function ManagedItemDetail() {
   return <LiveItemDetailBody key={[authEpoch, readiness?.tenantId, readiness?.legalEntityId, readiness?.principalId, selection.entityId, selection.branch, id].join(":")} />;
 }
 function LiveItemDetailBody() {
-  const { id } = useParams();
+  const { id } = useParams(); const navigate = useNavigate();
   const readiness = useLiveReadiness();
   const viewOnly = readiness?.permissions.includes("procurement-item-manage") !== true;
   const company = companyId();
