@@ -6,6 +6,7 @@ import { VendorDetailFrame, vendorDetailTabs } from "../components/vendors/Vendo
 import { DetailSection, DetailValue } from "../components/data/DetailPrimitives";
 import { useErpShell } from "../lib/erpShell";
 import { RecordTable } from "../components/data/RecordTable";
+import { LiveCatalogDirectory } from "../components/data/LiveCatalogDirectory";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
   addVendorContact, addVendorSite, addVendorQualification, createVendorDraft, getVendorDraft,
@@ -34,51 +35,52 @@ function useCompany() {
 }
 
 export function LiveVendorList() {
+  const readiness = useCompany();
+  const { legalEntityId, permissions } = readiness;
+  const { selection, authEpoch } = useErpShell();
+  if (selection.entityId && selection.entityId !== legalEntityId)
+    return <p role="status">Checking the selected company…</p>;
+  return <VendorListRecord key={[authEpoch, readiness.tenantId, legalEntityId, selection.branch ?? "",
+    readiness.principalId, permissions.slice().sort().join("|")].join(":")} />;
+}
+
+const vendorStatuses = ["Submitted", "More Information Required", "Draft", "Approved", "Active", "Suspended", "Withdrawn"]
+  .map(value => ({ value, label: value === "Submitted" ? "Submitted for review" : value }));
+
+function VendorListRecord() {
   const { legalEntityId, permissions } = useCompany();
   const canCreate = permissions.includes("procurement-vendor-create");
-  const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
+  const [revision, setRevision] = useState(0);
   const [data, setData] = useState<VendorPage | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setData(null);
     listVendorDrafts(legalEntityId, { search, status, page, signal: controller.signal })
-      .then(setData).catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
+      .then(result => { if (!controller.signal.aborted) setData(result); })
+      .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [legalEntityId, search, status, page]);
+  }, [legalEntityId, search, status, page, revision]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Vendors" subtitle="Add vendors, review their details, and manage who can receive new orders." actions={canCreate ? <Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link> : undefined} />
-    <Panel><div className="p-5">
-      <form className="mb-4 flex max-w-xl gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(query.trim()); }}>
-        <Input aria-label="Search vendors" placeholder="Search vendor name or company ID" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <Button type="submit" variant="secondary">Search</Button>
-      </form>
-      <Select aria-label="Filter vendors by status" className="mb-4 max-w-xs" value={status}
-        onChange={(event) => { setPage(1); setStatus(event.target.value); }}>
-        <option value="">All statuses</option><option value="Submitted">Submitted for review</option>
-        <option value="More Information Required">More information required</option>
-        <option value="Draft">Draft</option><option value="Approved">Approved</option>
-        <option value="Active">Active</option><option value="Suspended">Suspended</option>
-        <option value="Withdrawn">Withdrawn</option>
-      </Select>
-      {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
-      {loading ? <p role="status">Loading vendors…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
-        <thead><tr><th>Vendor</th><th>Company ID</th><th>Country</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.items.map((vendor) => <tr key={vendor.id}>
-          <td><Link className="font-medium text-primary hover:underline" to={`/vendors/${vendor.id}`}>{vendor.displayName}</Link><span className="block text-xs text-muted-foreground">{vendor.legalName}</span></td>
-          <td>{vendor.number}</td><td>{vendor.countryCode}</td><td><Badge>{vendor.status}</Badge></td>
-          <td><Link className="text-sm text-primary hover:underline" to={`/vendors/${vendor.id}`}>Open</Link></td>
-        </tr>)}</tbody>
-      </RecordTable></div> : search || status
-        ? <EmptyState title="No vendors match this view" description="Try a different search or status." />
-        : <EmptyState title="Every purchase starts with a vendor" description="Create and manage your vendors and their contact persons, all in one place." action={canCreate ? <Link to="/vendors/new"><Button>Add vendor</Button></Link> : undefined} />}
-      {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
-    </div></Panel>
+    <LiveCatalogDirectory key={`${search}:${status}:${page}`} title="Vendors" entity="vendors"
+      subtitle="Add vendors, review their details, and manage who can receive new orders."
+      columns={[{ key: "number", label: "Vendor / Company ID", width: 250 }, { key: "legal", label: "Legal name", width: 210 },
+        { key: "country", label: "Country", width: 100 }, { key: "orderable", label: "Orderable", width: 95 },
+        { key: "created", label: "Created", width: 130 }, { key: "status", label: "Status", width: 125 }]}
+      rows={(data?.items ?? []).map(vendor => ({ id: vendor.id, number: vendor.number, title: vendor.displayName,
+        status: vendor.status, path: `/vendors/${vendor.id}`, fields: { legal: vendor.legalName,
+          country: vendor.countryCode, orderable: vendor.isOrderable ? "Yes" : "No", created: vendor.createdAt?.slice(0, 10) || "" } }))}
+      total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25} loading={loading} error={error}
+      search={search} onSearch={value => { setPage(1); setSearch(value); }} status={status} statuses={vendorStatuses}
+      onStatusChange={value => { setPage(1); setStatus(value); }} onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
+      action={canCreate ? <Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link> : undefined}
+      emptyTitle="Every purchase starts with a vendor"
+      emptyDescription="Create and manage your vendors and their contact persons, all in one place." />
   </div>;
 }
 
