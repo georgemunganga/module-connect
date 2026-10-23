@@ -161,9 +161,9 @@ function LiveOrderEditorRecord() {
   }
   if (!permissions.includes(id ? "procurement-po-edit" : "procurement-po-create"))
     return <div className="p-5 sm:p-8" role="alert">You do not have access to edit purchase orders for this company.</div>;
-  return <div className="-mx-5 -mt-5 min-h-[calc(100dvh-5rem)] bg-[#f7f8fb] pb-20 sm:-mx-8 sm:-mt-8">
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background pb-20">
     <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-5 py-5 sm:px-8">
-      <div><h1 className="flex items-center gap-2 text-xl font-medium tracking-tight"><ShoppingBag size={23} strokeWidth={1.4} />{id ? "Edit order draft" : "New purchase order draft"}</h1>
+      <div className="min-w-0"><h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} strokeWidth={1.4} className="shrink-0" />{id ? "Edit order draft" : "New purchase order draft"}</h1>
         <p className="mt-1 text-sm text-muted-foreground">This stays internal until approvals and budget checks are available.</p></div>
       <Button type="button" variant="ghost" aria-label="Close editor" disabled={saving} onClick={() => navigate(id ? `/purchase-orders/${id}` : "/purchase-orders")}><X size={20} /></Button>
     </header>
@@ -263,10 +263,10 @@ function LegacyOrderDetail() {
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading order…</div>;
   if (!record) return <div className="p-5 sm:p-8" role="alert">{error || "Order not found."}</div>;
   const canEdit = record.status === "Draft" && permissions.includes("procurement-po-edit");
-  return <div className="-mx-5 -mt-5 min-h-[calc(100dvh-5rem)] bg-[#f7f8fb] sm:-mx-8 sm:-mt-8">
-    <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-8">
-      <div><Link className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary" to="/purchase-orders"><ArrowLeft size={13} />Purchase Orders</Link>
-        <div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-semibold">{record.number}</h1><Badge>{record.status}</Badge></div>
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background">
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-8">
+      <div className="min-w-0"><Link className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary" to="/purchase-orders"><ArrowLeft size={13} />Purchase Orders</Link>
+        <div className="flex min-w-0 flex-wrap items-center gap-2"><h1 title={record.number} className="max-w-3xl break-all text-2xl font-semibold line-clamp-2">{record.number}</h1><Badge>{record.status}</Badge></div>
         <p className="mt-1 text-xs text-muted-foreground">{record.supplierName || "Vendor"} · {record.currencyCode}</p></div>
       {canEdit && <Button onClick={() => navigate(`/purchase-orders/${record.id}/edit`)}>Edit draft</Button>}
     </header>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectOrderWorkspaceBounds } from "./order-layout-assert";
 
 test.setTimeout(120_000);
 const companyId = "11111111-1111-4111-8111-111111111111";
@@ -141,6 +142,18 @@ test("draft order keeps imported detail sections and shows unavailable controls 
   await expect(page.getByText("Comments cannot be saved", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByText("Detailed order change history is not available", { exact: false })).toBeVisible();
+});
+
+for (const width of [1440, 390]) test(`legacy order editor and detail respect ERP navigation at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 1000 });
+  await mockErp(page);
+  await page.goto("/procurement/workspace/purchase-orders/new");
+  await expectOrderWorkspaceBounds(page, width, page.getByRole("button", { name: "Close editor" }));
+  await page.getByRole("combobox", { name: "Vendor" }).click();
+  await page.getByRole("option", { name: "Office Supplier" }).click();
+  await page.getByLabel("Description 1").fill("Laptop");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expectOrderWorkspaceBounds(page, width, page.getByRole("tab", { name: "Overview" }));
 });
 
 test("read-only buyer cannot start or edit an order draft", async ({ page }) => {

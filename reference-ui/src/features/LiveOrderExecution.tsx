@@ -123,10 +123,10 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
     <p className="text-sm">Command reference: <code>{pending.key}</code>. Keep this browser tab open until the result is reconciled.</p>
     <details className="text-sm"><summary>Original action details</summary><pre className="overflow-auto whitespace-pre-wrap">{pending.operation}{"\n"}{pending.body}</pre></details>
     <Button disabled={busy} onClick={() => void recover()}>{busy ? "Checking…" : "Check saved result"}</Button></div></Panel>;
-  return <div className="-mx-5 -mt-5 min-h-[calc(100dvh-5rem)] bg-[#f7f8fb] sm:-mx-8 sm:-mt-8">
-    <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-8"><div>
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background">
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-8"><div className="min-w-0">
       <Link className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary" to="/purchase-orders"><ArrowLeft size={13} />Purchase Orders</Link>
-      <div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-semibold">{data?.order.number ?? "Purchase order"}</h1>{data && <Badge>{data.order.status}</Badge>}</div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2"><h1 title={data?.order.number ?? "Purchase order"} className="max-w-3xl break-all text-2xl font-semibold line-clamp-2">{data?.order.number ?? "Purchase order"}</h1>{data && <Badge>{data.order.status}</Badge>}</div>
       {data && <p className="mt-1 text-xs text-muted-foreground">{data.order.supplierName || "Vendor"} · {data.order.currencyCode}</p>}
     </div></header>
     {data && <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "items", label: `Items (${data.order.lines.length})` }, { key: "related", label: "Related" },

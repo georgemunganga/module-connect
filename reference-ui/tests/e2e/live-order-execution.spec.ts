@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectOrderWorkspaceBounds } from "./order-layout-assert";
 const company = "11111111-1111-4111-8111-111111111111", branch = "22222222-2222-4222-8222-222222222222", worker = "33333333-3333-4333-8333-333333333333";
 const id = "44444444-4444-4444-8444-444444444444", other = "55555555-5555-4555-8555-555555555555", line = "66666666-6666-4666-8666-666666666666";
 const issuedId = "77777777-7777-4777-8777-777777777777", financeId = "88888888-8888-4888-8888-888888888888";
@@ -73,6 +74,14 @@ async function confirm(page: Page, name: string, options: { reference?: string; 
   await expect(dialog.getByRole("button", { name: "Confirm action", exact: true })).toBeDisabled();
   await dialog.getByRole("switch").click(); await dialog.getByRole("button", { name: "Confirm action", exact: true }).click();
 }
+for (const width of [1440, 390]) test(`governed order detail respects ERP navigation at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 1000 });
+  const evidence = await mock(page, { action: "FinanceRelease" }); await page.goto(`${root}/${id}`);
+  await expectOrderWorkspaceBounds(page, width, page.getByRole("tab", { name: "Overview" }));
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByRole("heading", { name: "Approval and sending history" })).toBeVisible();
+  expect(evidence.writes).toHaveLength(0);
+});
 test("Finance-only operator discovers scoped orders and reviews exact amounts without general PO read", async ({ page }) => {
   const evidence = await mock(page); await page.goto(root);
   await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toBeVisible();

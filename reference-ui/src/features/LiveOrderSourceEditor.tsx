@@ -109,9 +109,9 @@ function SourceEditor({ id, scopeKey }: { id?: string; scopeKey: string }) {
     finally { if (alive.current) setBusy(false); }
   }
   if (!canWrite) return <div className="p-5 sm:p-8" role="alert">You do not have access to {id ? "edit linked order drafts" : "create orders from approved requests"}.</div>;
-  return <div className="-mx-5 -mt-5 min-h-[calc(100dvh-5rem)] bg-[#f7f8fb] pb-20 sm:-mx-8 sm:-mt-8">
-    <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-5 py-5 sm:px-8"><div>
-      <h1 className="flex items-center gap-2 text-xl font-medium tracking-tight"><ShoppingBag size={23} strokeWidth={1.4} />{id ? "Edit linked order draft" : "Create order from approved requests"}</h1>
+  return <div className="min-h-[calc(100dvh-5rem)] bg-background pb-20">
+    <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-5 py-5 sm:px-8"><div className="min-w-0">
+      <h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} strokeWidth={1.4} className="shrink-0" />{id ? "Edit linked order draft" : "Create order from approved requests"}</h1>
       <p className="mt-1 text-sm text-muted-foreground">Each line keeps its approved request. ERP rechecks sources, prices, quantities and access when you save.</p></div>
       <Button type="button" variant="ghost" aria-label="Close editor" disabled={busy} onClick={() => navigate(id ? `/purchase-orders/${id}` : "/purchase-orders")}><X size={20} /></Button>
     </header><div className="max-w-[1260px] space-y-7 px-5 py-6 sm:px-8">
