@@ -66,6 +66,9 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || creditPath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"));
   if (state.readiness && deniedCrud) {
     const denied = <div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div>;
+    // A Core account may be allowed in another company. Keep the existing
+    // organisation selector reachable when this payment company's grant denies.
+    if (paymentPath && blockedShell) return blockedShell(denied);
     return <LiveReadiness.Provider value={state.readiness}>{requestPath
       ? <RequestApprovalJournalBoundary readiness={state.readiness} isScopeCurrent={() => currentKey.current === readinessKey}>{blockedShell ? blockedShell(denied) : denied}</RequestApprovalJournalBoundary>
       : denied}</LiveReadiness.Provider>;

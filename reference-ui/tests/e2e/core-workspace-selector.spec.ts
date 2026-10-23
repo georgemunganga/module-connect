@@ -41,7 +41,8 @@ async function setup(page: Page, coreStatus = 200) {
       return json({ tenantId: "synthetic", legalEntityId: company, principalId: principal,
         workerId: null, branch: headers["x-shell-branch-scope"] === "all" ? null : { id: branchC },
         company: { id: company, currencyCode: "ZMW" },
-        permissions: ["procurement-access", "procurement-payment-read"] });
+        permissions: company === companyA
+          ? ["procurement-access", "procurement-payment-read"] : ["procurement-access"] });
     }
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "synthetic",
       legalEntityId: headers["x-shell-entity"] || companyC, schemaReady: true,
@@ -58,10 +59,11 @@ async function setup(page: Page, coreStatus = 200) {
 test("a payment-only Core account can switch from default C to authorized company A", async ({ page }) => {
   const scope = await setup(page);
   await page.goto("/procurement/workspace/payments");
-  await expect(page.getByRole("heading", { name: "Payments Made" })).toBeVisible();
+  await expect(page.getByText("You do not have permission to open this Procurement page", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Organisation context" }).click();
   await expect(page.getByRole("button", { name: "Company A · All branches" })).toBeVisible();
   await page.getByRole("button", { name: "Company A · All branches" }).click();
+  await expect(page.getByRole("heading", { name: "Payments Made" })).toBeVisible();
   await expect.poll(() => scope.seen.some(request => request.path === "/api/procurement/v1/manual-payments"
     && request.company === companyA && request.all === "all")).toBe(true);
   expect(scope.adminCalls()).toBe(0);
