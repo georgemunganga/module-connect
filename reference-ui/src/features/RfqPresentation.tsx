@@ -37,9 +37,9 @@ export function RfqWizardLayout({ title, back, children, footer, approved = fals
   </div>;
 }
 
-export function RfqDetailLayout({ title, number, method, currency, status, back, actions, overview, items, itemCount, related, activity }: {
+export function RfqDetailLayout({ title, number, method, currency, status, back, actions, overview, items, itemCount, related, relatedFootnote, activity }: {
   title: string; number: string; method: string; currency: string; status: string; back: string;
-  actions?: ReactNode; overview: ReactNode; items: ReactNode; itemCount: number; related?: ReactNode; activity?: ReactNode;
+  actions?: ReactNode; overview: ReactNode; items: ReactNode; itemCount: number; related?: ReactNode; relatedFootnote?: string; activity?: ReactNode;
 }) {
   const [active, setActive] = useState("overview");
   return <div className="min-h-[calc(100dvh-5rem)] bg-muted/30">
@@ -52,7 +52,7 @@ export function RfqDetailLayout({ title, number, method, currency, status, back,
     <div className="mx-auto max-w-7xl space-y-5 p-5 sm:p-8">
       <div hidden={active !== "overview"} inert={active !== "overview" ? true : undefined}>{overview}</div>
       {active === "items" && <DetailSection title="Items / Line Details">{items}</DetailSection>}
-      {active === "related" && <DetailSection title="Related records">{related}<p className="text-sm text-muted-foreground">Related bids, purchase orders and awards are not available yet.</p></DetailSection>}
+      <div hidden={active !== "related"} inert={active !== "related" ? true : undefined}><DetailSection title="Related records">{related}<p className="text-sm text-muted-foreground">{relatedFootnote ?? "Related bids, purchase orders and awards are not available yet."}</p></DetailSection></div>
       {active === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not available for this quote request yet.</p></DetailSection>}
       {active === "history" && <DetailSection title="History">{activity || <p className="text-sm text-muted-foreground">An activity history is not available for this quote request yet.</p>}</DetailSection>}
     </div>
