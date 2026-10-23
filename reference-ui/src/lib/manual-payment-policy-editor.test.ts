@@ -12,12 +12,12 @@ describe("manual payment policy editor", () => {
     expect(parseManualPaymentPolicy(json)).toEqual([{ currencyCode: "ZMW", maximumExact: "0.0001" },
       { currencyCode: "USD", maximumExact: "99999999999999.9999" }]);
   });
-  it.each([[], [{ currencyCode: "ZMW", maximumExact: "" }],
-    [{ currencyCode: "ZMW", maximumExact: "1.00001" }],
-    [{ currencyCode: "ZMW", maximumExact: "0" }],
-    [{ currencyCode: "ZMW", maximumExact: "1" }, { currencyCode: "zmw", maximumExact: "2" }]])
-  ("does not invent payment authority for missing or invalid maxima", rows => {
-    expect(() => serializeManualPaymentPolicy(rows)).toThrow();
+  it("does not invent payment authority for missing or invalid maxima", () => {
+    for (const rows of [[], [{ currencyCode: "ZMW", maximumExact: "" }],
+      [{ currencyCode: "ZMW", maximumExact: "1.00001" }],
+      [{ currencyCode: "ZMW", maximumExact: "0" }],
+      [{ currencyCode: "ZMW", maximumExact: "1" }, { currencyCode: "zmw", maximumExact: "2" }]])
+      expect(() => serializeManualPaymentPolicy(rows)).toThrow();
   });
   it("refuses to edit a policy that weakens independent review or adds unknown fields", () => {
     const valid = JSON.parse(serializeManualPaymentPolicy([{ currencyCode: "ZMW", maximumExact: "1" }]));
