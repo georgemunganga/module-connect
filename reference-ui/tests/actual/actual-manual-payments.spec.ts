@@ -64,6 +64,40 @@ async function mutation(page: Page, method: string, suffix: string, action: () =
   return result;
 }
 
+async function nextManualPolicyDay(page: Page): Promise<string> {
+  type PolicySummary = { id: string; policyKey: string; state: string; effectiveFrom: string };
+  const policyKey = 'MANUAL_PAYMENT_REVIEW';
+  const saved: PolicySummary[] = [];
+  let total: number | null = null;
+  for (let pageNo = 1; pageNo <= 100; pageNo++) {
+    const response = await page.request.get(`/api/procurement/v1/configuration/policies?page=${pageNo}&pageSize=100&key=${policyKey}`, {
+      headers: { 'X-Shell-Entity': f().companyId }, failOnStatusCode: false });
+    expect(response.status(), `read full saved ${policyKey} page ${pageNo}`).toBe(200);
+    const body = await response.json() as { items?: PolicySummary[]; total?: number; page?: number; pageSize?: number };
+    if (!Array.isArray(body.items) || !Number.isSafeInteger(body.total) || body.total! < 0
+      || body.page !== pageNo || body.pageSize !== 100 || body.items.length > 100
+      || body.items.some(item => !uuid.test(item.id) || item.policyKey !== policyKey
+        || typeof item.state !== 'string' || !Number.isFinite(Date.parse(item.effectiveFrom)))
+      || total !== null && body.total !== total) throw new Error('Saved payment policy history was incomplete');
+    total = body.total!;
+    saved.push(...body.items);
+    if (saved.length === total) {
+      if (new Set(saved.map(item => item.id)).size !== saved.length)
+        throw new Error('Saved payment policy history contained duplicate versions');
+      const dayMs = 86_400_000;
+      const today = new Date();
+      const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+      const latestPublishedFutureStart = Math.max(todayUtc, ...saved.filter(item => item.state === 'Published')
+        .map(item => Date.parse(item.effectiveFrom)).filter(start => start > Date.now())
+        .map(start => Math.floor(start / dayMs) * dayMs));
+      return new Date(latestPublishedFutureStart + 2 * dayMs).toISOString().slice(0, 10);
+    }
+    if (saved.length > total || body.items.length === 0)
+      throw new Error('Saved payment policy history stopped before its reported total');
+  }
+  throw new Error('Saved payment policy history exceeded the bounded read');
+}
+
 // No route interception, synthetic identity headers, fixture storage injection or
 // browser-side transaction stores: each step goes through the actual local host.
 test('real cookie roles complete one independently reviewed manual payment', async ({ page }) => {
@@ -151,10 +185,10 @@ test('real cookie roles complete one independently reviewed manual payment', asy
 
 test('real policy author and publisher return, revise and publish explicit future payment limits', async ({ page }) => {
   const settings = '/settings/modules/payments-made/approvals';
-  // Two UTC days ahead leaves publication time to complete even near midnight.
-  const effectiveDay = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
   await login(page, 'policy_author', settings);
   await expect(page.getByRole('heading', { name: 'Payments Made settings' })).toBeVisible();
+  // Read all existing versions before choosing a date; prior real runs remain retained.
+  const effectiveDay = await nextManualPolicyDay(page);
   await page.getByRole('button', { name: 'Add draft' }).click();
   await page.getByLabel('Effective from (UTC)').fill(effectiveDay);
   await page.getByLabel('Currency 1').fill('ZMW');
@@ -166,11 +200,14 @@ test('real policy author and publisher return, revise and publish explicit futur
   expect(JSON.parse(input.rulesJson)).toMatchObject({ schemaVersion: 1, identitySchemaVersion: 2,
     approvalType: 'SingleApprover', independentCreatorApprover: true,
     independentRecorderConfirmer: true, maximumByCurrency: { ZMW: '100.0000' } });
-  const draft = await created.json() as { id: string; version: number; state: string };
+  const draft = await created.json() as { id: string; version: number; state: string; policyVersionNumber: number };
   expect(uuid.test(draft.id)).toBe(true);
   expect(draft.state).toBe('Draft');
+  expect(Number.isSafeInteger(draft.policyVersionNumber) && draft.policyVersionNumber > 0).toBe(true);
   const policyId = draft.id;
-  const row = () => page.getByRole('row').filter({ hasText: effectiveDay });
+  const row = () => page.getByRole('table').getByRole('row').filter({
+    has: page.getByRole('cell', { name: String(draft.policyVersionNumber), exact: true }),
+  });
   await expect(row()).toBeVisible();
   await row().getByRole('button', { name: 'Send for review' }).click();
   await page.getByLabel('Reason').fill('Private review of an explicit future limit');
