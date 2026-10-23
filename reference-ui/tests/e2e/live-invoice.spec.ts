@@ -246,7 +246,7 @@ test("bill edit saves through the scoped API and survives refresh, then cancella
   await page.getByLabel("Cancellation reason").fill("Duplicate received document");
   page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "Cancel invoice", exact: true }).click();
-  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
+  await expect(page.getByText("Cancelled", { exact: true }).first()).toBeVisible();
   await page.reload();
   await page.getByRole("tab", { name: "Items (1)", exact: true }).click();
   await expect(page.getByText("Corrected original supplies", { exact: true })).toBeVisible();

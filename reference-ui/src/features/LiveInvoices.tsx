@@ -110,7 +110,7 @@ function InvoiceListRecord() {
   const last = data && first ? Math.min(page * pageSize, data.total) : 0;
   const renderCell = (invoice: InvoiceSummary, column: ListColumn) => {
     if (column.key === "date") return <span className="text-muted-foreground">{invoice.invoiceDate}</span>;
-    if (column.key === "number") return <Link className="block text-left" to={`/bills/${invoice.id}`}>
+    if (column.key === "number") return <Link aria-label={invoice.invoiceNumber} className="block text-left" to={`/bills/${invoice.id}`}>
       <span className="font-semibold text-primary">{invoice.invoiceNumber}</span>
       <span className="mt-1 block text-xs text-muted-foreground">Supplier invoice</span>
     </Link>;
