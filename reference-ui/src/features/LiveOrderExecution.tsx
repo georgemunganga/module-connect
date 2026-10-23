@@ -169,7 +169,7 @@ function ExecutionDetail({ id, scopeKey }: { id: string; scopeKey: string }) {
         {data.issued.map((entry) => <p key={entry.id} className="text-sm">Revision {entry.revisionNumber} authorised for sending · {new Date(entry.authorizedAt).toLocaleString()}</p>)}
         {data.deliveries.map((entry) => <p key={entry.id} className="text-sm">{entry.outcome} · {entry.channel} · {entry.evidenceReference} · {new Date(entry.observedAt).toLocaleString()}</p>)}
         {!data.cases.length && !data.issued.length && <ActivityTimeline items={[]} />}
-      </div></Panel>
+      </div></Panel>}
       {decision && !pending && <ApprovalDecisionDialog action={decision.action} recordLabel="order" reason={decision.reason} busy={busy} error={error}
         onReason={(reason) => setDecision({ ...decision, reason })} onCancel={() => setDecision(null)} onConfirm={() => {
           if (decision.action !== "Approve" && !decision.reason.trim()) return;
