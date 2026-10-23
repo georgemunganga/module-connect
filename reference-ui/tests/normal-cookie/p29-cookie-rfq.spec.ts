@@ -60,6 +60,9 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
   if (test.info().project.use.trace !== 'off' || test.info().project.use.screenshot !== 'off'
     || test.info().project.use.video !== 'off') throw new Error('Credential-safe proof requires capture disabled');
   retain(); let step = 'buyer-login', failed = false;
+  const network: Array<{ path: string; method: string; status: number }> = [];
+  const progress = (next: string) => { step = next; evidence.step = next; retain(); };
+  let inspectedPage: import('@playwright/test').Page | undefined;
   const context = await browser.newContext({ baseURL: proxy.origin, ignoreHTTPSErrors: true });
   try {
     const login = await api(() => context.request.post('/api/hrm/auth/login', {
@@ -74,7 +77,7 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
     const meta = await api(() => context.request.get('/api/procurement/v1/meta', { headers: selection }));
     expect(meta.status()).toBe(200); expect((await body(meta)).capabilities?.principalSourcingSourceDrafts).toBe(true);
 
-    step = 'approved-source-preview';
+    progress('approved-source-preview');
     // A buyer need not have generic request-read: use the dedicated scoped
     // sourcing picker and find the exact approved fixture line across pages.
     let candidate: Record<string, any> | undefined;
@@ -91,12 +94,19 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
     const requestNumber = candidate!.requestNumber as string;
     expect(typeof requestNumber === 'string' && requestNumber.length > 0).toBe(true);
 
-    step = 'create-principal-draft';
-    const page = await context.newPage();
+    progress('create-principal-draft');
+    const page = await context.newPage(); inspectedPage = page;
+    page.on('response', response => {
+      const url = new URL(response.url());
+      if (url.pathname.startsWith('/api/') && network.length < 100) network.push({
+        path: url.pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id'),
+        method: response.request().method(), status: response.status(),
+      });
+    });
     // Candidate shell selection is checked by Core before each business call.
     await page.addInitScript(value => localStorage.setItem('erp.shell.state.v1', JSON.stringify(value)),
       { entityId: fixture.companyId, branch: fixture.branchId });
-    await page.goto('/procurement/workspace/rfqs/new?source=principal-approved');
+    await page.goto('/procurement/workspace/rfqs/new?source=principal-approved', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Use approved purchase requests', exact: true })).toBeVisible();
     await page.getByLabel('Find request or item').fill(requestNumber);
     const row = page.getByRole('row').filter({ hasText: requestNumber });
@@ -116,11 +126,12 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
     evidence.createCommandKey = createCommandKey; retain();
     await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
 
-    step = 'reload-and-cancel';
-    await page.reload(); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    progress('reload-draft-detail');
+    await page.reload({ waitUntil: 'domcontentloaded' }); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Items (1)' }).click();
     await expect(page.getByRole('cell', { name: candidate!.description })).toBeVisible();
     await page.getByRole('tab', { name: 'Overview' }).click();
+    progress('cancel-draft');
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Private principal RFQ draft cancellation');
     const cancelledWaiting = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/${created.eventId}/principal-source-cancel`)
       && response.request().method() === 'POST');
@@ -130,12 +141,26 @@ test('workerless buyer creates, reloads and cancels an internal RFQ from approve
     expect(guid(cancelCommandKey)).toBe(true); expect(cancelCommandKey).not.toBe(createCommandKey);
     const cancelled = await cancelledResponse.json() as Record<string, any>;
     expect(cancelled.status).toBe('Cancelled'); expect(cancelled.version).toBe(created.version + 1);
-    await page.reload(); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
-    await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
     evidence.cancelledVersion = cancelled.version; evidence.cancelCommandKey = cancelCommandKey;
+    progress('cancelled-ui-readback');
+    await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
+    progress('reload-cancelled-detail');
+    await page.reload({ waitUntil: 'domcontentloaded' }); await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
     evidence.principalRfqDraftVerified = true;
     evidence.status = 'PASS_NORMAL_COOKIE_P29_INTERNAL_DRAFT_UI_ONLY'; retain();
-  } catch { failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step; }
+  } catch (error) {
+    failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step;
+    // Typed diagnostics only: never error messages, cookies, headers or request bodies.
+    const matcher = (error as { matcherResult?: { name?: unknown } })?.matcherResult?.name;
+    evidence.assertion = typeof matcher === 'string' && /^[A-Za-z]+$/.test(matcher) ? matcher : 'Unclassified';
+    evidence.apiResponses = network;
+    if (inspectedPage && !inspectedPage.isClosed()) {
+      evidence.cancelledTextMatches = await inspectedPage.getByText('Cancelled', { exact: true }).count().catch(() => -1);
+      evidence.alertCount = await inspectedPage.getByRole('alert').count().catch(() => -1);
+      evidence.headingCount = await inspectedPage.getByRole('heading').count().catch(() => -1);
+    }
+  }
   finally {
     await context.close().catch(() => undefined);
     writeFileSync(fixture.completionPath, JSON.stringify({ schemaVersion: 2, challenge: fixture.challenge, status: 'BrowserFinished' }) + '\n',
