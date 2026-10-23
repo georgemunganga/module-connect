@@ -33,9 +33,9 @@ function iso(value: string) { return value ? new Date(value).toISOString() : nul
 
 /** One reactive context boundary clears both governed and ad-hoc surfaces immediately. */
 function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
-  const company = useCompany(); const { selection } = useErpShell(); const { id = "" } = useParams();
+  const company = useCompany(); const { selection, authEpoch } = useErpShell(); const { id = "" } = useParams();
   const [query] = useSearchParams(); const governed = query.get("source") === "approved";
-  const key = JSON.stringify([company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
+  const key = JSON.stringify([authEpoch, company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
     company.principalId, company.permissions, company.capabilities, governed, view, id]);
   return <SourcingPageContent key={key} view={view} governed={governed} id={id} />;
 }

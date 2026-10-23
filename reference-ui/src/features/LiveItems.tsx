@@ -304,7 +304,7 @@ function LiveItemDetailBody() {
       </aside>
       <main className="min-w-0 flex-1">
         <header className="sticky top-14 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 py-4 sm:px-8">
-          <div className="min-w-0"><Button type="button" variant="ghost" disabled={busy || writeUnconfirmed} onClick={() => navigate("/items")}><ArrowLeft size={13} /> Items</Button><h1 className="break-words text-xl font-semibold">{item.name}</h1><p className="text-sm text-muted-foreground">{item.code} · {item.kind} · {item.unitCode}</p></div>
+          <div className="min-w-0"><Button type="button" variant="ghost" disabled={busy || writeUnconfirmed} onClick={() => navigate("/items")}><ArrowLeft size={13} /> Items</Button><h1 className="break-words text-2xl font-semibold">{item.name}</h1><p className="text-sm text-muted-foreground">{item.code} · {item.kind} · {item.unitCode}</p></div>
           <div className="flex flex-wrap items-center gap-2"><Badge>{item.status}</Badge>
             {!viewOnly && !writeUnconfirmed && item.status === "Inactive" && <Link to={`/items/${item.id}/edit`} aria-disabled={busy} onClick={event => { if (busyRef.current || busy) event.preventDefault(); }}><Button variant="secondary" disabled={busy}>Edit item</Button></Link>}
             {!viewOnly && item.status === "Active" && <Button variant="secondary" disabled={busy || writeUnconfirmed} onClick={() => void retire()}>Make inactive</Button>}
