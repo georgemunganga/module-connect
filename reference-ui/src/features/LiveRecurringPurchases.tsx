@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Plus } from "lucide-react";
-import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
+import { ArrowLeft, Plus } from "lucide-react";
+import { Badge, Button, Field, Input, Modal, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { claimRecurringWrite, confirmRecurringWrite, recurringWriteLocked } from "../lib/recurring-write-lock";
-import { RecordTable } from "../components/data/RecordTable";
+import { compareExactDecimal } from "../lib/decimal-comparison";
+import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
+import { ActivityTimeline, DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
@@ -21,7 +23,10 @@ function useRecurringScope() {
   if (!readiness) throw new Error("Recurring purchases require an ERP company.");
   const writeScope = JSON.stringify([readiness.tenantId, readiness.legalEntityId,
     readiness.principalId, shell.selection.branch ?? ""]);
-  return { ...readiness, selectedBranch: shell.selection.branch, writeScope, key: JSON.stringify([writeScope, shell.authEpoch]) };
+  const companyReady = !shell.selection.entityId || shell.selection.entityId === readiness.legalEntityId;
+  return { ...readiness, selectedBranch: shell.selection.branch, companyReady, writeScope,
+    key: JSON.stringify([writeScope, shell.selection.entityId ?? "", shell.authEpoch,
+      readiness.capabilities.recurringPurchaseDraft, readiness.permissions.join("|")]) };
 }
 function emptyDraft(currency: string): RecurringPurchaseDraft {
   return { supplierId: "", supplierContractId: null, title: "", frequency: "Monthly",
@@ -29,7 +34,7 @@ function emptyDraft(currency: string): RecurringPurchaseDraft {
     expectedAmount: "" };
 }
 function canRead(scope: ReturnType<typeof useRecurringScope>) {
-  return scope.capabilities.recurringPurchaseDraft && scope.permissions.includes("procurement-recurring-read");
+  return scope.companyReady && scope.capabilities.recurringPurchaseDraft && scope.permissions.includes("procurement-recurring-read");
 }
 function canCreate(scope: ReturnType<typeof useRecurringScope>) {
   return canRead(scope) && scope.permissions.includes("procurement-recurring-create");
@@ -41,39 +46,53 @@ function canEdit(scope: ReturnType<typeof useRecurringScope>) {
 export function LiveRecurringPurchaseList() {
   const scope = useRecurringScope();
   const [page, setPage] = useState(1);
-  const [result, setResult] = useState<{ key: string; data: RecurringPurchasePage } | null>(null);
+  const [result, setResult] = useState<{ key: string; page: number; data: RecurringPurchasePage } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [revision, setRevision] = useState(0);
   useEffect(() => { setPage(1); }, [scope.key]);
   useEffect(() => {
-    if (!canRead(scope)) return;
+    if (!canRead(scope)) { setResult(null); setLoading(false); return; }
     const controller = new AbortController();
     setResult(null); setError(""); setLoading(true);
     listRecurringPurchases(scope.legalEntityId, page, controller.signal)
       .then((data) => {
         data.items.forEach(record => recurringPurchaseForPrincipal(record, scope.principalId, scope.selectedBranch));
-        if (!controller.signal.aborted) setResult({ key: scope.key, data });
+        if (!controller.signal.aborted) setResult({ key: scope.key, page, data });
       })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [scope.key, page, scope.legalEntityId]);
-  const data = result?.key === scope.key ? result.data : null;
+  }, [scope.key, page, scope.legalEntityId, revision]);
+  const data = result?.key === scope.key && result.page === page ? result.data : null;
+  const action = canCreate(scope) ? <Link to="/recurring-bills/new"><Button><Plus size={16} className="mr-2 inline" />New recurring purchase</Button></Link> : undefined;
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Recurring purchases" subtitle="Plan purchases that repeat. This schedule does not create a bill or payment." actions={canCreate(scope) ? <Link to="/recurring-bills/new"><Button><Plus size={16} className="mr-2 inline" />New recurring purchase</Button></Link> : undefined} />
-    {!canRead(scope) ? <p role="alert">You cannot view recurring purchases for this company.</p> :
-      <Panel><div className="p-5">
-        {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
-        {loading ? <p role="status">Loading recurring purchases…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
-          <thead><tr><th>Reference</th><th>Purchase</th><th>Repeats</th><th>Next expected</th><th>Expected each time</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>{data.items.map((item) => <tr key={item.id}><td>{item.number}</td><td><Link to={`/recurring-bills/${item.id}`} className="font-medium text-primary hover:underline">{item.title}</Link></td><td>{item.frequency}</td><td>{item.nextCycleOn}</td><td>{item.currencyCode} {item.exactExpectedAmount}</td><td><Badge>{item.status}</Badge></td><td><Link to={`/recurring-bills/${item.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
-        </RecordTable></div> : data ? <EmptyState title="No recurring purchases yet" description="Add an expected schedule for repeat goods or services." action={canCreate(scope) ? <Link to="/recurring-bills/new"><Button>New recurring purchase</Button></Link> : undefined} /> : null}
-        {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
-      </div></Panel>}
+    {!scope.companyReady ? <p role="status">Checking the selected company…</p>
+      : !canRead(scope) ? <p role="alert">You cannot view recurring purchases for this company.</p>
+        : <LiveRecordDirectory key={`${scope.key}:${page}`} title="Recurring purchases" entity="recurring purchases"
+          subtitle="Plan purchases that repeat. This schedule does not create a bill or payment."
+          columns={[{ key: "date", label: "Created", width: 130 }, { key: "number", label: "Purchase", width: 260 },
+            { key: "frequency", label: "Repeats", width: 130 }, { key: "next", label: "Next expected", width: 150 },
+            { key: "amount", label: "Expected each time", width: 190 }, { key: "status", label: "Status", width: 120 }]}
+          rows={(data?.items ?? []).map(item => ({ id: item.id, number: item.number, title: item.title,
+            status: item.status, path: `/recurring-bills/${item.id}`, fields: {
+              date: item.createdAt.slice(0, 10), frequency: item.frequency, next: item.nextCycleOn,
+              amount: `${item.currencyCode} ${item.exactExpectedAmount}`, currency: item.currencyCode, amountValue: item.exactExpectedAmount } }))}
+          sortComparators={{ amount: (left, right) => left.fields.currency.localeCompare(right.fields.currency)
+            || compareExactDecimal(left.fields.amountValue, right.fields.amountValue) }}
+          loading={loading} error={error} total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25}
+          onPage={setPage} onRefresh={() => setRevision(value => value + 1)} action={action}
+          emptyTitle="No recurring purchases yet" emptyDescription="Add an expected schedule for repeat goods or services." />}
   </div>;
 }
 
 export function LiveRecurringPurchaseEditor() {
+  const { id } = useParams();
+  const scope = useRecurringScope();
+  return <RecurringPurchaseEditorRecord key={`${scope.key}:${id ?? "new"}`} />;
+}
+
+function RecurringPurchaseEditorRecord() {
   const { id } = useParams();
   const navigate = useNavigate();
   const scope = useRecurringScope();
@@ -93,12 +112,16 @@ export function LiveRecurringPurchaseEditor() {
   const [saving, setSaving] = useState(false);
   const [saveBlock, setSaveBlock] = useState<"unknown" | "stale" | null>(null);
   const [error, setError] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [leaveDialog, setLeaveDialog] = useState<"discard" | "review" | null>(null);
   useEffect(() => {
     generation.current += 1;
     const controller = new AbortController();
+    pending.current = false;
     setLoaded(null); setVersion(null); setRecordStatus(null); setSaving(false); setError(""); setSaveBlock(recurringWriteLocked(writeScope) ? "unknown" : null); setLoading(Boolean(id));
-    setVendors([]); setContracts([]); setDraft(emptyDraft(scope.defaultCurrencyCode));
-    if (id) getRecurringPurchase(scope.legalEntityId, id, controller.signal)
+    setDirty(false); setLeaveDialog(null);
+    setVendors([]); setContracts([]); setSearch(""); setDraft(emptyDraft(scope.defaultCurrencyCode));
+    if (id && scope.companyReady && canRead(scope)) getRecurringPurchase(scope.legalEntityId, id, controller.signal)
       .then((record) => { if (!controller.signal.aborted) {
         recurringPurchaseForPrincipal(record, scope.principalId, scope.selectedBranch);
         setDraft({ supplierId: record.supplierId, supplierContractId: record.supplierContractId,
@@ -130,11 +153,18 @@ export function LiveRecurringPurchaseEditor() {
     return () => controller.abort();
   }, [context, scope.legalEntityId]);
   const field = <K extends keyof RecurringPurchaseDraft>(key: K, value: RecurringPurchaseDraft[K]) =>
-    setDraft((before) => ({ ...before, [key]: value }));
+    { if (saving || saveBlock) return; setDraft((before) => ({ ...before, [key]: value })); setDirty(true); };
   const writable = id ? canEdit(scope) : canCreate(scope);
+  const reviewPath = id ? `/recurring-bills/${id}` : "/recurring-bills";
+  function leave() {
+    if (pending.current || saving) return;
+    if (saveBlock) { setLeaveDialog("review"); return; }
+    if (dirty) { setLeaveDialog("discard"); return; }
+    navigate("/recurring-bills");
+  }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!writable || pending.current || saveBlock) return;
+    if (!writable || pending.current || saveBlock || leaveDialog) return;
     if (id && (loaded !== context || version === null || recordStatus !== "Draft")) { setError("This purchase cannot be edited. Open the saved record."); return; }
     const issue = validateRecurringPurchase(draft);
     if (issue) { setError(issue); return; }
@@ -157,22 +187,28 @@ export function LiveRecurringPurchaseEditor() {
         if (cause instanceof RecurringPurchaseError && cause.status === 409) setSaveBlock("stale");
         else if (!isDefiniteRecurringRejection(cause)) setSaveBlock("unknown");
       }
-    } finally { pending.current = false; if (active()) setSaving(false); }
+    } finally { if (active()) { pending.current = false; setSaving(false); } }
   }
   return <div className="p-5 sm:p-8">
+    <Button variant="ghost" className="mb-3" disabled={saving} onClick={leave}><ArrowLeft size={15} className="mr-1 inline" />Recurring purchases</Button>
     <PageHeader title={id ? "Edit recurring purchase" : "New recurring purchase"} subtitle="Record an expected repeat purchase. Bills and payments stay with Finance." />
-    {!writable ? <p role="alert">You cannot {id ? "edit" : "create"} recurring purchases for this company.</p>
+    {!scope.companyReady ? <p role="status">Checking the selected company…</p>
+      : !writable ? <p role="alert">You cannot {id ? "edit" : "create"} recurring purchases for this company.</p>
       : loading ? <p role="status">Loading recurring purchase…</p>
         : id && loaded !== context ? <p role="alert">{error || "This purchase is unavailable. Return to the list."}</p>
           : id && recordStatus !== "Draft" ? <p role="status">This recurring purchase is closed. <Link className="text-primary underline" to={`/recurring-bills/${id}`}>Open its saved history</Link>.</p>
-          : <form onSubmit={save} className="max-w-5xl space-y-5">
+          : <form onSubmit={save} className="max-w-6xl space-y-5">
             {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-            {saveBlock && <p role="status" className="rounded-lg border p-3 text-sm">{saveBlock === "unknown" ? "The save result was not confirmed." : "This purchase changed."} Review the saved {id ? "purchase" : "list"} to confirm the outcome. Unconfirmed writes stay blocked for this browser session. <Link className="text-primary underline" to={id ? `/recurring-bills/${id}` : "/recurring-bills"}>Review saved records</Link></p>}
-            <Panel title="Purchase schedule"><div className="grid gap-4 p-5 sm:grid-cols-2">
+            {saveBlock && <p role="status" className="rounded-lg border p-3 text-sm">{saveBlock === "unknown" ? "The save result was not confirmed." : "This purchase changed."} Review the saved {id ? "purchase" : "list"} to confirm the outcome. {saveBlock === "unknown" ? "Unconfirmed writes stay blocked for this browser session." : "Reload the saved record before making changes."} <Link className="text-primary underline" to={reviewPath}>Review saved records</Link></p>}
+            <fieldset disabled={saving || !!saveBlock} className="space-y-5">
+            <Panel title="Supplier and purchase"><div className="grid gap-4 bg-muted/30 p-5 sm:grid-cols-2">
               {!scope.permissions.includes("procurement-vendor-read") && <p className="sm:col-span-2 text-sm">Supplier browsing is not assigned to your account. A saved supplier link remains unchanged.</p>}
               <Field label="Search suppliers" className="sm:col-span-2"><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search supplier name" /></Field>
               <Field label="Supplier" className="sm:col-span-2"><Select required value={draft.supplierId} onChange={(e) => { field("supplierId", e.target.value); field("supplierContractId", null); }}><option value="">Choose a supplier</option>{draft.supplierId && !vendors.some((v) => v.id === draft.supplierId) && <option value={draft.supplierId}>Selected supplier</option>}{vendors.map((v) => <option key={v.id} value={v.id}>{v.displayName} ({v.status})</option>)}</Select></Field>
               <Field label="Purchase name" className="sm:col-span-2"><Input required maxLength={300} value={draft.title} onChange={(e) => field("title", e.target.value)} placeholder="For example, monthly cleaning" /></Field>
+            </div></Panel>
+            <Panel title="Purchase schedule"><div className="grid gap-4 p-5 sm:grid-cols-2">
+              <p className="sm:col-span-2 text-sm text-muted-foreground">Choose when the purchase is expected. Saving this plan will not create a supplier bill or payment.</p>
               <Field label="How often"><Select value={draft.frequency} onChange={(e) => field("frequency", e.target.value as RecurringPurchaseDraft["frequency"])}><option value="Weekly">Weekly</option><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option><option value="Yearly">Yearly</option></Select></Field>
               <Field label="Expected each time"><Input required inputMode="decimal" value={draft.expectedAmount} onChange={(e) => field("expectedAmount", e.target.value)} placeholder="0.00" /></Field>
               <Field label="Currency"><Input required maxLength={3} value={draft.currencyCode} onChange={(e) => field("currencyCode", e.target.value.toUpperCase())} /></Field>
@@ -181,12 +217,23 @@ export function LiveRecurringPurchaseEditor() {
               <Field label="Last expected date (optional)"><Input type="date" value={draft.lastCycleOn || ""} onChange={(e) => field("lastCycleOn", e.target.value || null)} /></Field>
               <Field label="Related contract (optional)" className="sm:col-span-2"><Select value={draft.supplierContractId || ""} onChange={(e) => field("supplierContractId", e.target.value || null)}><option value="">No contract selected</option>{draft.supplierContractId && !contracts.some((c) => c.id === draft.supplierContractId) && <option value={draft.supplierContractId}>Selected contract</option>}{contracts.filter((c) => c.supplierId === draft.supplierId && c.status !== "Cancelled").map((c) => <option key={c.id} value={c.id}>{c.title} ({c.status})</option>)}</Select></Field>
             </div></Panel>
-            <div className="flex gap-3"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save recurring purchase"}</Button><Link to="/recurring-bills"><Button variant="secondary">Back to list</Button></Link></div>
+            </fieldset>
+            <Panel title="Items and charges"><div className="p-5 text-sm text-muted-foreground">Item lines, tax and discounts are not available for recurring purchase schedules yet. The expected amount above is saved exactly as entered.</div></Panel>
+            <Panel title="Terms and notes"><div className="grid gap-4 p-5 sm:grid-cols-2"><Field label="Payment terms"><Input disabled value="" placeholder="Not saved for recurring purchases" /></Field><Field label="Notes"><Textarea disabled value="" placeholder="Not saved for recurring purchases" /></Field><p className="sm:col-span-2 text-sm text-muted-foreground">Terms and notes are not part of the current recurring purchase record.</p></div></Panel>
+            <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-3 border-y border-border bg-card/95 px-5 py-4 backdrop-blur"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save recurring purchase"}</Button><Button type="button" variant="secondary" disabled={saving} onClick={leave}>Back to list</Button><span className="ml-auto text-xs text-muted-foreground">Planned purchase only · no bill or payment created</span></footer>
           </form>}
+    {leaveDialog === "discard" && <Modal title="Discard unsaved changes?" onClose={() => setLeaveDialog(null)}><p className="text-sm text-muted-foreground">These changes have not been submitted to ERP.</p><div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setLeaveDialog(null)}>Keep editing</Button><Button variant="danger" disabled={saving} onClick={() => navigate("/recurring-bills")}>Discard changes</Button></div></Modal>}
+    {leaveDialog === "review" && <Modal title="Review saved recurring purchases" onClose={() => setLeaveDialog(null)}><p className="text-sm text-muted-foreground">{saveBlock === "unknown" ? "The save result is unconfirmed." : "The saved purchase changed while you were editing."} Open saved records to check the outcome. {saveBlock === "unknown" ? "This does not retry the save or clear its browser safety lock." : "This does not retry the save."}</p><div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setLeaveDialog(null)}>Stay on this page</Button><Button onClick={() => navigate(reviewPath)}>Review saved records</Button></div></Modal>}
   </div>;
 }
 
 export function LiveRecurringPurchaseDetail() {
+  const { id } = useParams();
+  const scope = useRecurringScope();
+  return <RecurringPurchaseDetailRecord key={`${scope.key}:${id ?? ""}`} />;
+}
+
+function RecurringPurchaseDetailRecord() {
   const { id } = useParams();
   const scope = useRecurringScope();
   const context = `${scope.key}:${id ?? ""}`;
@@ -201,11 +248,13 @@ export function LiveRecurringPurchaseDetail() {
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
+  const [tab, setTab] = useState("overview");
   useEffect(() => {
     generation.current += 1;
-    if (!id || !canRead(scope)) return;
+    if (!id || !canRead(scope)) { setLoaded(null); setLoading(false); return; }
     const controller = new AbortController();
-    setLoaded(null); setLoading(true); setBusy(false); setReason(""); setError("");
+    busyRef.current = false;
+    setLoaded(null); setLoading(true); setBusy(false); setReason(""); setError(""); setTab("overview");
     getRecurringPurchase(scope.legalEntityId, id, controller.signal)
       .then((record) => { if (!controller.signal.aborted) { setLoaded({ key: context, record: recurringPurchaseForPrincipal(record, scope.principalId, scope.selectedBranch) }); setBlocked(recurringWriteLocked(writeScope)); } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
@@ -232,28 +281,63 @@ export function LiveRecurringPurchaseDetail() {
         setError(errorText(cause));
         if (!isDefiniteRecurringRejection(cause) || cause.status === 409) setBlocked(true);
       }
-    } finally { busyRef.current = false; if (active()) setBusy(false); }
+    } finally { if (active()) { busyRef.current = false; setBusy(false); } }
   }
   return <div className="p-5 sm:p-8">
-    {!canRead(scope) ? <p role="alert">You cannot view recurring purchases for this company.</p>
+    {!scope.companyReady ? <p role="status">Checking the selected company…</p>
+      : !canRead(scope) ? <p role="alert">You cannot view recurring purchases for this company.</p>
       : loading ? <p role="status">Loading recurring purchase…</p>
         : record ? <>
-          <PageHeader title={record.title} subtitle={`${record.number} · Planned repeat purchase`} actions={canEdit(scope) && record.status === "Draft" ? <Link to={`/recurring-bills/${record.id}/edit`}><Button>Edit</Button></Link> : undefined} />
+          <Link to="/recurring-bills" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"><ArrowLeft size={15} />Recurring purchases</Link>
+          <PageHeader title={record.title} subtitle={`${record.number} · Planned repeat purchase`}
+            actions={<div className="flex flex-wrap items-center gap-2"><Badge>{record.status}</Badge>{canEdit(scope) && record.status === "Draft" && <Link to={`/recurring-bills/${record.id}/edit`}><Button>Edit</Button></Link>}<Button variant="secondary" disabled title="Only editing and closing a recurring purchase are available in ERP.">More</Button></div>} />
           {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
           {blocked && <p role="status" className="mb-4">The close result is uncertain or this version changed. Reloading does not retry the close action. <Button variant="secondary" onClick={() => setRefresh((value) => value + 1)}>Reload saved purchase</Button></p>}
-          <Panel title="Schedule"><dl className="grid gap-5 p-5 text-sm sm:grid-cols-2">
-            <div><dt className="text-muted-foreground">Status</dt><dd><Badge>{record.status}</Badge></dd></div>
-            <div><dt className="text-muted-foreground">Owner</dt><dd>You</dd></div>
-            <div><dt className="text-muted-foreground">Supplier</dt><dd><Link className="text-primary underline" to={`/vendors/${record.supplierId}`}>Open supplier</Link></dd></div>
-            <div><dt className="text-muted-foreground">Related contract</dt><dd>{record.supplierContractId ? <Link className="text-primary underline" to={`/contracts/${record.supplierContractId}`}>Open contract</Link> : "None"}</dd></div>
-            <div><dt className="text-muted-foreground">Repeats</dt><dd>{record.frequency}</dd></div>
-            <div><dt className="text-muted-foreground">Expected each time</dt><dd>{record.currencyCode} {record.exactExpectedAmount}</dd></div>
-            <div><dt className="text-muted-foreground">First expected</dt><dd>{record.firstCycleOn}</dd></div>
-            <div><dt className="text-muted-foreground">Next expected</dt><dd>{record.nextCycleOn}</dd></div>
-            <div><dt className="text-muted-foreground">Last expected</dt><dd>{record.lastCycleOn || "No end date"}</dd></div>
-            {record.closedReason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Closure reason</dt><dd>{record.closedReason}</dd></div>}
-          </dl></Panel>
-          {canEdit(scope) && record.status === "Draft" && <Panel title="Close recurring purchase" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} /></Field><Button variant="danger" disabled={busy || blocked || !reason.trim()} onClick={() => void close()}>{busy ? "Closing…" : "Close schedule"}</Button></div></Panel>}
+          <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "schedule", label: "Schedule" },
+            { key: "related", label: "Related" }, { key: "comments", label: "Comments" },
+            { key: "history", label: "History" }]} active={tab} onChange={setTab} />
+          <div className="mt-5 space-y-5">
+            {tab === "overview" && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(270px,0.85fr)]">
+              <DetailSection title="Recurring purchase overview" action={<Badge>{record.status}</Badge>}>
+                <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  <DetailValue label="Purchase number" value={record.number} />
+                  <DetailValue label="Owner" value="You" />
+                  <DetailValue label="Supplier" value={scope.permissions.includes("procurement-vendor-read")
+                    ? <Link className="text-primary underline" to={`/vendors/${record.supplierId}`}>Open supplier</Link> : "Supplier access unavailable"} />
+                  <DetailValue label="Expected each time" value={`${record.currencyCode} ${record.exactExpectedAmount}`} />
+                  <DetailValue label="Repeats" value={record.frequency} />
+                  <DetailValue label="Next expected" value={record.nextCycleOn} />
+                </dl>
+                <p className="mt-5 text-sm text-muted-foreground">This is a purchase plan. It does not create bills or payments.</p>
+              </DetailSection>
+              <div className="space-y-5">
+                <DetailSection title="Record activity"><ActivityTimeline items={[
+                  { id: "created", title: "Purchase plan created", date: record.createdAt },
+                  ...(record.closedAt ? [{ id: "closed", title: "Schedule closed", detail: record.closedReason || undefined, date: record.closedAt, tone: "warning" as const }] : []),
+                ]} /></DetailSection>
+                {canEdit(scope) && record.status === "Draft" && <DetailSection title="Close recurring purchase"><div className="space-y-3"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} /></Field><Button variant="danger" disabled={busy || blocked || !reason.trim()} onClick={() => void close()}>{busy ? "Closing…" : "Close schedule"}</Button></div></DetailSection>}
+              </div>
+            </div>}
+            {tab === "schedule" && <DetailSection title="Repeat schedule"><dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <DetailValue label="How often" value={record.frequency} /><DetailValue label="Expected each time" value={`${record.currencyCode} ${record.exactExpectedAmount}`} />
+              <DetailValue label="First expected" value={record.firstCycleOn} /><DetailValue label="Next expected" value={record.nextCycleOn} />
+              <DetailValue label="Last expected" value={record.lastCycleOn || "No end date"} /><DetailValue label="Status" value={<Badge>{record.status}</Badge>} />
+              {record.closedReason && <DetailValue label="Closure reason" value={record.closedReason} />}
+            </dl><p className="mt-5 text-sm text-muted-foreground">The dates describe an expected purchase. No bill is generated automatically.</p></DetailSection>}
+            {tab === "related" && <DetailSection title="Related records"><dl className="grid gap-5 sm:grid-cols-2">
+              <DetailValue label="Supplier" value={scope.permissions.includes("procurement-vendor-read")
+                ? <Link className="text-primary underline" to={`/vendors/${record.supplierId}`}>Open supplier</Link> : "Supplier access unavailable"} />
+              <DetailValue label="Contract" value={record.supplierContractId
+                ? scope.permissions.includes("procurement-contract-read")
+                  ? <Link className="text-primary underline" to={`/contracts/${record.supplierContractId}`}>Open contract</Link> : "Contract access unavailable"
+                : "No contract selected"} />
+            </dl><p className="mt-5 text-sm text-muted-foreground">Linked bills, payments, attachments and comments are not available for this purchase plan.</p></DetailSection>}
+            {tab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not connected to saved recurring purchases yet. No comment will be stored in this browser as an ERP record.</p></DetailSection>}
+            {tab === "history" && <DetailSection title="Saved history"><ActivityTimeline items={[
+              { id: "created", title: "Purchase plan created", date: record.createdAt },
+              ...(record.closedAt ? [{ id: "closed", title: "Schedule closed", detail: record.closedReason || undefined, date: record.closedAt, tone: "warning" as const }] : []),
+            ]} /><p className="mt-5 text-sm text-muted-foreground">Detailed edit and approval history is not available in this view.</p></DetailSection>}
+          </div>
         </> : <p role="alert">{error || "Recurring purchase not found."}</p>}
     <Link to="/recurring-bills" className="mt-5 inline-block text-sm text-primary hover:underline">Back to recurring purchases</Link>
   </div>;

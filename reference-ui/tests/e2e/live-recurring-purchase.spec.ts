@@ -11,12 +11,12 @@ const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDra
 const permissions = ["procurement-access", "procurement-vendor-read", "procurement-recurring-read", "procurement-recurring-create", "procurement-recurring-edit"];
 type RecordValue = Record<string, unknown> & { id: string; version: number; status: string };
 
-async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean; createStatus?: number; closed?: boolean; wrongOwner?: boolean; wrongBranch?: boolean } = {}) {
+async function fixture(page: Page, opts: { permissions?: string[]; failedGet?: boolean; unknownCreate?: boolean; createStatus?: number; closed?: boolean; exactAmount?: string; wrongOwner?: boolean; wrongBranch?: boolean } = {}) {
   const writes: string[] = [];
   let record: RecordValue | null = opts.closed ? { id: recordId, number: "RPC-1", title: "Past service", supplierId: supplier,
     supplierContractId: null, ownerPrincipalId: principal, ownerWorkerId: null, workLocationId: branch, frequency: "Monthly",
     firstCycleOn: "2026-01-01", nextCycleOn: "2026-09-01", lastCycleOn: null,
-    expectedAmount: 20, exactExpectedAmount: "20", currencyCode: "ZMW",
+    expectedAmount: 20, exactExpectedAmount: opts.exactAmount ?? "20", currencyCode: "ZMW",
     status: "Closed", version: 2, createdAt: "2026-01-01T00:00:00Z", closedAt: "2026-10-01T00:00:00Z",
     closedReason: "Completed" } : null;
   await page.addInitScript(id => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: id, branch: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" })), company);
@@ -85,7 +85,7 @@ test("system user without an employee can create, edit and close recurring purch
   await expect(page.getByText("ZMW 5.1234")).toBeVisible();
   await page.getByLabel("Reason").fill("Service ended");
   await page.getByRole("button", { name: "Close schedule" }).click();
-  await expect(page.getByText("Closed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Closed", { exact: true }).first()).toBeVisible();
   expect(state.writes).toHaveLength(3);
   expect(state.writes.every(path => path.startsWith("/api/procurement/v1/recurring-purchases"))).toBe(true);
 });
@@ -114,6 +114,64 @@ test("direct edit URL for a closed purchase shows saved history, without a write
   expect(state.writes).toHaveLength(0);
 });
 
+test("imported directory and detail sections show saved exact schedule without payment actions", async ({ page }) => {
+  const state = await fixture(page, { closed: true, exactAmount: "99999999999999.9999" });
+  await page.goto("/procurement/workspace/recurring-bills");
+  await expect(page.getByRole("heading", { name: "Recurring purchases", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Search recurring purchases on this page")).toBeVisible();
+  await expect(page.getByText("99999999999999.9999")).toBeVisible();
+  await page.getByLabel("Search recurring purchases on this page").fill("No matching plan");
+  await expect(page.getByText("No matching recurring purchases on this page")).toBeVisible();
+  await page.getByRole("button", { name: "Clear page filters" }).click();
+  await expect(page.getByText("Past service")).toBeVisible();
+  await page.getByRole("button", { name: "Preview RPC-1" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Past service");
+  await page.getByRole("button", { name: "View full details" }).click();
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
+  await expect(page.getByText("ZMW 99999999999999.9999")).toBeVisible();
+  await page.getByRole("tab", { name: "Schedule" }).click();
+  await expect(page.getByRole("heading", { name: "Repeat schedule" })).toBeVisible();
+  await expect(page.getByText("No bill is generated automatically.")).toBeVisible();
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(page.getByRole("heading", { name: "Related records" })).toBeVisible();
+  await expect(page.getByText("Linked bills, payments, attachments and comments are not available")).toBeVisible();
+  await page.getByRole("tab", { name: "Comments" }).click();
+  await expect(page.getByText("Comments are not connected to saved recurring purchases yet.")).toBeVisible();
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByText("Detailed edit and approval history is not available")).toBeVisible();
+  expect(state.writes).toHaveLength(0);
+});
+
+test("editor retains original grouped form and confirms discarding unsaved values", async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto("/procurement/workspace/recurring-bills/new");
+  for (const heading of ["Supplier and purchase", "Purchase schedule", "Items and charges", "Terms and notes"])
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+  await expect(page.getByLabel("Payment terms")).toBeDisabled();
+  await expect(page.getByLabel("Notes")).toBeDisabled();
+  await page.getByLabel("Purchase name").fill("Unsaved subscription");
+  await page.getByRole("button", { name: "Back to list" }).click();
+  await expect(page.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page.getByLabel("Purchase name")).toHaveValue("Unsaved subscription");
+  await page.getByRole("button", { name: "Back to list" }).click();
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.getByRole("heading", { name: "Recurring purchases", exact: true })).toBeVisible();
+  expect(state.writes).toHaveLength(0);
+});
+
+test("reader keeps the list and saved detail tabs without create edit or close controls", async ({ page }) => {
+  const state = await fixture(page, { closed: true, permissions: ["procurement-access", "procurement-recurring-read"] });
+  await page.goto("/procurement/workspace/recurring-bills");
+  await expect(page.getByRole("link", { name: /Past service/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "New recurring purchase" })).toHaveCount(0);
+  await page.getByRole("link", { name: /Past service/ }).click();
+  await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Close schedule" })).toHaveCount(0);
+  expect(state.writes).toHaveLength(0);
+});
+
 test("unconfirmed create locks repeat submission and retains entered values", async ({ page }) => {
   const state = await fixture(page, { unknownCreate: true });
   await page.goto("/procurement/workspace/recurring-bills/new");
@@ -126,11 +184,45 @@ test("unconfirmed create locks repeat submission and retains entered values", as
   await page.getByRole("button", { name: "Save recurring purchase" }).click();
   await expect(page.getByText("The save result was not confirmed.")).toBeVisible();
   await expect(page.getByLabel("Purchase name")).toHaveValue("Cloud subscription");
+  await expect(page.getByLabel("Purchase name")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+  await page.getByRole("button", { name: "Back to list" }).click();
+  const review = page.getByRole("dialog", { name: "Review saved recurring purchases" });
+  await expect(review).toBeVisible();
+  await expect(review).not.toContainText("changes have not been saved");
+  await expect(page.getByRole("dialog", { name: "Discard unsaved changes?" })).toHaveCount(0);
+  await review.getByRole("button", { name: "Stay on this page" }).click();
+  await expect(page).toHaveURL(/\/recurring-bills\/new$/);
   expect(state.writes).toHaveLength(1);
   await page.reload();
   await expect(page.getByText("The save result was not confirmed.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save recurring purchase" })).toBeDisabled();
+  await page.getByRole("button", { name: "Recurring purchases", exact: true }).click();
+  await expect(review).toBeVisible();
+  await review.getByRole("button", { name: "Review saved records" }).click();
+  await expect(page).toHaveURL(/\/recurring-bills$/);
+  expect(state.writes).toHaveLength(1);
+});
+
+test("stale create offers read-only review from Back without discarding or retrying", async ({ page }) => {
+  const state = await fixture(page, { createStatus: 409 });
+  await page.goto("/procurement/workspace/recurring-bills/new");
+  await page.getByRole("combobox", { name: "Supplier", exact: true }).click();
+  await page.getByRole("option", { name: "Copper Services (Active)", exact: true }).click();
+  await page.getByLabel("Purchase name").fill("Cloud subscription");
+  await page.getByLabel("Expected each time").fill("10.0001");
+  await page.getByLabel("First expected date").fill("2026-11-01");
+  await page.getByLabel("Next expected date").fill("2026-11-01");
+  await page.getByRole("button", { name: "Save recurring purchase" }).click();
+  await expect(page.getByText("This purchase changed.")).toBeVisible();
+  await expect(page.getByLabel("Purchase name")).toBeDisabled();
+  await page.getByRole("button", { name: "Recurring purchases", exact: true }).click();
+  const review = page.getByRole("dialog", { name: "Review saved recurring purchases" });
+  await expect(review).toBeVisible();
+  await expect(review).toContainText("saved purchase changed");
+  await expect(page.getByRole("dialog", { name: "Discard unsaved changes?" })).toHaveCount(0);
+  await review.getByRole("button", { name: "Review saved records" }).click();
+  await expect(page).toHaveURL(/\/recurring-bills$/);
   expect(state.writes).toHaveLength(1);
 });
 
@@ -201,3 +293,19 @@ for (const mode of ["wrong branch", "blocked storage"] as const) {
     expect(state.writes).toHaveLength(mode === "wrong branch" ? 1 : 0);
   });
 }
+
+test("recurring amount sorting compares exact decimal text within currency", async ({ page }) => {
+  await fixture(page, { closed: true });
+  const common = { supplierId: supplier, supplierContractId: null, ownerPrincipalId: principal, ownerWorkerId: null,
+    workLocationId: branch, frequency: "Monthly", firstCycleOn: "2026-01-01", nextCycleOn: "2026-09-01", lastCycleOn: null,
+    currencyCode: "ZMW", status: "Closed", version: 2, createdAt: "2026-01-01T00:00:00Z", closedAt: "2026-10-01T00:00:00Z", closedReason: "Completed" };
+  await page.route("**/api/procurement/v1/recurring-purchases?*", route => route.fulfill({ json: { items: [
+    { ...common, id: recordId, number: "RPC-LARGE", title: "Larger fraction", expectedAmount: 0.001, exactExpectedAmount: "0.001" },
+    { ...common, id: "55555555-5555-4555-8555-555555555555", number: "RPC-SMALL", title: "Smaller fraction", expectedAmount: 0.0001, exactExpectedAmount: "0.0001" },
+  ], total: 2, page: 1, pageSize: 25 } }));
+  await page.goto("/procurement/workspace/recurring-bills");
+  await page.getByRole("combobox", { name: "Sort recurring purchases on this page", exact: true }).click();
+  await page.getByRole("option", { name: "Expected each time", exact: true }).click();
+  const rows = page.getByTestId("erp-record-table").locator("tbody tr");
+  await expect(rows.first()).toContainText("Smaller fraction");await expect(rows.last()).toContainText("Larger fraction");
+});

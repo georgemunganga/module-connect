@@ -359,8 +359,13 @@ export function Budgets() {
   );
 }
 
-export function Analytics() {
-  const { records } = useApp();
+export type AnalyticsRecord = { id: string; number?: string; title: string; kind: string; party: string; date: string; status: string; amount?: number };
+export type LiveAnalyticsData = { rows: AnalyticsRecord[]; state: "ready" | "loading" | "error" | "unavailable"; incomplete?: boolean; refresh: () => void };
+export function Analytics({ live }: { live?: LiveAnalyticsData } = {}) {
+  return live ? <AnalyticsFrame records={live.rows} live={live} /> : <DemoAnalytics />;
+}
+function DemoAnalytics() { const { records } = useApp(); return <AnalyticsFrame records={records} />; }
+function AnalyticsFrame({ records, live }: { records: AnalyticsRecord[]; live?: LiveAnalyticsData }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [status, setStatus] = useState("all");
@@ -373,7 +378,7 @@ export function Analytics() {
         .filter((record) => category === "all" || record.kind === category)
         .filter((record) => status === "all" || record.status === status)
         .filter((record) =>
-          `${record.title} ${record.party} ${record.id}`
+          `${record.title} ${record.party} ${record.number || ""} ${record.id}`
             .toLowerCase()
             .includes(query.toLowerCase()),
         ),
@@ -389,7 +394,7 @@ export function Analytics() {
     ),
   ];
   const statuses = [...new Set(reportRows.map((record) => record.status))];
-  const total = reportRows.reduce((sum, record) => sum + record.amount, 0);
+  const total = live ? undefined : reportRows.reduce((sum, record) => sum + (record.amount ?? 0), 0);
   const exportRows = [
     ["Record ID", "Report", "Category", "Party", "Date", "Amount", "Status"],
     ...reportRows.map((record) => [
@@ -406,48 +411,50 @@ export function Analytics() {
     <div>
       <PageHeader
         title="Analytics"
-        subtitle="Reports center built from the records saved in this browser."
-        actions={
+        subtitle={live ? "Explore saved records from the current pages. Search and filters apply to these loaded records only." : "Reports center built from the records saved in this browser."}
+        actions={<>
+          {live && <Button variant="secondary" onClick={live.refresh}>Refresh</Button>}
           <Button
             variant="secondary"
-            onClick={() => csvDownload("procureui-analytics.csv", exportRows)}
+            disabled={Boolean(live)} title={live ? "Report export is not available yet." : undefined}
+            onClick={() => { if (!live) csvDownload("procureui-analytics.csv", exportRows); }}
           >
             <Download size={15} /> Export CSV
-          </Button>
-        }
+          </Button></>}
       />
+      {live?.incomplete && live.state === "ready" && <p role="alert" className="mb-4 text-sm text-muted-foreground">Some records could not be loaded. The table shows only the records available now.</p>}
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        <Stat label="Matching records" value={String(reportRows.length)} />
-        <Stat label="Record value" value={money(total)} tone="green" />
+        <Stat label="Matching records" value={live && live.state !== "ready" ? "—" : String(reportRows.length)} />
+        <Stat label="Record value" value={live ? "—" : money(total ?? 0)} tone="green" />
         <Stat
           label="Report categories"
-          value={String(categories.length)}
+          value={live && live.state !== "ready" ? "—" : String(categories.length)}
           tone="amber"
         />
       </div>
       <Panel
         title="All reports"
         action={
-          <span className="text-xs text-slate-400">
-            {reportRows.length} rows
+          <span className="text-xs text-muted-foreground">
+            {live && live.state !== "ready" ? "Records unavailable" : `${reportRows.length} loaded rows`}
           </span>
         }
       >
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 p-4 sm:flex-row">
+        <div className="flex flex-col gap-3 border-b border-border bg-muted/30 p-4 sm:flex-row">
           <div className="relative flex-1">
             <Filter
-              className="pointer-events-none absolute left-3 top-2.5 text-slate-400"
+              className="pointer-events-none absolute left-3 top-2.5 text-muted-foreground"
               size={15}
             />
             <Input
               className="pl-9"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search reports, parties, IDs..."
+              aria-label="Search loaded report records" placeholder="Search reports, parties, IDs..."
             />
           </div>
           <Select
-            className="sm:w-44"
+            className="sm:w-44" aria-label="Report category"
             value={category}
             onChange={(event) => setCategory(event.target.value)}
           >
@@ -459,7 +466,7 @@ export function Analytics() {
             ))}
           </Select>
           <Select
-            className="sm:w-40"
+            className="sm:w-40" aria-label="Report status"
             value={status}
             onChange={(event) => setStatus(event.target.value)}
           >
@@ -471,10 +478,10 @@ export function Analytics() {
             ))}
           </Select>
         </div>
-        {reportRows.length === 0 ? (
+        {live && live.state !== "ready" ? <p role={live.state === "error" ? "alert" : "status"} className="p-5 text-sm text-muted-foreground">{live.state === "loading" ? "Loading saved records…" : live.state === "error" ? "Could not load report records. Refresh to try again." : "Report records are not available for your access."}</p> : reportRows.length === 0 ? (
           <EmptyState
             title="No report rows match"
-            description="Change the filters or create a local procurement record."
+            description={live ? "Change the page filters or add a record in its purchasing page." : "Change the filters or create a local procurement record."}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -491,13 +498,13 @@ export function Analytics() {
               </thead>
               <tbody>
                 {reportRows.map((record) => (
-                  <tr key={record.id} className="hover:bg-blue-50/30">
+                  <tr key={`${record.kind}:${record.id}`} className="hover:bg-primary/5">
                     <td className="table-cell">
-                      <span className="font-medium text-blue-600">
+                      <span className="font-medium text-primary">
                         {record.title}
                       </span>
-                      <div className="text-[11px] text-slate-400">
-                        {record.id}
+                      <div className="text-[11px] text-muted-foreground">
+                        {record.number || record.id}
                       </div>
                     </td>
                     <td className="table-cell capitalize">
@@ -506,7 +513,7 @@ export function Analytics() {
                     <td className="table-cell">{record.party}</td>
                     <td className="table-cell">{record.date}</td>
                     <td className="table-cell text-right font-medium">
-                      {money(record.amount)}
+                      {live ? "—" : money(record.amount ?? 0)}
                     </td>
                     <td className="table-cell">
                       <Badge>{record.status}</Badge>
@@ -518,6 +525,7 @@ export function Analytics() {
           </div>
         )}
       </Panel>
+      {live && <p className="mt-3 text-sm text-muted-foreground">Record values and report export are not connected yet. Totals below describe your accessible records, not spend or Finance balances.</p>}
     </div>
   );
 }

@@ -113,7 +113,7 @@ test("actual Core-only recurring planner creates, reloads, edits, consumes a no-
     await page.getByLabel("Reason", { exact: true }).fill("Actual browser repeat purchase ended");
     const closed = await actualMutation(page, "POST", `/recurring-purchases/${id}/close`, () => page.getByRole("button", { name: "Close schedule", exact: true }).click());
     expect(closed).toMatchObject({ id, version: 4, status: "Closed", closedReason: "Actual browser repeat purchase ended" });
-    await page.reload(); await expect(page.getByText("Closed", { exact: true })).toBeVisible();
+    await page.reload(); await expect(page.getByText("Closed", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Close schedule", exact: true })).toHaveCount(0);
     const retained = proof(id); expect(retained.row).toMatchObject({ status: "Closed", version: 4 });

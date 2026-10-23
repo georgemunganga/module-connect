@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Analytics, type AnalyticsRecord } from "./Insights";
 import { Dashboard, type HomeRow, type HomeMetric } from "./Dashboard";
 import { listVendorDrafts } from "../../../src/platform/procurement-vendors-api";
 import { listInvoiceIntake } from "../../../src/platform/procurement-invoices-api";
 import { listPublishedCatalog } from "../../../src/platform/procurement-catalog-api";
 import { listAssignedApprovals } from "../../../src/platform/procurement-approvals-api";
 import { requestApprovalsAvailable } from "../lib/request-approval-availability";
-import { Button, PageHeader, Panel } from "../components/ui";
+import { Panel } from "../components/ui";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { useErpShell } from "../lib/erpShell";
 import type { ProcurementCapability } from "../lib/procurement-live";
@@ -16,21 +17,24 @@ import { listOwnPlans } from "../../../src/platform/procurement-plans-api";
 import { listOwnContractDrafts } from "../../../src/platform/procurement-contracts-api";
 
 type Metric = { label: string; permission: string; capability: ProcurementCapability; path: string;
-  load: (company: string, signal: AbortSignal) => Promise<{ count: number; rows?: HomeRow[] }> };
-type Result = { state: "ready"; count: number; rows?: HomeRow[] } | { state: "unavailable" | "error" | "loading" };
+  load: (company: string, signal: AbortSignal) => Promise<{ count: number; rows?: HomeRow[]; reportRows?: AnalyticsRecord[] }> };
+type Result = { state: "ready"; count: number; rows?: HomeRow[]; reportRows?: AnalyticsRecord[] } | { state: "unavailable" | "error" | "loading" };
 const metrics: Metric[] = [
   { label: "My purchase requests", permission: "procurement-request-read", capability: "requestDraft", path: "/requests",
     load: async (company, signal) => {
       const page = await listOwnRequestDrafts(company, 0, signal);
-      return { count: page.count, rows: page.records.slice().sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)).slice(0, 3)
+      return { count: page.count, reportRows: page.records.map(row => ({ id: row.id, number: row.number, title: row.purpose, kind: "requests", party: "—", date: row.createdAt?.slice(0, 10) || "", status: row.status })), rows: page.records.slice().sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)).slice(0, 3)
         .map(row => ({ id: row.id, reference: row.number, title: row.purpose, status: row.status, path: `/requests/${row.id}` })) };
     } },
   { label: "My purchase orders", permission: "procurement-po-read", capability: "orderDraft", path: "/purchase-orders",
-    load: async (company, signal) => ({ count: (await listOwnOrderDrafts(company, 1, signal)).total }) },
+    load: async (company, signal) => { const page = await listOwnOrderDrafts(company, 1, signal); return { count: page.total,
+      reportRows: page.items.map(row => ({ id: row.id, number: row.number, title: row.number, kind: "purchase-orders", party: row.supplierName || "—", date: row.createdAt?.slice(0, 10) || "", status: row.status })) }; } },
   { label: "My purchase plans", permission: "procurement-plan-read", capability: "planningDraft", path: "/plans",
-    load: async (company, signal) => ({ count: (await listOwnPlans(company, 1, signal)).total }) },
+    load: async (company, signal) => { const page = await listOwnPlans(company, 1, signal); return { count: page.total,
+      reportRows: page.items.map(row => ({ id: row.id, number: row.number, title: row.number, kind: "plans", party: "—", date: row.createdAt?.slice(0, 10) || "", status: row.status })) }; } },
   { label: "My contracts", permission: "procurement-contract-read", capability: "contractDraft", path: "/contracts",
-    load: async (company, signal) => ({ count: (await listOwnContractDrafts(company, 1, signal)).total }) },
+    load: async (company, signal) => { const page = await listOwnContractDrafts(company, 1, signal); return { count: page.total,
+      reportRows: page.items.map(row => ({ id: row.id, number: row.number, title: row.title, kind: "contracts", party: "—", date: row.effectiveFrom?.slice(0, 10) || "", status: row.status })) }; } },
 ];
 
 const homeMetrics: Metric[] = [
@@ -72,11 +76,11 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
     for (const metric of visibleMetrics) {
       if (!available(metric)) continue;
       metric.load(legalEntityId, controller.signal)
-        .then(({ count, rows }) => {
+        .then(({ count, rows, reportRows }) => {
           if (!controller.signal.aborted)
             setResult(current => current.key === contextKey ? { ...current,
               values: { ...current.values, [metric.permission]: Number.isSafeInteger(count) && count >= 0
-                ? { state: "ready", count, rows } : { state: "error" } } } : current);
+                ? { state: "ready", count, rows, reportRows } : { state: "error" } } } : current);
         })
         .catch(() => {
           if (!controller.signal.aborted)
@@ -105,9 +109,12 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
     }} />;
   }
   return <div className="p-5 sm:p-8">
-    <PageHeader title={analytics ? "Procurement activity" : "Procurement home"}
-      subtitle="Your saved purchasing records in the selected company. These counts do not represent company spend or Finance balances."
-      actions={<Button variant="secondary" onClick={() => setRevision(value => value + 1)}>Refresh</Button>} />
+    <Analytics key={contextKey} live={{ rows: metrics.flatMap(metric => { const value = values[metric.permission]; return value?.state === "ready" ? value.reportRows ?? [] : []; }),
+      state: metrics.some(metric => !values[metric.permission] || values[metric.permission]?.state === "loading") ? "loading"
+        : metrics.some(metric => values[metric.permission]?.state === "ready") ? "ready"
+          : metrics.some(metric => values[metric.permission]?.state === "error") ? "error" : "unavailable",
+      incomplete: metrics.some(metric => values[metric.permission]?.state === "error"),
+      refresh: () => setRevision(value => value + 1) }} />
     <div className="mt-5 grid gap-4 sm:grid-cols-2">
       {metrics.map(metric => {
         const value = values[metric.permission] ?? { state: "loading" };

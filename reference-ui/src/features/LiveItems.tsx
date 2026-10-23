@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
+import { LiveCatalogDirectory } from "../components/data/LiveCatalogDirectory";
 import { useErpShell } from "../lib/erpShell";
 import { invoiceDecimal } from "./invoice-values";
 import { ItemApiError, catalogPriceCanEdit, catalogPriceEditDraft, updateCatalogPrice, type CatalogPriceEdit } from "../../../src/platform/procurement-items-api";
@@ -30,38 +31,47 @@ function companyId() {
 }
 
 export function LiveItemList() {
-  const canManage = useLiveReadiness()?.permissions.includes("procurement-item-manage") === true;
-  return canManage ? <ManagedItemList /> : <LivePublishedCatalog />;
+  const readiness = useLiveReadiness(); const { selection, authEpoch } = useErpShell();
+  if (!readiness) throw new Error("Items require ERP company context.");
+  if (selection.entityId && selection.entityId !== readiness.legalEntityId)
+    return <p role="status">Checking the selected company…</p>;
+  const canManage = readiness.permissions.includes("procurement-item-manage");
+  return canManage ? <ManagedItemList key={[authEpoch, readiness.tenantId, readiness.legalEntityId,
+    selection.branch ?? "", readiness.principalId, readiness.permissions.slice().sort().join("|")].join(":")} />
+    : <LivePublishedCatalog />;
 }
 
 function ManagedItemList() {
   const company = companyId();
   const canManage = true;
-  const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [revision, setRevision] = useState(0);
   const [data, setData] = useState<ItemPage | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
-    listItemDrafts(company, { search, page, signal: controller.signal }).then(setData)
+    setLoading(true); setError(""); setData(null);
+    listItemDrafts(company, { search, page, signal: controller.signal }).then(result => { if (!controller.signal.aborted) setData(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [company, search, page]);
+  }, [company, search, page, revision]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Items" subtitle="Manage goods and services your company may buy." actions={canManage ? <Link to="/items/new"><Button><Plus size={16} className="mr-2 inline" />Add item</Button></Link> : undefined} />
-    <Panel><div className="p-5">
-      <form className="mb-4 flex max-w-md gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(query.trim()); }}><Input aria-label="Search items" placeholder="Search item name or code" value={query} onChange={(event) => setQuery(event.target.value)} /><Button type="submit" variant="secondary">Search</Button></form>
-      {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
-      {loading ? <p role="status">Loading items…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
-        <thead><tr><th>Item</th><th>Code</th><th>Type</th><th>Unit</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.items.map((item) => <tr key={item.id}><td><Link className="font-medium text-primary hover:underline" to={`/items/${item.id}`}>{item.name}</Link></td><td>{item.code}</td><td>{item.kind}</td><td>{item.unitCode}</td><td><Badge>{item.status}</Badge></td><td><Link className="text-sm text-primary hover:underline" to={`/items/${item.id}`}>Open</Link></td></tr>)}</tbody>
-      </RecordTable></div> : <EmptyState title={canManage ? "Add your first item" : "No items yet"} description={canManage ? "Create a draft item before making it available for buying." : "Your company's items will appear here."} action={canManage ? <Link to="/items/new"><Button>Add item</Button></Link> : undefined} />}
-      {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
-    </div></Panel>
+    <LiveCatalogDirectory key={`${search}:${page}`} title="Items" entity="items"
+      subtitle="Manage goods and services your company may buy."
+      columns={[{ key: "number", label: "Item / Code", width: 260 }, { key: "kind", label: "Type", width: 110 },
+        { key: "category", label: "Category", width: 135 }, { key: "unit", label: "Unit", width: 85 },
+        { key: "purchasable", label: "Available to buy", width: 140 }, { key: "status", label: "Status", width: 110 }]}
+      rows={(data?.items ?? []).map(item => ({ id: item.id, number: item.code, title: item.name,
+        status: item.status, path: `/items/${item.id}`, fields: { kind: item.kind, category: item.categoryCode,
+          unit: item.unitCode, purchasable: item.isPurchasable ? "Yes" : "No" } }))}
+      total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25} loading={loading} error={error}
+      search={search} onSearch={value => { setPage(1); setSearch(value); }}
+      onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
+      action={canManage ? <Link to="/items/new"><Button><Plus size={16} className="mr-2 inline" />Add item</Button></Link> : undefined}
+      emptyTitle="Add your first item" emptyDescription="Create a draft item before making it available for buying." />
   </div>;
 }
 

@@ -348,8 +348,8 @@ test("reviewer can return a submitted vendor with a visible reason", async ({ pa
   await page.goto("/procurement/workspace/vendors");
   await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
   await page.getByRole("option", { name: "Submitted for review" }).click();
-  await expect(page.getByRole("link", { name: "Acme", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Acme", exact: true }).click();
+  await expect(page.getByRole("link", { name: /VEN-001\s+Acme/ })).toBeVisible();
+  await page.getByRole("link", { name: /VEN-001\s+Acme/ }).click();
   await expect(page.getByRole("heading", { name: "Review vendor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send back for changes" })).toBeDisabled();
   await page.getByLabel("Reason for your decision").fill("Confirm the legal address");
@@ -360,7 +360,7 @@ test("reviewer can return a submitted vendor with a visible reason", async ({ pa
   await page.getByRole("link", { name: "Back to vendors" }).click();
   await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
   await page.getByRole("option", { name: "Submitted for review" }).click();
-  await expect(page.getByText("No vendors match this view")).toBeVisible();
+  await expect(page.getByText("No vendors match this search")).toBeVisible();
 });
 
 test("independent vendor approver sees the review but no create or edit actions", async ({ page }) => {
@@ -430,10 +430,10 @@ test("worker-less ERP administrator can review vendors without purchasing comman
   await mockErp(page, { adminViewOnly: true });
   await page.goto("/procurement/workspace/vendors");
   await expect(page.getByText("Administrator view")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Acme", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /VEN-001\s+Acme/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Add vendor|New vendor/i })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Add vendor|New vendor/i })).toHaveCount(0);
-  await page.getByRole("link", { name: "Acme", exact: true }).click();
+  await page.getByRole("link", { name: /VEN-001\s+Acme/ }).click();
   await expect(page.getByRole("heading", { name: "Review vendor", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Approve vendor|Reject vendor|Save vendor/i })).toHaveCount(0);
   await page.goto("/procurement/workspace/vendors/new");
