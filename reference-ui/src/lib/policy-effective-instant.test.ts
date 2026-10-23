@@ -7,6 +7,10 @@ describe("manual policy effective instants", () => {
     expect(utcPolicyDay(saved)).toBe("2026-11-01");
     expect(selectedPolicyInstant("2026-11-01", saved)).toBe(saved);
     expect(samePolicyInstant(saved, "2026-11-01T11:27:05.123Z")).toBe(true);
+    expect(samePolicyInstant("2026-11-01T11:27:05.1234567Z",
+      "2026-11-01T13:27:05.1234567+02:00")).toBe(true);
+    expect(samePolicyInstant("2026-11-01T11:27:05.1234567Z",
+      "2026-11-01T11:27:05.1234568Z")).toBe(false);
   });
   it("uses explicit midnight UTC only for a new or changed date", () => {
     expect(selectedPolicyInstant("2026-11-02", saved)).toBe("2026-11-02T00:00:00.000Z");
