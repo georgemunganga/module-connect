@@ -30,8 +30,11 @@ function ManualPaymentSettingsRecord() {
   const company = readiness.legalEntityId;
   const canRead = readiness.capabilities.configurationDraft
     && readiness.permissions.includes("procurement-configuration-read");
-  const canEdit = canRead && readiness.permissions.includes("procurement-configuration-edit");
-  const canApprove = canRead && readiness.permissions.includes("procurement-configuration-approve");
+  const manualWorkflowReady = readiness.capabilities.manualPaymentWorkflow === true;
+  const canEdit = canRead && manualWorkflowReady
+    && readiness.permissions.includes("procurement-configuration-edit");
+  const canApprove = canRead && manualWorkflowReady
+    && readiness.permissions.includes("procurement-configuration-approve");
   const marker = `procurement.policy.command.pending.v1:${[readiness.tenantId, company,
     selection.branch ?? "", readiness.principalId, KEY].join(":")}`;
   const [guard, setGuard] = useState(() => readAuthorityCreateGuard(marker));
@@ -47,12 +50,12 @@ function ManualPaymentSettingsRecord() {
   const busy = useRef(false), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    if (!canRead) return;
     let active = true; setSchemaReady(false);
+    if (!canRead || !manualWorkflowReady) return () => { active = false; };
     getEffectivePolicy(company, KEY).then(() => { if (active) setSchemaReady(true); })
       .catch(() => { if (active) setSchemaReady(false); });
     return () => { active = false; };
-  }, [company, canRead]);
+  }, [company, canRead, manualWorkflowReady]);
   useEffect(() => {
     if (!canRead) return;
     const controller = new AbortController(); setLoading(true); setError("");

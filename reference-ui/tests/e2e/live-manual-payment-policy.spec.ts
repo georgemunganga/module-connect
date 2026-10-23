@@ -11,8 +11,17 @@ const baseCapabilities = ['vendorDraft', 'itemDraft', 'requestDraft', 'approvals
   'contracts', 'orders', 'receiving', 'invoiceValidation', 'financeHandoff',
   'supplierPortal', 'planningDraft', 'configurationDraft', 'contractDraft', 'sourcingDraft'];
 
-async function fixture(page: Page, failCreate = false) {
-  let actor = author, record: Record<string, unknown> | null = null;
+async function fixture(page: Page, failCreate = false, workflowReady = true) {
+  let actor = author;
+  let record: Record<string, unknown> | null = workflowReady ? null : {
+    id: policy, policyKey: 'MANUAL_PAYMENT_REVIEW', policyVersionNumber: 2,
+    state: 'Draft', version: 1, createdAt: '2026-10-23T12:00:00Z',
+    effectiveFrom: '2026-11-01T00:00:00Z', effectiveTo: null,
+    rulesJson: JSON.stringify({ schemaVersion: 1, identitySchemaVersion: 2,
+      policyKey: 'MANUAL_PAYMENT_REVIEW', transactionType: 'ManualPaymentReview',
+      approvalType: 'SingleApprover', independentCreatorApprover: true,
+      independentRecorderConfirmer: true, maximumByCurrency: { ZMW: '100.0000' } }),
+  };
   const writes: { path: string; body: Record<string, unknown> }[] = [];
   await page.addInitScript(({ company, branch }) => localStorage.setItem('erp.shell.state.v1',
     JSON.stringify({ entityId: company, branch })), { company, branch });
@@ -31,11 +40,13 @@ async function fixture(page: Page, failCreate = false) {
         actor === author ? 'procurement-configuration-edit' : 'procurement-configuration-approve'] });
     if (path === '/api/procurement/v1/meta') return json({ tenantId: 'synthetic', legalEntityId: company,
       schemaReady: true, capabilities: Object.fromEntries([...baseCapabilities, 'manualPaymentWorkflow']
-        .map(key => [key, true])) });
+        .map(key => [key, key === 'manualPaymentWorkflow' ? workflowReady : true])) });
     if (path === '/api/procurement/v1/configuration/policies/effective')
       return json({ status: 'Missing', isAuthority: false, policy: null });
     if (path === '/api/procurement/v1/configuration/policies/validate') {
-      const rules = JSON.parse(String((request.postDataJSON() as { rulesJson: string }).rulesJson));
+      const body = request.postDataJSON() as { rulesJson: string };
+      writes.push({ path, body: body as unknown as Record<string, unknown> });
+      const rules = JSON.parse(String(body.rulesJson));
       const ready = rules.maximumByCurrency?.ZMW === '100.0000' || rules.maximumByCurrency?.ZMW === '1000.0000';
       return json({ isValid: ready, issues: ready ? [] : [{ path: '$', message: 'Set an exact limit.' }],
         reviewReady: ready, reviewIssues: ready ? [] : [{ path: '$', message: 'Set an exact limit.' }] });
@@ -112,6 +123,19 @@ test('payment review settings require exact limits and separate author/publisher
   expect(scope.writes.map(write => write.path.split('/').at(-1))).toEqual([
     'validate', 'policies', 'submit-review', 'return-for-changes', 'validate', policy,
     'submit-review', 'publish']);
+});
+
+test('saved payment review rules remain readable while manual payment workflow is off', async ({ page }) => {
+  const scope = await fixture(page, false, false);
+  await scope.as('author');
+  await expect(page.getByText('Manual payment review policy admission is unavailable', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'View' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add draft' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit draft' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Send for review' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'View' }).click();
+  await expect(page.getByText('ZMW: maximum bill amount 100.0000', { exact: false })).toBeVisible();
+  expect(scope.writes).toEqual([]);
 });
 
 test('an interrupted policy create stays blocked and is not retried with a new command', async ({ page }) => {
