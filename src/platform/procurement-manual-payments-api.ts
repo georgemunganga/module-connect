@@ -12,6 +12,7 @@ export type ManualPaymentScope = { readonly identity: ManualPaymentIdentity;
   readonly headers: Readonly<Record<string, string>>; current(): boolean; assertCurrent(): void };
 export type ManualPaymentSummary = { id: string; version: number; status: ManualPaymentStatus;
   title: string | null; branchId: string; supplierInvoiceId: string; supplierId: string;
+  invoiceNumber: string; supplierDisplayName: string;
   currencyCode: string; amountExact: string; creatorPrincipalId: string;
   approverPrincipalId: string; recorderPrincipalId: string; confirmerPrincipalId: string;
   createdAt: string; updatedAt: string | null };
@@ -41,6 +42,12 @@ export type ManualPaymentCommand =
   | { action: "Create"; key: string; input: ManualPaymentCreate }
   | { action: "Revise"; key: string; id: string; input: ManualPaymentRevise }
   | { action: Exclude<ManualPaymentAction, "Create" | "Revise">; key: string; id: string; input: ManualPaymentTransition };
+export type ManualPaymentAssignee = { principalId: string; displayName: string };
+export type ManualPaymentAssigneePage = { items: ManualPaymentAssignee[]; nextCursor: string | null; hasMore: boolean };
+export type ManualPaymentInvoiceChoice = { invoiceId: string; invoiceNumber: string; supplierId: string;
+  supplierDisplayName: string; currencyCode: string; grossExact: string; invoiceDate: string; branchId: string };
+export type ManualPaymentInvoiceChoices = { items: ManualPaymentInvoiceChoice[];
+  nextCursor: string | null; hasMore: boolean; previewOnly: true };
 
 export class ManualPaymentApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -140,17 +147,21 @@ function summary(x: unknown): ManualPaymentSummary {
     || typeof x.currencyCode !== "string" || !/^[A-Z]{3}$/.test(x.currencyCode)
     || !exact(x.amountExact, true) || !id(x.creatorPrincipalId) || !id(x.approverPrincipalId)
     || !id(x.recorderPrincipalId) || !id(x.confirmerPrincipalId) || !iso(x.createdAt)
-    || x.updatedAt !== null && !iso(x.updatedAt)) throw invalid();
+    || x.updatedAt !== null && !iso(x.updatedAt)
+    || typeof x.invoiceNumber !== "string" || typeof x.supplierDisplayName !== "string") throw invalid();
   return x as unknown as ManualPaymentSummary;
 }
 
 export async function listManualPayments(scope: ManualPaymentScope, page = 1,
-  filters: { search?: string; status?: ManualPaymentStatus } = {}, signal?: AbortSignal): Promise<ManualPaymentPage> {
+  filters: { search?: string; status?: ManualPaymentStatus; invoiceId?: string; supplierId?: string } = {}, signal?: AbortSignal): Promise<ManualPaymentPage> {
   if (!version(page) || page > 100000 || filters.search && (filters.search.length > 100 || /[\x00-\x1f\x7f]/.test(filters.search))
-    || filters.status && !validStatus(filters.status)) throw new ManualPaymentApiError(422, "Choose valid payment filters.");
+    || filters.status && !validStatus(filters.status) || filters.invoiceId && !id(filters.invoiceId)
+    || filters.supplierId && !id(filters.supplierId)) throw new ManualPaymentApiError(422, "Choose valid payment filters.");
   const query = new URLSearchParams({ page: String(page), pageSize: "25" });
   if (filters.search?.trim()) query.set("q", filters.search.trim());
   if (filters.status) query.set("status", filters.status);
+  if (filters.invoiceId) query.set("invoiceId", filters.invoiceId);
+  if (filters.supplierId) query.set("supplierId", filters.supplierId);
   const body = await request(scope, `?${query}`, { signal });
   if (!obj(body) || !Array.isArray(body.items) || !count(body.total) || body.page !== page
     || body.pageSize !== 25 || body.items.length > 25
@@ -158,6 +169,63 @@ export async function listManualPayments(scope: ManualPaymentScope, page = 1,
   const items = body.items.map(summary);
   if (new Set(items.map(item => item.id)).size !== items.length) throw invalid();
   return { items, total: body.total, page, pageSize: 25 };
+}
+
+/** Current Core accounts eligible for one named payment assignment in an explicit company branch.
+ * A choice is only a preview; create/revise/submit revalidate it server-side. */
+export async function lookupManualPaymentAssignees(scope: ManualPaymentScope, input: {
+  role: "approve" | "record" | "confirm"; branchId: string; q?: string; cursor?: string;
+  limit?: number; recorderPrincipalId?: string;
+}, signal?: AbortSignal): Promise<ManualPaymentAssigneePage> {
+  if (!id(input.branchId) || !["approve", "record", "confirm"].includes(input.role)
+    || input.cursor !== undefined && !id(input.cursor)
+    || input.limit !== undefined && (!version(input.limit) || input.limit > 50)
+    || input.q && (input.q.length > 100 || /[\x00-\x1f\x7f]/.test(input.q))
+    || (input.role === "confirm" ? !id(input.recorderPrincipalId) : input.recorderPrincipalId !== undefined))
+    throw new ManualPaymentApiError(422, "Choose a branch and valid payment role.");
+  const query = new URLSearchParams({ role: input.role, branchId: input.branchId, limit: String(input.limit ?? 25) });
+  if (input.q?.trim()) query.set("q", input.q.trim());
+  if (input.cursor) query.set("cursor", input.cursor);
+  if (input.recorderPrincipalId) query.set("recorderPrincipalId", input.recorderPrincipalId);
+  const body = await request(scope, `/lookups/assignees?${query}`, { signal });
+  if (!obj(body) || !Array.isArray(body.items) || body.items.length > (input.limit ?? 25)
+    || typeof body.hasMore !== "boolean" || body.nextCursor !== null && !id(body.nextCursor)
+    || body.hasMore !== (body.nextCursor !== null)
+    || !body.items.every(item => obj(item) && id(item.principalId)
+      && typeof item.displayName === "string" && item.displayName.length <= 300)
+    || new Set(body.items.map(item => (item as ManualPaymentAssignee).principalId)).size !== body.items.length)
+    throw invalid();
+  return body as unknown as ManualPaymentAssigneePage;
+}
+
+/** Payment-scoped invoice picker. Gross is informational, never remaining capacity. */
+export async function lookupManualPaymentInvoices(scope: ManualPaymentScope, input: {
+  branchId: string; q?: string; cursor?: string; limit?: number; invoiceId?: string;
+}, signal?: AbortSignal): Promise<ManualPaymentInvoiceChoices> {
+  if (!id(input.branchId) || input.cursor !== undefined
+    && (!/^(0|[1-9]\d*)$/.test(input.cursor) || !Number.isSafeInteger(Number(input.cursor)))
+    || input.invoiceId !== undefined && !id(input.invoiceId)
+    || input.limit !== undefined && (!version(input.limit) || input.limit > 50)
+    || input.q && (input.q.length > 100 || /[\x00-\x1f\x7f]/.test(input.q)))
+    throw new ManualPaymentApiError(422, "Choose a branch and valid invoice search.");
+  const query = new URLSearchParams({ branchId: input.branchId, limit: String(input.limit ?? 25) });
+  if (input.q?.trim()) query.set("q", input.q.trim());
+  if (input.cursor !== undefined) query.set("cursor", input.cursor);
+  if (input.invoiceId) query.set("invoiceId", input.invoiceId);
+  const body = await request(scope, `/lookups/invoices?${query}`, { signal });
+  if (!obj(body) || body.previewOnly !== true || !Array.isArray(body.items)
+    || body.items.length > (input.limit ?? 25) || typeof body.hasMore !== "boolean"
+    || body.nextCursor !== null && (typeof body.nextCursor !== "string"
+      || !/^(0|[1-9]\d*)$/.test(body.nextCursor) || !Number.isSafeInteger(Number(body.nextCursor)))
+    || body.hasMore !== (body.nextCursor !== null)
+    || !body.items.every(row => obj(row) && id(row.invoiceId) && id(row.supplierId)
+      && id(row.branchId) && row.branchId === input.branchId
+      && typeof row.invoiceNumber === "string" && typeof row.supplierDisplayName === "string"
+      && typeof row.currencyCode === "string" && /^[A-Z]{3}$/.test(row.currencyCode)
+      && exact(row.grossExact, true) && typeof row.invoiceDate === "string"
+      && /^\d{4}-\d{2}-\d{2}$/.test(row.invoiceDate)) || new Set(body.items.map(row =>
+        (row as ManualPaymentInvoiceChoice).invoiceId)).size !== body.items.length) throw invalid();
+  return body as unknown as ManualPaymentInvoiceChoices;
 }
 
 export async function getManualPayment(scope: ManualPaymentScope, requestId: string,

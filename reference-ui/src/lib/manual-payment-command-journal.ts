@@ -1,5 +1,6 @@
 import { approvalBrowserTabNonce } from "./request-approval-journal";
-import type { ManualPaymentAction, ManualPaymentReceipt, ManualPaymentScope } from "../../../src/platform/procurement-manual-payments-api";
+import { isDefiniteManualPaymentRejection, type ManualPaymentAction, type ManualPaymentReceipt,
+  type ManualPaymentScope } from "../../../src/platform/procurement-manual-payments-api";
 
 /** Browser recovery metadata only. Never store payment amount, reason, external
  * reference, bank data, request JSON, or credentials. */
@@ -59,6 +60,15 @@ export function createManualPaymentRecoveryJournal(scope: ManualPaymentScope,
       if (!valid(locator) || !saved || JSON.stringify(saved) !== JSON.stringify(locator) || !slot
         || receipt.commandKey !== locator.key || receipt.action !== locator.action || !id(receipt.id)
         || locator.id !== null && receipt.id !== locator.id) return false;
+      try { store.removeItem(slot); return store.getItem(slot) === null; }
+      catch { return false; }
+    },
+    /** A received, definite server rejection has no receipt to confirm. The
+     * caller must keep the entered fields and review the rejection before retry. */
+    reject(locator: ManualPaymentRecoveryLocator, error: unknown): boolean {
+      const saved = state().pending;
+      if (!isDefiniteManualPaymentRejection(error) || !valid(locator) || !saved
+        || JSON.stringify(saved) !== JSON.stringify(locator) || !slot) return false;
       try { store.removeItem(slot); return store.getItem(slot) === null; }
       catch { return false; }
     },

@@ -450,8 +450,11 @@ function InvoiceDetailRecord() {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {canEdit && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}
-        <Button variant="secondary" disabled aria-describedby="invoice-payment-unavailable">Record payment</Button>
-        <span id="invoice-payment-unavailable" className="sr-only">Manual payment recording is not connected yet.</span>
+        {capabilities.manualPaymentWorkflow && permissions.includes("procurement-payment-read")
+          && permissions.includes("procurement-payment-create")
+          ? <Link to={`/payments/new?invoiceId=${encodeURIComponent(invoice.id)}`}><Button variant="secondary">Create manual payment request</Button></Link>
+          : <><Button variant="secondary" disabled aria-describedby="invoice-payment-unavailable">Record payment</Button>
+            <span id="invoice-payment-unavailable" className="sr-only">Manual payment review is not available yet.</span></>}
         <div className="relative"><Button variant="secondary" aria-label="More invoice actions" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={16} /> More</Button>
           {menuOpen && <div role="menu" aria-label="Invoice actions" className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-card p-3 text-left text-xs shadow-lg">
             <p className="font-medium">More actions</p>

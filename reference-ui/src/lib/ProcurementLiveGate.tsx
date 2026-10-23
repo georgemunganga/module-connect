@@ -45,6 +45,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const planPath = /^\/plans(?:\/|$)/.test(location.pathname);
   const creditPath = /^\/vendor-credits(?:\/|$)/.test(location.pathname);
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
+  const paymentPath = /^\/payments(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
@@ -60,6 +61,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || contractPath && !permits("procurement-contract-read", "procurement-contract-create", "procurement-contract-edit")
     || planPath && !permits("procurement-plan-read", "procurement-plan-create", "procurement-plan-edit")
     || invoicePath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
+    || paymentPath && !(newRecord ? permission.includes("procurement-payment-create")
+      : editRecord ? permission.includes("procurement-payment-edit") : permission.includes("procurement-payment-read"))
     || creditPath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"));
   if (state.readiness && deniedCrud) {
     const denied = <div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div>;
@@ -83,6 +86,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
+    || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders))
     || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))

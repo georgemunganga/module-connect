@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  captureManualPaymentScope, getManualPayment, listManualPayments, manualPaymentActionAvailability,
+  captureManualPaymentScope, getManualPayment, listManualPayments, lookupManualPaymentAssignees,
+  lookupManualPaymentInvoices, manualPaymentActionAvailability, ManualPaymentApiError,
   recoverManualPaymentCreate, sendManualPaymentCommand, type ManualPaymentIdentity,
 } from "../../../src/platform/procurement-manual-payments-api";
 import { createManualPaymentRecoveryJournal } from "../lib/manual-payment-command-journal";
@@ -18,7 +19,8 @@ const key = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const nonce = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const at = "2026-10-23T12:00:00Z";
 const summary = { id: payment, version: 1, status: "Draft", title: "External payment",
-  branchId: branch, supplierInvoiceId: invoice, supplierId: supplier, currencyCode: "ZMW",
+  branchId: branch, supplierInvoiceId: invoice, supplierId: supplier, invoiceNumber: "BILL-1042",
+  supplierDisplayName: "Northwind Devices", currencyCode: "ZMW",
   amountExact: "99999999999999.9999", creatorPrincipalId: principal, approverPrincipalId: approver,
   recorderPrincipalId: recorder, confirmerPrincipalId: confirmer, createdAt: at, updatedAt: null };
 const detail = { request: { ...summary, purpose: "Supplier transfer", approvedAmountExact: null,
@@ -132,6 +134,20 @@ describe("manual payment API client", () => {
     expect(journal.state().blocked).toBe(true);
   });
 
+  it("clears a journal only for a definite received rejection of the same command", () => {
+    const captured = scope();
+    const map = new Map<string, string>();
+    const store = { getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => { map.set(k, v); }, removeItem: (k: string) => { map.delete(k); } };
+    const journal = createManualPaymentRecoveryJournal(captured, store, nonce);
+    const locator = { action: "Create" as const, key, id: null };
+    expect(journal.claim(locator)).toBe(true);
+    expect(journal.reject(locator, new ManualPaymentApiError(0, "Interrupted"))).toBe(false);
+    expect(journal.state().blocked).toBe(true);
+    expect(journal.reject(locator, new ManualPaymentApiError(422, "Invalid amount"))).toBe(true);
+    expect(journal.state().blocked).toBe(false);
+  });
+
   it("rejects imprecise inputs and exposes unavailable execution actions honestly", async () => {
     const captured = scope();
     const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
@@ -143,5 +159,36 @@ describe("manual payment API client", () => {
     expect(manualPaymentActionAvailability("bank-execution")).toMatchObject({ supported: false });
     expect(manualPaymentActionAvailability("batch-payment")).toMatchObject({ supported: false });
     expect(manualPaymentActionAvailability("payment-upload")).toMatchObject({ supported: false });
+  });
+
+  it("uses payment-scoped bill lookup and never calls generic vendor or invoice search", async () => {
+    const captured = scope();
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ items: [{ invoiceId: invoice,
+      invoiceNumber: "BILL-1042", supplierId: supplier, supplierDisplayName: "Northwind Devices",
+      currencyCode: "ZMW", grossExact: "99999999999999.9999", invoiceDate: "2026-10-20", branchId: branch }],
+      nextCursor: null, hasMore: false, previewOnly: true }));
+    vi.stubGlobal("fetch", fetcher);
+    const choices = await lookupManualPaymentInvoices(captured, { branchId: branch, invoiceId: invoice });
+    expect(choices.items[0].grossExact).toBe("99999999999999.9999");
+    expect(fetcher.mock.calls[0][0]).toContain(`/manual-payments/lookups/invoices?branchId=${branch}`);
+    expect(fetcher.mock.calls[0][0]).toContain(`invoiceId=${invoice}`);
+    expect(fetcher.mock.calls[0][0]).not.toContain("/api/procurement/v1/invoices");
+    fetcher.mockResolvedValue(Response.json({ items: [{ ...choices.items[0], grossExact: "1.00001" }],
+      nextCursor: null, hasMore: false, previewOnly: true }));
+    await expect(lookupManualPaymentInvoices(captured, { branchId: branch })).rejects.toMatchObject({ status: 0 });
+  });
+
+  it("accepts only current named assignee IDs and never employee identifiers", async () => {
+    const captured = scope();
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ items: [{ principalId: confirmer,
+      displayName: "Finance reviewer" }], nextCursor: null, hasMore: false }));
+    vi.stubGlobal("fetch", fetcher);
+    const people = await lookupManualPaymentAssignees(captured, { role: "confirm", branchId: branch,
+      recorderPrincipalId: recorder });
+    expect(people.items[0].principalId).toBe(confirmer);
+    expect(fetcher.mock.calls[0][0]).toContain(`recorderPrincipalId=${recorder}`);
+    await expect(lookupManualPaymentAssignees(captured, { role: "confirm", branchId: branch }))
+      .rejects.toMatchObject({ status: 422 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

@@ -20,6 +20,7 @@ import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePl
 import { LiveVendorCreditList, LiveVendorCreditDetail, LiveVendorCreditEditor } from "../features/LiveVendorCredits";
 import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
 import { LiveInbox } from "../features/LiveInbox";
+import { LivePaymentList, LivePaymentEditor, LivePaymentDetail } from "../features/LivePayments";
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
 import { LiveReceivingList, LiveReceivingDetail } from "../features/LiveReceiving";
 import { LiveReceivingEditor } from "../features/LiveReceivingEditor";
@@ -72,6 +73,7 @@ function PendingLiveWorkflow() {
     return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">View only</h1><p className="mt-3 text-sm text-muted-foreground">You can review Procurement as an ERP administrator. Creating or changing purchasing records requires an active employee account.</p><Link className="mt-5 inline-block text-primary hover:underline" to={location.pathname.replace(/\/(?:new|edit)\/?$/, "") || "/vendors"}>Back to records</Link></div>;
   const routeName = location.pathname.split("/").filter(Boolean)[0];
   const pageName = routeName === "recurring-bills" ? "Recurring purchases" : routeName?.replaceAll("-", " ") || "Home";
+  if (routeName === "batch-payments") return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">Batch payments</h1><p className="mt-3 max-w-xl text-sm text-muted-foreground">Batch payment preparation and bank execution are not available in Procurement. Finance manages payment release.</p></div>;
   return <div className="p-5 sm:p-8">
     <h1 className="text-2xl font-semibold capitalize">{pageName}</h1>
     <p className="mt-3 max-w-xl text-sm text-muted-foreground">This workflow is being connected to your ERP. Your company and account are ready; no sample transactions are shown here.</p>
@@ -111,6 +113,7 @@ export function App() {
                   : isProcurementLiveMode && module.key === "rfqs" ? <LiveSourcingList />
                     : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditList />
                     : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceList />
+                    : isProcurementLiveMode && module.key === "payments" ? <LivePaymentList />
                     : isProcurementLiveMode && module.key === "recurring-bills" ? <LiveRecurringPurchaseList />
                     : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingList />
                     : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderList />
@@ -123,6 +126,7 @@ export function App() {
                 path={`/${module.key}/:id`}
                 element={isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditDetail />
                   : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceDetail />
+                  : isProcurementLiveMode && module.key === "payments" ? <LivePaymentDetail />
                   : isProcurementLiveMode && module.key === "recurring-bills" ? <LiveRecurringPurchaseDetail />
                   : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingDetail />
                   : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderDetail />
@@ -144,6 +148,7 @@ export function App() {
                     isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
                       : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditEditor />
                       : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceEditor />
+                      : isProcurementLiveMode && module.key === "payments" ? <LivePaymentEditor />
                       : isProcurementLiveMode && module.key === "recurring-bills" ? <LiveRecurringPurchaseEditor />
                         : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingEditor />
                         : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderEditor /> : <EditorRoute
@@ -158,6 +163,7 @@ export function App() {
                     isProcurementLiveMode && module.key === "requests" ? <LiveRequestEditor />
                       : isProcurementLiveMode && module.key === "vendor-credits" ? <LiveVendorCreditEditor />
                       : isProcurementLiveMode && module.key === "bills" ? <LiveInvoiceEditor />
+                      : isProcurementLiveMode && module.key === "payments" ? <LivePaymentEditor />
                       : isProcurementLiveMode && module.key === "recurring-bills" ? <LiveRecurringPurchaseEditor />
                         : isProcurementLiveMode && module.key === "purchase-receives" ? <LiveReceivingEditor />
                         : isProcurementLiveMode && module.key === "purchase-orders" ? <LiveOrderEditor /> : <EditorRoute
