@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 export async function expectOrderWorkspaceBounds(page: Page, width: number, target: Locator) {
   await page.setViewportSize({ width, height: 1000 });
@@ -21,4 +21,6 @@ export async function expectOrderWorkspaceBounds(page: Page, width: number, targ
     const center = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     return node === center || node.contains(center);
   })).toBe(true);
+  const targetName = (await target.getAttribute("aria-label") || await target.innerText()).replace(/[^a-z0-9]+/gi, "-");
+  await page.screenshot({ path: test.info().outputPath(`order-${width}-${targetName}.png`), fullPage: true });
 }
