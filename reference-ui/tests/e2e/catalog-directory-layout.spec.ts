@@ -4,6 +4,11 @@ const company = "11111111-1111-4111-8111-111111111111";
 const worker = "22222222-2222-4222-8222-222222222222";
 const vendor = "33333333-3333-4333-8333-333333333333";
 const item = "44444444-4444-4444-8444-444444444444";
+const capabilityKeys = ["vendorDraft", "itemDraft", "requestDraft", "approvals", "principalApprovals", "sourcing",
+  "contracts", "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceDocuments", "invoiceValidation",
+  "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft",
+  "recurringPurchaseDraft", "sourcingDraft", "sourcingSourceDrafts", "vendorCreditDraft", "receivingDrafts",
+  "receivingGoods", "receivingInspection", "receivingServices", "invoiceComparison", "invoiceOriginalUnitReview"];
 
 async function catalogFixture(page: Page, kind: "vendors" | "items", failList = false) {
   const calls: Array<{ path: string; search: string; status: string; page: string; method: string }> = [];
@@ -22,7 +27,7 @@ async function catalogFixture(page: Page, kind: "vendors" | "items", failList = 
         : ["procurement-access", "procurement-item-manage"],
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
-      capabilities: { vendorDraft: kind === "vendors", itemDraft: kind === "items" } });
+      capabilities: Object.fromEntries(capabilityKeys.map(key => [key, key === (kind === "vendors" ? "vendorDraft" : "itemDraft")])) });
     if (path === `/api/procurement/v1/${kind}`) {
       calls.push({ path, search: url.searchParams.get("search") ?? "", status: url.searchParams.get("status") ?? "",
         page: url.searchParams.get("page") ?? "", method: request.method() });
@@ -50,7 +55,8 @@ test("vendor directory keeps ERP layout and sends search, status and paging to t
   await expect(page.getByText("Second vendor")).toBeVisible();
   await page.getByLabel("Search vendors", { exact: true }).fill("Copper");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  await page.getByLabel("Filter vendors by status").selectOption("Active");
+  await page.getByRole("combobox", { name: "Filter vendors by status" }).click();
+  await page.getByRole("option", { name: "Active", exact: true }).click();
   await expect.poll(() => calls.at(-1)).toMatchObject({ search: "Copper", status: "Active", page: "1", method: "GET" });
   expect(calls.every(call => call.method === "GET")).toBe(true);
   await expect(page.getByText("Column filters, sorting and selection apply to the loaded page only.")).toBeVisible();
@@ -73,5 +79,5 @@ test("directory list failure displays the server error without a stale row or in
   await page.goto("/procurement/workspace/vendors");
   await expect(page.getByRole("alert")).toContainText("Scoped list unavailable");
   await expect(page.getByTestId("erp-record-table")).toHaveCount(0);
-  await expect(page.getByText("Record totals unavailable while loading.")).toBeVisible();
+  await expect(page.getByText("Record totals are unavailable.")).toBeVisible();
 });
