@@ -270,7 +270,7 @@ test("confirmed child save with failed follow-up GET stays blocked until reconci
   await expect(page.getByRole("button",{name:"Add contact"})).toHaveCount(0);
   failRead=false;await page.getByRole("button",{name:"Reload saved vendor"}).click();
   await expect(page.getByRole("button",{name:"I compared the saved details"})).toBeVisible();
-  await expect(page.getByText("Saved Contact",{exact:false})).toBeVisible();
+  await expect(page.getByText("Saved Contact",{exact:true})).toBeVisible();
 });
 test("late detail save response cannot restore controls after company context changes", async ({ page }) => {
   await mockErp(page);await page.goto("/procurement/workspace/vendors/new");
