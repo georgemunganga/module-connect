@@ -86,6 +86,7 @@ export type VendorOpenOrders = { supplierId: string; count: number;
     issuedAt?: string | null }> };
 
 export interface VendorDetail extends VendorSummary {
+  canEdit?: boolean;
   tradingName?: string | null; website?: string | null; companyIdType?: string | null;
   taxIdentifierRef?: string | null; supplierType?: string | null;
   attributes?: { id: string; kind: "CustomField" | "ReportingTag"; key: string; value?: string | null; version: number }[];

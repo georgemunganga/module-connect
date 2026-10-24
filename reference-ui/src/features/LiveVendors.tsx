@@ -17,6 +17,7 @@ import {
   submitVendorForReview,
   returnVendorForInformation, approveVendor, rejectVendor, suspendVendor, reactivateVendor,
   reviewVendorQualification,
+  VendorApiError,
   type VendorContactDraft, type VendorDetail, type VendorDraft, type VendorOpenOrders, type VendorPage,
   type VendorQualificationDraft, type VendorSiteDraft,
 } from "../../../src/platform/procurement-vendors-api";
@@ -91,10 +92,10 @@ export { FullVendorEditor as LiveVendorEditor } from "./FullVendorEditor";
 export function LiveVendorDetail() {
   const { id } = useParams();
   const readiness = useCompany();
-  const { selection } = useErpShell();
+  const { selection, authEpoch } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
-  return <LiveVendorRecord key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id}`} />;
+  return <LiveVendorRecord key={`${authEpoch}:${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id}`} />;
 }
 
 function VendorDirectory({ companyId, selectedId, canCreate }: { companyId: string; selectedId: string; canCreate: boolean }) {
@@ -140,6 +141,8 @@ function LiveVendorRecord() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [reconciled, setReconciled] = useState(false);
   const [businessReason, setBusinessReason] = useState("");
   const [reviewReason, setReviewReason] = useState("");
   const [duplicatesReviewed, setDuplicatesReviewed] = useState(false);
@@ -157,7 +160,13 @@ function LiveVendorRecord() {
   const [removingDetail, setRemovingDetail] = useState<{ kind: "contact" | "site" | "qualification"; id: string; label: string } | null>(null);
   const [removalReason, setRemovalReason] = useState("");
   const [qualification, setQualification] = useState({ qualificationType: "", issuer: "", referenceNumber: "", issuedOn: "", expiresOn: "" });
-  const reload = () => { if (!id || !mounted.current) return; setLoading(true); getVendorDraft(legalEntityId, id).then(value => { if (mounted.current) setVendor(value); }).catch((cause: unknown) => { if (mounted.current) setError(message(cause)); }).finally(() => { if (mounted.current) setLoading(false); }); };
+  async function reload(): Promise<boolean> {
+    if (!id || !mounted.current) return false;
+    setLoading(true);
+    try { const value = await getVendorDraft(legalEntityId, id); if (!mounted.current) return false; setVendor(value); setError(""); return true; }
+    catch (cause) { if (mounted.current) setError(message(cause)); return false; }
+    finally { if (mounted.current) setLoading(false); }
+  }
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
@@ -177,15 +186,20 @@ function LiveVendorRecord() {
     return () => controller.abort();
   }, [vendor?.canSuspend, vendor?.id, vendor?.version, legalEntityId]);
   async function act(operation: () => Promise<unknown>): Promise<boolean> {
-    if (!mounted.current) return false;
+    if (!mounted.current || blocked) return false;
     setBusy(true); setError("");
-    try { await operation(); if (!mounted.current) return false; reload(); return true; }
-    catch (cause) { if (mounted.current) setError(message(cause)); return false; }
+    try { await operation(); if (!mounted.current) return false;
+      if (!await reload()) { setBlocked(true); setReconciled(false); setError("The action was confirmed, but the saved vendor could not be reloaded. Review the saved record before another action."); return false; }
+      return true;
+    }
+    catch (cause) { if (mounted.current) { setError(message(cause));
+      if (!(cause instanceof VendorApiError) || cause.status === 0 || cause.status === 409 || cause.status >= 500) { setBlocked(true); setReconciled(false); }
+    } return false; }
     finally { if (mounted.current) setBusy(false); }
   }
   if (loading) return <div className="p-5 sm:p-8" role="status">Loading vendor…</div>;
   if (!vendor) return <div className="p-5 sm:p-8" role="alert">{error || "Vendor not found."}</div>;
-  const editable = permissions.includes("procurement-vendor-edit") && (vendor.status === "Draft" || vendor.status === "More Information Required");
+  const editable = vendor.canEdit === true && !blocked;
   const qualificationDatesInvalid = Boolean(qualification.issuedOn && qualification.expiresOn
     && qualification.expiresOn < qualification.issuedOn);
   const activeTab = vendorDetailTabs.some(value => value.key === tab) ? tab! : "overview";
@@ -196,6 +210,7 @@ function LiveVendorRecord() {
     actions={editable ? <Link to={`/vendors/${vendor.id}/edit`}><Button variant="secondary">Edit vendor</Button></Link> : undefined}
     activeTab={activeTab} onTabChange={value => navigate(value === "overview" ? `/vendors/${vendor.id}` : `/vendors/${vendor.id}/${value}`)}>
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    {blocked && <div className="mb-4 rounded-lg border border-border p-4 text-sm"><p>A vendor change is unconfirmed or its saved result could not be reloaded. Review the saved vendor before another action; do not repeat the request blindly.</p><div className="mt-3 flex gap-2"><Button variant="secondary" disabled={busy} onClick={()=>void reload().then(ok=>setReconciled(ok))}>Reload saved vendor</Button>{reconciled && <Button disabled={busy} onClick={()=>{setBlocked(false);setReconciled(false);}}>I compared the saved details</Button>}</div></div>}
     {activeTab !== "overview" ? <DetailSection title={vendorDetailTabs.find(value => value.key === activeTab)!.label}>
       <p className="text-sm text-muted-foreground">{activeTab === "comments" ? "Vendor comments are not connected yet." : activeTab === "transactions" ? "Linked purchase transactions are not connected to this vendor view yet." : activeTab === "mails" ? "Vendor email history and sending are not connected yet." : "Vendor statements and payable balances are not connected to Finance yet."}</p>
       <p className="mt-2 text-sm text-muted-foreground">No records or balances are inferred from this unavailable information.</p>

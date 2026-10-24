@@ -52,7 +52,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       }
     }
     if (path === `/api/procurement/v1/vendors/${vendorId}` && vendor) {
-      if (request.method() === "GET") return json(vendor);
+      if (request.method() === "GET") return json({ ...vendor, canEdit: !options.reviewer && !options.approveOnly && !options.adminViewOnly && ["Draft", "More Information Required"].includes(vendor.status) });
       if (request.method() === "PUT") {
         if (options.staleUpdate) return json({ detail: "This vendor changed. Refresh it and try again." }, 409);
         const { version, draft } = request.postDataJSON();
@@ -239,6 +239,23 @@ test("vendor list denial shows an error without demo rows", async ({ page }) => 
   await page.goto("/procurement/workspace/vendors");
   await expect(page.getByRole("alert")).toContainText("do not have access");
   await expect(page.getByText("Northstar Office Supply")).toHaveCount(0);
+});
+test("lost detail contact-create result blocks replay until a scoped saved-record comparison", async ({ page }) => {
+  await mockErp(page);await page.goto("/procurement/workspace/vendors/new");
+  await page.getByLabel("Company name").fill("Reconciliation Supplier Ltd");
+  await page.getByLabel("Display name").fill("Reconciliation Supplier");
+  await page.getByRole("button",{name:"Save draft"}).click();
+  await expect(page.getByRole("heading",{name:"Reconciliation Supplier"})).toBeVisible();
+  let attempts=0;
+  await page.route(`**/api/procurement/v1/vendors/${vendorId}/contacts`,route=>{attempts++;return route.abort("failed");});
+  await page.getByLabel("Contact name").fill("Potentially saved contact");
+  await page.getByRole("button",{name:"Add contact"}).click();
+  await expect(page.getByText("A vendor change is unconfirmed",{exact:false})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Add contact"})).toHaveCount(0);
+  expect(attempts).toBe(1);
+  await page.getByRole("button",{name:"Reload saved vendor"}).click();
+  await expect(page.getByRole("button",{name:"I compared the saved details"})).toBeVisible();
+  expect(attempts).toBe(1);
 });
 
 test("vendor draft contact and address can be corrected and removed with a reason", async ({ page }) => {
