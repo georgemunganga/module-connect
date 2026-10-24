@@ -66,14 +66,21 @@ test("unavailable revision capability keeps the restored edit form read-only",as
 test("workerless buyer revises the same linked draft and sees retained history",async({page})=>{
   const state=await fixture(page);await page.goto(`${root}/${order}/edit?workflow=principal`);
   await expect(page.getByRole("region",{name:"Order lines"}).getByRole("table")).toBeVisible();
+  await expect(page.getByText("Approved purchase request").first()).toBeVisible();
+  await expect(page.getByText(request,{exact:true})).toHaveCount(0);
   await page.getByRole("textbox",{name:"Reason for revision"}).fill("Reduce quantity");
   await page.getByRole("textbox",{name:"Line 1 quantity"}).fill("1.0002");
   await expect(page.getByRole("button",{name:"Save draft revision"})).toBeDisabled();
   await page.getByRole("textbox",{name:"Line 1 quantity"}).fill("1.0000");
   await page.getByRole("button",{name:"Save draft revision"}).click();
   await expect(page.getByRole("heading",{name:"PO-1"})).toBeVisible();
+  await page.getByRole("tab",{name:"Items (1)"}).click();
+  await expect(page.getByRole("cell",{name:"Approved purchase request"})).toBeVisible();
+  await expect(page.getByText(request,{exact:true})).toHaveCount(0);
   await page.getByRole("tab",{name:"History"}).click();
   await expect(page.getByText("Draft revision 1 · version 2")).toBeVisible();
+  await expect(page.getByText("You",{exact:true})).toBeVisible();
+  await expect(page.getByText(buyer,{exact:true})).toHaveCount(0);
   expect(state.writes).toHaveLength(1);
   expect(state.writes[0].body).toContain('"quantity":1.0000');
   expect(JSON.parse(state.writes[0].body)).toMatchObject({expectedOrderVersion:1,

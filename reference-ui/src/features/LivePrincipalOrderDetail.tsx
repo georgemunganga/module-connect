@@ -193,7 +193,7 @@ function PrincipalDetail({id,view,assignmentId,scopeKey}:{id:string;view:View;as
         </fieldset></form>}</div></Panel>}
       </>}
       {activeTab==="items"&&<DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable variant="compact"><thead><tr><th>Description</th><th>Unit</th><th>Quantity</th><th>Unit price</th><th>Tax</th>{data.view==="buyer"&&<><th>Source request</th><th>Allocation</th></>}</tr></thead>
-        <tbody>{data.record.lines.map(row=><tr key={row.id}><td>{row.description}</td><td>{row.unitCode}</td><td>{row.quantity}</td><td>{record.currencyCode} {row.unitPrice}</td><td>{record.currencyCode} {row.taxAmount}</td>{data.view==="buyer"&&"purchaseRequestId" in row&&<><td>{row.purchaseRequestId}</td><td>{row.allocationStatus}</td></>}</tr>)}</tbody></RecordTable></div></DetailSection>}
+        <tbody>{data.record.lines.map(row=><tr key={row.id}><td>{row.description}</td><td>{row.unitCode}</td><td>{row.quantity}</td><td>{record.currencyCode} {row.unitPrice}</td><td>{record.currencyCode} {row.taxAmount}</td>{data.view==="buyer"&&"purchaseRequestId" in row&&<><td>Approved purchase request</td><td>{row.allocationStatus}</td></>}</tr>)}</tbody></RecordTable></div></DetailSection>}
       {activeTab==="related"&&<><Panel title="Finance evidence"><div className="space-y-3 p-5"><p className="text-sm">The recorded commitment and release references describe external evidence. This page does not move money or post a Finance entry.</p>
         {data.view==="finance"&&data.record.funding?<p>{data.record.funding.manualCommitmentReference} · {data.record.funding.attestedGrossAmountExact} {record.currencyCode}</p>
           :data.view==="buyer"&&data.record.releaseConfirmation?<p>Release confirmed: {data.record.releaseConfirmation.externalReleaseEvidenceReference}</p>
@@ -202,11 +202,9 @@ function PrincipalDetail({id,view,assignmentId,scopeKey}:{id:string;view:View;as
       {activeTab==="comments"&&<DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments cannot be saved on this purchase order yet.</p></DetailSection>}
       {activeTab==="history"&&<DetailSection title="Recorded activity"><p className="text-sm">Current saved state: {record.status}, version {record.version}.</p>
         {data.view==="buyer"&&data.record.draftEditHistory&&<div className="mt-4 space-y-3">
-          <p className="text-sm">Original commercial snapshot: {data.record.draftEditHistory.originalSnapshotSha256}</p>
           {data.record.draftEditHistory.revisions.map(item=><div key={item.id} className="rounded-lg border border-border p-3 text-sm">
             <p className="font-medium">Draft revision {item.revisionNumber} · version {item.resultOrderVersion}</p>
-            <p>{item.reason}</p><p className="text-muted-foreground">{item.recordedAt} · {item.actorPrincipalId}</p>
-            <p className="break-all text-xs text-muted-foreground">Snapshot {item.snapshotSha256}</p>
+            <p>{item.reason}</p><p className="text-muted-foreground">{item.recordedAt} · {item.actorPrincipalId===context.principalId?"You":"Authorized user"}</p>
           </div>)}
         </div>}
         {data.view==="buyer"&&data.record.release&&<p className="mt-2 text-sm">External release requested {data.record.release.requestedAt}: {data.record.release.reason}</p>}

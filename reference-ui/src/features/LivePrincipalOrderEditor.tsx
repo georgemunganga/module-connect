@@ -153,7 +153,7 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
         <section aria-label="Approved requests" className="space-y-3">
           <h2 className="text-sm font-semibold">Approved requests</h2>
           {editing?saved?.lines.map(row=><div key={row.id} className="rounded-md border border-border p-3 text-sm">
-            <p className="font-medium">{row.description}</p><p className="text-muted-foreground">Request {row.purchaseRequestId} · {row.allocationStatus} · {row.quantity} {row.unitCode}</p>
+            <p className="font-medium">{row.description}</p><p className="text-muted-foreground">Approved purchase request · {row.allocationStatus} · {row.quantity} {row.unitCode}</p>
           </div>):loading?<p role="status">Loading approved requests…</p>:available.length?available.map(source=><div key={source.purchaseRequestLineId} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
             <div><p className="font-medium">{source.requestNumber} · {source.description??"Request line"}</p>
               <p className="text-sm text-muted-foreground">{source.canSelect?`${source.availableQuantity} ${source.unitCode} available · ${source.currencyCode} ${source.approvedUnitEstimate} each`:"Unavailable for this order"}</p></div>
@@ -188,7 +188,7 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
           <div className="overflow-x-auto rounded-md border border-border"><table className="w-full min-w-[850px] text-sm">
             <thead className="bg-muted/50 text-left"><tr><th className="p-3">Item / source</th><th className="p-3">Unit</th><th className="p-3">Quantity</th><th className="p-3">Unit price</th><th className="p-3">Tax</th><th className="p-3">Action</th></tr></thead>
             <tbody>{draft.lines.map((entry,at)=><tr key={entry.id??chosen[at]?.purchaseRequestLineId??at} className="border-t border-border align-top">
-              <td className="p-3"><span className="mb-1 block text-xs text-muted-foreground">{editing?`Request ${saved?.lines[at]?.purchaseRequestId}`:`${chosen[at]?.requestNumber} · Available ${chosen[at]?.availableQuantity}`}</span><Input aria-label={`Line ${at+1} description`} required value={entry.description} onChange={event=>line(at,{description:event.target.value})}/>
+              <td className="p-3"><span className="mb-1 block text-xs text-muted-foreground">{editing?"Approved purchase request":`${chosen[at]?.requestNumber} · Available ${chosen[at]?.availableQuantity}`}</span><Input aria-label={`Line ${at+1} description`} required value={entry.description} onChange={event=>line(at,{description:event.target.value})}/>
                 {editing&&<div className="mt-2 grid gap-2"><Input aria-label={`Line ${at+1} cost centre`} placeholder="Cost centre" value={entry.costCenterRef??""} onChange={event=>line(at,{costCenterRef:event.target.value||null})}/>
                   <Input aria-label={`Line ${at+1} project`} placeholder="Project" value={entry.projectRef??""} onChange={event=>line(at,{projectRef:event.target.value||null})}/></div>}</td>
               <td className="p-3"><Input aria-label={`Line ${at+1} unit`} readOnly value={entry.unitCode}/></td>
