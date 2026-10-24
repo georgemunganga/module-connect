@@ -143,17 +143,22 @@ test('buyer and independent Core reviewer publish an RFQ, then record outside co
     await buyerPage.getByRole('button', { name: 'Request publication review' }).click();
     const opened = await openWait; expect(opened.status()).toBe(201); evidence.open = captured(opened); retain();
     await expect(buyerPage.getByText('Waiting for the assigned independent reviewer.')).toBeVisible();
-    progress('independent-review');
+    progress('reviewer-login');
     await login(reviewerContext, reviewer, fixture.reviewerPrincipalId); reviewerLogged = true;
     const reviewerPage = await pageFor(reviewerContext);
+    progress('reviewer-assigned-list');
     await reviewerPage.goto('/procurement/workspace/rfqs?source=principal-approved', { waitUntil: 'domcontentloaded' });
     await expect(reviewerPage.getByText('Publication reviews assigned to me')).toBeVisible();
+    progress('reviewer-assignment-link');
     await reviewerPage.getByRole('link', { name: 'Review RFQ' }).click();
+    progress('reviewer-detail');
     await expect(reviewerPage.getByText('Independent publication review')).toBeVisible();
     const decideWait = reviewerPage.waitForResponse(response => /\/decisions$/.test(new URL(response.url()).pathname)
       && response.request().method() === 'POST');
+    progress('reviewer-decision');
     await reviewerPage.getByRole('button', { name: 'Approve', exact: true }).click();
     const decided = await decideWait; expect(decided.status()).toBe(200); evidence.decide = captured(decided);
+    progress('reviewer-decision-confirmation');
     await expect(reviewerPage.getByText('Approved for internal RFQ publication.', { exact: false })).toBeVisible();
     progress('buyer-reload-published');
     await reload(buyerPage); await expect(buyerPage.getByText('Approved for internal RFQ publication.', { exact: false })).toBeVisible();
@@ -195,5 +200,5 @@ test('buyer and independent Core reviewer publish an RFQ, then record outside co
     writeFileSync(fixture.completionPath, JSON.stringify({ schemaVersion: 3, challenge: fixture.challenge,
       status: 'BrowserFinished' }) + '\n', { mode: 0o600, flag: 'wx' }); retain();
   }
-  if (failed) throw new Error(`Normal-cookie P30 RFQ proof failed at ${step}; inspect protected evidence`);
+  if (failed) throw new Error(`Normal-cookie P30 RFQ proof failed at ${evidence.failedStep}; inspect protected evidence`);
 });
