@@ -37,9 +37,9 @@ export function RfqWizardLayout({ title, back, children, footer, approved = fals
   </div>;
 }
 
-export function RfqDetailLayout({ title, number, method, currency, status, back, actions, overview, items, itemCount, related, relatedFootnote, activity, activeTab, onTabChange }: {
+export function RfqDetailLayout({ title, number, method, currency, status, back, actions, feedback, overview, items, itemCount, related, relatedFootnote, activity, activeTab, onTabChange }: {
   title: string; number: string; method: string; currency: string; status: string; back: string;
-  actions?: ReactNode; overview: ReactNode; items: ReactNode; itemCount: number; related?: ReactNode; relatedFootnote?: string; activity?: ReactNode;
+  actions?: ReactNode; feedback?: ReactNode; overview: ReactNode; items: ReactNode; itemCount: number; related?: ReactNode; relatedFootnote?: string; activity?: ReactNode;
   activeTab?: string; onTabChange?: (tab: string) => void;
 }) {
   const [localActive, setLocalActive] = useState("overview");
@@ -53,6 +53,7 @@ export function RfqDetailLayout({ title, number, method, currency, status, back,
     </header>
     <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "items", label: `Items (${itemCount})` }, { key: "related", label: "Related" }, { key: "comments", label: "Comments" }, { key: "history", label: "History" }]} active={active} onChange={setActive} />
     <div className="mx-auto max-w-7xl space-y-5 p-5 sm:p-8">
+      {feedback}
       <div hidden={active !== "overview"} inert={active !== "overview" ? true : undefined}>{overview}</div>
       {active === "items" && <DetailSection title="Items / Line Details">{items}</DetailSection>}
       <div hidden={active !== "related"} inert={active !== "related" ? true : undefined}><DetailSection title="Related records">{related}<p className="text-sm text-muted-foreground">{relatedFootnote ?? "Related bids, purchase orders and awards are not available yet."}</p></DetailSection></div>
