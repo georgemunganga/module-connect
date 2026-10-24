@@ -1,4 +1,4 @@
-import { expect, test, type APIResponse, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type APIResponse, type BrowserContext, type Page, type Response } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -64,7 +64,7 @@ async function body(response: APIResponse): Promise<Record<string, unknown>> {
   try { return await response.json() as Record<string, unknown>; }
   catch { throw new Error('Private receiving API returned invalid JSON'); }
 }
-function command(response: APIResponse, allowed: readonly string[]): { key: string; body: string } {
+function command(response: Response, allowed: readonly string[]): { key: string; body: string } {
   const key = response.request().headers()['idempotency-key'];
   const raw = response.request().postData();
   if (!guid(key) || !raw || raw.length > 65536) throw new Error('Bounded receiving command missing');
