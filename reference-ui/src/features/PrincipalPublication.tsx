@@ -219,12 +219,17 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
       targetId: current.bidId }, key => cancelManualQuote(company, current, key));
   }
   if (journal.error || cancelJournal.error) return <div className="p-5 sm:p-8"><p role="alert">{journal.error || cancelJournal.error}</p></div>;
+  const feedback = <>
+    {actionError && !pending && !cancelPending && <p role="alert" className="text-destructive">{actionError}</p>}
+    {pending && <PendingResult value={pending} busy={busy} error={actionError} check={() => void recover()} />}
+    {cancelPending && <PendingResult value={cancelPending} busy={busy} error={actionError} check={() => void recoverCancellation()} />}
+  </>;
   if (!record) return <div className="p-5 sm:p-8">{loadError ? <p role="alert">{loadError}</p> : <p role="status">Loading quote request…</p>}
-    {pending && <PendingResult value={pending} busy={busy} error={actionError} check={() => void recover()} />}</div>;
+    {feedback}</div>;
   const activeAssignment = record.publication?.assignments.find(x => x.state === "Pending");
   return <RfqDetailLayout title={record.title} number={record.number} method={record.method}
     currency={record.currencyCode} status={record.status} back="/rfqs?source=principal-approved"
-    activeTab={activeTab} onTabChange={setActiveTab}
+    activeTab={activeTab} onTabChange={setActiveTab} feedback={feedback}
     actions={<Button variant="secondary" disabled title={record.status === "Draft"
       ? "Choose approved suppliers and request independent publication review below"
       : "Supplier dispatch and award are not available"}>{record.status === "Draft" ? "Publish" : "Send to suppliers"}</Button>}
@@ -234,9 +239,6 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
       <tr key={line.id}><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitCode}</td>
         <td>{record.currencyCode} {line.approvedUnitEstimate}</td><td>{line.allocationState === "Reserved" ? "Held for this RFQ" : "Released"}</td></tr>)}</tbody></RecordTable></div>}
     overview={<div className="space-y-5">
-      {actionError && <p role="alert" className="text-destructive">{actionError}</p>}
-      {pending && <PendingResult value={pending} busy={busy} error={actionError} check={() => void recover()} />}
-      {cancelPending && <PendingResult value={cancelPending} busy={busy} error={actionError} check={() => void recoverCancellation()} />}
       <div className="grid gap-5 lg:grid-cols-3"><DetailSection title="Quote details" className="lg:col-span-2"><dl className="grid gap-4 sm:grid-cols-2">
         <DetailValue label="Reference" value={record.number} /><DetailValue label="Method" value={record.method} />
         <DetailValue label="Currency" value={record.currencyCode} /><DetailValue label="Status" value={record.status} />
