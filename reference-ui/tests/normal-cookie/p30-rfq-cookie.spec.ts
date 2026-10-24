@@ -8,6 +8,7 @@ type Fixture = { schemaVersion: 3; controlPlaneOnly: true; browserAuthentication
   apiUrl: string; database: string; tenantId: string; companyId: string; branchId: string;
   buyerPrincipalId: string; reviewerPrincipalId: string; approvedRequestId: string; approvedRequestLineId: string;
   nativeEventId: string; nativePolicyId: string; nativeCaseId: string; nativeSupplierIds: string[];
+  contactCanonicalProbeSha256: string;
   syntheticCredentials: Credential[]; challenge: string; completionPath: string; expiresAt: string };
 const guid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v)
   && v !== '00000000-0000-0000-0000-000000000000';
@@ -34,6 +35,7 @@ if (fixture.schemaVersion !== 3 || fixture.controlPlaneOnly !== true || proxy.sc
     fixture.nativePolicyId, fixture.nativeCaseId].every(guid)
   || !Array.isArray(fixture.nativeSupplierIds) || fixture.nativeSupplierIds.length !== 2
   || !fixture.nativeSupplierIds.every(guid) || fixture.nativeSupplierIds[0] === fixture.nativeSupplierIds[1]
+  || !/^[a-f0-9]{64}$/.test(fixture.contactCanonicalProbeSha256)
   || !/^[a-f0-9]{64}$/.test(fixture.challenge) || !path.isAbsolute(fixture.completionPath)
   || existsSync(fixture.completionPath) || !Number.isFinite(Date.parse(fixture.expiresAt))
   || Date.parse(fixture.expiresAt) <= Date.now())

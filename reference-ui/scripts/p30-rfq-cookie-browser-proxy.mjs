@@ -33,6 +33,7 @@ need(fixture.schemaVersion === 3 && fixture.controlPlaneOnly === true && fixture
   && Array.isArray(fixture.syntheticCredentials) && fixture.syntheticCredentials.length === 7
   && fixture.syntheticCredentials.filter(value => value.principalId === fixture.buyerPrincipalId).length === 1
   && fixture.syntheticCredentials.filter(value => value.principalId === fixture.reviewerPrincipalId).length === 1
+  && /^[a-f0-9]{64}$/.test(fixture.contactCanonicalProbeSha256)
   && /^[a-f0-9]{64}$/.test(fixture.challenge)
   && fixture.completionPath === '/p25-evidence/p30-rfq-local-cookie-browser-completion.private.json'
   && !fs.existsSync(fixture.completionPath)
