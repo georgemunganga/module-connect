@@ -4,9 +4,9 @@ const capabilities=Object.fromEntries(["vendorDraft","itemDraft","requestDraft",
 const site="55555555-5555-4555-8555-555555555555",qualification="66666666-6666-4666-8666-666666666666";
 type Row=Record<string,unknown>;
 /** Contract mocks only: not real persistence or authorization evidence. */
-export async function fullVendorMock(page:Page,options:{edit?:boolean;denyEdit?:boolean;stale?:boolean;loseChild?:boolean;qualificationStatus?:string}={}) {
+export async function fullVendorMock(page:Page,options:{edit?:boolean;denyEdit?:boolean;canEditFalse?:boolean;stale?:boolean;loseChild?:boolean;qualificationStatus?:string}={}) {
   const writes:{method:string;path:string;body:Row}[]=[];
-  let saved:Row={id:vendor,number:"VEN-1",legalName:"Full Vendor Ltd",displayName:"Full Vendor",countryCode:"ZM",status:"Draft",isOrderable:false,version:1,defaultCurrencyCode:"ZMW",isLocal:true,contacts:[{id:contact,name:"Jane",isPrimary:false}],sites:[],qualifications:options.qualificationStatus?[{id:qualification,qualificationType:"Reviewed clearance",reviewStatus:options.qualificationStatus}]:[],attributes:[],createdAt:"2026-10-22T00:00:00Z"};
+  let saved:Row={id:vendor,number:"VEN-1",legalName:"Full Vendor Ltd",displayName:"Full Vendor",countryCode:"ZM",status:"Draft",canEdit:!options.canEditFalse,isOrderable:false,version:1,defaultCurrencyCode:"ZMW",isLocal:true,contacts:[{id:contact,name:"Jane",isPrimary:false}],sites:[],qualifications:options.qualificationStatus?[{id:qualification,qualificationType:"Reviewed clearance",reviewStatus:options.qualificationStatus}]:[],attributes:[],createdAt:"2026-10-22T00:00:00Z"};
   await page.addInitScript(id=>localStorage.setItem("erp.shell.state.v1",JSON.stringify({entityId:id})),company);
   await page.route("**/api/**",async route=>{
     const request=route.request(),path=new URL(request.url()).pathname,method=request.method();
