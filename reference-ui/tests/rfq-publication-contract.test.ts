@@ -70,6 +70,15 @@ describe("principal RFQ publication adapter", () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ expectedEventVersion: 4,
       expectedCaseVersion: 1, expectedAssignmentVersion: 1, action: "Approve" });
   });
+  it("maps only the known contact time validation code and hides raw server text", async () => {
+    const send = () => recordManualContact(company, event, { id: invitation, supplierId: supplier,
+      status: "ReadyForManualDelivery", version: 1, contactRecorded: false },
+    "EmailOutsideSystem", "outside-ref", "2026-10-23T12:00:00.123Z", key);
+    respond({ code: "SourcingManualContactTimeInvalid", message: "Private server text" }, 422);
+    await expect(send()).rejects.toThrow("Contact time must be after approval and cannot be in the future.");
+    respond({ code: "UnknownValidation", message: "Private server text" }, 422);
+    await expect(send()).rejects.toThrow("Check the quote details, supplier and amounts.");
+  });
   it("treats contact as external evidence and quote as internal Draft, never supplier submission", async () => {
     let fetch = respond({ eventId: event, invitationId: invitation, status: "ManualContactRecorded",
       supplierDeliveryReported: true, emailSentBySystem: false, commandKey: key });

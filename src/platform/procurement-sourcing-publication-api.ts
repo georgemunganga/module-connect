@@ -48,6 +48,17 @@ async function call(company: string, path: string, init: RequestInit = {}): Prom
   try { response = await fetch(`/api/procurement/v1/sourcing${path}`, {
     ...init, headers, credentials: "include", cache: "no-store", method: init.method ?? "GET",
   }); } catch { throw new PublicationApiError(0, "The response was interrupted. Check its original save reference."); }
+  if (response.status === 422) {
+    let invalidContactTime = false;
+    try {
+      const problem: unknown = await response.json();
+      invalidContactTime = problem !== null && typeof problem === "object" && "code" in problem
+        && problem.code === "SourcingManualContactTimeInvalid";
+    } catch { /* Unknown/non-JSON validation errors retain the generic message. */ }
+    throw new PublicationApiError(422, invalidContactTime
+      ? "Contact time must be after approval and cannot be in the future."
+      : "Check the quote details, supplier and amounts.");
+  }
   if (!response.ok) throw new PublicationApiError(response.status, response.status === 401 ? "Sign in to ERP before continuing."
     : response.status === 403 ? "You do not have access to this quote action."
       : response.status === 404 ? "This quote is unavailable in your current company or branch."
