@@ -16,6 +16,7 @@ import { PrincipalInvoiceReviewDetail } from "../features/PrincipalInvoiceUnitRe
 import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../features/LiveRequests";
 import { LiveSourcingList, LiveSourcingEditor, LiveSourcingDetail } from "../features/LiveSourcing";
 import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../features/LiveContracts";
+import { LiveContractReviewWorklist, LiveContractReviewDetail } from "../features/LiveContractReviews";
 import { LiveRecurringPurchaseList, LiveRecurringPurchaseEditor, LiveRecurringPurchaseDetail } from "../features/LiveRecurringPurchases";
 import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePlans";
 import { LiveVendorCreditList, LiveVendorCreditDetail, LiveVendorCreditEditor } from "../features/LiveVendorCredits";
@@ -179,6 +180,8 @@ export function App() {
             {isProcurementLiveMode && <>
               <Route path="/contracts" element={<LiveContractList />} />
               <Route path="/contracts/new" element={<LiveContractEditor />} />
+              <Route path="/contracts/internal-review" element={<LiveContractReviewWorklist />} />
+              <Route path="/contracts/internal-review/:id/assignments/:assignmentId" element={<LiveContractReviewDetail />} />
               <Route path="/contracts/:id/edit" element={<LiveContractEditor />} />
               <Route path="/contracts/:id" element={<LiveContractDetail />} />
               <Route path="/plans" element={<LivePlanList />} />
