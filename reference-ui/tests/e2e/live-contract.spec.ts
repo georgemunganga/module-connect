@@ -160,6 +160,10 @@ test("lost rate response requires GET review and never retries POST", async ({ p
   await expect(page.getByText("The last result needs review.")).toBeVisible();
   expect(state.rateWrites()).toBe(1);
   await expect(page.getByRole("button", { name: "Save rate" })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText("The last result needs review.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add rate" })).toHaveCount(0);
+  expect(state.rateWrites()).toBe(1);
   await page.getByRole("button", { name: "Review saved contract and rates" }).click();
   await expect(page.getByText("Monthly support")).toBeVisible();
   expect(state.rateWrites()).toBe(1);

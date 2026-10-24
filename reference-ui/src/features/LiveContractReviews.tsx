@@ -20,9 +20,9 @@ function scope() {
 
 /** A scoped list of this Core account's currently assigned reviews. */
 export function LiveContractReviewWorklist() {
-  const { legalEntityId, effectiveBranchId, permissions, capabilities } = scope();
+  const { tenantId, legalEntityId, principalId, effectiveBranchId, permissions, capabilities } = scope();
   const { authEpoch } = useErpShell();
-  const viewScope = `${authEpoch}:${legalEntityId}:${effectiveBranchId ?? ""}`;
+  const viewScope = `${authEpoch}:${tenantId}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}`;
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AssignedContractReviews | null>(null);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
@@ -70,9 +70,9 @@ export function LiveContractReviewWorklist() {
 export function LiveContractReviewDetail() {
   const { id, assignmentId } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, principalId, effectiveBranchId, permissions, capabilities } = scope();
+  const { tenantId, legalEntityId, principalId, effectiveBranchId, permissions, capabilities } = scope();
   const { authEpoch } = useErpShell();
-  const key = `${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${id ?? ""}:${assignmentId ?? ""}`;
+  const key = `${authEpoch}:${tenantId}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${id ?? ""}:${assignmentId ?? ""}`;
   const current = useRef(key); current.current = key;
   const [record, setRecord] = useState<AssignedContractReviewDetail | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
