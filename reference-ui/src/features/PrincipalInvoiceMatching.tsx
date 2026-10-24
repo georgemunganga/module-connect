@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
@@ -267,7 +266,8 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
           <Button type="button" variant="secondary" disabled={busy} onClick={() => { setDrafts({}); setAcceptances(null); }}>Clear draft links</Button></div>
       </form>}
       {state.state === "Mapped" && !editing && <div className="space-y-3"><p>Saved links are not verified original units.</p>
-        {state.reviewId ? <Link className="text-primary underline" to={`/approvals/principal-unit-review/${state.reviewId}`}>Open original review</Link>
+        {state.reviewId ? <p role="status">Original document check: {state.reviewState}.
+          Current assigned reviewers can open their task from Approvals. Returned or rejected links can be corrected here.</p>
           : canOpen && <><Field label="Review note (optional)"><Textarea maxLength={2000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></Field>
             <Button disabled={busy} onClick={openReview}>Request original unit review</Button></>}</div>}
       {(state.state === "Reviewed" || state.state === "ComparisonBlocked") && <div className="space-y-3"><p>{state.state === "ComparisonBlocked"
