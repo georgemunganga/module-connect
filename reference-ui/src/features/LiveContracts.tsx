@@ -3,12 +3,13 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
+import { ContractDraftRates } from "./ContractDraftRates";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import {
   ContractApiError,
   cancelOwnContractDraft, createOwnContractDraft, getOwnContractDraft,
-  listOwnContractDrafts, updateOwnContractDraft,
+  listOwnContractDrafts, updateOwnContractDraft, validContractCeiling,
   type ContractDetail, type ContractDraft, type ContractPage,
 } from "../../../src/platform/procurement-contracts-api";
 
@@ -18,12 +19,15 @@ function useCompany() {
   if (!readiness) throw new Error("Contracts require an ERP company.");
   return readiness;
 }
-function money(amount: number, currency: string) {
-  return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function exactMoney(amount: string | undefined, currency: string) {
+  if (amount === undefined) return "Exact spending limit unavailable";
+  const [whole, fraction = ""] = amount.split(".");
+  return currency + " " + whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+    + "." + fraction.padEnd(2, "0");
 }
 function emptyDraft(currencyCode: string): ContractDraft {
   return { supplierId: "", title: "", contractType: "Supply", currencyCode,
-    ceilingAmount: 0, effectiveFrom: null, expiresOn: null, renewalNoticeOn: null };
+    ceilingAmount: "0", effectiveFrom: null, expiresOn: null, renewalNoticeOn: null };
 }
 function validDates(draft: ContractDraft): string | null {
   if (draft.effectiveFrom && draft.expiresOn && draft.expiresOn < draft.effectiveFrom)
@@ -53,7 +57,7 @@ export function LiveContractList() {
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading contracts…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Reference</th><th>Contract</th><th>Type</th><th>Limit</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>{data.items.map((item) => <tr key={item.id}><td>{item.number}</td><td><Link to={`/contracts/${item.id}`} className="font-medium text-primary hover:underline">{item.title}</Link></td><td>{item.contractType}</td><td>{money(item.ceilingAmount, item.currencyCode)}</td><td>{item.expiresOn || "—"}</td><td><Badge>{item.status}</Badge></td><td><Link to={`/contracts/${item.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
+        <tbody>{data.items.map((item) => <tr key={item.id}><td>{item.number}</td><td><Link to={`/contracts/${item.id}`} className="font-medium text-primary hover:underline">{item.title}</Link></td><td>{item.contractType}</td><td>{exactMoney(item.ceilingAmountExact, item.currencyCode)}</td><td>{item.expiresOn || "—"}</td><td><Badge>{item.status}</Badge></td><td><Link to={`/contracts/${item.id}`} className="text-sm text-primary hover:underline">Open</Link></td></tr>)}</tbody>
       </RecordTable></div> : <EmptyState title="No contracts yet" description="Create a draft to record the supplier, dates and spending limit." action={permissions.includes("procurement-contract-create") ? <Link to="/contracts/new"><Button>New contract</Button></Link> : undefined} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel>
@@ -89,7 +93,7 @@ export function LiveContractEditor() {
       if (record) {
         setVersion(record.version); setLoadedContext(editorContext);
         setDraft({ supplierId: record.supplierId, title: record.title, contractType: record.contractType,
-          currencyCode: record.currencyCode, ceilingAmount: record.ceilingAmount,
+          currencyCode: record.currencyCode, ceilingAmount: record.ceilingAmountExact ?? "",
           effectiveFrom: record.effectiveFrom || null, expiresOn: record.expiresOn || null,
           renewalNoticeOn: record.renewalNoticeOn || null });
       } else { setVersion(null); setDraft(emptyDraft(defaultCurrencyCode)); }
@@ -121,6 +125,9 @@ export function LiveContractEditor() {
     setError("");
     const dateIssue = validDates(draft);
     if (dateIssue) { setError(dateIssue); return; }
+    if (!validContractCeiling(draft.ceilingAmount)) {
+      setError("Enter an exact non-negative spending limit with up to four decimal places."); return;
+    }
     if (!draft.supplierId) { setError("Choose a supplier."); return; }
     setSaving(true);
     try {
@@ -151,7 +158,7 @@ export function LiveContractEditor() {
         {!supplierLoading && !vendors.length && <p className="sm:col-span-2 text-sm text-muted-foreground">{supplierSearch ? "No eligible suppliers match that search." : "Add an eligible supplier before creating a contract."}</p>}
         <Field label="Contract title" className="sm:col-span-2"><Input required maxLength={300} value={draft.title} onChange={(event) => field("title", event.target.value)} /></Field>
         <Field label="Contract type"><Select value={draft.contractType} onChange={(event) => field("contractType", event.target.value)}><option value="Supply">Goods supply</option><option value="Service">Services</option><option value="Framework">Framework agreement</option><option value="Subscription">Subscription</option><option value="Other">Other</option></Select></Field>
-        <Field label="Spending limit"><Input required type="number" min="0" max="99999999999999" step="0.0001" value={draft.ceilingAmount} onChange={(event) => field("ceilingAmount", Number(event.target.value))} /></Field>
+        <Field label="Spending limit"><Input required inputMode="decimal" value={draft.ceilingAmount} onChange={(event) => field("ceilingAmount", event.target.value)} /></Field>
         <Field label="Currency"><Input required maxLength={3} value={draft.currencyCode} onChange={(event) => field("currencyCode", event.target.value.toUpperCase())} /></Field>
         <Field label="Starts on"><Input type="date" value={draft.effectiveFrom || ""} onChange={(event) => field("effectiveFrom", event.target.value || null)} /></Field>
         <Field label="Expires on"><Input type="date" value={draft.expiresOn || ""} onChange={(event) => field("expiresOn", event.target.value || null)} /></Field>
@@ -165,7 +172,7 @@ export function LiveContractEditor() {
 export function LiveContractDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, permissions } = useCompany();
+  const { legalEntityId, permissions, capabilities } = useCompany();
   const [record, setRecord] = useState<ContractDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -174,7 +181,7 @@ export function LiveContractDetail() {
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
-    setLoading(true); setError("");
+    setLoading(true); setRecord(null); setError(""); setReason("");
     getOwnContractDraft(legalEntityId, id, controller.signal).then(setRecord)
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -189,20 +196,24 @@ export function LiveContractDetail() {
     finally { setBusy(false); }
   }
   return <div className="p-5 sm:p-8">
-    {loading ? <p role="status">Loading contract…</p> : record ? <>
+    {loading ? <p role="status">Loading contract…</p> : record && record.id === id ? <>
       <PageHeader title={record.title} subtitle={`${record.number} · Supplier agreement`} actions={permissions.includes("procurement-contract-edit") && record.status === "Draft" ? <Link to={`/contracts/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       <Panel title="Contract details"><dl className="grid gap-5 p-5 text-sm sm:grid-cols-2">
         <div><dt className="text-muted-foreground">Status</dt><dd className="mt-1"><Badge>{record.status}</Badge></dd></div>
         <div><dt className="text-muted-foreground">Supplier reference</dt><dd className="mt-1"><Link className="text-primary hover:underline" to={`/vendors/${record.supplierId}`}>Open supplier</Link></dd></div>
         <div><dt className="text-muted-foreground">Type</dt><dd className="mt-1">{record.contractType}</dd></div>
-        <div><dt className="text-muted-foreground">Spending limit</dt><dd className="mt-1">{money(record.ceilingAmount, record.currencyCode)}</dd></div>
+        <div><dt className="text-muted-foreground">Spending limit</dt><dd className="mt-1">{exactMoney(record.ceilingAmountExact, record.currencyCode)}</dd></div>
         <div><dt className="text-muted-foreground">Starts on</dt><dd className="mt-1">{record.effectiveFrom || "—"}</dd></div>
         <div><dt className="text-muted-foreground">Expires on</dt><dd className="mt-1">{record.expiresOn || "—"}</dd></div>
         <div><dt className="text-muted-foreground">Renewal reminder</dt><dd className="mt-1">{record.renewalNoticeOn || "—"}</dd></div>
         <div><dt className="text-muted-foreground">Draft revision</dt><dd className="mt-1">{record.draftVersion?.revisionNumber ?? "—"}</dd></div>
         {record.terminationReason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Cancellation reason</dt><dd className="mt-1">{record.terminationReason}</dd></div>}
       </dl></Panel>
+      <ContractDraftRates key={legalEntityId + ":" + record.id} companyId={legalEntityId}
+        contract={record} enabled={capabilities.contractDraftRates === true}
+        canEdit={permissions.includes("procurement-contract-edit")}
+        onFreshContract={setRecord} />
       {permissions.includes("procurement-contract-edit") && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
     </> : <p role="alert">{error || "Contract not found."}</p>}
     <Link to="/contracts" className="mt-5 inline-block text-sm text-primary hover:underline">Back to contracts</Link>

@@ -11,8 +11,10 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "contractDraft"]));
 type ContractRecord = Record<string, unknown> & { id: string; version: number; title: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; noSupplier?: boolean; searchOnly?: boolean } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; noSupplier?: boolean; searchOnly?: boolean; ratesEnabled?: boolean; loseFirstRate?: boolean } = {}) {
   let record: ContractRecord | null = null;
+  let savedRate: Record<string, unknown> | null = null;
+  let rateWrites = 0;
   await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -24,7 +26,7 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId: null, permissions: ["procurement-access", "procurement-contract-read", "procurement-contract-create", "procurement-contract-edit"], company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
-    if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
+    if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities: { ...capabilities, contractDraftRates: options.ratesEnabled === true } });
     if (path === "/api/procurement/v1/vendors") {
       const found = !options.noSupplier && (!options.searchOnly || new URL(request.url()).searchParams.get("search")?.toLowerCase().includes("copper"));
       return json({ items: found ? [{ id: vendorId, number: "VEN-001", displayName: "Copper Supplies", legalName: "Copper Supplies", countryCode: "ZM", status: "Active", isOrderable: true, version: 1, createdAt: "2026-10-18T00:00:00Z" }] : [], total: found ? 1 : 0, page: 1, pageSize: 100 });
@@ -34,7 +36,8 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
         : json({ items: record ? [record] : [], total: record ? 1 : 0, page: 1, pageSize: 25 });
       if (request.method() === "POST") {
         const input = request.postDataJSON();
-        record = { ...input, id: contractId, number: "CON-001", status: "Draft", version: 1,
+        record = { ...input, ceilingAmount: Number(input.ceilingAmount),
+          ceilingAmountExact: input.ceilingAmount, id: contractId, number: "CON-001", status: "Draft", version: 1,
           currencyCode: input.currencyCode || "ZMW", draftVersion: { id: contractId, revisionNumber: 1, status: "Draft", version: 1 } };
         return json(record, 201);
       }
@@ -44,7 +47,8 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       if (request.method() === "PUT") {
         if (options.staleUpdate) return json({ message: "Refresh this contract before saving." }, 409);
         const input = request.postDataJSON();
-        record = { ...record, ...input.draft, version: record.version + 1 };
+        record = { ...record, ...input.draft, ceilingAmount: Number(input.draft.ceilingAmount),
+          ceilingAmountExact: input.draft.ceilingAmount, version: record.version + 1 };
         return json(record);
       }
     }
@@ -53,8 +57,36 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       record = { ...record, status: "Cancelled", terminationReason: input.reason, version: record.version + 1 };
       return json(record);
     }
+    if (path === `/api/procurement/v1/contracts/${contractId}/rates` && record) {
+      if (request.method() === "GET") return json({ contractId, contractVersion: record.version, draftVersionId: contractId, items: savedRate ? [savedRate] : [] });
+      if (request.method() === "POST") {
+        rateWrites++;
+        const input = request.postDataJSON();
+        if (input.contractVersion !== record.version) return json({ message: "Refresh the contract." }, 409);
+        record = { ...record, version: record.version + 1 };
+        savedRate = { ...input.rate, id: "55555555-5555-4555-8555-555555555555",
+          lineNumber: 1, unitPriceExact: input.rate.unitPrice, maximumQuantityExact: input.rate.maximumQuantity,
+          status: "Active", statusReason: null, version: 1 };
+        if (options.loseFirstRate && rateWrites === 1) return route.abort("failed");
+        return json({ contractId, contractVersion: record.version, rate: savedRate }, 201);
+      }
+    }
+    if (path === `/api/procurement/v1/contracts/${contractId}/rates/55555555-5555-4555-8555-555555555555` && record && savedRate) {
+      if (request.method() === "GET") return json({ contractId, contractVersion: record.version, rate: savedRate });
+      const input = request.postDataJSON();
+      if (input.contractVersion !== record.version || input.rateVersion !== savedRate.version)
+        return json({ message: "Refresh the rate." }, 409);
+      if (request.method() === "PUT") savedRate = { ...savedRate, ...input.rate,
+        unitPriceExact: String(input.rate.unitPrice).replace(/0+$/, "").replace(/\.$/, ""),
+        maximumQuantityExact: input.rate.maximumQuantity, version: Number(savedRate.version) + 1 };
+      else if (request.method() === "POST") savedRate = { ...savedRate, status: "Removed", statusReason: input.reason, version: Number(savedRate.version) + 1 };
+      else return json({ message: "Unexpected method" }, 405);
+      record = { ...record, version: record.version + 1 };
+      return json({ contractId, contractVersion: record.version, rate: savedRate });
+    }
     return json({ message: `Unexpected route: ${path}` }, 404);
   });
+  return { rateWrites: () => rateWrites };
 }
 
 test("contract draft is saved, revised and cancelled", async ({ page }) => {
@@ -69,6 +101,8 @@ test("contract draft is saved, revised and cancelled", async ({ page }) => {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("heading", { name: "Office supplies agreement" })).toBeVisible();
   await expect(page.getByText("ZMW 50,000.00")).toBeVisible();
+  await expect(page.getByText("Detailed draft rates are not available for this ERP company yet.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add rate" })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Office supplies agreement" })).toBeVisible();
   await page.getByRole("link", { name: "Edit draft" }).click();
@@ -79,6 +113,56 @@ test("contract draft is saved, revised and cancelled", async ({ page }) => {
   await page.getByRole("button", { name: "Cancel draft" }).click();
   await expect(page.getByRole("heading", { name: "Contracts" })).toBeVisible();
   await expect(page.getByText("Cancelled")).toBeVisible();
+});
+
+test("draft rates keep exact prices, removed history and parent CAS in the existing contract detail", async ({ page }) => {
+  await mockErp(page, { ratesEnabled: true });
+  await page.goto("/procurement/workspace/contracts/new");
+  await page.getByRole("combobox", { name: "Supplier" }).click();
+  await page.getByRole("option", { name: /Copper Supplies/ }).click();
+  await page.getByLabel("Contract title").fill("Rate schedule");
+  await page.getByLabel("Spending limit").fill("99999999999999.9999");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("ZMW 99,999,999,999,999.9999")).toBeVisible();
+  await page.getByRole("button", { name: "Add rate" }).click();
+  await page.getByLabel("Description").fill("Monthly support");
+  await page.getByLabel("Unit").fill("month");
+  await page.getByLabel("Unit price").fill("0.0001");
+  await page.getByLabel("Maximum quantity (optional)").fill("2.5000");
+  await page.getByRole("button", { name: "Save rate" }).click();
+  await expect(page.getByText("Monthly support")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "0.0001" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("cell", { name: "0.0001" })).toBeVisible();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Unit price").fill("1.2500");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("cell", { name: "1.25" })).toBeVisible();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByLabel("Why remove this rate?").fill("No longer offered");
+  await page.getByRole("button", { name: "Remove rate" }).click();
+  await expect(page.getByText("Reason: No longer offered")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
+});
+
+test("lost rate response requires GET review and never retries POST", async ({ page }) => {
+  const state = await mockErp(page, { ratesEnabled: true, loseFirstRate: true });
+  await page.goto("/procurement/workspace/contracts/new");
+  await page.getByRole("combobox", { name: "Supplier" }).click();
+  await page.getByRole("option", { name: /Copper Supplies/ }).click();
+  await page.getByLabel("Contract title").fill("Lost acknowledgement");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: "Add rate" }).click();
+  await page.getByLabel("Description").fill("Monthly support");
+  await page.getByLabel("Unit").fill("month");
+  await page.getByLabel("Unit price").fill("0.0001");
+  await page.getByRole("button", { name: "Save rate" }).click();
+  await expect(page.getByText("The last result needs review.")).toBeVisible();
+  expect(state.rateWrites()).toBe(1);
+  await expect(page.getByRole("button", { name: "Save rate" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Review saved contract and rates" }).click();
+  await expect(page.getByText("Monthly support")).toBeVisible();
+  expect(state.rateWrites()).toBe(1);
 });
 
 test("contract list denial does not show local records", async ({ page }) => {

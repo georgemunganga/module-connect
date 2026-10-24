@@ -3,11 +3,12 @@ import { procurementScopeHeaders } from "../../shared/shell-scope";
 /** Commercial contract drafts. Review, signature, activation and drawdowns are separate workflows. */
 export type ContractDraft = {
   supplierId: string; title: string; contractType: string; currencyCode: string;
-  ceilingAmount: number; effectiveFrom: string | null; expiresOn: string | null;
+  ceilingAmount: string; effectiveFrom: string | null; expiresOn: string | null;
   renewalNoticeOn: string | null;
 };
-export type ContractSummary = ContractDraft & {
+export type ContractSummary = Omit<ContractDraft, "ceilingAmount"> & {
   id: string; number: string; status: string; version: number;
+  ceilingAmount: number; ceilingAmountExact?: string;
 };
 export type ContractDetail = ContractSummary & {
   terminationReason?: string | null; createdAt?: string;
@@ -20,6 +21,8 @@ export class ContractApiError extends Error {
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
+const exact18x4 = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/;
+export const validContractCeiling = (value: string) => exact18x4.test(value);
 
 async function call(companyId: string, path: string, init: RequestInit = {}): Promise<unknown> {
   if (!guid.test(companyId)) throw new ContractApiError(0, "Choose an ERP company before opening contracts.");
@@ -50,7 +53,10 @@ function summary(value: unknown): value is ContractSummary {
   return object(value) && guid.test(String(value.id)) && guid.test(String(value.supplierId))
     && typeof value.number === "string" && typeof value.title === "string"
     && typeof value.contractType === "string" && typeof value.currencyCode === "string"
-    && typeof value.ceilingAmount === "number" && typeof value.status === "string"
+    && typeof value.ceilingAmount === "number"
+    && (value.ceilingAmountExact === undefined || typeof value.ceilingAmountExact === "string"
+      && exact18x4.test(value.ceilingAmountExact))
+    && typeof value.status === "string"
     && typeof value.version === "number";
 }
 function detail(value: unknown): value is ContractDetail { return summary(value); }
@@ -71,6 +77,7 @@ export async function getOwnContractDraft(companyId: string, id: string,
   return body;
 }
 export async function createOwnContractDraft(companyId: string, draft: ContractDraft): Promise<ContractDetail> {
+  if (!validContractCeiling(draft.ceilingAmount)) throw new ContractApiError(422, "Enter an exact non-negative spending limit with up to four decimal places.");
   const body = await call(companyId, "", { method: "POST", body: JSON.stringify(draft) });
   if (!detail(body)) throw new ContractApiError(0, "The ERP did not confirm the saved contract. Refresh before retrying.");
   return body;
@@ -78,6 +85,7 @@ export async function createOwnContractDraft(companyId: string, draft: ContractD
 export async function updateOwnContractDraft(companyId: string, id: string,
   version: number, draft: ContractDraft): Promise<ContractDetail> {
   if (!guid.test(id)) throw new ContractApiError(0, "The contract reference is invalid.");
+  if (!validContractCeiling(draft.ceilingAmount)) throw new ContractApiError(422, "Enter an exact non-negative spending limit with up to four decimal places.");
   const body = await call(companyId, `/${id}`, { method: "PUT", body: JSON.stringify({ version, draft }) });
   if (!detail(body)) throw new ContractApiError(0, "The ERP did not confirm the contract update. Refresh before retrying.");
   return body;
