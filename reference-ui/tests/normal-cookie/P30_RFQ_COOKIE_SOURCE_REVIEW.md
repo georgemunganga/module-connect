@@ -1,0 +1,7 @@
+# P30 RFQ normal-cookie source acceptance
+
+The test uses the existing restored RFQ wizard, buyer detail Related tab and independent reviewer queue. It starts from a genuine native P30 RFQ cohort with one remaining approved request unit and two active supplier records. It creates a new draft, opens publication review, approves it under a separate current Core account, records an outside supplier contact, then creates a buyer-entered quotation Draft. Real local login/logout and cookie revocation are checked for both accounts. Supplier dispatch, submission, award, PO and Finance actions are never requested.
+
+Required private inputs are a new schema 3 fixture `P30_RFQ_COOKIE_FIXTURE`, its SHA-bound HTTPS proxy receipt `P30_RFQ_COOKIE_PROXY_RECEIPT`, `P30_RFQ_COOKIE_EXPECTED_DATABASE`, and a new protected `P30_RFQ_COOKIE_BROWSER_RESULT`. The proxy additionally requires the exact runtime PID, prebuilt static dist, private TLS key and cert through its `P30_RFQ_COOKIE_*` environment. The API-side completion path and challenge are supplied in the fixture. Capture and verify the owning PostgreSQL baseline with `verify_p30_rfq_cookie_owner.py` in the ERP tool branch. No browser result alone is owner acceptance.
+
+This source has not been run. Keep the fixture, result, credentials, cookies and proxy receipt out of Git and all normal console output. Never replace the imported RFQ screens with a demo or local store for this proof.
