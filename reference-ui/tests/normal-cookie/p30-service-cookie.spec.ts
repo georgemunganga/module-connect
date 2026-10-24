@@ -176,6 +176,7 @@ test('workerless receiver drafts service and independent owner certifies half', 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByText('Certified', { exact: true }).first()).toBeVisible();
     await expect(page.getByText(/Accepted quantity: 0.5/)).toBeVisible();
+    await expect(page.getByText(/Accepted value: ZMW 0.00005/)).toBeVisible();
     await logout(receiver); await receiver.close();
     evidence.allSessionsRevoked = true;
     evidence.serviceBrowserActionsVerified = true;
