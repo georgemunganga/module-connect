@@ -74,3 +74,63 @@ test("separate issue notes stay with their own owner record and unknown POST rec
   expect(posted).toBe(1);
   expect(legacyMatchingReads).toBe(0); // Typed mapping never opens the legacy writer.
 });
+
+test("issue owner can choose an eligible named matcher and Assign keeps the saved command key", async ({ page }) => {
+  let assigns = 0, selectedOwner = "";
+  await page.addInitScript(({ entity, site }) => localStorage.setItem("erp.shell.state.v1",
+    JSON.stringify({ entityId: entity, branch: site })), { entity: company, site: branch });
+  await page.route("**/api/**", async route => {
+    const request = route.request(), path = new URL(request.url()).pathname;
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Issue owner", roles: [] } });
+    if (path === "/api/hrm/branding") return json({ displayName: "Amizo" });
+    if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo" }] });
+    if (path === "/api/hrm/admin/locations") return json({ items: [] });
+    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (path === "/api/procurement/v1/context") return json({ tenantId: "tenant-a", legalEntityId: company,
+      principalId: actor, workerId: null, company: { id: company, currencyCode: "ZMW" },
+      permissions: ["procurement-access", "procurement-invoice-read", "procurement-invoice-match"] });
+    if (path === "/api/procurement/v1/meta") return json({ tenantId: "tenant-a", legalEntityId: company,
+      schemaReady: true, capabilities: { invoiceIntake: true, principalInvoiceMatching: true } });
+    if (path === `/api/procurement/v1/invoices/${invoice}`) return json({ id: invoice,
+      supplierId: company, supplierName: "Supplier", invoiceNumber: "BILL-42", invoiceDate: "2026-10-23",
+      currencyCode: "ZMW", status: "Received", intakeChannel: "Manual", version: 2,
+      createdAt: "2026-10-23T10:00:00Z", netAmount: "1", taxAmount: "0", grossAmount: "1",
+      nextStep: "Resolve the recorded comparison issues.", lines: [{ id: line, lineNumber: 1,
+        description: "Service", quantity: "1", unitPrice: "1", taxAmount: "0" }] });
+    if (path === `/api/procurement/v1/invoices/${invoice}/principal-matching/status`) return json({
+      invoiceId: invoice, invoiceVersion: 2, sourceSchemaVersion: 2, state: "ComparisonBlocked",
+      stateVersion: 2, mappingRevision: 1, mappingVersionId: mapping, reviewId: outcome,
+      reviewOutcomeId: outcome, reviewState: "Verified", comparisonId: null, exposureVersion: 1,
+      isAuthority: false, canPostToFinance: false });
+    if (path === `/api/procurement/v1/invoices/${invoice}/principal-matching/exceptions`) return json({
+      invoiceId: invoice, invoiceVersion: 2, sourceSchemaVersion: 2, page: 1, pageSize: 20, total: 1,
+      canPostToFinance: false, items: [{ issueId: first, supplierInvoiceLineId: line,
+        mappingVersionId: mapping, code: "FirstIssue", state: "Open", ownerPrincipalId: actor,
+        version: 1, openedAt: "2026-10-23T10:00:00Z", dueAt: null, resolvedAt: null,
+        resolutionReference: null, history: [] }] });
+    if (path === `/api/procurement/v1/invoices/${invoice}/principal-matching/exceptions/${first}/eligible-owners`)
+      return json({ invoiceId: invoice, issueId: first, issueVersion: 1, sourceSchemaVersion: 2,
+        isAuthority: false, items: [{ principalId: second, displayName: "Second matcher" }],
+        nextCursor: null, hasMore: false });
+    if (path === `/api/procurement/v1/invoices/${invoice}/principal-matching/exceptions/${first}/actions`) {
+      assigns++;
+      selectedOwner = request.postDataJSON().newOwnerPrincipalId;
+      expect(request.postDataJSON()).toEqual({ expectedVersion: 1, action: "Assign",
+        reason: "Please check this bill", evidenceReference: null, newOwnerPrincipalId: second });
+      return json({ invoiceId: invoice, invoiceVersion: 2, issueId: first, actionId: outcome,
+        commandKey: request.headers()["idempotency-key"], ownerPrincipalId: second,
+        issueState: "InReview", issueVersion: 2, sourceSchemaVersion: 2, canPostToFinance: false });
+    }
+    return json({ code: "Unavailable" }, 404);
+  });
+  await page.goto(`/procurement/workspace/bills/${invoice}`);
+  await page.getByRole("textbox", { name: "Correction note or next step" }).fill("Please check this bill");
+  await page.getByRole("button", { name: "Assign to someone else" }).click();
+  await page.getByRole("combobox", { name: "Assign issue to" }).click();
+  await page.getByRole("option", { name: "Second matcher", exact: true }).click();
+  await page.getByRole("button", { name: "Assign issue", exact: true }).click();
+  await expect(page.getByText(/Issue assigned/)).toBeVisible();
+  expect(assigns).toBe(1);
+  expect(selectedOwner).toBe(second);
+});

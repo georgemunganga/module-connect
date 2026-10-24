@@ -253,6 +253,23 @@ export type PrincipalInvoiceIssue = { issueId: string; supplierInvoiceLineId: st
     actorPrincipalId: string; reason: string; evidenceReference: string | null; at: string }[] };
 export type PrincipalInvoiceIssuePage = { invoiceId: string; invoiceVersion: number;
   items: PrincipalInvoiceIssue[]; total: number; page: number; pageSize: number };
+export type PrincipalIssueOwnerPage = { invoiceId: string; issueId: string; issueVersion: number;
+  items: { principalId: string; displayName: string }[]; nextCursor: string | null;
+  hasMore: boolean; isAuthority: false; sourceSchemaVersion: 2 };
+export async function listPrincipalIssueOwners(company: string, invoice: string, issue: string,
+  q = "", cursor: string | null = null, signal?: AbortSignal): Promise<PrincipalIssueOwnerPage> {
+  if (!id(issue) || q.length > 100 || /[\x00-\x1f\x7f]/.test(q) || cursor !== null && !id(cursor)) throw invalid();
+  const value = await call(company, `${invoicePath(invoice)}/principal-matching/exceptions/${issue}/eligible-owners`
+    + `?limit=25&q=${encodeURIComponent(q)}${cursor ? `&cursor=${cursor}` : ""}`, { signal });
+  if (!record(value) || value.invoiceId !== invoice || value.issueId !== issue
+    || !integer(value.issueVersion) || value.issueVersion < 1 || value.sourceSchemaVersion !== 2
+    || value.isAuthority !== false || typeof value.hasMore !== "boolean"
+    || !(value.nextCursor === null || id(value.nextCursor)) || value.hasMore !== (value.nextCursor !== null)
+    || !Array.isArray(value.items) || value.items.length > 25
+    || value.items.some((person: unknown) => !record(person) || !id(person.principalId)
+      || typeof person.displayName !== "string" || !person.displayName.trim())) throw invalid();
+  return value as unknown as PrincipalIssueOwnerPage;
+}
 export async function listPrincipalInvoiceIssues(company: string, invoice: string, page = 1,
   signal?: AbortSignal): Promise<PrincipalInvoiceIssuePage> {
   if (!integer(page) || page < 1 || page > 100000) throw invalid();

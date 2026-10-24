@@ -7,11 +7,11 @@ import { claimPrincipalInvoicePending, clearPrincipalInvoicePending, readPrincip
 import { canLinkPrincipalInvoiceLines } from "../lib/principal-invoice-link-eligibility";
 import { listInvoiceDocuments, type InvoiceDocument } from "../../../src/platform/procurement-invoices-api";
 import { getPrincipalInvoiceState, listPrincipalAcceptances, listPrincipalInvoiceSources,
-  listPrincipalInvoiceIssues, recoverPrincipalInvoiceCommand, recoverPrincipalIssueAction,
+  listPrincipalInvoiceIssues, listPrincipalIssueOwners, recoverPrincipalInvoiceCommand, recoverPrincipalIssueAction,
   sendPrincipalInvoiceCommand, sendPrincipalIssueAction, PrincipalInvoiceError,
   type PrincipalInvoiceLocator, type PrincipalInvoiceMappingLine, type PrincipalInvoiceSource,
   type PrincipalInvoiceSourcePage, type PrincipalAcceptance, type PrincipalInvoiceState,
-  type PrincipalInvoiceIssuePage, type PrincipalInvoiceIssue,
+  type PrincipalInvoiceIssuePage, type PrincipalInvoiceIssue, type PrincipalIssueOwnerPage,
 } from "../../../src/platform/procurement-principal-invoice-api";
 
 type Line = { id: string; lineNumber: number; description: string };
@@ -51,10 +51,16 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
   const [page, setPage] = useState(1), [search, setSearch] = useState(""), [query, setQuery] = useState("");
   const [issuePage, setIssuePage] = useState(1), [issueRevision, setIssueRevision] = useState(0);
   const [issueDrafts, setIssueDrafts] = useState<Record<string, IssueDraft>>({});
+  const [ownerIssueId, setOwnerIssueId] = useState<string | null>(null);
+  const [ownerSearch, setOwnerSearch] = useState(""), [ownerCursor, setOwnerCursor] = useState<string | null>(null);
+  const [ownerPage, setOwnerPage] = useState<PrincipalIssueOwnerPage | null>(null);
+  const [ownerChoice, setOwnerChoice] = useState(""), [ownerLoading, setOwnerLoading] = useState(false);
   const [reason, setReason] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
   const inFlight = useRef(false), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => { setOwnerIssueId(null); setOwnerPage(null); setOwnerChoice("");
+    setOwnerCursor(null); setOwnerSearch(""); }, [scope]);
   useEffect(() => {
     if (!canRead) return;
     const abort = new AbortController(); setState(null); setLoading(true); setError("");
@@ -72,6 +78,23 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
       .catch(cause => { if (!abort.signal.aborted) setError(errorText(cause)); });
     return () => abort.abort();
   }, [canRead, company, invoiceId, state?.state, issuePage, issueRevision]);
+  useEffect(() => {
+    if (!ownerIssueId || !canRead || state?.state !== "ComparisonBlocked" || pending.blocked) {
+      setOwnerPage(null); return;
+    }
+    const currentIssue = issues?.items.find(item => item.issueId === ownerIssueId);
+    if (!currentIssue || currentIssue.ownerPrincipalId !== context.principalId) { setOwnerPage(null); return; }
+    const abort = new AbortController(); setOwnerLoading(true);
+    listPrincipalIssueOwners(company, invoiceId, ownerIssueId, ownerSearch, ownerCursor, abort.signal)
+      .then(value => { if (!abort.signal.aborted) {
+        if (value.issueVersion !== currentIssue.version) throw new Error("The issue changed. Refresh before assigning it.");
+        setOwnerPage(previous => ownerCursor && previous
+          ? { ...value, items: [...previous.items, ...value.items] } : value);
+      } }).catch(cause => { if (!abort.signal.aborted) { setOwnerPage(null); setError(errorText(cause)); } })
+      .finally(() => { if (!abort.signal.aborted) setOwnerLoading(false); });
+    return () => abort.abort();
+  }, [ownerIssueId, ownerSearch, ownerCursor, canRead, state?.state, pending.blocked,
+    company, invoiceId, context.principalId, issues, scope]);
   useEffect(() => {
     if (!editing || !canMap || pending.blocked) return;
     const abort = new AbortController(); setSources(null);
@@ -204,11 +227,12 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
     { invoiceVersion, mappingVersionId: state.mappingVersionId, reviewOutcomeId: state.reviewOutcomeId,
       exposureVersion: state.exposureVersion, reason: reason.trim() || null });
   }
-  async function workIssue(issue: PrincipalInvoiceIssue, action: "Comment" | "CorrectionRequested" | "ReadyToRetry") {
+  async function workIssue(issue: PrincipalInvoiceIssue, action: "Comment" | "CorrectionRequested" | "ReadyToRetry" | "Assign") {
     const draft = issueDrafts[issue.issueId];
     if (inFlight.current || busy || pending.blocked || !state || state.state !== "ComparisonBlocked"
       || issue.mappingVersionId !== state.mappingVersionId || issue.ownerPrincipalId !== context.principalId
-      || !draft?.reason.trim()) return;
+      || !draft?.reason.trim() || action === "Assign" && (!ownerPage || ownerPage.issueId !== issue.issueId
+        || ownerPage.issueVersion !== issue.version || !ownerPage.items.some(person => person.principalId === ownerChoice))) return;
     const locator: PrincipalInvoiceLocator = { operation: "IssueAction", invoiceId,
       key: crypto.randomUUID(), invoiceVersion, mappingRevision: state.mappingRevision,
       mappingVersionId: state.mappingVersionId, reviewId: state.reviewId,
@@ -219,11 +243,13 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
       setError("A previous issue action needs checking before another change."); return; }
     setPending(readPrincipalInvoicePending(scope)); setBusy(true); setError("");
     try { await sendPrincipalIssueAction(company, locator, action, draft.reason,
-      draft.evidence.trim() || null);
+      draft.evidence.trim() || null, action === "Assign" ? ownerChoice : null);
       if (!clearPrincipalInvoicePending(scope, locator)) throw new Error("The issue action was confirmed, but browser recovery remains locked.");
       if (alive.current) { setPending(readPrincipalInvoicePending(scope));
         setIssueDrafts(all => { const next = { ...all }; delete next[issue.issueId]; return next; });
-        setIssueRevision(n => n + 1); setNotice("Issue note recorded. No bill approval or Finance effect was created."); }
+        setOwnerIssueId(null); setOwnerPage(null); setOwnerChoice("");
+        setIssueRevision(n => n + 1); setNotice(action === "Assign" ? "Issue assigned. No bill approval or Finance effect was created."
+          : "Issue note recorded. No bill approval or Finance effect was created."); }
     } catch (cause) { if (cause instanceof PrincipalInvoiceError && [400, 422].includes(cause.status)) clearPrincipalInvoicePending(scope, locator);
       if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setError(errorText(cause)); } }
     finally { inFlight.current = false; if (alive.current) setBusy(false); }
@@ -297,7 +323,29 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
                   reason: all[issue.issueId]?.reason ?? "", evidence: event.target.value } }))} /></Field>
               <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={busy || !draft.reason.trim()} onClick={() => void workIssue(issue, "Comment")}>Add note</Button>
                 <Button variant="secondary" disabled={busy || !draft.reason.trim()} onClick={() => void workIssue(issue, "CorrectionRequested")}>Request correction</Button>
-                <Button variant="secondary" disabled={busy || !draft.reason.trim()} onClick={() => void workIssue(issue, "ReadyToRetry")}>Ready to retry</Button></div>
+                <Button variant="secondary" disabled={busy || !draft.reason.trim()} onClick={() => void workIssue(issue, "ReadyToRetry")}>Ready to retry</Button>
+                <Button variant="secondary" disabled={busy || pending.blocked} onClick={() => {
+                  setOwnerIssueId(ownerIssueId === issue.issueId ? null : issue.issueId);
+                  setOwnerSearch(""); setOwnerCursor(null); setOwnerPage(null); setOwnerChoice("");
+                }}>Assign to someone else</Button></div>
+              {ownerIssueId === issue.issueId && <div className="space-y-2 rounded-lg border border-border p-3">
+                <Field label="Find a person who can work on this issue"><Input value={ownerSearch} maxLength={100}
+                  disabled={busy || pending.blocked} onChange={event => {
+                    setOwnerSearch(event.target.value); setOwnerCursor(null); setOwnerPage(null); setOwnerChoice("");
+                  }} /></Field>
+                {ownerLoading && <p role="status">Finding eligible people…</p>}
+                {ownerPage && <><Field label="Assign issue to"><Select value={ownerChoice}
+                  disabled={busy || pending.blocked} onChange={event => setOwnerChoice(event.target.value)}>
+                  <option value="">Choose a person</option>{ownerPage.items.map(person =>
+                    <option key={person.principalId} value={person.principalId}>{person.displayName}</option>)}
+                </Select></Field>
+                  {ownerPage.items.length === 0 && <p>No eligible people matched this search.</p>}
+                  {ownerPage.hasMore && <Button variant="secondary" disabled={busy || ownerLoading || pending.blocked}
+                    onClick={() => setOwnerCursor(ownerPage.nextCursor)}>More people</Button>}</>}
+                <Button disabled={busy || pending.blocked || !draft.reason.trim() || !ownerChoice || !ownerPage
+                  || !ownerPage.items.some(person => person.principalId === ownerChoice)}
+                  onClick={() => void workIssue(issue, "Assign")}>Assign issue</Button>
+              </div>}
             </div>}
         </div>; })}
         {issues && issues.total > issues.pageSize && <div className="flex gap-3"><Button variant="secondary" disabled={issuePage <= 1} onClick={() => setIssuePage(issuePage - 1)}>Previous issues</Button>
