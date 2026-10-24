@@ -6,9 +6,11 @@ import { TransactionEditorFrame } from "./TransactionEditor";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { principalOrderJournal, type PrincipalLocator } from "../lib/principal-order-command-journal";
-import { createPrincipalBody, listPrincipalSources, listPrincipalSuppliers, recoverPrincipalCommand, sendPrincipalCommand,
-  PrincipalOrderError, type PrincipalCommand, type PrincipalSource, type PrincipalSupplier } from "../../../src/platform/procurement-principal-orders-api";
+import { createPrincipalBody, editPrincipalBody, getPrincipalOrder, listPrincipalSources, listPrincipalSuppliers,
+  recoverPrincipalCommand, sendPrincipalCommand, PrincipalOrderError, type PrincipalCommand,
+  type PrincipalOrderDetail, type PrincipalSource, type PrincipalSupplier } from "../../../src/platform/procurement-principal-orders-api";
 import type { ExactOrderDraft, ExactOrderDraftLine } from "../../../src/platform/procurement-order-execution-api";
+import { draftEditProblem } from "./principal-order-draft-edit";
 
 const blank = (currencyCode: string): ExactOrderDraft => ({ supplierId: "", currencyCode,
   shipToRef: "", billToRef: "", paymentTermRef: "", expectedDeliveryOn: null, lines: [] });
@@ -43,6 +45,7 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
     [vendorPage,setVendorPage]=useState(1),[vendorNext,setVendorNext]=useState<number|null>(null);
   const [page,setPage]=useState(1),[sourceTotal,setSourceTotal]=useState(0),[loading,setLoading]=useState(true);
   const [error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
+  const [saved,setSaved]=useState<PrincipalOrderDetail|null>(null),[reason,setReason]=useState("");
   const [pending,setPending]=useState<PrincipalLocator|null>(null);
   const lock=useRef(false),alive=useRef(true);
   useEffect(()=>{alive.current=true;try{setPending(principalOrderJournal.read(scopeKey));}
@@ -54,11 +57,23 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
       .catch(cause=>{if(!abort.signal.aborted)setError(errorText(cause));})
       .finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();},[company,page,id,context.permissions]);
-  useEffect(()=>{if(!context.permissions.includes("procurement-po-convert"))return;
+  useEffect(()=>{if(!id)return;
+    const abort=new AbortController();setLoading(true);setSaved(null);setError("");
+    getPrincipalOrder(company,id,abort.signal).then(result=>{if(abort.signal.aborted)return;
+      setSaved(result);setDraft({supplierId:result.supplierId,currencyCode:result.currencyCode,
+        shipToRef:result.shipToRef??"",billToRef:result.billToRef??"",paymentTermRef:result.paymentTermRef??"",
+        expectedDeliveryOn:result.expectedDeliveryOn,
+        lines:result.lines.map(row=>({id:row.id,description:row.description,unitCode:row.unitCode,
+          quantity:row.quantity,unitPrice:row.unitPrice,taxAmount:row.taxAmount,
+          costCenterRef:row.costCenterRef,projectRef:row.projectRef,expectedDeliveryOn:row.expectedDeliveryOn}))});})
+      .catch(cause=>{if(!abort.signal.aborted)setError(errorText(cause));})
+      .finally(()=>{if(!abort.signal.aborted)setLoading(false);});
+    return()=>abort.abort();},[company,id]);
+  useEffect(()=>{if(id||!context.permissions.includes("procurement-po-convert"))return;
     const abort=new AbortController(),timer=setTimeout(()=>listPrincipalSuppliers(company,vendorPage,vendorSearch.trim(),abort.signal)
       .then(result=>{if(!abort.signal.aborted){setVendors(result.items);setVendorNext(result.nextPage);}})
       .catch(cause=>{if(!abort.signal.aborted)setError(errorText(cause));}),vendorSearch?250:0);
-    return()=>{clearTimeout(timer);abort.abort();};},[company,vendorSearch,vendorPage,context.permissions]);
+    return()=>{clearTimeout(timer);abort.abort();};},[company,id,vendorSearch,vendorPage,context.permissions]);
   function select(source:PrincipalSource) {
     if(!source.canSelect || !source.availableQuantity || !source.approvedUnitEstimate || !source.unitCode
       || !source.expectedRequestVersion || chosen.some(row=>row.purchaseRequestLineId===source.purchaseRequestLineId))return;
@@ -73,16 +88,25 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
     setDraft(current=>({...current,lines:current.lines.filter((_,i)=>i!==at)}));}
   function line(at:number,patch:Partial<ExactOrderDraftLine>){setDraft(current=>({...current,
     lines:current.lines.map((entry,i)=>i===at?{...entry,...patch}:entry)}));}
-  async function recover(){if(lock.current || !pending)return;lock.current=true;setBusy(true);setError("");
+  async function recover(){if(lock.current || !pending)return;
+    if(id ? pending.operation!=="Edit"||pending.orderId!==id : pending.operation!=="Create"||pending.orderId!==null){
+      setError("This command belongs to a different order action. Open the original record to reconcile it.");return;}
+    lock.current=true;setBusy(true);setError("");
     try{const result=await recoverPrincipalCommand(company,{...pending,body:""});
       principalOrderJournal.clear(scopeKey,pending);if(alive.current){setPending(null);setNotice("The saved order was confirmed.");onSaved(result.orderId);}}
     catch(cause){if(alive.current)setError(`${errorText(cause)} Keep this command reference: ${pending.key}.`);}
     finally{lock.current=false;if(alive.current)setBusy(false);}}
-  async function save(event:FormEvent){event.preventDefault();if(lock.current||busy||pending||id)return;
-    if(!context.permissions.includes("procurement-po-convert"))return;
+  async function save(event:FormEvent){event.preventDefault();if(lock.current||busy||pending||loading)return;
+    if(id ? !saved||saved.id!==id||!context.capabilities.principalOrderDraftRevision
+        ||saved.canEditDraft!==true||!context.permissions.includes("procurement-po-edit")
+        ||!!draftEditProblem(saved,draft)||!reason.trim()
+      : !context.permissions.includes("procurement-po-convert"))return;
     let command:PrincipalCommand;
-    try{command={operation:"Create",key:crypto.randomUUID(),orderId:null,body:createPrincipalBody(draft,chosen)};
-      principalOrderJournal.claim(scopeKey,command);setPending({operation:command.operation,key:command.key,orderId:null});}
+    try{command=id&&saved?{operation:"Edit",key:crypto.randomUUID(),orderId:id,
+        body:editPrincipalBody(saved,draft,reason)}
+      :{operation:"Create",key:crypto.randomUUID(),orderId:null,body:createPrincipalBody(draft,chosen)};
+      principalOrderJournal.claim(scopeKey,command);
+      setPending({operation:command.operation,key:command.key,orderId:command.orderId});}
     catch(cause){setError(errorText(cause));return;}
     lock.current=true;setBusy(true);setError("");
     try{const result=await sendPrincipalCommand(company,command);
@@ -91,47 +115,67 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
         try{principalOrderJournal.clear(scopeKey,command);if(alive.current)setPending(null);}catch{/* Retain recovery lock. */}}
       if(alive.current)setError(errorText(cause));}
     finally{lock.current=false;if(alive.current)setBusy(false);}}
-  if(id)return <div className="p-5 sm:p-8" role="status">This governed order keeps its approved lines unchanged. Open the saved order to continue its workflow.</div>;
-  if(!context.capabilities.principalDirectOrderDrafts||!context.permissions.includes("procurement-po-convert"))
+  if(!context.capabilities.principalDirectOrderDrafts||!id&&!context.permissions.includes("procurement-po-convert"))
     return <div className="p-5 sm:p-8" role="alert">Creating an order from approved requests is unavailable for this account.</div>;
+  if(id&&loading)return <div className="p-5 sm:p-8" role="status">Loading order draft…</div>;
+  if(id&&!saved)return <div className="p-5 sm:p-8" role="alert">{error||"This order draft is unavailable in your selected company and branch."}</div>;
+  const editing=!!id,canEdit=editing&&context.capabilities.principalOrderDraftRevision
+    &&context.permissions.includes("procurement-po-edit")&&saved?.canEditDraft===true;
+  const editProblem=editing&&saved?draftEditProblem(saved,draft):null;
+  const closePath=editing?`/purchase-orders/${id}?workflow=principal`:"/purchase-orders?workflow=principal";
+  const saveDisabled=busy||!!pending||loading||(editing
+    ?!canEdit||!!editProblem||!reason.trim():!chosen.length||!draft.supplierId);
   const total=draftTotal(draft.lines);
   const footer=<>
-    <Button form="principal-order-draft-form" type="submit" disabled={busy||!!pending||!chosen.length||!draft.supplierId}>{busy?"Saving…":"Save internal draft"}</Button>
+    <Button form="principal-order-draft-form" type="submit" disabled={saveDisabled}>{busy?"Saving…":editing?"Save draft revision":"Save internal draft"}</Button>
     <Button type="button" variant="secondary" disabled title="Supplier sending requires a separately approved order.">Save and send</Button>
-    <Button type="button" variant="ghost" disabled={busy} onClick={()=>navigate("/purchase-orders?workflow=principal")}>Cancel</Button>
+    <Button type="button" variant="ghost" disabled={busy||!!pending} onClick={()=>navigate(closePath)}>Cancel</Button>
     <span className="ml-auto text-xs text-muted-foreground">No supplier notification or Finance posting occurs here</span>
   </>;
-  return <TransactionEditorFrame title="New purchase order" close={()=>navigate("/purchase-orders?workflow=principal")} closeDisabled={busy} footer={footer}>
-    <p className="text-sm text-muted-foreground">Select approved request lines. This first saves an internal draft.</p>
+  return <TransactionEditorFrame title={editing?`Edit ${saved?.number??"purchase order"}`:"New purchase order"}
+    close={()=>navigate(closePath)} closeDisabled={busy||!!pending} footer={footer}>
+    <p className="text-sm text-muted-foreground">{editing
+      ?"Revise this unfunded internal draft. Its supplier, currency and approved source lines stay linked."
+      :"Select approved request lines. This first saves an internal draft."}</p>
     <form id="principal-order-draft-form" onSubmit={save} className="space-y-7">
       {error&&<p role="alert" className="text-sm text-destructive">{error}</p>}{notice&&<p role="status">{notice}</p>}
       {pending&&<section aria-label="Check your last save" className="space-y-3 rounded-md border border-border bg-card p-4">
         <h2 className="font-semibold">Check your last save</h2><p className="text-sm">The last order save may have succeeded. Check command {pending.key} before another save.</p>
         <Button type="button" disabled={busy} onClick={()=>void recover()}>Check saved result</Button></section>}
-      <fieldset disabled={busy||!!pending} className="space-y-7">
+      {editing&&<section aria-label="Draft revision" className="space-y-3 rounded-md border border-border p-4">
+        <p className="text-sm">Current version: {saved?.version}. Original source evidence remains linked.</p>
+        {!canEdit&&<p role="status" className="text-sm text-muted-foreground">{saved?.editUnavailableReason??"Draft revision is not available for this order or account."}</p>}
+        {editProblem&&<p role="alert" className="text-sm text-destructive">{editProblem}</p>}
+        <Field label="Reason for revision"><Input value={reason} disabled={!canEdit||busy||!!pending}
+          maxLength={1000} onChange={event=>setReason(event.target.value)}/></Field>
+      </section>}
+      <fieldset disabled={busy||!!pending||editing&&!canEdit} className="space-y-7">
         <section aria-label="Approved requests" className="space-y-3">
           <h2 className="text-sm font-semibold">Approved requests</h2>
-          {loading?<p role="status">Loading approved requests…</p>:available.length?available.map(source=><div key={source.purchaseRequestLineId} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
+          {editing?saved?.lines.map(row=><div key={row.id} className="rounded-md border border-border p-3 text-sm">
+            <p className="font-medium">{row.description}</p><p className="text-muted-foreground">Request {row.purchaseRequestId} · {row.allocationStatus} · {row.quantity} {row.unitCode}</p>
+          </div>):loading?<p role="status">Loading approved requests…</p>:available.length?available.map(source=><div key={source.purchaseRequestLineId} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
             <div><p className="font-medium">{source.requestNumber} · {source.description??"Request line"}</p>
               <p className="text-sm text-muted-foreground">{source.canSelect?`${source.availableQuantity} ${source.unitCode} available · ${source.currencyCode} ${source.approvedUnitEstimate} each`:"Unavailable for this order"}</p></div>
             <Button type="button" variant="secondary" disabled={!source.canSelect||chosen.some(row=>row.purchaseRequestLineId===source.purchaseRequestLineId)} onClick={()=>select(source)}>Add line</Button>
           </div>):<p className="text-sm text-muted-foreground">No approved direct-purchase lines are available in this company and branch.</p>}
-          <div className="flex gap-3"><Button type="button" variant="secondary" disabled={page===1} onClick={()=>setPage(page-1)}>Previous</Button><Button type="button" variant="secondary" disabled={page*25>=sourceTotal} onClick={()=>setPage(page+1)}>More</Button></div>
+          {!editing&&<div className="flex gap-3"><Button type="button" variant="secondary" disabled={page===1} onClick={()=>setPage(page-1)}>Previous</Button><Button type="button" variant="secondary" disabled={page*25>=sourceTotal} onClick={()=>setPage(page+1)}>More</Button></div>}
         </section>
         <section aria-label="Vendor" className="-mx-5 bg-muted/50 px-5 py-5 sm:-mx-8 sm:px-8">
           <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
-            <Field label="Find vendor"><Input value={vendorSearch} onChange={event=>{setVendorSearch(event.target.value);setVendorPage(1);}} /></Field>
+            {editing?<Field label="Vendor Name"><Input readOnly value={saved?.supplierDisplayName??""}/></Field>
+              :<><Field label="Find vendor"><Input value={vendorSearch} onChange={event=>{setVendorSearch(event.target.value);setVendorPage(1);}} /></Field>
             <Field label="Vendor Name *"><Select required value={draft.supplierId} onChange={event=>setDraft(current=>({...current,supplierId:event.target.value}))}>
               <option value="">Choose an approved vendor</option>
               {draft.supplierId&&!vendors.some(row=>row.id===draft.supplierId)&&<option value={draft.supplierId}>Previously selected vendor</option>}
               {vendors.map(row=><option key={row.id} value={row.id}>{row.displayName}</option>)}</Select>
               <div className="mt-2 flex gap-2"><Button type="button" variant="secondary" disabled={vendorPage===1} onClick={()=>setVendorPage(vendorPage-1)}>Previous</Button>
-                <Button type="button" variant="secondary" disabled={!vendorNext} onClick={()=>setVendorPage(vendorNext??vendorPage)}>More</Button></div></Field>
+                <Button type="button" variant="secondary" disabled={!vendorNext} onClick={()=>setVendorPage(vendorNext??vendorPage)}>More</Button></div></Field></>}
           </div>
         </section>
         <section aria-label="Order details" className="grid max-w-4xl gap-x-8 gap-y-5 sm:grid-cols-2">
-          <Field label="Date"><Input readOnly value="Set by ERP when saved" /></Field>
-          <Field label="Purchase order #"><Input readOnly value="Generated when saved" /></Field>
+          <Field label="Date"><Input readOnly value={editing?saved?.createdAt?.slice(0,10)??"—":"Set by ERP when saved"} /></Field>
+          <Field label="Purchase order #"><Input readOnly value={editing?saved?.number??"—":"Generated when saved"} /></Field>
           <Field label="Currency"><Input readOnly value={draft.currencyCode} /></Field>
           <Field label="Delivery Date"><Input type="date" value={draft.expectedDeliveryOn??""} onChange={event=>setDraft(current=>({...current,expectedDeliveryOn:event.target.value||null}))}/></Field>
           <Field label="Deliver to"><Input value={draft.shipToRef} onChange={event=>setDraft(current=>({...current,shipToRef:event.target.value}))}/></Field>
@@ -143,13 +187,16 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
           <h2 className="text-sm font-semibold">Order lines</h2>
           <div className="overflow-x-auto rounded-md border border-border"><table className="w-full min-w-[850px] text-sm">
             <thead className="bg-muted/50 text-left"><tr><th className="p-3">Item / source</th><th className="p-3">Unit</th><th className="p-3">Quantity</th><th className="p-3">Unit price</th><th className="p-3">Tax</th><th className="p-3">Action</th></tr></thead>
-            <tbody>{draft.lines.map((entry,at)=><tr key={chosen[at]?.purchaseRequestLineId??at} className="border-t border-border align-top">
-              <td className="p-3"><span className="mb-1 block text-xs text-muted-foreground">{chosen[at]?.requestNumber} · Available {chosen[at]?.availableQuantity}</span><Input aria-label={`Line ${at+1} description`} required value={entry.description} onChange={event=>line(at,{description:event.target.value})}/></td>
+            <tbody>{draft.lines.map((entry,at)=><tr key={entry.id??chosen[at]?.purchaseRequestLineId??at} className="border-t border-border align-top">
+              <td className="p-3"><span className="mb-1 block text-xs text-muted-foreground">{editing?`Request ${saved?.lines[at]?.purchaseRequestId}`:`${chosen[at]?.requestNumber} · Available ${chosen[at]?.availableQuantity}`}</span><Input aria-label={`Line ${at+1} description`} required value={entry.description} onChange={event=>line(at,{description:event.target.value})}/>
+                {editing&&<div className="mt-2 grid gap-2"><Input aria-label={`Line ${at+1} cost centre`} placeholder="Cost centre" value={entry.costCenterRef??""} onChange={event=>line(at,{costCenterRef:event.target.value||null})}/>
+                  <Input aria-label={`Line ${at+1} project`} placeholder="Project" value={entry.projectRef??""} onChange={event=>line(at,{projectRef:event.target.value||null})}/></div>}</td>
               <td className="p-3"><Input aria-label={`Line ${at+1} unit`} readOnly value={entry.unitCode}/></td>
               <td className="p-3"><Input aria-label={`Line ${at+1} quantity`} required inputMode="decimal" value={entry.quantity} onChange={event=>line(at,{quantity:event.target.value})}/></td>
               <td className="p-3"><Input aria-label={`Line ${at+1} unit price`} required inputMode="decimal" value={entry.unitPrice} onChange={event=>line(at,{unitPrice:event.target.value})}/></td>
               <td className="p-3"><Input aria-label={`Line ${at+1} tax`} required inputMode="decimal" value={entry.taxAmount} onChange={event=>line(at,{taxAmount:event.target.value})}/></td>
-              <td className="p-3"><Button type="button" variant="secondary" onClick={()=>remove(at)}>Remove</Button></td>
+              <td className="p-3"><Button type="button" variant="secondary" disabled={editing}
+                title={editing?"Linked source lines cannot be removed from this draft.":undefined} onClick={()=>remove(at)}>Remove</Button></td>
             </tr>)}</tbody></table>{!draft.lines.length&&<p className="p-4 text-sm text-muted-foreground">Choose a request line above to prepare the order.</p>}</div>
           <div className="ml-auto max-w-sm space-y-2 border-t border-border pt-3 text-sm"><div className="flex justify-between"><span>Draft total ({draft.currencyCode})</span><strong>{total??"Check line amounts"}</strong></div>
             <p className="text-xs text-muted-foreground">Exact quantity × unit price plus entered tax. ERP validates the saved value.</p></div>

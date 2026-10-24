@@ -140,7 +140,10 @@ function PrincipalDetail({id,view,assignmentId,scopeKey}:{id:string;view:View;as
       <Link className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary" to="/purchase-orders?workflow=principal"><ArrowLeft size={13}/>Purchase Orders</Link>
       <div className="flex min-w-0 flex-wrap items-center gap-2"><h1 title={record.number} className="max-w-3xl break-all text-2xl font-semibold line-clamp-2">{record.number}</h1><Badge>{record.status}</Badge></div>
       <p className="mt-1 text-xs text-muted-foreground">{record.supplierDisplayName} · {record.currencyCode}</p>
-    </div></header>
+    </div>{data.view==="buyer"&&record.status==="Draft"&&<Button variant="secondary"
+      disabled={busy||!!pending||!context.capabilities.principalOrderDraftRevision||data.record.canEditDraft!==true}
+      title={data.record.editUnavailableReason??undefined}
+      onClick={()=>navigate(`/purchase-orders/${id}/edit?workflow=principal`)}>Edit draft</Button>}</header>
     <DetailTabs tabs={[{key:"overview",label:"Overview"},{key:"items",label:`Items (${data.record.lines.length})`},
       {key:"related",label:"Related"},{key:"comments",label:"Comments"},{key:"history",label:"History"}]} active={activeTab} onChange={setActiveTab} />
     <div className="space-y-5 px-5 py-6 sm:px-8">
@@ -198,6 +201,14 @@ function PrincipalDetail({id,view,assignmentId,scopeKey}:{id:string;view:View;as
         <DetailSection title="Related Records"><p className="text-sm text-muted-foreground">Approved request references appear on the order lines. Receipts and supplier invoices belong to their own workspaces. No supplier send or payment is asserted here.</p></DetailSection></>}
       {activeTab==="comments"&&<DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments cannot be saved on this purchase order yet.</p></DetailSection>}
       {activeTab==="history"&&<DetailSection title="Recorded activity"><p className="text-sm">Current saved state: {record.status}, version {record.version}.</p>
+        {data.view==="buyer"&&data.record.draftEditHistory&&<div className="mt-4 space-y-3">
+          <p className="text-sm">Original commercial snapshot: {data.record.draftEditHistory.originalSnapshotSha256}</p>
+          {data.record.draftEditHistory.revisions.map(item=><div key={item.id} className="rounded-lg border border-border p-3 text-sm">
+            <p className="font-medium">Draft revision {item.revisionNumber} · version {item.resultOrderVersion}</p>
+            <p>{item.reason}</p><p className="text-muted-foreground">{item.recordedAt} · {item.actorPrincipalId}</p>
+            <p className="break-all text-xs text-muted-foreground">Snapshot {item.snapshotSha256}</p>
+          </div>)}
+        </div>}
         {data.view==="buyer"&&data.record.release&&<p className="mt-2 text-sm">External release requested {data.record.release.requestedAt}: {data.record.release.reason}</p>}
         <p className="mt-2 text-sm text-muted-foreground">The complete audit trail is held by ERP. This view shows only the history returned by this order API.</p></DetailSection>}
       <div className="flex gap-3"><Link to="/purchase-orders?workflow=principal" className="text-sm text-primary">Back to purchase orders</Link>
