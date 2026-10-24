@@ -4,6 +4,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { isRfqCookieDatabase } from './rfq-cookie-database.mjs';
 const need = (condition, message) => { if (!condition) throw new Error(message); };
 const absolute = name => { const value = process.env[name]; need(value && path.isAbsolute(value), 'Absolute private input path required'); return value; };
 function protectedFile(name) {
@@ -23,7 +24,7 @@ need(fixture.schemaVersion === 3 && fixture.controlPlaneOnly === true && fixture
   && fixture.apiSetupAuthentication === 'PRIVATE_SUBJECT_TEST_AUTH_ONLY'
   && fixture.localCookieLoginVerified === false && fixture.browserAcceptanceVerified === false
   && fixture.nativeIdentityProviderVerified === false && fixture.externalFinanceAuthority === false
-  && /^proc_p30_http_po_[a-z0-9_]{1,40}$/.test(fixture.database) && fixture.database.length <= 63
+  && isRfqCookieDatabase(fixture.database)
   && fixture.database === process.env.P30_RFQ_COOKIE_EXPECTED_DATABASE
   && [fixture.companyId, fixture.branchId, fixture.buyerPrincipalId, fixture.approvedRequestId,
     fixture.approvedRequestLineId, fixture.nativeEventId, fixture.nativePolicyId,
