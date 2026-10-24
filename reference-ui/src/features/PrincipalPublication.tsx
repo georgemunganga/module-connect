@@ -287,7 +287,7 @@ function PublicationRecord({ id, company, permissions, slot, cancelSlot }: {
         {contactInvitation && <Panel title="Record external supplier contact"><div className="space-y-3 p-5"><p className="text-sm text-muted-foreground">Record a contact that happened outside ERP. This action sends nothing.</p>
           <Field label="Channel"><Select value={channel} onChange={event => setChannel(event.target.value)}><option value="">Choose channel</option><option value="EmailOutsideSystem">Email outside ERP</option><option value="Physical">Physical delivery</option><option value="Telephone">Telephone</option><option value="Other">Other</option></Select></Field>
           <Field label="External reference"><Input value={contactRef} maxLength={200} onChange={event => setContactRef(event.target.value)} /></Field>
-          <Field label="When contact occurred (your local time)"><Input type="datetime-local" value={reportedAt} onChange={event => setReportedAt(event.target.value)} /></Field>
+          <Field label="When contact occurred (your local time)"><Input type="datetime-local" step="0.001" value={reportedAt} onChange={event => setReportedAt(event.target.value)} /></Field>
           <div className="flex gap-2"><Button type="button" disabled={blocked || !channel || !contactRef.trim() || !reportedAt}
             onClick={saveContact}>Record contact</Button>
             <Button type="button" variant="secondary" disabled={blocked} onClick={() => setContactInvitation(null)}>Close</Button></div></div></Panel>}

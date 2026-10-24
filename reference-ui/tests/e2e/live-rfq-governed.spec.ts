@@ -432,7 +432,11 @@ test("buyer records outside contact and an exact internal quotation Draft withou
   await page.getByRole("combobox", { name: "Channel" }).click();
   await page.getByRole("option", { name: "Email outside ERP" }).click();
   await page.getByLabel("External reference").fill("outside-ref-1");
-  await page.getByLabel("When contact occurred (your local time)").fill("2026-10-23T12:00");
+  const observedLocal = "2026-10-23T12:00:00.123";
+  const expectedObservedUtc = await page.evaluate(value => new Date(value).toISOString(), observedLocal);
+  const contactTime = page.getByLabel("When contact occurred (your local time)");
+  await expect(contactTime).toHaveAttribute("step", "0.001");
+  await contactTime.fill(observedLocal);
   await page.getByRole("button", { name: "Record contact", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Related" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Enter quotation Draft" })).toBeVisible();
@@ -442,7 +446,8 @@ test("buyer records outside contact and an exact internal quotation Draft withou
   await expect(page.getByRole("tab", { name: "Related" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Open Draft" })).toBeVisible();
   const contact = calls.find(call => call.path.endsWith("/manual-contact") && call.method === "POST");
-  expect(contact?.body).toMatchObject({ channel: "EmailOutsideSystem", reference: "outside-ref-1" });
+  expect(contact?.body).toMatchObject({ channel: "EmailOutsideSystem", reference: "outside-ref-1",
+    reportedContactAt: expectedObservedUtc });
   const quote = calls.find(call => call.path.endsWith("/principal-manual-quotes") && call.method === "POST");
   expect(quote?.body).toMatchObject({ invitationId: lineA, lines: [{ unitPrice: "0.0001" }] });
   expect(calls.some(call => /dispatch|email-send|quote-submit|award/.test(call.path))).toBe(false);
