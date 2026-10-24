@@ -48,7 +48,9 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
 function SourcingPageContent({ view, governed, mode, id }: { view: "list" | "editor" | "detail"; governed: boolean; mode: RfqSourceMode; id: string }) {
   const { capabilities, permissions } = useCompany();
   const canConvert = permissions.includes("procurement-sourcing-convert");
-  const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel");
+  const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel")
+    || capabilities.principalSourcingPublication === true && mode === "principal"
+      && (permissions.includes("procurement-sourcing-submit") || permissions.includes("procurement-sourcing-publish"));
   const enabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
   const anyGoverned = capabilities.sourcingSourceDrafts || capabilities.principalSourcingSourceDrafts;
   return <>

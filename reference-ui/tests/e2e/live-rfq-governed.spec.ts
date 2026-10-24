@@ -7,9 +7,11 @@ const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
 type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
-async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean } = {}) {
+async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; published?: boolean; reviewer?: boolean } = {}) {
   const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
-  let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false, status = "Draft", version = 1, selected: Selection[] = [], exists = Boolean(options.seed);
+  let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false,
+    status = options.published ? "Published" : options.reviewer ? "PublicationReview" : "Draft", version = 1,
+    contacted = false, quoteSaved = false, selected: Selection[] = [], exists = Boolean(options.seed);
   const sources = [lineA, lineB].map((id, at) => ({ purchaseRequestId: at ? prB : prA, purchaseRequestLineId: id, requestNumber: `PR-${at + 1}`,
     state: "Available", canSelect: true, branchRef: branch, description: at ? "Printer paper" : "Office notebooks", unitCode: "EACH", categoryCode: "OFFICE",
     expectedRequestVersion: 4, sourceLineVersion: 1, availableQuantity: "99999999999999.9999", approvedUnitEstimate: "0.0001", currencyCode: "ZMW",
@@ -20,7 +22,7 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
     lines: (selected.length ? selected : [{ purchaseRequestId: prA, purchaseRequestLineId: lineA, quantity: "1" }]).map((value, index) => ({
       id: index ? lineB : lineA, purchaseRequestId: value.purchaseRequestId, purchaseRequestLineId: value.purchaseRequestLineId,
       description: index ? "Printer paper" : "Office notebooks", unitCode: "EACH", categoryCode: "OFFICE", quantity: value.quantity,
-      approvedUnitEstimate: "0.0001", estimatedValue: "0.0001", allocationState: status === "Draft" ? "Reserved" : "Released" })) });
+      approvedUnitEstimate: "0.0001", estimatedValue: "0.0001", allocationState: status === "Cancelled" ? "Released" : "Reserved" })) });
   await page.addInitScript(({ company, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: company, branch })), { company, branch });
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method();
@@ -36,19 +38,73 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: options.principal ? null : worker,
-      permissions: ["procurement-access", ...(options.deny ? [] : ["procurement-sourcing-convert", "procurement-sourcing-cancel"])],
+      permissions: ["procurement-access", ...(options.deny ? [] : ["procurement-sourcing-convert", "procurement-sourcing-cancel",
+        ...(options.publication && !options.reviewer ? ["procurement-sourcing-submit"] : []),
+        ...(options.reviewer ? ["procurement-sourcing-publish"] : [])])],
       company: { id: company, name: "Amizo Power", code: "AMIZO", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
       capabilities: { vendorDraft: true, itemDraft: true, requestDraft: true, approvals: false, sourcing: false, contracts: false, orders: false,
         receiving: false, invoiceIntake: false, invoiceValidation: false, financeHandoff: false, supplierPortal: false, planningDraft: true,
         configurationDraft: true, contractDraft: true, sourcingDraft: !options.principal,
-        ...(options.principal ? { principalSourcingSourceDrafts: !options.principalUnavailable, sourcingSourceDrafts: false }
+        ...(options.principal ? { principalSourcingSourceDrafts: !options.principalUnavailable,
+          ...(options.publication ? { principalSourcingPublication: true } : {}), sourcingSourceDrafts: false }
           : options.absent ? {} : { sourcingSourceDrafts: true }) } });
     if (url.pathname.startsWith("/api/procurement/v1/sourcing")) {
       calls.push({ method, path: url.pathname, body: method === "POST" ? request.postDataJSON() : null, key: request.headers()["idempotency-key"] });
+      if (request.headers()["x-shell-location"] === otherBranch)
+        return json({ message: "Unavailable in this branch" }, 404);
+      if (options.publication) {
+        const fingerprint = "a".repeat(64), opening = prA, caseId = prB, supplierId = lineB, invitationId = lineA;
+        const publication = { openingId: opening, coreCaseId: caseId,
+          caseState: status === "Published" ? "Approved" : "Pending", coreCaseVersion: status === "Published" ? 2 : 1, policyVersionId: prA, policyVersionNumber: 1,
+          supplierDeliveryState: "PerInvitation", reviewer: Boolean(options.reviewer), assignments: options.reviewer && status === "PublicationReview"
+            ? [{ id: lineA, version: 1, state: "Pending", permissionKey: "procurement-sourcing-publish" }] : [] };
+        if (url.pathname.endsWith("/principal-publications")) return json({ items: [{ id: event, number: "RF-1", title: "Office supplies", currencyCode: "ZMW",
+          status, version, originalDraftFingerprint: fingerprint, state: "VerifiedRetainedSourcing" }],
+          total: 1, page: 1, pageSize: 25, scope: "OwnCurrentCompany", canPublish: false });
+        if (url.pathname.endsWith("/principal-publication-reviews/assigned")) return json({ items: options.reviewer && status === "PublicationReview" ? [{
+          eventId: event, caseId, number: "RF-1", title: "Office supplies", currencyCode: "ZMW", status,
+          eventVersion: version, caseVersion: 1, assignments: [{ id: lineA, version: 1, state: "Pending" }], state: "VerifiedAssignedReview" }] : [], total: options.reviewer && status === "PublicationReview" ? 1 : 0,
+          page: 1, pageSize: 25, scope: "CurrentCoreAssignment" });
+        if (url.pathname.endsWith("/principal-publication-suppliers")) return json({ eventId: event,
+          eligibilityMeaning: "CurrentApprovedPreviewOnly", items: [{ supplierId, displayName: "Paper Supply", number: "SUP-1" }],
+          total: 1, page: 1, pageSize: 25 });
+        if (url.pathname.endsWith("/principal-publication") && method === "GET") return json({ ...record(),
+          version, status, originalDraftFingerprint: fingerprint, canPublish: false,
+          supplierDeliveryState: status === "Draft" ? "NotStarted" : "PerInvitation",
+          publication: status === "Draft" ? undefined : publication,
+          invitations: status === "Published" ? [{ id: invitationId, supplierId,
+            status: contacted ? "ManualContactRecorded" : "ReadyForManualDelivery", version: contacted ? 2 : 1, contactRecorded: contacted }] : [] });
+        if (url.pathname.endsWith("/principal-publication-reviews") && method === "POST") {
+          status = "PublicationReview"; version++;
+          return json({ eventId: event, status, version, publicationReviewId: opening,
+            coreCaseId: caseId, supplierDeliveryState: "NotStarted", financeReservationChanged: false,
+            commandKey: request.headers()["idempotency-key"] });
+        }
+        if (url.pathname.includes("/principal-publication-reviews/") && url.pathname.endsWith("/decisions") && method === "POST") {
+          status = "Published"; version++;
+          return json({ eventId: event, status, version, coreCaseVersion: 2, coreDecisionId: lineB,
+            caseState: "Approved", supplierDeliveryState: "ReadyForManualDelivery", financeReservationChanged: false,
+            commandKey: request.headers()["idempotency-key"] });
+        }
+        if (url.pathname.endsWith("/manual-contact") && method === "POST") {
+          contacted = true;
+          return json({ eventId: event, invitationId, status: "ManualContactRecorded", supplierDeliveryReported: true,
+            emailSentBySystem: false, commandKey: request.headers()["idempotency-key"] });
+        }
+        if (url.pathname.endsWith("/principal-manual-quotes") && method === "GET") return json({ items: quoteSaved ? [{
+          bidId: prB, supplierId, invitationId, status: "Draft", bidVersion: 1, supplierSubmitted: false }] : [],
+          nextCursor: null, hasMore: false });
+        if (url.pathname.endsWith("/principal-manual-quotes") && method === "POST") {
+          quoteSaved = true;
+          return json({ eventId: event, bidId: prB, supplierId, invitationId, status: "Draft", bidVersion: 1,
+            draftRevision: 1, sourceChannel: "Manual", supplierSubmitted: false, totalExact: "0.0001",
+            lines: [{ sourcingLineId: lineA, quantityExact: "1", unitPriceExact: "0.0001",
+              taxAmountExact: "0", deliveryAmountExact: "0" }], commandKey: request.headers()["idempotency-key"] }, 201);
+        }
+      }
       if (options.principal && !url.pathname.includes("principal-") && url.pathname !== "/api/procurement/v1/sourcing")
         return json({ message: "Earlier worker workflow is unavailable" }, 404);
-      if (request.headers()["x-shell-location"] === otherBranch) return json({ message: "Unavailable in this branch" }, 404);
       if (url.pathname.endsWith(options.principal ? "/approved-principal-sources" : "/approved-sources")) return json({ items: sources, candidateTotal: 2, page: 1, pageSize: 25, eligibilityMeaning: "CurrentPreviewOnly", canPublish: false });
       if (url.pathname.endsWith(options.principal ? "/principal-source-drafts" : "/source-drafts")) return json({ items: exists ? [{ ...record(), state: "VerifiedRetainedDraft" }] : [], total: exists ? 1 : 0, page: 1, pageSize: 25, canPublish: false });
       if (url.pathname.endsWith(options.principal ? "/from-approved-principal-sources" : "/from-approved-sources")) {
@@ -290,4 +346,75 @@ test("unavailable session journal cannot send a create", async ({ page }) => {
   await page.getByRole("button", { name: "Create internal draft", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("No new save will be sent");
   expect(calls.filter(x => x.method === "POST")).toHaveLength(0);
+});
+
+test("principal maker uses the original RFQ detail to request independent publication review", async ({ page }) => {
+  const calls = await mock(page, { principal: true, publication: true, seed: true });
+  await page.goto(`/procurement/workspace/rfqs/${event}?source=principal-approved`);
+  await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Items (1)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel draft and release its quantities" })).toBeVisible();
+  await page.getByLabel("Find an approved supplier").fill("Paper");
+  await page.getByRole("button", { name: "Search suppliers" }).click();
+  await expect(page.getByText("Paper Supply")).toBeVisible();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("button", { name: "Request publication review" }).click();
+  await expect(page.getByText("Waiting for the assigned independent reviewer.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+  const opened = calls.find(call => call.path.endsWith("/principal-publication-reviews") && call.method === "POST");
+  expect(opened?.key).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(opened?.body).toMatchObject({ expectedEventVersion: 1, supplierIds: [lineB] });
+  expect(calls.some(call => /send|dispatch|award|submit-quote/.test(call.path))).toBe(false);
+});
+
+test("separate current Core reviewer sees assignment and approves through the same RFQ detail", async ({ page }) => {
+  const calls = await mock(page, { principal: true, publication: true, reviewer: true, seed: true });
+  await page.goto("/procurement/workspace/rfqs?source=principal-approved");
+  await expect(page.getByText("Publication reviews assigned to me")).toBeVisible();
+  await page.getByRole("link", { name: "Review RFQ" }).click();
+  await expect(page.getByText("Independent publication review")).toBeVisible();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Approved for internal RFQ publication.", { exact: false })).toBeVisible();
+  expect(calls.filter(call => call.path.endsWith("/decisions") && call.method === "POST")).toHaveLength(1);
+  expect(calls.some(call => call.path.endsWith("/principal-manual-quotes"))).toBe(false);
+});
+
+test("buyer records outside contact and an exact internal quotation Draft without dispatch", async ({ page }) => {
+  const calls = await mock(page, { principal: true, publication: true, published: true, seed: true });
+  await page.goto(`/procurement/workspace/rfqs/${event}?source=principal-approved`);
+  await page.getByRole("tab", { name: "Related" }).click();
+  await page.getByRole("button", { name: "Record manual contact" }).click();
+  await page.getByRole("combobox", { name: "Channel" }).click();
+  await page.getByRole("option", { name: "Email outside ERP" }).click();
+  await page.getByLabel("External reference").fill("outside-ref-1");
+  await page.getByLabel("When contact occurred (your local time)").fill("2026-10-23T12:00");
+  await page.getByRole("button", { name: "Record contact", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Related" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Enter quotation Draft" })).toBeVisible();
+  await page.getByRole("button", { name: "Enter quotation Draft" }).click();
+  await page.getByLabel("Unit price").fill("0.0001");
+  await page.getByRole("button", { name: "Create quotation Draft" }).click();
+  await expect(page.getByRole("tab", { name: "Related" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Open Draft" })).toBeVisible();
+  const contact = calls.find(call => call.path.endsWith("/manual-contact") && call.method === "POST");
+  expect(contact?.body).toMatchObject({ channel: "EmailOutsideSystem", reference: "outside-ref-1" });
+  const quote = calls.find(call => call.path.endsWith("/principal-manual-quotes") && call.method === "POST");
+  expect(quote?.body).toMatchObject({ invitationId: lineA, lines: [{ unitPrice: "0.0001" }] });
+  expect(calls.some(call => /dispatch|email-send|quote-submit|award/.test(call.path))).toBe(false);
+});
+
+test("principal RFQ detail clears the related tab and old record on branch change", async ({ page }) => {
+  await mock(page, { principal: true, publication: true, published: true, seed: true });
+  await page.goto(`/procurement/workspace/rfqs/${event}?source=principal-approved`);
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(page.getByRole("tab", { name: "Related" })).toHaveAttribute("aria-selected", "true");
+  await page.evaluate(({ company, branch }) => {
+    const key = "erp.shell.state.v1", oldValue = localStorage.getItem(key);
+    const newValue = JSON.stringify({ entityId: company, branch });
+    localStorage.setItem(key, newValue);
+    window.dispatchEvent(new StorageEvent("storage", { key, oldValue, newValue }));
+  }, { company, branch: otherBranch });
+  await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Record manual contact" })).toHaveCount(0);
+  await expect(page.getByRole("alert")).toContainText("unavailable in your current company or branch");
 });

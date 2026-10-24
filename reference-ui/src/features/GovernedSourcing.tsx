@@ -10,6 +10,8 @@ import { useErpShell } from "../lib/erpShell";
 import { readRfqRecovery, writeRfqRecovery } from "../lib/rfq-command-journal";
 import { pendingRfqCommands } from "../lib/rfq-command-memory";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { listPublications, type PublicationPage, type PublicationRow } from "../../../src/platform/procurement-sourcing-publication-api";
+import { PrincipalPublicationDetail, PrincipalAssignedReviews } from "./PrincipalPublication";
 import { cancelRfqCommand, createRfqCommand, getGovernedRfq, listGovernedRfq, listRfqSources, recoverRfqCommand, sendRfqCommand,
   rfqRecoveryReference, RfqExecutionError, type RfqRecoveryReference, type RfqCommand, type RfqDetail, type RfqOwnedPage, type RfqSelection, type RfqSource, type RfqSourcePage, type RfqOwned, type RfqSourceMode } from "../../../src/platform/procurement-sourcing-execution-api";
 const message = (error: unknown) => error instanceof Error ? error.message : "The quote action could not be confirmed.";
@@ -27,7 +29,10 @@ function Pager({ page, total, size, change }: { page: number; total: number; siz
     <span>Page {page}</span><Button type="button" variant="secondary" disabled={page * size >= total} onClick={() => change(page + 1)}>Next</Button></div>;
 }
 export function GovernedSourcingList({ mode = "worker" }: { mode?: RfqSourceMode }) {
-  const { legalEntityId, permissions } = useCompany(); const [data, setData] = useState<RfqOwnedPage | null>(null);
+  const { legalEntityId, permissions, capabilities } = useCompany();
+  const publication = mode === "principal" && capabilities.principalSourcingPublication === true;
+  const ownerCanRead = !publication || permissions.includes("procurement-sourcing-submit");
+  const [data, setData] = useState<RfqOwnedPage | PublicationPage | null>(null);
   const [page, setPage] = useState(1), [search, setSearch] = useState(""), [state, setState] = useState(""), [error, setError] = useState("");
   const [revision, setRevision] = useState(0), [notice, setNotice] = useState("");
   const [visible, setVisible] = useState(["number", "currency", "status"]), [widths, setWidths] = useState<Record<string, number>>({});
@@ -35,21 +40,27 @@ export function GovernedSourcingList({ mode = "worker" }: { mode?: RfqSourceMode
   const [previewId, setPreviewId] = useState<string | null>(null);
   const columns: ListColumn[] = [{ key: "number", label: "Reference / Description", width: 360 }, { key: "currency", label: "Currency", width: 160 }, { key: "status", label: "Status", width: 160 }];
   useEffect(() => { const controller = new AbortController(); setData(null); setError(""); setSelected([]); setPreviewId(null);
-    listGovernedRfq(legalEntityId, page, search, state, controller.signal, mode).then(value => { if (!controller.signal.aborted) setData(value); })
+    (publication ? ownerCanRead ? listPublications(legalEntityId, page, search, state, controller.signal)
+      : Promise.resolve({ items: [], total: 0, page, pageSize: 25 } satisfies PublicationPage)
+      : listGovernedRfq(legalEntityId, page, search, state, controller.signal, mode)).then(value => { if (!controller.signal.aborted) setData(value); })
       .catch(error => { if (!controller.signal.aborted) setError(message(error)); }); return () => controller.abort();
-  }, [legalEntityId, page, search, state, revision, mode]);
-  const rows = useMemo(() => (data?.items ?? []).slice().sort((left, right) => {
-    const field = (row: RfqOwned) => sort === "currency" ? row.currencyCode || "" : sort === "status" ? row.status || row.state : row.number;
+  }, [legalEntityId, page, search, state, revision, mode, publication, ownerCanRead]);
+  const rows = useMemo<(RfqOwned | PublicationRow)[]>(() => [...(data?.items ?? [])].sort((left, right) => {
+    const field = (row: RfqOwned | PublicationRow) => sort === "currency" ? row.currencyCode || "" : sort === "status" ? row.status || row.state : row.number;
     return field(left).localeCompare(field(right)) || left.id.localeCompare(right.id);
   }), [data, sort]);
   const currentIds = new Set(rows.map(row => row.id));
   const currentSelection = selected.filter(id => currentIds.has(id));
-  const preview = rows.find(row => row.id === previewId && row.state === "VerifiedRetainedDraft");
-  return <div className="p-5 sm:p-8"><PageHeader title="Request for Quotes" subtitle="Internal drafts from approved purchase requests. Vendors have not received these drafts."
+  const verified = (row: RfqOwned | PublicationRow) => row.state === "VerifiedRetainedDraft" || row.state === "VerifiedRetainedSourcing";
+  const preview = rows.find(row => row.id === previewId && verified(row));
+  return <div className="p-5 sm:p-8"><PageHeader title="Request for Quotes" subtitle={publication
+    ? "Approved request sources, internal publication review, and manually contacted suppliers."
+    : "Internal drafts from approved purchase requests. Vendors have not received these drafts."}
     actions={<><ListTools entity="Quote Requests" columns={columns} visibleColumns={visible} onVisibleColumnsChange={setVisible}
       columnWidths={widths} onColumnWidthsChange={setWidths} clipText={clip} onClipTextChange={setClip}
       sortOptions={columns.map(column => ({ key: column.key, label: `${column.label} on this page` }))} onSort={setSort}
-      filterFields={[{ key: "status", label: "Status", type: "select", options: ["Draft", "Cancelled"] }]} activeFilters={{ status: state }}
+      filterFields={[{ key: "status", label: "Status", type: "select", options: publication
+        ? ["Draft", "PublicationReview", "Published", "Cancelled"] : ["Draft", "Cancelled"] }]} activeFilters={{ status: state }}
       onApplyFilters={filters => { setSelected([]); setPreviewId(null); setPage(1); setState(filters.status || ""); }} showSavedView={false}
       onExport={() => setNotice("Export is not available yet.")} onRefresh={() => { setSelected([]); setPreviewId(null); setRevision(value => value + 1); }}
       onResetWidths={() => setWidths({})} notify={setNotice} unavailableImportReason="Import is not available yet."
@@ -57,20 +68,21 @@ export function GovernedSourcingList({ mode = "worker" }: { mode?: RfqSourceMode
       viewExportLabel="Export Current Page View" selectedCount={currentSelection.length} />
       {permissions.includes("procurement-sourcing-convert") && <Link to={createLink(mode)}><Button>Use approved requests</Button></Link>}</>} />
     <Panel><div className="flex flex-wrap items-end gap-3 border-b border-border p-5"><Field label="Find quote request" className="min-w-56 flex-1"><Input maxLength={100} value={search} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setSearch(e.target.value); }} /></Field>
-      <Field label="Status" className="min-w-40"><Select value={state} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setState(e.target.value); }}><option value="">All statuses</option><option value="Draft">Draft</option><option value="Cancelled">Cancelled</option></Select></Field></div>
+      <Field label="Status" className="min-w-40"><Select value={state} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setState(e.target.value); }}><option value="">All statuses</option><option value="Draft">Draft</option>{publication && <><option value="PublicationReview">Publication review</option><option value="Published">Published internally</option></>}<option value="Cancelled">Cancelled</option></Select></Field></div>
       <p className="px-5 pt-3 text-xs text-muted-foreground">Search and status work across pages you can access. Sorting and selection apply to this page only.</p>
       {notice && <p role="status" className="px-5 pt-3 text-sm">{notice}</p>}
-      {error ? <p role="alert" className="p-5">{error}</p> : !data ? <p role="status" className="p-5">Loading your quote requests…</p> : !rows.length ? <div className="p-5"><EmptyState title="No drafts from approved requests" description="Use approved purchase requests to prepare a quote request." /></div>
+      {error ? <p role="alert" className="p-5">{error}</p> : !data ? <p role="status" className="p-5">Loading your quote requests…</p> : !rows.length ? <div className="p-5"><EmptyState title={publication ? "No quote requests here" : "No drafts from approved requests"} description="Use approved purchase requests to prepare a quote request." /></div>
         : <><StandardDataTable rows={rows} columns={columns} visibleColumns={visible} columnWidths={widths} clipText={clip}
           selected={currentSelection} onSelectedChange={ids => setSelected(ids.filter(id => currentIds.has(id)))} onSort={setSort} rowLabel={row => `Open ${row.number}`}
-          renderCell={(row, column) => column.key === "number" ? row.state === "VerifiedRetainedDraft" ? <Link to={detailLink(row.id, mode)} className="block text-primary"><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm">{row.title || "Needs review"}</span></Link>
+          renderCell={(row, column) => column.key === "number" ? verified(row) ? <Link to={detailLink(row.id, mode)} className="block text-primary"><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm">{row.title || "Needs review"}</span></Link>
             : <><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm text-muted-foreground">Needs review</span></>
             : column.key === "currency" ? row.currencyCode || "—" : <Badge>{row.status || "Needs review"}</Badge>}
-          renderActions={row => row.state === "VerifiedRetainedDraft" ? <span className="flex items-center gap-2"><Link to={detailLink(row.id, mode)} className="text-primary">Open</Link><Button variant="ghost" onClick={() => setPreviewId(row.id)}>Preview</Button></span> : <span className="text-xs text-muted-foreground">Needs review</span>} />
+          renderActions={row => verified(row) ? <span className="flex items-center gap-2"><Link to={detailLink(row.id, mode)} className="text-primary">Open</Link><Button variant="ghost" onClick={() => setPreviewId(row.id)}>Preview</Button></span> : <span className="text-xs text-muted-foreground">Needs review</span>} />
           {currentSelection.length > 0 && <div className="border-t border-border bg-primary/5 px-5 py-3 text-sm">{currentSelection.length} selected on this page · Bulk changes are not available yet. <Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}</>}
       {data && <div className="border-t border-border px-5 py-3"><Pager page={page} total={data.total} size={data.pageSize} change={next => { setSelected([]); setPreviewId(null); setPage(next); }} /></div>}
     </Panel>
     {preview && <Modal title={`${preview.number} · Preview`} onClose={() => setPreviewId(null)}><div className="space-y-3 text-sm"><p className="font-medium">{preview.title}</p><Badge>{preview.status}</Badge><p>Currency: {preview.currencyCode}</p><Link to={detailLink(preview.id, mode)}><Button variant="secondary">View full details</Button></Link></div></Modal>}
+    {publication && permissions.includes("procurement-sourcing-publish") && <PrincipalAssignedReviews company={legalEntityId} />}
   </div>;
 }
 
@@ -162,6 +174,12 @@ export function GovernedSourcingCreate({ mode = "worker" }: { mode?: RfqSourceMo
   </RfqWizardLayout>;
 }
 export function GovernedSourcingDetail({ id, mode = "worker" }: { id: string; mode?: RfqSourceMode }) {
+  const { capabilities } = useCompany();
+  if (mode === "principal" && capabilities.principalSourcingPublication)
+    return <PrincipalPublicationDetail id={id} />;
+  return <GovernedSourcingDraftDetail id={id} mode={mode} />;
+}
+function GovernedSourcingDraftDetail({ id, mode }: { id: string; mode: RfqSourceMode }) {
   const slot = useCommandSlot(`Cancel:${id}`, mode); const working = useRef(false); const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const { legalEntityId, permissions } = useCompany(); const [record, setRecord] = useState<RfqDetail | null>(null), [error, setError] = useState("");
