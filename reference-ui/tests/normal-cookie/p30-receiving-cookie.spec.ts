@@ -174,7 +174,10 @@ test('workerless receiver, inspector and acceptor record one goods delivery', as
     await confirm(inspectionPage, 'PRIVATE-REC:browser-inspection');
     const inspectedResponse = await inspectWaiting; expect(inspectedResponse.status()).toBe(200);
     const inspectCommand = command(inspectedResponse, ['version', 'sourceVersion', 'quantity', 'evidenceReference']);
+    const inspectedLineId = new URL(inspectedResponse.request().url()).pathname.split('/').at(-2);
+    expect(guid(inspectedLineId)).toBe(true);
     evidence.inspectCommandKey = inspectCommand.key; evidence.inspectRequestBody = inspectCommand.body;
+    evidence.inspectTargetLineId = inspectedLineId;
     evidence.inspectedVersion = (await inspectedResponse.json() as Record<string, unknown>).version; retain();
     await logout(inspector); await inspector.close();
 
@@ -190,7 +193,10 @@ test('workerless receiver, inspector and acceptor record one goods delivery', as
     await confirm(acceptancePage, 'PRIVATE-REC:browser-acceptance');
     const acceptedResponse = await acceptWaiting; expect(acceptedResponse.status()).toBe(200);
     const acceptCommand = command(acceptedResponse, ['version', 'sourceVersion', 'quantity', 'evidenceReference']);
+    const acceptedLineId = new URL(acceptedResponse.request().url()).pathname.split('/').at(-2);
+    expect(guid(acceptedLineId)).toBe(true);
     evidence.acceptCommandKey = acceptCommand.key; evidence.acceptRequestBody = acceptCommand.body;
+    evidence.acceptTargetLineId = acceptedLineId;
     evidence.acceptedVersion = (await acceptedResponse.json() as Record<string, unknown>).version; retain();
     await acceptancePage.reload({ waitUntil: 'domcontentloaded' });
     await expect(acceptancePage.getByText('1', { exact: true }).first()).toBeVisible();
