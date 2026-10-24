@@ -19,10 +19,12 @@ describe("unfunded principal PO draft edit guidance",()=>{
     expect(draftEditProblem(saved,{...draft(),lines:[{...draft().lines[0],id:id(9)}]})).toMatch(/line/);
     expect(draftEditProblem(saved,{...draft(),lines:[{...draft().lines[0],unitCode:"BOX"}]})).toMatch(/unit/);
   });
-  it("uses exact four-place integers to block quantity, price, line value and tax increases",()=>{
+  it("uses exact four-place integers to limit price, line value and tax while allowing capacity-checked quantity growth",()=>{
     for(const changed of [{quantity:"1.0002"},{unitPrice:"1.0002"},{taxAmount:"0.0002"},
       {quantity:"0.0000"},{quantity:"1e3"}])
       expect(draftEditProblem(saved,{...draft(),lines:[{...draft().lines[0],...changed}]})).not.toBeNull();
     expect(draftEditProblem(saved,{...draft(),lines:[{...draft().lines[0],quantity:"1.0000"}]})).toBeNull();
+    expect(draftEditProblem(saved,{...draft(),lines:[{...draft().lines[0],quantity:"1.0002",unitPrice:"1.0000"}]})).toBeNull();
+    expect(draftEditProblem(saved,{...draft(),lines:[{...draft().lines[0],quantity:"1.0003",unitPrice:"1.0000"}]})).toMatch(/line value/);
   });
 });

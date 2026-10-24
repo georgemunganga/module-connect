@@ -22,9 +22,9 @@ export function draftEditProblem(order: PrincipalOrderDetail, draft: ExactOrderD
     if (quantity === null || price === null || tax === null || priorQuantity === null
       || priorPrice === null || priorTax === null || quantity <= 0n)
       return "Enter exact positive quantities and valid amounts with up to four decimal places.";
-    if (quantity > priorQuantity || price > priorPrice || tax > priorTax
+    if (price > priorPrice || tax > priorTax
       || quantity * price > priorQuantity * priorPrice)
-      return "Increasing quantity, unit price, line value or tax needs a separate approval workflow.";
+      return "Unit price, line value and tax cannot increase in this draft revision.";
   }
   return null;
 }

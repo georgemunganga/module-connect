@@ -11,4 +11,6 @@ This is the UI binding for the bounded unfunded internal Draft revision child fe
 
 The optional capability defaults false on older metadata. The P33 backend currently has no registered positive revision readiness provider; the UI remains unavailable until genuine schema, finite role, and owner proof are accepted. A record can still deny Edit even when the module capability is on. The server repeats all source, supplier, authority, reservation and amount checks on every command.
 
+The client permits a higher quantity when a lower unit price keeps line value and tax at or below the current draft. It does not invent an available source balance; the server checks the remaining approved request capacity and may reject the save with a conflict, leaving the current draft unchanged.
+
 The existing Save and send control stays disabled because internal draft editing does not dispatch to a supplier or post Finance entries. Existing five editor sections, PO detail tabs, shared ERP controls, and all historical worker PO routes remain intact. Browser and unit tests are authored as source; their execution belongs to the serialized verification gate.

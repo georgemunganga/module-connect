@@ -4,8 +4,8 @@ const id=(n:number)=>`${String(n).padStart(8,"0")}-1111-4111-8111-111111111111`;
 const company=id(1),branch=id(2),buyer=id(3),supplier=id(4),request=id(5),order=id(7),line=id(8);
 const root="/procurement/workspace/purchase-orders",api="/api/procurement/v1/orders";
 
-async function fixture(page:Page,{enabled=true,lost=false}={}){
-  let version=1,quantity="1.0001";
+async function fixture(page:Page,{enabled=true,lost=false,capacityDenied=false}={}){
+  let version=1,quantity="1.0001",unitPrice="1.0001";
   const writes:Array<{key:string;body:string}>=[],recovery:string[]=[];
   await page.addInitScript(({entityId,branch})=>localStorage.setItem("erp.shell.state.v1",
     JSON.stringify({entityId,branch})),{entityId:company,branch});
@@ -34,12 +34,14 @@ async function fixture(page:Page,{enabled=true,lost=false}={}){
         revisions:[{id:id(9),revisionNumber:1,reason:"Reduce quantity",actorPrincipalId:buyer,
           recordedAt:"2026-10-24T10:00:00Z",previousSnapshotSha256:null,snapshotSha256:"c".repeat(64),
           snapshotJson:"{}",resultOrderVersion:2}]},
-      lines:[{id:line,lineNumber:1,description:"Laptop",unitCode:"EA",quantity,unitPrice:"1.0001",taxAmount:"0.0001",
+      lines:[{id:line,lineNumber:1,description:"Laptop",unitCode:"EA",quantity,unitPrice,taxAmount:"0.0001",
         costCenterRef:"IT",projectRef:null,expectedDeliveryOn:null,purchaseRequestId:request,allocationStatus:"Reserved"}]});
     if(path===`${api}/${order}/principal-direct-edit`){
       const key=req.headers()["idempotency-key"],body=req.postData()??"";writes.push({key,body});
       if(!enabled)return json({message:"Unavailable"},503);
-      version=2;quantity="1.0000";
+      if(capacityDenied)return json({message:"Approved request capacity changed"},409);
+      version=2;quantity=body.includes('"quantity":1.0002')?"1.0002":"1.0000";
+      unitPrice=body.includes('"unitPrice":1.0000')?"1.0000":"1.0001";
       if(lost)return route.abort("failed");
       return json({orderId:order,number:"PO-1",status:"Draft",version,originalDirectSourceSha256:"a".repeat(64),
         commandKey:key,recordedHistoricalResult:true});
@@ -52,7 +54,7 @@ async function fixture(page:Page,{enabled=true,lost=false}={}){
     }
     return json({message:"Unexpected endpoint"},404);
   });
-  return {writes,recovery};
+  return {writes,recovery,current:()=>({version,quantity,unitPrice})};
 }
 
 test("unavailable revision capability keeps the restored edit form read-only",async({page})=>{
@@ -63,15 +65,16 @@ test("unavailable revision capability keeps the restored edit form read-only",as
   expect(state.writes).toHaveLength(0);
 });
 
-test("workerless buyer revises the same linked draft and sees retained history",async({page})=>{
+test("workerless buyer increases quantity at a lower price and sees retained history",async({page})=>{
   const state=await fixture(page);await page.goto(`${root}/${order}/edit?workflow=principal`);
   await expect(page.getByRole("region",{name:"Order lines"}).getByRole("table")).toBeVisible();
   await expect(page.getByText("Approved purchase request").first()).toBeVisible();
   await expect(page.getByText(request,{exact:true})).toHaveCount(0);
-  await page.getByRole("textbox",{name:"Reason for revision"}).fill("Reduce quantity");
+  await page.getByRole("textbox",{name:"Reason for revision"}).fill("Use a lower unit price");
   await page.getByRole("textbox",{name:"Line 1 quantity"}).fill("1.0002");
   await expect(page.getByRole("button",{name:"Save draft revision"})).toBeDisabled();
-  await page.getByRole("textbox",{name:"Line 1 quantity"}).fill("1.0000");
+  await page.getByRole("textbox",{name:"Line 1 unit price"}).fill("1.0000");
+  await expect(page.getByRole("button",{name:"Save draft revision"})).toBeEnabled();
   await page.getByRole("button",{name:"Save draft revision"}).click();
   await expect(page.getByRole("heading",{name:"PO-1"})).toBeVisible();
   await page.getByRole("tab",{name:"Items (1)"}).click();
@@ -82,9 +85,27 @@ test("workerless buyer revises the same linked draft and sees retained history",
   await expect(page.getByText("You",{exact:true})).toBeVisible();
   await expect(page.getByText(buyer,{exact:true})).toHaveCount(0);
   expect(state.writes).toHaveLength(1);
-  expect(state.writes[0].body).toContain('"quantity":1.0000');
+  expect(state.writes[0].body).toContain('"quantity":1.0002');
+  expect(state.writes[0].body).toContain('"unitPrice":1.0000');
   expect(JSON.parse(state.writes[0].body)).toMatchObject({expectedOrderVersion:1,
-    originalDirectSourceSha256:"a".repeat(64),reason:"Reduce quantity"});
+    originalDirectSourceSha256:"a".repeat(64),reason:"Use a lower unit price"});
+  expect(state.current()).toEqual({version:2,quantity:"1.0002",unitPrice:"1.0000"});
+});
+
+test("source capacity conflict leaves the draft unchanged and blocks a second POST",async({page})=>{
+  const state=await fixture(page,{capacityDenied:true});await page.goto(`${root}/${order}/edit?workflow=principal`);
+  await page.getByRole("textbox",{name:"Reason for revision"}).fill("Use a lower unit price");
+  await page.getByRole("textbox",{name:"Line 1 quantity"}).fill("1.0002");
+  await page.getByRole("textbox",{name:"Line 1 unit price"}).fill("1.0000");
+  await expect(page.getByRole("button",{name:"Save draft revision"})).toBeEnabled();
+  await page.getByRole("button",{name:"Save draft revision"}).click();
+  await expect(page.getByRole("alert").filter({hasText:"source evidence changed"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Check saved result"})).toBeVisible();
+  expect(state.writes).toHaveLength(1);
+  expect(state.current()).toEqual({version:1,quantity:"1.0001",unitPrice:"1.0001"});
+  await page.reload();
+  await expect(page.getByRole("textbox",{name:"Line 1 quantity"})).toHaveValue("1.0001");
+  expect(state.writes).toHaveLength(1);
 });
 
 test("interrupted Edit response uses actor-owned GET recovery with no second POST",async({page})=>{

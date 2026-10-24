@@ -144,6 +144,7 @@ function PrincipalEditor({scopeKey,id,onSaved}:{scopeKey:string;id?:string;onSav
         <Button type="button" disabled={busy} onClick={()=>void recover()}>Check saved result</Button></section>}
       {editing&&<section aria-label="Draft revision" className="space-y-3 rounded-md border border-border p-4">
         <p className="text-sm">Current version: {saved?.version}. Original source evidence remains linked.</p>
+        <p className="text-sm text-muted-foreground">A higher quantity can be saved only when unit price, line value and tax stay within the current draft limits and ERP confirms remaining approved request capacity.</p>
         {!canEdit&&<p role="status" className="text-sm text-muted-foreground">{saved?.editUnavailableReason??"Draft revision is not available for this order or account."}</p>}
         {editProblem&&<p role="alert" className="text-sm text-destructive">{editProblem}</p>}
         <Field label="Reason for revision"><Input value={reason} disabled={!canEdit||busy||!!pending}
