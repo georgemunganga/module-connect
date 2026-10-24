@@ -7,9 +7,9 @@ const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
 type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
-async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; publicationCapabilityOff?: boolean; legacySourceAvailable?: boolean; published?: boolean; reviewer?: boolean; reviewerCancel?: boolean } = {}) {
+async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; publicationCapabilityOff?: boolean; legacySourceAvailable?: boolean; published?: boolean; reviewer?: boolean; reviewerCancel?: boolean; rejectContactTimeOnce?: boolean } = {}) {
   const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
-  let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false,
+  let lost = false, contactTimeRejected = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false,
     status = options.published ? "Published" : options.reviewer ? "PublicationReview" : "Draft", version = 1,
     contacted = false, quoteSaved = false, selected: Selection[] = [], exists = Boolean(options.seed);
   const sources = [lineA, lineB].map((id, at) => ({ purchaseRequestId: at ? prB : prA, purchaseRequestLineId: id, requestNumber: `PR-${at + 1}`,
@@ -89,6 +89,10 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
             commandKey: request.headers()["idempotency-key"] });
         }
         if (url.pathname.endsWith("/manual-contact") && method === "POST") {
+          if (options.rejectContactTimeOnce && !contactTimeRejected) {
+            contactTimeRejected = true;
+            return json({ code: "SourcingManualContactTimeInvalid", message: "Private server detail must not appear" }, 422);
+          }
           contacted = true;
           return json({ eventId: event, invitationId, status: "ManualContactRecorded", supplierDeliveryReported: true,
             emailSentBySystem: false, commandKey: request.headers()["idempotency-key"] });
@@ -467,4 +471,37 @@ test("principal RFQ detail clears the related tab and old record on branch chang
   await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Record manual contact" })).toHaveCount(0);
   await expect(page.getByRole("alert")).toContainText("unavailable in your current company or branch");
+});
+
+
+test("contact time validation is correctable without recording contact or enabling quotation", async ({ page }) => {
+  const calls = await mock(page, { principal: true, publication: true, published: true, seed: true,
+    rejectContactTimeOnce: true });
+  await page.goto(`/procurement/workspace/rfqs/${event}?source=principal-approved`);
+  await page.getByRole("tab", { name: "Related" }).click();
+  await page.getByRole("button", { name: "Record manual contact" }).click();
+  await page.getByRole("combobox", { name: "Channel" }).click();
+  await page.getByRole("option", { name: "Email outside ERP" }).click();
+  await page.getByLabel("External reference").fill("outside-time-correction");
+  const time = page.getByLabel("When contact occurred (your local time)");
+  await time.fill("2026-10-22T12:00:00.123");
+  await page.getByRole("button", { name: "Record contact", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Contact time must be after approval and cannot be in the future.");
+  await expect(page.getByText("Private server detail must not appear")).toHaveCount(0);
+  await expect(page.getByText("Manual contact recorded", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Enter quotation Draft" })).toHaveCount(0);
+  await expect(time).toHaveValue("2026-10-22T12:00:00.123");
+  expect(calls.filter(call => call.path.endsWith("/manual-contact") && call.method === "POST")).toHaveLength(1);
+  const corrected = "2026-10-23T12:00:01.456";
+  const expectedUtc = await page.evaluate(value => new Date(value).toISOString(), corrected);
+  await time.fill(corrected);
+  await page.getByRole("button", { name: "Record contact", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Enter quotation Draft" })).toBeVisible();
+  await expect(page.getByText("Manual contact recorded", { exact: true })).toBeVisible();
+  const contacts = calls.filter(call => call.path.endsWith("/manual-contact") && call.method === "POST");
+  expect(contacts).toHaveLength(2);
+  expect(contacts[0].key).toBeTruthy(); expect(contacts[1].key).toBeTruthy();
+  expect(contacts[1].key).not.toBe(contacts[0].key);
+  expect(contacts[1].body).toMatchObject({ reportedContactAt: expectedUtc });
+  expect(calls.filter(call => call.path.endsWith("/principal-manual-quotes") && call.method === "POST")).toHaveLength(0);
 });
