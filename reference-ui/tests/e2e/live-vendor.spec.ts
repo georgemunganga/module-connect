@@ -257,6 +257,34 @@ test("lost detail contact-create result blocks replay until a scoped saved-recor
   await expect(page.getByRole("button",{name:"I compared the saved details"})).toBeVisible();
   expect(attempts).toBe(1);
 });
+test("confirmed child save with failed follow-up GET stays blocked until reconciliation", async ({ page }) => {
+  await mockErp(page);await page.goto("/procurement/workspace/vendors/new");
+  await page.getByLabel("Company name").fill("Saved Supplier Ltd");await page.getByLabel("Display name").fill("Saved Supplier");
+  await page.getByRole("button",{name:"Save draft"}).click();
+  await expect(page.getByRole("heading",{name:"Saved Supplier"})).toBeVisible();
+  let failRead=true;
+  await page.route(`**/api/procurement/v1/vendors/${vendorId}`,route=>route.request().method()==="GET"&&failRead
+    ?route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({message:"Temporary read failure"})}):route.fallback());
+  await page.getByLabel("Contact name").fill("Saved Contact");await page.getByRole("button",{name:"Add contact"}).click();
+  await expect(page.getByText("saved vendor could not be reloaded",{exact:false})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Add contact"})).toHaveCount(0);
+  failRead=false;await page.getByRole("button",{name:"Reload saved vendor"}).click();
+  await expect(page.getByRole("button",{name:"I compared the saved details"})).toBeVisible();
+  await expect(page.getByText("Saved Contact",{exact:false})).toBeVisible();
+});
+test("late detail save response cannot restore controls after company context changes", async ({ page }) => {
+  await mockErp(page);await page.goto("/procurement/workspace/vendors/new");
+  await page.getByLabel("Company name").fill("Old Company Supplier Ltd");await page.getByLabel("Display name").fill("Old Company Supplier");
+  await page.getByRole("button",{name:"Save draft"}).click();
+  await expect(page.getByRole("heading",{name:"Old Company Supplier"})).toBeVisible();
+  let release!:()=>void;let entered!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});const started=new Promise<void>(resolve=>{entered=resolve;});let writes=0;
+  await page.route(`**/api/procurement/v1/vendors/${vendorId}/contacts`,async route=>{writes++;entered();await held;try{await route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({id:"44444444-4444-4444-8444-444444444444",version:2})});}catch{/* old scope may abort */}});
+  await page.getByLabel("Contact name").fill("Old company contact");await page.getByRole("button",{name:"Add contact"}).click();await started;
+  await page.route("**/api/procurement/v1/context",route=>route.fulfill({status:403,contentType:"application/json",body:JSON.stringify({message:"No access to selected company"})}));
+  await page.evaluate(()=>{const key="erp.shell.state.v1",newValue=JSON.stringify({entityId:"88888888-8888-4888-8888-888888888888"});localStorage.setItem(key,newValue);window.dispatchEvent(new StorageEvent("storage",{key,newValue}));});
+  await expect(page.getByRole("heading",{name:"Old Company Supplier"})).toHaveCount(0);
+  release();await expect(page.getByRole("button",{name:"Add contact"})).toHaveCount(0);expect(writes).toBe(1);
+});
 
 test("vendor draft contact and address can be corrected and removed with a reason", async ({ page }) => {
   test.setTimeout(90_000);
