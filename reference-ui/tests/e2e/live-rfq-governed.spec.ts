@@ -382,7 +382,7 @@ test("separate current Core reviewer sees assignment and approves through the sa
 });
 
 test("publication-only reviewer opens assigned reviews from the normal RFQ route", async ({ page }) => {
-  const calls = await mock(page, { principal: true, publication: true, reviewer: true, seed: true });
+  const calls = await mock(page, { principal: true, publication: true, reviewer: true, legacySourceAvailable: true, seed: true });
   await page.goto("/procurement/workspace/rfqs");
   await expect(page.getByText("Publication reviews assigned to me")).toBeVisible();
   await expect(page.getByRole("link", { name: "Review RFQ" })).toBeVisible();

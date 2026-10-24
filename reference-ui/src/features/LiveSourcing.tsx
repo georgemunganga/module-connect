@@ -37,10 +37,13 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
   const company = useCompany(); const { selection, authEpoch } = useErpShell(); const { id = "" } = useParams();
   const [query] = useSearchParams();
   const source = query.get("source");
-  const principalDefault = source === null && (company.capabilities.principalSourcingSourceDrafts
-    || company.capabilities.principalSourcingPublication === true
-      && company.permissions.includes("procurement-sourcing-publish"))
-    && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts;
+  const publicationReviewerDefault = company.capabilities.principalSourcingPublication === true
+    && company.permissions.includes("procurement-sourcing-publish")
+    && !company.permissions.includes("procurement-sourcing-convert")
+    && !company.permissions.includes("procurement-sourcing-cancel");
+  const principalDefault = source === null && (publicationReviewerDefault
+    || company.capabilities.principalSourcingSourceDrafts
+      && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts);
   const governed = source === "approved" || source === "principal-approved" || principalDefault;
   const mode: RfqSourceMode = source === "principal-approved" || principalDefault ? "principal" : "worker";
   const key = JSON.stringify([authEpoch, company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
