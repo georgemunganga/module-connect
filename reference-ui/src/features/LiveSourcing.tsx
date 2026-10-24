@@ -37,8 +37,13 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
   const company = useCompany(); const { selection, authEpoch } = useErpShell(); const { id = "" } = useParams();
   const [query] = useSearchParams();
   const source = query.get("source");
-  const principalDefault = source === null && company.capabilities.principalSourcingSourceDrafts
-    && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts;
+  const publicationReviewerDefault = company.capabilities.principalSourcingPublication === true
+    && company.permissions.includes("procurement-sourcing-publish")
+    && !company.permissions.includes("procurement-sourcing-convert")
+    && !company.permissions.includes("procurement-sourcing-cancel");
+  const principalDefault = source === null && (publicationReviewerDefault
+    || company.capabilities.principalSourcingSourceDrafts
+      && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts);
   const governed = source === "approved" || source === "principal-approved" || principalDefault;
   const mode: RfqSourceMode = source === "principal-approved" || principalDefault ? "principal" : "worker";
   const key = JSON.stringify([authEpoch, company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
@@ -51,7 +56,12 @@ function SourcingPageContent({ view, governed, mode, id }: { view: "list" | "edi
   const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel")
     || capabilities.principalSourcingPublication === true && mode === "principal"
       && (permissions.includes("procurement-sourcing-submit") || permissions.includes("procurement-sourcing-publish"));
-  const enabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
+  const sourceEnabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
+  // A named publication reviewer can read the assigned list and RFQ detail
+  // without the separate approved-source conversion capability.
+  const enabled = sourceEnabled || view !== "editor" && mode === "principal"
+    && capabilities.principalSourcingPublication === true
+    && permissions.includes("procurement-sourcing-publish");
   const anyGoverned = capabilities.sourcingSourceDrafts || capabilities.principalSourcingSourceDrafts;
   return <>
     {view === "list" && anyGoverned && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">

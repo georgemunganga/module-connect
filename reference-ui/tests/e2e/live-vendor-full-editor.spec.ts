@@ -18,6 +18,7 @@ test("explicit child save preserves unsaved header and uses authoritative suppli
   await page.getByRole("button",{name:"Save vendor details",exact:true}).click();await expect(page.getByRole("status").filter({hasText:"Vendor details saved"})).toBeVisible();expect(state.writes[1].body.version).toBe(2);expect(state.writes[1].body.draft).not.toHaveProperty("contacts");expect(state.read().displayName).toBe("Unsaved header");
 });
 test("denied edit never falls back to create",async({page})=>{const state=await fullVendorMock(page,{denyEdit:true});await page.goto(`/procurement/workspace/vendors/${vendor}/edit`);await expect(page.getByRole("alert")).toContainText("do not have access");await expect(page.getByRole("button",{name:"Save vendor details",exact:true})).toBeDisabled();expect(state.writes).toHaveLength(0);});
+test("server canEdit false defeats a broad client edit grant",async({page})=>{const state=await fullVendorMock(page,{canEditFalse:true});await page.goto(`/procurement/workspace/vendors/${vendor}/edit`);await expect(page.getByRole("button",{name:"Save vendor details",exact:true})).toBeDisabled();await expect(page.getByLabel("Display name",{exact:true})).toBeDisabled();expect(state.writes).toHaveLength(0);});
 for(const failure of ["stale","loseChild"] as const)test(`${failure} child save preserves form and blocks repeated mutation`,async({page})=>{
   const state=await fullVendorMock(page,{[failure]:true});await page.goto(`/procurement/workspace/vendors/${vendor}/edit`);await page.getByLabel("Display name",{exact:true}).fill("Preserved header");await page.getByRole("tab",{name:"Contact Persons",exact:true}).click();await page.getByRole("textbox",{name:"Contact name",exact:true}).fill("Entered Contact");await page.getByRole("button",{name:"Save contact",exact:true}).click();await expect(page.getByRole("alert")).toBeVisible();await expect(page.getByLabel("Display name",{exact:true})).toHaveValue("Preserved header");await expect(page.getByRole("button",{name:"Save contact",exact:true})).toBeDisabled();expect(state.writes).toHaveLength(1);await page.getByRole("button",{name:"Reload saved vendor and discard edits",exact:true}).click();await expect(page.getByLabel("Display name",{exact:true})).toHaveValue("Full Vendor");expect(state.writes).toHaveLength(1);
 });
@@ -38,6 +39,23 @@ test("newly saved field names are locked without discarding unsaved child edits"
   await page.getByRole("tab",{name:"Custom Fields",exact:true}).click();await page.getByRole("button",{name:"Add custom field",exact:true}).click();await page.getByRole("textbox",{name:"Name",exact:true}).fill("Tier");await page.getByRole("textbox",{name:"Value",exact:true}).fill("Local");
   await page.getByRole("button",{name:"Save vendor details",exact:true}).click();await expect(page.getByRole("status").filter({hasText:"Vendor details saved"})).toBeVisible();await expect(page.getByRole("textbox",{name:"Name",exact:true})).toBeDisabled();
   await page.getByRole("tab",{name:"Contact Persons",exact:true}).click();await expect(page.getByRole("textbox",{name:"Contact name",exact:true})).toHaveValue("Unsaved contact");expect((state.read().contacts as {name:string}[])[0].name).toBe("Jane");expect(state.writes).toHaveLength(1);
+});
+test("contact first and last name edits save a matching display name",async({page})=>{
+  const state=await fullVendorMock(page,{edit:true});await page.goto(`/procurement/workspace/vendors/${vendor}/edit`);
+  await page.getByRole("tab",{name:"Contact Persons",exact:true}).click();
+  await page.getByRole("textbox",{name:"Contact firstName",exact:true}).fill("Ada");
+  await page.getByRole("textbox",{name:"Contact lastName",exact:true}).fill("Kunda");
+  await expect(page.getByRole("textbox",{name:"Contact name",exact:true})).toHaveValue("Ada Kunda");
+  await page.getByRole("button",{name:"Save contact",exact:true}).click();
+  expect(state.writes[0].body.contact).toMatchObject({name:"Ada Kunda",firstName:"Ada",lastName:"Kunda"});
+});
+test("Cancel asks before discarding a dirty vendor editor",async({page})=>{
+  await fullVendorMock(page,{edit:true});await page.goto(`/procurement/workspace/vendors/${vendor}/edit`);
+  await page.getByLabel("Display name",{exact:true}).fill("Unsaved change");
+  page.once("dialog",dialog=>dialog.dismiss());await page.getByRole("link",{name:"Cancel",exact:true}).click();
+  await expect(page.getByLabel("Display name",{exact:true})).toHaveValue("Unsaved change");
+  page.once("dialog",dialog=>dialog.accept());await page.getByRole("link",{name:"Cancel",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Full Vendor",exact:true})).toBeVisible();
 });
 test("lost create acknowledgement blocks a second create and retains entered values",async({page})=>{
   await fullVendorMock(page);let writes=0;await page.route("**/api/procurement/v1/vendors",route=>{if(route.request().method()!=="POST")return route.fallback();writes++;return route.abort("failed");});
