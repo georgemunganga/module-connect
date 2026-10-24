@@ -167,12 +167,38 @@ test('buyer and independent Core reviewer publish an RFQ, then record outside co
     await buyerPage.getByRole('combobox', { name: 'Channel' }).click();
     await buyerPage.getByRole('option', { name: 'Email outside ERP' }).click();
     await buyerPage.getByLabel('External reference').fill(`outside-${randomUUID()}`);
-    await buyerPage.getByLabel('When contact occurred (your local time)').fill('2026-10-23T12:00');
+    // Capture the browser's actual local time after the real approval completed.
+    // Milliseconds avoid truncating a same-minute contact before DecidedAt.
+    const contactTime = await buyerPage.evaluate(() => {
+      const now = new Date(), two = (value: number) => String(value).padStart(2, '0');
+      return { local: `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`
+        + `T${two(now.getHours())}:${two(now.getMinutes())}:${two(now.getSeconds())}`
+        + `.${String(now.getMilliseconds()).padStart(3, '0')}`, utc: now.toISOString() };
+    });
+    const contactInput = buyerPage.getByLabel('When contact occurred (your local time)');
+    await expect(contactInput).toHaveAttribute('step', '0.001');
+    await contactInput.fill(contactTime.local);
     progress('manual-contact');
     const contactWait = buyerPage.waitForResponse(response => /\/manual-contact$/.test(new URL(response.url()).pathname)
       && response.request().method() === 'POST');
     await buyerPage.getByRole('button', { name: 'Record contact', exact: true }).click();
-    const contacted = await contactWait; expect(contacted.status()).toBe(201); evidence.contact = captured(contacted);
+    const contacted = await contactWait;
+    evidence.contactHttpStatus = contacted.status();
+    if (contacted.status() !== 201) {
+      // Retain only the classified code, never response bodies or credentials.
+      let code = 'UnclassifiedResponse';
+      try {
+        const problem: unknown = await contacted.json();
+        if (problem && typeof problem === 'object' && 'code' in problem
+          && typeof problem.code === 'string' && /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(problem.code)) code = problem.code;
+      } catch { code = 'NonJsonResponse'; }
+      evidence.contactErrorCode = code;
+    }
+    retain();
+    expect(contacted.status()).toBe(201);
+    const contactCommand = captured(contacted);
+    expect(JSON.parse(contactCommand.body).reportedContactAt).toBe(contactTime.utc);
+    evidence.contact = contactCommand;
     await expect(buyerPage.getByRole('tab', { name: 'Related' })).toHaveAttribute('aria-selected', 'true');
     await buyerPage.getByRole('button', { name: 'Enter quotation Draft' }).first().click();
     await buyerPage.getByLabel('Unit price').fill('0.0001');

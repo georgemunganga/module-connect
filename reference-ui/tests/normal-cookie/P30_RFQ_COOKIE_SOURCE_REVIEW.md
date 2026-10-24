@@ -7,3 +7,10 @@ Required private inputs are a new schema 3 fixture `P30_RFQ_COOKIE_FIXTURE`, its
 This source has not been run. Keep the fixture, result, credentials, cookies and proxy receipt out of Git and all normal console output. Never replace the imported RFQ screens with a demo or local store for this proof.
 
 Proxy admission correction: the RFQ proxy now uses a small pure RFQ-database validator shared with a built-in Node regression. It accepts the bounded proc_p30_http_rfq_ cohort and rejects a PO-prefixed fixture; the exact P30_RFQ_COOKIE_EXPECTED_DATABASE binding remains mandatory. Two pure Node tests passed (node --test reference-ui/scripts/rfq-cookie-database.test.mjs). This is test transport only: no application/layout, dependency, build, API, database or actual browser run occurred for this correction. The actual cookie workflow remains pending its fresh fixture/owner proof.
+
+
+## Contact timestamp correction after failed RFQ11
+
+The earlier proof entered a fixed 2026-10-23 local time after an approval on 2026-10-24. The server correctly rejects contact predating its approval. Fresh proof source captures browser-local current time with milliseconds only after approval confirmation, requires the existing contact input's millisecond step, and compares the real command UTC timestamp to that captured instant. Product companion `codex/rfq-manual-contact-precision` adds only `step="0.001"` to the existing ERP input; server chronology validation remains unchanged.
+
+Manual-contact HTTP status and a bounded classified problem code are retained before asserting success. Failure diagnostics contain no response body, credential or header. Existing successful original command evidence remains for the independent owner. RFQ11 failure stays retained; this source has no executed browser/runtime acceptance and requires a fresh cohort and a staged build containing the companion product change.
