@@ -1,28 +1,64 @@
 {
-  "status": "UI_UNIT_TYPE_BUILD_PASSED_BROWSER_PENDING",
-  "buildSource": "819842432c122c49b52d845112f0633aa1c6a03d",
-  "unitEvidence": "procurement-p30-ui-20261023_run03",
-  "unitSource": "46c333d52ac52adc1282e7aaa40dea558b2fabce",
+  "status": "PO_NORMAL_COOKIE_BROWSER_AND_OWNER_PASSED_OTHER_P30_RELEASE_GATES_PENDING",
+  "source": "873b64844b87e5c4895d3cc756cb77762c202694",
   "unitPassed": 484,
   "unitFailed": 0,
   "typecheckExit": 0,
   "buildExit": 0,
-  "stagedFiles": 5,
-  "liveMode": true,
-  "browserAcceptance": false,
-  "deployed": false,
-  "limits": "Unit suite ran before erased-only TypeScript annotation and private browser-proof changes; final type/build cover current source. Actual API/cookie acceptance pending.",
-  "stagedEvidence": "procurement-p30-ui-20261023_run04",
-  "priorFailuresRetained": [
-    "run01: two unit transport contract failures",
-    "run02: TypeScript integration errors",
-    "run03: two untrusted extension-field type errors"
+  "files": 5,
+  "priorBrowserResult": {
+    "passed": 25,
+    "failed": 3,
+    "skipped": 2,
+    "evidence": "procurement-p30-ui-20261023_run04"
+  },
+  "fixedSincePriorBrowser": [
+    "Core branch data in PO test fixture",
+    "Keep RFQ Related tab through save/recovery",
+    "Clear records/actions across branch change"
   ],
+  "actualCookieBrowserPassed": true,
+  "deployed": false,
+  "evidence": "procurement-p30-ui-20261023_run05",
   "remaining": [
-    "Playwright original-layout workflow checks",
-    "Actual PostgreSQL API and local-cookie persistence",
-    "Independent owner reconciliation",
-    "ERP migration/finite-role release",
-    "Production deployment and UAT"
-  ]
+    "Other P30 actual RFQ/receiving workflows",
+    "Protected production migration/role/API/publisher rehearsal",
+    "Production deployment and authenticated UAT"
+  ],
+  "mockedBrowser": {
+    "passed": 31,
+    "failed": 0,
+    "skipped": 0,
+    "proofSource": "2474bddc2305d5dc6fe1844a4bb1daeeef0453c1",
+    "evidence": "procurement-p30-ui-20261023_run06",
+    "routeMocks": true,
+    "actualPersistenceClaim": false
+  },
+  "currentProductSource": "7c575d2",
+  "currentTargetedVerification": {
+    "evidence": "procurement-p30-ui-20261024_run07",
+    "typecheckExit": 0,
+    "buildExit": 0,
+    "mockedBrowserPassed": 16,
+    "mockedBrowserFailed": 0,
+    "scope": [
+      "policy lifecycle and explicit zero quote requirement",
+      "principal PO draft creation and interrupted-response recovery"
+    ]
+  },
+  "unitSuiteEvidenceSource": "873b64844b87e5c4895d3cc756cb77762c202694",
+  "unitSuiteRerunAfterHelpTextOnlyChange": false,
+  "actualCookieScope": "Principal PO create, reload, cancel, reload, logout; no other P30 browser claim",
+  "actualCookieEvidence": {
+    "evidence": "procurement-p30-actual-po-20261024_run05",
+    "passed": 1,
+    "normalPasswordAndSessionCookie": true,
+    "businessResponseMocks": false,
+    "privateIdentityHeaders": false,
+    "independentOwnerPassed": true,
+    "originalOrdersUnchanged": true,
+    "commandFingerprintsVerified": true,
+    "sourceReservationRestored": true,
+    "actualLoginSessionRevoked": true
+  }
 }

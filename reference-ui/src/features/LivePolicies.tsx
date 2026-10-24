@@ -365,7 +365,8 @@ function LivePoliciesRecord() {
               <Field label="Category codes (optional)"><Input value={row.categoryCodes} placeholder="IT, OFFICE" onChange={(event) => changeRow(index, { categoryCodes: event.target.value.toUpperCase() })} /></Field>
               <Field label="Budget handling"><Select value={row.budget} onChange={(event) => changeRow(index, { budget: event.target.value as RuleRow["budget"] })}><option value="Required">Require budget confirmation</option><option value="ExceptionReview">Send budget exception for review</option></Select></Field>
               <Field label="Buying method code (optional)"><Input value={row.method} onChange={(event) => changeRow(index, { method: event.target.value.toUpperCase() })} /></Field>
-              <Field label="Quotes needed (optional)"><Input type="number" min={0} max={20} value={row.quotes} onChange={(event) => changeRow(index, { quotes: event.target.value })} /></Field>
+              <div className="space-y-1"><Field label="Quotes needed (optional)"><Input type="number" min={0} max={20} value={row.quotes} onChange={(event) => changeRow(index, { quotes: event.target.value })} /></Field>
+                <p className="text-xs text-muted-foreground">For a direct purchase, enter 0 explicitly. Leaving this blank means the request cannot be turned directly into a purchase order.</p></div>
             </div>
             <fieldset><legend className="mb-2 text-sm font-medium">Approvers needed</legend><div className="flex flex-wrap gap-4 text-sm">
               {([['lineManager', 'Line manager'], ['budgetOwner', 'Budget owner'], ['procurementManager', 'Procurement manager']] as const).map(([field, label]) => <label key={field} className="flex items-center gap-2"><Switch checked={row[field]} onChange={(event) => changeRow(index, { [field]: event.target.checked })} />{label}</label>)}
