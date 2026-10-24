@@ -51,7 +51,12 @@ function SourcingPageContent({ view, governed, mode, id }: { view: "list" | "edi
   const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel")
     || capabilities.principalSourcingPublication === true && mode === "principal"
       && (permissions.includes("procurement-sourcing-submit") || permissions.includes("procurement-sourcing-publish"));
-  const enabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
+  const sourceEnabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
+  // A named publication reviewer can read the assigned list and RFQ detail
+  // without the separate approved-source conversion capability.
+  const enabled = sourceEnabled || view !== "editor" && mode === "principal"
+    && capabilities.principalSourcingPublication === true
+    && permissions.includes("procurement-sourcing-publish");
   const anyGoverned = capabilities.sourcingSourceDrafts || capabilities.principalSourcingSourceDrafts;
   return <>
     {view === "list" && anyGoverned && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">

@@ -7,7 +7,7 @@ const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
 type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
-async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; published?: boolean; reviewer?: boolean } = {}) {
+async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; publicationCapabilityOff?: boolean; published?: boolean; reviewer?: boolean } = {}) {
   const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
   let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false,
     status = options.published ? "Published" : options.reviewer ? "PublicationReview" : "Draft", version = 1,
@@ -38,16 +38,17 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: options.principal ? null : worker,
-      permissions: ["procurement-access", ...(options.deny ? [] : ["procurement-sourcing-convert", "procurement-sourcing-cancel",
-        ...(options.publication && !options.reviewer ? ["procurement-sourcing-submit"] : []),
-        ...(options.reviewer ? ["procurement-sourcing-publish"] : [])])],
+      permissions: ["procurement-access", ...(options.deny ? [] : options.reviewer
+        ? ["procurement-sourcing-publish"]
+        : ["procurement-sourcing-convert", "procurement-sourcing-cancel",
+          ...(options.publication ? ["procurement-sourcing-submit"] : [])])],
       company: { id: company, name: "Amizo Power", code: "AMIZO", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
       capabilities: { vendorDraft: true, itemDraft: true, requestDraft: true, approvals: false, sourcing: false, contracts: false, orders: false,
         receiving: false, invoiceIntake: false, invoiceValidation: false, financeHandoff: false, supplierPortal: false, planningDraft: true,
         configurationDraft: true, contractDraft: true, sourcingDraft: !options.principal,
-        ...(options.principal ? { principalSourcingSourceDrafts: !options.principalUnavailable,
-          ...(options.publication ? { principalSourcingPublication: true } : {}), sourcingSourceDrafts: false }
+        ...(options.principal ? { principalSourcingSourceDrafts: !options.principalUnavailable && !options.reviewer,
+          ...(options.publication ? { principalSourcingPublication: !options.publicationCapabilityOff } : {}), sourcingSourceDrafts: false }
           : options.absent ? {} : { sourcingSourceDrafts: true }) } });
     if (url.pathname.startsWith("/api/procurement/v1/sourcing")) {
       calls.push({ method, path: url.pathname, body: method === "POST" ? request.postDataJSON() : null, key: request.headers()["idempotency-key"] });
@@ -376,7 +377,23 @@ test("separate current Core reviewer sees assignment and approves through the sa
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByText("Approved for internal RFQ publication.", { exact: false })).toBeVisible();
   expect(calls.filter(call => call.path.endsWith("/decisions") && call.method === "POST")).toHaveLength(1);
+  expect(calls.some(call => call.path.endsWith("/principal-publications") || call.path.endsWith("/approved-principal-sources"))).toBe(false);
   expect(calls.some(call => call.path.endsWith("/principal-manual-quotes"))).toBe(false);
+});
+
+test("publication reviewer cannot open approved-source creation without its capability", async ({ page }) => {
+  const calls = await mock(page, { principal: true, publication: true, reviewer: true, seed: true });
+  await page.goto("/procurement/workspace/rfqs/new?source=principal-approved");
+  await expect(page.getByRole("alert")).toContainText("not available with your current access");
+  expect(calls.filter(call => call.path.startsWith("/api/procurement/v1/sourcing"))).toHaveLength(0);
+});
+
+test("publication reviewer sees no governed RFQ without current publication capability", async ({ page }) => {
+  const calls = await mock(page, { principal: true, publication: true, publicationCapabilityOff: true, reviewer: true, seed: true });
+  await page.goto("/procurement/workspace/rfqs?source=principal-approved");
+  await expect(page.getByRole("alert")).toContainText("not available with your current access");
+  await expect(page.getByText("Publication reviews assigned to me")).toHaveCount(0);
+  expect(calls.filter(call => call.path.startsWith("/api/procurement/v1/sourcing"))).toHaveLength(0);
 });
 
 test("buyer records outside contact and an exact internal quotation Draft without dispatch", async ({ page }) => {
