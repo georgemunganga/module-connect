@@ -9,6 +9,7 @@ import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
 import { InvoiceUnitReviewOwner } from "./InvoiceUnitReviewOwner";
 import { PrincipalInvoiceMatching } from "./PrincipalInvoiceMatching";
+import type { PrincipalInvoiceState } from "../../../src/platform/procurement-principal-invoice-api";
 import { StandardDataTable } from "../components/data/StandardDataTable";
 import { RecordTable } from "../components/data/RecordTable";
 import { ListTools, type ExportScope, type ListColumn, type ListFilterField } from "../components/data/ListTools";
@@ -400,6 +401,7 @@ function InvoiceDetailRecord() {
   const [uncertain, setUncertain] = useState(false);
   const [stale, setStale] = useState(false);
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
+  const [principalState, setPrincipalState] = useState<PrincipalInvoiceState | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -407,14 +409,14 @@ function InvoiceDetailRecord() {
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setPrincipalState(null);
     getInvoiceIntake(legalEntityId, id, controller.signal)
       .then((result) => { if (!controller.signal.aborted) { setInvoice(result); setUncertain(false); setStale(false); setReason(""); } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) { setError(errorText(cause)); setStale(true); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, refresh]);
-  const refreshSavedInvoice = () => { if (busy || loading) return; setLoading(true); setError(""); setRefresh(value => value + 1); };
+  const refreshSavedInvoice = () => { if (busy || loading) return; setLoading(true); setError(""); setPrincipalState(null); setRefresh(value => value + 1); };
   async function cancel() {
     if (!permissions.includes("procurement-invoice-capture") || !invoice || busy || loading || uncertain || stale || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
     setBusy(true); setError("");
@@ -435,6 +437,12 @@ function InvoiceDetailRecord() {
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."} <Button variant="secondary" onClick={refreshSavedInvoice}>Try loading again</Button></div>;
   const canEdit = !loading && !busy && !uncertain && !stale && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
   const canCancel = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel");
+  const principalCheckAvailable = capabilities.principalInvoiceMatching
+    && permissions.includes("procurement-invoice-read") && permissions.includes("procurement-invoice-match");
+  const currentPrincipalState = principalState?.invoiceId === invoice.id && principalState.invoiceVersion === invoice.version
+    ? principalState : null;
+  const legacyComparisonAvailable = !principalCheckAvailable
+    || currentPrincipalState?.state === "Unmapped" || currentPrincipalState?.state === "LegacyWorkflow";
   const tabs = [
     { key: "overview", label: "Overview" },
     { key: "items", label: `Items (${invoice.lines.length})` },
@@ -495,13 +503,18 @@ function InvoiceDetailRecord() {
           </div>
         </div>
         {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
-        {capabilities.invoiceComparison && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
+        {capabilities.invoiceComparison && permissions.includes("procurement-invoice-read") && legacyComparisonAvailable && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
           company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
-          comparisonAvailable={capabilities.invoiceComparison} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
+          comparisonAvailable={capabilities.invoiceComparison} refresh={(message) => { setNotice(message ?? ""); setPrincipalState(null); setRefresh(value => value + 1); }} />}
+        {capabilities.invoiceComparison && principalCheckAvailable && !legacyComparisonAvailable
+          && <DetailSection title="Existing bill comparison"><p className="text-sm text-muted-foreground">
+            {currentPrincipalState ? "This bill uses the issued-order checks below. Its earlier comparison history remains saved."
+              : "Checking which bill review applies before showing comparison actions."}</p></DetailSection>}
         {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
         {capabilities.principalInvoiceMatching && permissions.includes("procurement-invoice-read") && permissions.includes("procurement-invoice-match")
-          && <PrincipalInvoiceMatching key={`${invoice.id}:${invoice.version}:principal`} invoiceId={invoice.id} invoiceVersion={invoice.version}
-            lines={invoice.lines} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
+          && <PrincipalInvoiceMatching key={`${invoice.id}:${invoice.version}:${refresh}:principal`} invoiceId={invoice.id} invoiceVersion={invoice.version}
+            lines={invoice.lines} onState={setPrincipalState}
+            refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
         {canCancel && <DetailSection title="Cancel invoice"><div className="space-y-3">
           <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
           <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || loading || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>

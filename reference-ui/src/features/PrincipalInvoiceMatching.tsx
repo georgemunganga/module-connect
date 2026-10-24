@@ -17,6 +17,7 @@ import { getPrincipalInvoiceState, listPrincipalAcceptances, listPrincipalInvoic
 type Line = { id: string; lineNumber: number; description: string };
 type LinkDraft = { source: PrincipalInvoiceSource; acceptance: PrincipalAcceptance | null;
   unit: string; document: string; reference: string };
+type IssueDraft = { reason: string; evidence: string };
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : "The invoice action could not be confirmed.";
 const issueLabel = (code: string) => ({
   InvoiceDuplicateEvidenceUnavailable: "A possible duplicate bill needs checking",
@@ -28,8 +29,9 @@ const issueLabel = (code: string) => ({
 }[code] ?? "The bill and purchasing evidence need checking");
 
 /** Fits inside the imported Bill detail Overview; the legacy comparison remains separate. */
-export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, refresh }: {
+export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, refresh, onState }: {
   invoiceId: string; invoiceVersion: number; lines: Line[]; refresh: (message?: string) => void;
+  onState?: (state: PrincipalInvoiceState) => void;
 }) {
   const context = useLiveReadiness()!, { selection } = useErpShell(), company = context.legalEntityId;
   const canRead = context.capabilities.principalInvoiceMatching && context.permissions.includes("procurement-invoice-read")
@@ -48,7 +50,7 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
   const [acceptances, setAcceptances] = useState<PrincipalAcceptance[] | null>(null);
   const [page, setPage] = useState(1), [search, setSearch] = useState(""), [query, setQuery] = useState("");
   const [issuePage, setIssuePage] = useState(1), [issueRevision, setIssueRevision] = useState(0);
-  const [issueReason, setIssueReason] = useState(""), [issueEvidence, setIssueEvidence] = useState("");
+  const [issueDrafts, setIssueDrafts] = useState<Record<string, IssueDraft>>({});
   const [reason, setReason] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
   const inFlight = useRef(false), alive = useRef(true);
@@ -57,11 +59,11 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
     if (!canRead) return;
     const abort = new AbortController(); setState(null); setLoading(true); setError("");
     getPrincipalInvoiceState(company, invoiceId, abort.signal)
-      .then(value => { if (!abort.signal.aborted) setState(value); })
+      .then(value => { if (!abort.signal.aborted) { setState(value); onState?.(value); } })
       .catch(cause => { if (!abort.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
-  }, [canRead, company, invoiceId, invoiceVersion]);
+  }, [canRead, company, invoiceId, invoiceVersion, onState]);
   useEffect(() => {
     if (!canRead || state?.state !== "ComparisonBlocked") { setIssues(null); return; }
     const abort = new AbortController(); setIssues(null);
@@ -110,7 +112,7 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
     ? { ...all, [activeLine]: { ...all[activeLine], ...change } } : all); }
   async function refreshState() {
     const value = await getPrincipalInvoiceState(company, invoiceId);
-    if (alive.current) setState(value);
+    if (alive.current) { setState(value); onState?.(value); }
     return value;
   }
   async function execute(locator: PrincipalInvoiceLocator, body: Record<string, unknown>) {
@@ -203,9 +205,10 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
       exposureVersion: state.exposureVersion, reason: reason.trim() || null });
   }
   async function workIssue(issue: PrincipalInvoiceIssue, action: "Comment" | "CorrectionRequested" | "ReadyToRetry") {
+    const draft = issueDrafts[issue.issueId];
     if (inFlight.current || busy || pending.blocked || !state || state.state !== "ComparisonBlocked"
       || issue.mappingVersionId !== state.mappingVersionId || issue.ownerPrincipalId !== context.principalId
-      || !issueReason.trim()) return;
+      || !draft?.reason.trim()) return;
     const locator: PrincipalInvoiceLocator = { operation: "IssueAction", invoiceId,
       key: crypto.randomUUID(), invoiceVersion, mappingRevision: state.mappingRevision,
       mappingVersionId: state.mappingVersionId, reviewId: state.reviewId,
@@ -215,11 +218,12 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
     if (!claimPrincipalInvoicePending(scope, locator)) { inFlight.current = false; setPending(readPrincipalInvoicePending(scope));
       setError("A previous issue action needs checking before another change."); return; }
     setPending(readPrincipalInvoicePending(scope)); setBusy(true); setError("");
-    try { await sendPrincipalIssueAction(company, locator, action, issueReason,
-      issueEvidence.trim() || null);
+    try { await sendPrincipalIssueAction(company, locator, action, draft.reason,
+      draft.evidence.trim() || null);
       if (!clearPrincipalInvoicePending(scope, locator)) throw new Error("The issue action was confirmed, but browser recovery remains locked.");
-      if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setIssueReason(""); setIssueEvidence("");
-        setIssueRevision(n => n + 1); setNotice("Correction note recorded. No bill approval or Finance effect was created."); }
+      if (alive.current) { setPending(readPrincipalInvoicePending(scope));
+        setIssueDrafts(all => { const next = { ...all }; delete next[issue.issueId]; return next; });
+        setIssueRevision(n => n + 1); setNotice("Issue note recorded. No bill approval or Finance effect was created."); }
     } catch (cause) { if (cause instanceof PrincipalInvoiceError && [400, 422].includes(cause.status)) clearPrincipalInvoicePending(scope, locator);
       if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setError(errorText(cause)); } }
     finally { inFlight.current = false; if (alive.current) setBusy(false); }
@@ -278,19 +282,24 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
       {state.state === "ComparisonBlocked" && <div className="space-y-4 border-t border-border pt-4">
         <h3 className="font-medium">Recorded issues</h3>
         {!issues && <p role="status">Loading issue history…</p>}
-        {issues?.items.map(issue => <div key={issue.issueId} className="space-y-2 rounded-lg border border-border p-4">
+        {issues?.items.map(issue => { const draft = issueDrafts[issue.issueId] ?? { reason: "", evidence: "" }; return <div key={issue.issueId} className="space-y-2 rounded-lg border border-border p-4">
           <p className="font-medium">{issueLabel(issue.code)} <Badge>{issue.state}</Badge></p>
           <p>{issue.supplierInvoiceLineId ? `Bill line ${lines.find(line => line.id === issue.supplierInvoiceLineId)?.lineNumber ?? "—"}` : "Whole bill"}
             {issue.ownerPrincipalId === context.principalId ? " · Assigned to you" : " · Assigned to another reviewer"}</p>
           {issue.history.map(action => <p key={action.actionId}>{action.action}: {action.reason}</p>)}
           {issue.ownerPrincipalId === context.principalId && issue.mappingVersionId === state.mappingVersionId
             && !["Resolved", "CancelledWithReason"].includes(issue.state) && <div className="space-y-2">
-              <Field label="Correction note or next step"><Textarea maxLength={2000} value={issueReason} disabled={busy} onChange={event => setIssueReason(event.target.value)} /></Field>
-              <Field label="Evidence reference (optional)"><Input maxLength={200} value={issueEvidence} disabled={busy} onChange={event => setIssueEvidence(event.target.value)} /></Field>
-              <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={busy || !issueReason.trim()} onClick={() => void workIssue(issue, "CorrectionRequested")}>Request correction</Button>
-                <Button variant="secondary" disabled={busy || !issueReason.trim()} onClick={() => void workIssue(issue, "ReadyToRetry")}>Ready to retry</Button></div>
+              <Field label="Correction note or next step"><Textarea maxLength={2000} value={draft.reason} disabled={busy}
+                onChange={event => setIssueDrafts(all => ({ ...all, [issue.issueId]: {
+                  reason: event.target.value, evidence: all[issue.issueId]?.evidence ?? "" } }))} /></Field>
+              <Field label="Evidence reference (optional)"><Input maxLength={200} value={draft.evidence} disabled={busy}
+                onChange={event => setIssueDrafts(all => ({ ...all, [issue.issueId]: {
+                  reason: all[issue.issueId]?.reason ?? "", evidence: event.target.value } }))} /></Field>
+              <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={busy || !draft.reason.trim()} onClick={() => void workIssue(issue, "Comment")}>Add note</Button>
+                <Button variant="secondary" disabled={busy || !draft.reason.trim()} onClick={() => void workIssue(issue, "CorrectionRequested")}>Request correction</Button>
+                <Button variant="secondary" disabled={busy || !draft.reason.trim()} onClick={() => void workIssue(issue, "ReadyToRetry")}>Ready to retry</Button></div>
             </div>}
-        </div>)}
+        </div>; })}
         {issues && issues.total > issues.pageSize && <div className="flex gap-3"><Button variant="secondary" disabled={issuePage <= 1} onClick={() => setIssuePage(issuePage - 1)}>Previous issues</Button>
           <span>Page {issuePage}</span><Button variant="secondary" disabled={issuePage * issues.pageSize >= issues.total} onClick={() => setIssuePage(issuePage + 1)}>Next issues</Button></div>}
       </div>}
