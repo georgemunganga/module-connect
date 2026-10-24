@@ -12,6 +12,7 @@ import { LiveVendorList, LiveVendorEditor, LiveVendorDetail } from "../features/
 import { LiveItemList, LiveItemEditor, LiveItemDetail } from "../features/LiveItems";
 import { LiveApprovalQueue, LiveApprovalDetail } from "../features/LiveApprovals";
 import { InvoiceUnitReviewDetail } from "../features/InvoiceUnitReviewTasks";
+import { PrincipalInvoiceReviewDetail } from "../features/PrincipalInvoiceUnitReviewTasks";
 import { LiveRequestList, LiveRequestEditor, LiveRequestDetail } from "../features/LiveRequests";
 import { LiveSourcingList, LiveSourcingEditor, LiveSourcingDetail } from "../features/LiveSourcing";
 import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../features/LiveContracts";
@@ -100,6 +101,7 @@ export function App() {
               element={isProcurementLiveMode ? <LiveApprovalQueue /> : <RecordList kind="requests" approval />}
             />
             <Route path="/approvals/unit-review/:id" element={isProcurementLiveMode ? <InvoiceUnitReviewDetail /> : <PendingLiveWorkflow />} />
+            <Route path="/approvals/principal-unit-review/:id" element={isProcurementLiveMode ? <PrincipalInvoiceReviewDetail /> : <PendingLiveWorkflow />} />
             <Route path="/approvals/:id" element={isProcurementLiveMode ? <LiveApprovalRoute /> : <PendingLiveWorkflow />} />
             <Route
               path="/procurement-requests"

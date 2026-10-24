@@ -8,6 +8,7 @@ import { invoiceDecimal, invoicePreview } from "./invoice-values";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
 import { InvoiceUnitReviewOwner } from "./InvoiceUnitReviewOwner";
+import { PrincipalInvoiceMatching } from "./PrincipalInvoiceMatching";
 import { StandardDataTable } from "../components/data/StandardDataTable";
 import { RecordTable } from "../components/data/RecordTable";
 import { ListTools, type ExportScope, type ListColumn, type ListFilterField } from "../components/data/ListTools";
@@ -498,6 +499,9 @@ function InvoiceDetailRecord() {
           company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
           comparisonAvailable={capabilities.invoiceComparison} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
         {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
+        {capabilities.principalInvoiceMatching && permissions.includes("procurement-invoice-read") && permissions.includes("procurement-invoice-match")
+          && <PrincipalInvoiceMatching key={`${invoice.id}:${invoice.version}:principal`} invoiceId={invoice.id} invoiceVersion={invoice.version}
+            lines={invoice.lines} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
         {canCancel && <DetailSection title="Cancel invoice"><div className="space-y-3">
           <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
           <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || loading || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>

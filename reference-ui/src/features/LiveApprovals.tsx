@@ -9,6 +9,7 @@ import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecision
 import { LiveOrderApprovalQueue } from "./LiveOrderApprovalQueue";
 import { LivePrincipalOrderApprovalQueue } from "./LivePrincipalOrders";
 import { InvoiceUnitReviewQueue } from "./InvoiceUnitReviewTasks";
+import { PrincipalInvoiceReviewQueue } from "./PrincipalInvoiceUnitReviewTasks";
 import { ApprovalOpeningPanel } from "./ApprovalOpeningPanel";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -32,19 +33,21 @@ export function LiveApprovalQueue() {
   const principalOrders = context.capabilities.principalOrderGovernance && context.capabilities.principalDirectOrderDrafts
     && context.permissions.includes("procurement-po-approve");
   const units = context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
-  const available = ([requests && "requests", orders && "orders", principalOrders && "principalOrders", units && "units"].filter(Boolean) as ("requests" | "orders" | "principalOrders" | "units")[]);
-  const [type, setType] = useState<"requests" | "orders" | "principalOrders" | "units">(() => available[0] ?? "requests");
+  const principalUnits = context.capabilities.principalInvoiceMatching && context.permissions.includes("procurement-invoice-unit-review");
+  const available = ([requests && "requests", orders && "orders", principalOrders && "principalOrders", units && "units", principalUnits && "principalUnits"].filter(Boolean) as ("requests" | "orders" | "principalOrders" | "units" | "principalUnits")[]);
+  const [type, setType] = useState<"requests" | "orders" | "principalOrders" | "units" | "principalUnits">(() => available[0] ?? "requests");
   const selected = available.includes(type) ? type : available[0];
   if (!selected) return <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
   const queue = selected === "orders" ? <LiveOrderApprovalQueue /> : selected==="principalOrders"
     ? <LivePrincipalOrderApprovalQueue key={[authEpoch,context.tenantId,context.legalEntityId,context.principalId,selection.branch,context.permissions.join("|")].join(":")}/>
-    : selected === "units" ? <InvoiceUnitReviewQueue /> : <RequestApprovalQueue />;
+    : selected === "units" ? <InvoiceUnitReviewQueue /> : selected === "principalUnits" ? <PrincipalInvoiceReviewQueue /> : <RequestApprovalQueue />;
   if (available.length === 1) return queue;
   return <><div className="flex gap-3 px-5 pt-5 sm:px-8" role="tablist" aria-label="Approval records">
     {requests && <Button role="tab" aria-selected={selected === "requests"} variant={selected === "requests" ? "primary" : "secondary"} onClick={() => setType("requests")}>Purchase requests</Button>}
     {orders && <Button role="tab" aria-selected={selected === "orders"} variant={selected === "orders" ? "primary" : "secondary"} onClick={() => setType("orders")}>Purchase orders</Button>}
     {principalOrders && <Button role="tab" aria-selected={selected === "principalOrders"} variant={selected === "principalOrders" ? "primary" : "secondary"} onClick={() => setType("principalOrders")}>Internal order approvals</Button>}
     {units && <Button role="tab" aria-selected={selected === "units"} variant={selected === "units" ? "primary" : "secondary"} onClick={() => setType("units")}>Original invoice units</Button>}
+    {principalUnits && <Button role="tab" aria-selected={selected === "principalUnits"} variant={selected === "principalUnits" ? "primary" : "secondary"} onClick={() => setType("principalUnits")}>Issued order bill units</Button>}
   </div>{queue}</>;
 }
 function RequestApprovalQueue() {
