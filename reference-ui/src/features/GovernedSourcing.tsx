@@ -66,7 +66,9 @@ export function GovernedSourcingList({ mode = "worker" }: { mode?: RfqSourceMode
       onResetWidths={() => setWidths({})} notify={setNotice} unavailableImportReason="Import is not available yet."
       unavailableExportReason="Export is not available yet." unavailableAllExportReason="Only the current page is loaded."
       viewExportLabel="Export Current Page View" selectedCount={currentSelection.length} />
-      {permissions.includes("procurement-sourcing-convert") && <Link to={createLink(mode)}><Button>Use approved requests</Button></Link>}</>} />
+      {permissions.includes("procurement-sourcing-convert")
+        && (mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true)
+        && <Link to={createLink(mode)}><Button>Use approved requests</Button></Link>}</>} />
     <Panel><div className="flex flex-wrap items-end gap-3 border-b border-border p-5"><Field label="Find quote request" className="min-w-56 flex-1"><Input maxLength={100} value={search} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setSearch(e.target.value); }} /></Field>
       <Field label="Status" className="min-w-40"><Select value={state} onChange={e => { setSelected([]); setPreviewId(null); setPage(1); setState(e.target.value); }}><option value="">All statuses</option><option value="Draft">Draft</option>{publication && <><option value="PublicationReview">Publication review</option><option value="Published">Published internally</option></>}<option value="Cancelled">Cancelled</option></Select></Field></div>
       <p className="px-5 pt-3 text-xs text-muted-foreground">Search and status work across pages you can access. Sorting and selection apply to this page only.</p>
