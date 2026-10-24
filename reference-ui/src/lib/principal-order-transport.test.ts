@@ -50,7 +50,7 @@ describe("principal order exact transport",()=>{
     const command:PrincipalCommand={operation:"Edit",key:id(6),orderId:id(7),body:""};
     const historic={orderId:id(7),number:"PO-1",status:"Draft",version:3,
       originalDirectSourceSha256:"a".repeat(64),commandKey:id(6),recordedHistoricalResult:true};
-    const fetcher=vi.fn(async()=>new Response(JSON.stringify({operation:"Edit",commandKey:id(6),
+    const fetcher=vi.fn(async(_url:string)=>new Response(JSON.stringify({operation:"Edit",commandKey:id(6),
       originalStatusCode:200,responseJson:JSON.stringify(historic),recordedHistoricalResult:true}),
     {status:200,headers:{"Content-Type":"application/json"}}));vi.stubGlobal("fetch",fetcher);
     expect((await recoverPrincipalCommand(id(5),command)).version).toBe(3);
