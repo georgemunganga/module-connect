@@ -8,7 +8,7 @@ type Fixture = { schemaVersion: 3; controlPlaneOnly: true; browserAuthentication
   apiUrl: string; database: string; tenantId: string; companyId: string; branchId: string;
   receiverPrincipalId: string; serviceOwnerPrincipalId: string; approvedRequestId: string; approvedRequestLineId: string;
   supplierId: string; issuedOrderId: string; issuedVersionId: string; issuedOrderLineId: string;
-  nativeGoodsOrderId: string; nativeServiceOrderId: string; syntheticCredentials: Credential[];
+  nativeGoodsOrderId: string; nativeServiceOrderId: string; servicePeriodDate: string; syntheticCredentials: Credential[];
   challenge: string; completionPath: string; expiresAt: string };
 const guid = (value: unknown): value is string => typeof value === 'string'
   && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
@@ -35,6 +35,7 @@ if (fixture.schemaVersion !== 3 || proxy.schemaVersion !== 3 || fixture.controlP
     fixture.issuedOrderId, fixture.issuedVersionId, fixture.issuedOrderLineId,
     fixture.nativeGoodsOrderId, fixture.nativeServiceOrderId].every(guid)
   || fixture.nativeGoodsOrderId === fixture.issuedOrderId || fixture.nativeServiceOrderId === fixture.issuedOrderId
+  || !/^\d{4}-\d{2}-\d{2}$/.test(fixture.servicePeriodDate)
   || !/^[a-f0-9]{64}$/.test(fixture.challenge) || !path.isAbsolute(fixture.completionPath)
   || existsSync(fixture.completionPath) || !Number.isFinite(Date.parse(fixture.expiresAt))
   || Date.parse(fixture.expiresAt) <= Date.now()) throw new Error('Actual unexpired P30 service normal-cookie fixture required');
@@ -134,9 +135,8 @@ test('workerless receiver drafts service and independent owner certifies half', 
     await page.getByRole('switch', { name: new RegExp(`Select ${String(number)}`) }).click();
     await page.getByLabel('Deliverable reference').fill('PRIVATE_BROWSER_SERVICE_HALF');
     await page.getByLabel('Service quantity').fill('0.5');
-    const today = new Date().toISOString().slice(0, 10);
-    await page.getByLabel('Service period from').fill(today);
-    await page.getByLabel('Service period to').fill(today);
+    await page.getByLabel('Service period from').fill(fixture.servicePeriodDate);
+    await page.getByLabel('Service period to').fill(fixture.servicePeriodDate);
     const createWaiting = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/service-acceptances/principal-drafts')
       && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Save delivery draft' }).click();

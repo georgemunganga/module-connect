@@ -30,6 +30,7 @@ need(fixture.schemaVersion === 3 && fixture.controlPlaneOnly === true && fixture
   && Array.isArray(fixture.syntheticCredentials) && fixture.syntheticCredentials.length === 16
   && fixture.syntheticCredentials.filter(value => value.principalId === fixture.receiverPrincipalId).length === 1
   && fixture.syntheticCredentials.filter(value => value.principalId === fixture.serviceOwnerPrincipalId).length === 1
+  && /^\d{4}-\d{2}-\d{2}$/.test(fixture.servicePeriodDate)
   && /^[a-f0-9]{64}$/.test(fixture.challenge)
   && fixture.completionPath === '/p25-evidence/p30-service-local-cookie-browser-completion.private.json'
   && !fs.existsSync(fixture.completionPath)
