@@ -3,7 +3,7 @@ import type { PrincipalCommand, PrincipalOperation } from "../../../src/platform
 const prefix = "erp.procurement.principal-order-command.v1:";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type PrincipalLocator = Pick<PrincipalCommand, "operation" | "key" | "orderId"> & { assignmentId?: string };
-const operations: PrincipalOperation[] = ["Create", "Cancel", "Funding", "Submit", "Decide", "Issue", "Ack", "ReleaseRequest", "ReleaseConfirm"];
+const operations: PrincipalOperation[] = ["Create", "Edit", "Cancel", "Funding", "Submit", "Decide", "Issue", "Ack", "ReleaseRequest", "ReleaseConfirm"];
 export class PrincipalJournalError extends Error {}
 
 /** Only a scoped locator is persisted. Command bodies, evidence references and amounts never enter storage. */

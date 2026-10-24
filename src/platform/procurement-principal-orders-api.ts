@@ -11,14 +11,21 @@ export class PrincipalOrderError extends Error { constructor(readonly status: nu
 
 export type PrincipalOrderSummary = { id: string; number: string; status: string; version: number; supplierId: string;
   branchRef: string; currencyCode: string; supplierDisplayName?: string; branchDisplayName?: string;
-  originalDirectSourceSha256?: string; issuedVersionId?: string | null };
+  originalDirectSourceSha256?: string; issuedVersionId?: string | null; createdAt?: string };
 export type PrincipalOrderPage = { items: PrincipalOrderSummary[]; total: number; page: number; pageSize: number };
 export type PrincipalDisplayLine = { id: string; lineNumber: number; description: string; unitCode: string;
   quantity: string; unitPrice: string; taxAmount: string };
-export type PrincipalOrderLine = PrincipalDisplayLine & { purchaseRequestId: string; allocationStatus: string };
+export type PrincipalOrderLine = PrincipalDisplayLine & { purchaseRequestId: string; allocationStatus: string;
+  costCenterRef?: string | null; projectRef?: string | null; expectedDeliveryOn?: string | null };
+export type PrincipalDraftRevision = { id: string; revisionNumber: number; reason: string;
+  actorPrincipalId: string; recordedAt: string; previousSnapshotSha256: string | null;
+  snapshotSha256: string; snapshotJson: string; resultOrderVersion: number };
+export type PrincipalDraftEditHistory = { originalSnapshotSha256: string; originalSnapshotJson: string;
+  captureMode: "Create" | "VerifiedFirstEdit"; revisions: PrincipalDraftRevision[] };
 export type PrincipalOrderDetail = PrincipalOrderSummary & { originalDirectSourceSha256: string;
   shipToRef: string | null; billToRef: string | null; paymentTermRef: string | null;
   expectedDeliveryOn: string | null; fundingRecorded: boolean; lines: PrincipalOrderLine[];
+  canEditDraft?: boolean; editUnavailableReason?: string | null; draftEditHistory?: PrincipalDraftEditHistory | null;
   release: { id: string; reason: string; state: string; requestedAt: string } | null;
   releaseConfirmation: { id: string; externalReleaseEvidenceReference: string; releasedGrossAmountExact: string; confirmedAt: string } | null };
 export type PrincipalSource = { purchaseRequestId: string; purchaseRequestLineId: string; requestNumber: string;
@@ -45,7 +52,7 @@ export type PrincipalFulfilmentDetail = PrincipalOrderSummary & { grossAmountExa
   lines: PrincipalDisplayLine[];
   issuedVersionId: string | null; issuedAuthorizedAt: string | null;
   allowedManualResponseChannels: string[]; canIssue: boolean; canRecordSupplierResponse: boolean };
-export type PrincipalOperation = "Create" | "Cancel" | "Funding" | "Submit" | "Decide" | "Issue" | "Ack" | "ReleaseRequest" | "ReleaseConfirm";
+export type PrincipalOperation = "Create" | "Edit" | "Cancel" | "Funding" | "Submit" | "Decide" | "Issue" | "Ack" | "ReleaseRequest" | "ReleaseConfirm";
 export type PrincipalCommand = { operation: PrincipalOperation; key: string; orderId: string | null; assignmentId?: string; body: string };
 export type PrincipalReply = { orderId: string; number: string; status: string; version: number;
   originalDirectSourceSha256: string; commandKey: string; recordedHistoricalResult: true };
@@ -134,8 +141,23 @@ export async function getPrincipalOrder(company: string, id: string, signal?: Ab
   const value = await call(company, `/${id}/principal-direct-draft`, { signal });
   if (!summary(value) || value.id !== id || typeof value.supplierDisplayName !== "string"
     || typeof value.branchDisplayName !== "string" || !orderLines(value.lines)
-    || typeof value.fundingRecorded !== "boolean") throw invalid();
+    || typeof value.fundingRecorded !== "boolean"
+    || value.canEditDraft !== undefined && typeof value.canEditDraft !== "boolean"
+    || value.editUnavailableReason !== undefined && value.editUnavailableReason !== null && typeof value.editUnavailableReason !== "string"
+    || value.draftEditHistory !== undefined && value.draftEditHistory !== null && !draftHistory(value.draftEditHistory)) throw invalid();
   return value as PrincipalOrderDetail;
+}
+function draftHistory(value: unknown): value is PrincipalDraftEditHistory {
+  return obj(value) && /^[0-9a-f]{64}$/.test(String(value.originalSnapshotSha256))
+    && typeof value.originalSnapshotJson === "string"
+    && (value.captureMode === "Create" || value.captureMode === "VerifiedFirstEdit")
+    && Array.isArray(value.revisions) && value.revisions.every(row => obj(row)
+      && uuid.test(String(row.id)) && positiveInt(row.revisionNumber)
+      && typeof row.reason === "string" && uuid.test(String(row.actorPrincipalId))
+      && typeof row.recordedAt === "string" && typeof row.snapshotJson === "string"
+      && /^[0-9a-f]{64}$/.test(String(row.snapshotSha256))
+      && (row.previousSnapshotSha256 === null || /^[0-9a-f]{64}$/.test(String(row.previousSnapshotSha256)))
+      && positiveInt(row.resultOrderVersion));
 }
 export async function getPrincipalFinanceDetail(company: string, id: string, signal?: AbortSignal): Promise<PrincipalFinanceDetail> {
   const value = await call(company, `/${id}/principal-finance-detail`, { signal });
@@ -185,8 +207,17 @@ export function createPrincipalBody(draft: ExactOrderDraft, sources: PrincipalSo
   });
   return `{"draft":${encodeExactOrderDraft(draft)},"sources":${JSON.stringify(selected)}}`;
 }
+export function editPrincipalBody(order: PrincipalOrderDetail, draft: ExactOrderDraft, reason: string): string {
+  if (!positiveInt(order.version) || !/^[0-9a-f]{64}$/.test(order.originalDirectSourceSha256)
+    || !reason.trim() || reason.trim().length > 1000 || draft.supplierId !== order.supplierId
+    || draft.currencyCode !== order.currencyCode || draft.lines.length !== order.lines.length
+    || draft.lines.some((line, index) => line.id !== order.lines[index]?.id
+      || line.unitCode !== order.lines[index]?.unitCode)) throw invalid();
+  return `{"expectedOrderVersion":${order.version},"originalDirectSourceSha256":${JSON.stringify(order.originalDirectSourceSha256)},"reason":${JSON.stringify(reason.trim())},"draft":${encodeExactOrderDraft(draft)}}`;
+}
 const routes: Record<PrincipalOperation, (command: PrincipalCommand) => string> = {
   Create: () => "/from-approved-principal-direct-sources",
+  Edit: command => `/${command.orderId}/principal-direct-edit`,
   Cancel: command => `/${command.orderId}/principal-direct-cancel`,
   Funding: command => `/${command.orderId}/principal-funding`,
   Submit: command => `/${command.orderId}/principal-submit`,
