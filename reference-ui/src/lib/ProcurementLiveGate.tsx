@@ -42,6 +42,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const requestPath = /^\/(?:requests|procurement-requests)(?:\/|$)/.test(location.pathname);
   const sourcingPath = /^\/rfqs(?:\/|$)/.test(location.pathname);
   const contractPath = /^\/contracts(?:\/|$)/.test(location.pathname);
+  const contractReviewPath = /^\/contracts\/internal-review(?:\/|$)/.test(location.pathname);
   const recurringPurchasePath = /^\/recurring-bills(?:\/|$)/.test(location.pathname);
   const planPath = /^\/plans(?:\/|$)/.test(location.pathname);
   const creditPath = /^\/vendor-credits(?:\/|$)/.test(location.pathname);
@@ -58,7 +59,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const deniedCrud = vendorPath && !permits("procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit")
     || itemPath && !(newRecord || editRecord ? permission.includes("procurement-item-manage") : permission.some(value => ["procurement-item-read", "procurement-item-manage"].includes(value)))
     || requestPath && !permits("procurement-request-read", "procurement-request-create", "procurement-request-edit")
-    || contractPath && !permits("procurement-contract-read", "procurement-contract-create", "procurement-contract-edit")
+    || contractReviewPath && !permission.includes("procurement-contract-review-read")
+    || contractPath && !contractReviewPath && !permits("procurement-contract-read", "procurement-contract-create", "procurement-contract-edit")
     || planPath && !permits("procurement-plan-read", "procurement-plan-create", "procurement-plan-edit")
     || invoicePath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
     || paymentPath && !(newRecord ? permission.includes("procurement-payment-create")
@@ -86,7 +88,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))
       || state.readiness.capabilities.principalInvoiceMatching && state.readiness.permissions.includes("procurement-invoice-unit-review")))
     || (sourcingPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
-    || (contractPath && state.readiness.capabilities.contractDraft)
+    || (contractReviewPath && state.readiness.capabilities.contractInternalReview)
+    || (contractPath && !contractReviewPath && state.readiness.capabilities.contractDraft)
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)

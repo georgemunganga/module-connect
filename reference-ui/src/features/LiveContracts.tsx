@@ -4,7 +4,9 @@ import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { ContractDraftRates } from "./ContractDraftRates";
+import { ContractInternalReview } from "./ContractInternalReview";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { useErpShell } from "../lib/erpShell";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import {
   ContractApiError,
@@ -38,7 +40,7 @@ function validDates(draft: ContractDraft): string | null {
 }
 
 export function LiveContractList() {
-  const { legalEntityId, permissions } = useCompany();
+  const { legalEntityId, permissions, capabilities } = useCompany();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ContractPage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +54,10 @@ export function LiveContractList() {
     return () => controller.abort();
   }, [legalEntityId, page]);
   return <div className="p-5 sm:p-8">
-    <PageHeader title="Contracts" subtitle="Keep supplier agreements together. Drafts need approval and signature before they can be used for purchasing." actions={permissions.includes("procurement-contract-create") ? <Link to="/contracts/new"><Button><Plus size={16} className="mr-2 inline" />New contract</Button></Link> : undefined} />
+    <PageHeader title="Contracts" subtitle="Keep supplier agreements together. Drafts need approval and signature before they can be used for purchasing." actions={<div className="flex gap-3">
+      {capabilities.contractInternalReview === true && permissions.includes("procurement-contract-review-read") && <Link to="/contracts/internal-review"><Button variant="secondary">Assigned reviews</Button></Link>}
+      {permissions.includes("procurement-contract-create") && <Link to="/contracts/new"><Button><Plus size={16} className="mr-2 inline" />New contract</Button></Link>}
+    </div>} />
     <Panel><div className="p-5">
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status">Loading contracts…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
@@ -172,8 +177,12 @@ export function LiveContractEditor() {
 export function LiveContractDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { legalEntityId, permissions, capabilities } = useCompany();
+  const { legalEntityId, principalId, effectiveBranchId, permissions, capabilities } = useCompany();
+  const { authEpoch } = useErpShell();
+  const viewScope = `${authEpoch}:${legalEntityId}:${effectiveBranchId ?? ""}:${id ?? ""}`;
+  const currentViewScope = useRef(viewScope); currentViewScope.current = viewScope;
   const [record, setRecord] = useState<ContractDetail | null>(null);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
@@ -181,22 +190,26 @@ export function LiveContractDetail() {
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
-    setLoading(true); setRecord(null); setError(""); setReason("");
-    getOwnContractDraft(legalEntityId, id, controller.signal).then(setRecord)
+    setLoading(true); setRecord(null); setLoadedScope(null); setError(""); setReason("");
+    getOwnContractDraft(legalEntityId, id, controller.signal).then((value) => {
+      if (!controller.signal.aborted) { setRecord(value); setLoadedScope(viewScope); }
+    })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [id, legalEntityId]);
+  }, [id, legalEntityId, effectiveBranchId, authEpoch, viewScope]);
   async function cancel() {
     if (!permissions.includes("procurement-contract-edit")) return;
-    if (!record || !reason.trim()) { setError("Give a reason for cancelling this draft."); return; }
+    if (!record || loadedScope !== viewScope || !reason.trim()) { setError("Give a reason for cancelling the current draft."); return; }
     setBusy(true); setError("");
-    try { await cancelOwnContractDraft(legalEntityId, record.id, record.version, reason.trim()); navigate("/contracts"); }
-    catch (cause) { setError(errorText(cause)); }
-    finally { setBusy(false); }
+    const captured = viewScope;
+    try { await cancelOwnContractDraft(legalEntityId, record.id, record.version, reason.trim());
+      if (currentViewScope.current === captured) navigate("/contracts"); }
+    catch (cause) { if (currentViewScope.current === captured) setError(errorText(cause)); }
+    finally { if (currentViewScope.current === captured) setBusy(false); }
   }
   return <div className="p-5 sm:p-8">
-    {loading ? <p role="status">Loading contract…</p> : record && record.id === id ? <>
+    {loading || loadedScope !== viewScope ? <p role="status">Loading contract…</p> : record && record.id === id ? <>
       <PageHeader title={record.title} subtitle={`${record.number} · Supplier agreement`} actions={permissions.includes("procurement-contract-edit") && record.status === "Draft" ? <Link to={`/contracts/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       <Panel title="Contract details"><dl className="grid gap-5 p-5 text-sm sm:grid-cols-2">
@@ -213,6 +226,11 @@ export function LiveContractDetail() {
       <ContractDraftRates key={legalEntityId + ":" + record.id} companyId={legalEntityId}
         contract={record} enabled={capabilities.contractDraftRates === true}
         canEdit={permissions.includes("procurement-contract-edit")}
+        onFreshContract={setRecord} />
+      <ContractInternalReview key={`${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
+        companyId={legalEntityId} principalId={principalId} contract={record}
+        branchId={effectiveBranchId} enabled={capabilities.contractInternalReview === true}
+        canSubmit={permissions.includes("procurement-contract-submit")}
         onFreshContract={setRecord} />
       {permissions.includes("procurement-contract-edit") && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
     </> : <p role="alert">{error || "Contract not found."}</p>}
