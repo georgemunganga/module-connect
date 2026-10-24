@@ -1,5 +1,5 @@
 {
-  "status": "UI_CURRENT_TYPE_BUILD_TARGETED_BROWSER_PASSED_ACTUAL_COOKIE_PENDING",
+  "status": "PO_NORMAL_COOKIE_BROWSER_AND_OWNER_PASSED_OTHER_P30_RELEASE_GATES_PENDING",
   "source": "873b64844b87e5c4895d3cc756cb77762c202694",
   "unitPassed": 484,
   "unitFailed": 0,
@@ -17,13 +17,13 @@
     "Keep RFQ Related tab through save/recovery",
     "Clear records/actions across branch change"
   ],
-  "actualCookieBrowserPassed": false,
+  "actualCookieBrowserPassed": true,
   "deployed": false,
   "evidence": "procurement-p30-ui-20261023_run05",
   "remaining": [
-    "Actual PostgreSQL/HTTP and normal-cookie browser proof",
-    "Independent owner reconciliation",
-    "Production migration/configuration/deployment/UAT"
+    "Other P30 actual RFQ/receiving workflows",
+    "Protected production migration/role/API/publisher rehearsal",
+    "Production deployment and authenticated UAT"
   ],
   "mockedBrowser": {
     "passed": 31,
@@ -47,5 +47,18 @@
     ]
   },
   "unitSuiteEvidenceSource": "873b64844b87e5c4895d3cc756cb77762c202694",
-  "unitSuiteRerunAfterHelpTextOnlyChange": false
+  "unitSuiteRerunAfterHelpTextOnlyChange": false,
+  "actualCookieScope": "Principal PO create, reload, cancel, reload, logout; no other P30 browser claim",
+  "actualCookieEvidence": {
+    "evidence": "procurement-p30-actual-po-20261024_run05",
+    "passed": 1,
+    "normalPasswordAndSessionCookie": true,
+    "businessResponseMocks": false,
+    "privateIdentityHeaders": false,
+    "independentOwnerPassed": true,
+    "originalOrdersUnchanged": true,
+    "commandFingerprintsVerified": true,
+    "sourceReservationRestored": true,
+    "actualLoginSessionRevoked": true
+  }
 }
