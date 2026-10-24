@@ -35,7 +35,8 @@ if (fixture.schemaVersion !== 3 || fixture.controlPlaneOnly !== true || proxy.sc
   || !Array.isArray(fixture.nativeSupplierIds) || fixture.nativeSupplierIds.length !== 2
   || !fixture.nativeSupplierIds.every(guid) || fixture.nativeSupplierIds[0] === fixture.nativeSupplierIds[1]
   || !/^[a-f0-9]{64}$/.test(fixture.challenge) || !path.isAbsolute(fixture.completionPath)
-  || existsSync(fixture.completionPath) || Date.parse(fixture.expiresAt) <= Date.now())
+  || existsSync(fixture.completionPath) || !Number.isFinite(Date.parse(fixture.expiresAt))
+  || Date.parse(fixture.expiresAt) <= Date.now())
   throw new Error('Current protected RFQ normal-cookie fixture required');
 const actor = (id: string) => { const matched = fixture.syntheticCredentials.filter(x => x.principalId === id);
   if (matched.length !== 1 || !matched[0].email || !matched[0].password) throw new Error('Exact synthetic actor missing');
