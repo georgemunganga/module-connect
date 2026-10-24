@@ -7,7 +7,7 @@ const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
 type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
-async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; publicationCapabilityOff?: boolean; legacySourceAvailable?: boolean; published?: boolean; reviewer?: boolean } = {}) {
+async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; publicationCapabilityOff?: boolean; legacySourceAvailable?: boolean; published?: boolean; reviewer?: boolean; reviewerCancel?: boolean } = {}) {
   const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
   let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false,
     status = options.published ? "Published" : options.reviewer ? "PublicationReview" : "Draft", version = 1,
@@ -39,7 +39,7 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: company, workerId: options.principal ? null : worker,
       permissions: ["procurement-access", ...(options.deny ? [] : options.reviewer
-        ? ["procurement-sourcing-publish"]
+        ? ["procurement-sourcing-publish", ...(options.reviewerCancel ? ["procurement-sourcing-cancel"] : [])]
         : ["procurement-sourcing-convert", "procurement-sourcing-cancel",
           ...(options.publication ? ["procurement-sourcing-submit"] : [])])],
       company: { id: company, name: "Amizo Power", code: "AMIZO", currencyCode: "ZMW" } });
@@ -385,6 +385,19 @@ test("publication-only reviewer opens assigned reviews from the normal RFQ route
   const calls = await mock(page, { principal: true, publication: true, reviewer: true, legacySourceAvailable: true, seed: true });
   await page.goto("/procurement/workspace/rfqs");
   await expect(page.getByText("Publication reviews assigned to me")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review RFQ" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Assigned reviews" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "From approved requests" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Use approved requests" })).toHaveCount(0);
+  expect(calls.some(call => call.path.endsWith("/principal-publications") || call.path.endsWith("/approved-principal-sources"))).toBe(false);
+});
+
+test("publication reviewer with cancel but no convert still opens assigned reviews", async ({ page }) => {
+  const calls = await mock(page, { principal: true, publication: true, reviewer: true, reviewerCancel: true,
+    legacySourceAvailable: true, seed: true });
+  await page.goto("/procurement/workspace/rfqs");
+  await expect(page.getByText("Publication reviews assigned to me")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Assigned reviews" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Review RFQ" })).toBeVisible();
   expect(calls.some(call => call.path.endsWith("/principal-publications") || call.path.endsWith("/approved-principal-sources"))).toBe(false);
 });
