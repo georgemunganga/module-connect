@@ -85,3 +85,66 @@ test("assigned Core reviewer sees pinned original and cannot decide until explic
   expect(decisions).toBe(1);
   expect(calls.some(path => path === `GET /api/procurement/v1/invoices/${invoice}`)).toBe(false);
 });
+
+test("a terminal decision remains recoverable by its original key after assigned detail becomes 404", async ({ page }) => {
+  let submittedKey = "", decisions = 0, recoveries = 0;
+  await setup(page, true, async (route, path) => {
+    const request = route.request(), json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/api/procurement/v1/principal-unit-reviews/tasks") {
+      await json({ items: [{ reviewId: review, invoiceId: invoice, mappingVersionId: mapping,
+        branchId: branch, openedAt: "2026-10-23T10:00:00Z", sourceSchemaVersion: 2, canPostToFinance: false }],
+      total: 1, page: 1, pageSize: 20, availabilityMeaning: "CurrentActiveAssignmentsOnly", canPostToFinance: false });
+      return true;
+    }
+    if (path === `/api/procurement/v1/principal-unit-reviews/${review}`) {
+      if (submittedKey) { await json({ code: "NotFound" }, 404); return true; }
+      await json({ reviewId: review, invoiceId: invoice, invoiceVersion: 2,
+        mappingVersionId: mapping, sourceSchemaVersion: 2, coreCaseId: coreCase, caseVersion: 1,
+        caseState: "Pending", reviewState: "Pending", originalDigestCurrent: true, currentMapping: true,
+        original: { invoiceNumber: "BILL-1", invoiceDate: "2026-10-23", currencyCode: "ZMW",
+          netAmount: "1", taxAmount: "0", grossAmount: "1",
+          lines: [{ id: line, lineNumber: 1, description: "Service", quantity: "1",
+            unitPrice: "1", taxAmount: "0" }] }, blockers: [],
+        originalDocumentLines: [{ invoiceLineId: line, documentVersionId: doc,
+          documentSha256: "a".repeat(64), documentLineReference: "Page 1", unitCode: "EACH" }],
+        assignments: [{ assignmentId: assignment, assignmentVersion: 1 }],
+        actionCandidates: ["Approve"], attestation: "OriginalDocumentUnitsConfirmed", canPostToFinance: false });
+      return true;
+    }
+    if (path === `/api/procurement/v1/principal-unit-reviews/${review}/documents`) {
+      await json({ reviewId: review, invoiceId: invoice,
+        items: [{ documentId: mapping, versionId: doc, versionNumber: 1, fileName: "Original.pdf",
+          mediaType: "application/pdf", sizeBytes: 100, sha256: "a".repeat(64),
+          scanState: "Available", canDownload: true }],
+        availabilityMeaning: "PinnedOriginalDocumentVersionsOnly", canPostToFinance: false });
+      return true;
+    }
+    if (path === `/api/procurement/v1/principal-unit-reviews/${review}/assignments/${assignment}/decisions`) {
+      decisions++; submittedKey = request.headers()["idempotency-key"];
+      await json({ code: "ResponseUnknown" }, 503); // Synthetic lost acknowledgement after commit.
+      return true;
+    }
+    if (submittedKey && path === `/api/procurement/v1/principal-unit-reviews/${review}/commands/${submittedKey}`) {
+      recoveries++;
+      await json({ reviewId: review, invoiceId: invoice, invoiceVersion: 2, commandKey: submittedKey,
+        decisionId: mapping, caseVersion: 2, reviewState: "Verified", sourceSchemaVersion: 2,
+        canPostToFinance: false });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/procurement/workspace/approvals");
+  await page.getByRole("link", { name: "Check original" }).click();
+  await page.getByRole("button", { name: "Confirm original units" }).click();
+  await page.getByRole("switch", { name: /I checked the original invoice document/ }).click();
+  await page.getByRole("button", { name: "Confirm decision" }).click();
+  await expect(page.getByRole("button", { name: "Check saved decision" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/This assignment may have completed/)).toBeVisible();
+  await page.getByRole("button", { name: "Check saved decision" }).click();
+  await expect(page.getByText(/Saved Verified decision found/)).toBeVisible();
+  await expect(page.getByText(/The saved decision is complete/)).toBeVisible();
+  expect(decisions).toBe(1);
+  expect(recoveries).toBe(1);
+});

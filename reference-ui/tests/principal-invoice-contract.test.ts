@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getPrincipalInvoiceState, listPrincipalInvoiceSources, listPrincipalAcceptances, listPrincipalInvoiceIssues,
   recoverPrincipalInvoiceCommand, sendPrincipalInvoiceCommand,
-  type PrincipalInvoiceLocator, type PrincipalInvoiceSource } from "../../src/platform/procurement-principal-invoice-api";
+  type PrincipalInvoiceLocator, type PrincipalInvoiceSource, type PrincipalInvoiceState } from "../../src/platform/procurement-principal-invoice-api";
 import { claimPrincipalInvoicePending, clearPrincipalInvoicePending,
   readPrincipalInvoicePending } from "../src/lib/principal-invoice-command-memory";
+import { canLinkPrincipalInvoiceLines } from "../src/lib/principal-invoice-link-eligibility";
 
 const company = "11111111-1111-4111-8111-111111111111", invoice = "22222222-2222-4222-8222-222222222222";
 const order = "33333333-3333-4333-8333-333333333333", issued = "44444444-4444-4444-8444-444444444444";
 const line = "55555555-5555-4555-8555-555555555555", mapping = "66666666-6666-4666-8666-666666666666";
 const key = "77777777-7777-4777-8777-777777777777";
-const state = () => ({ invoiceId: invoice, invoiceVersion: 3, sourceSchemaVersion: 2, state: "Unmapped",
+const state = (): PrincipalInvoiceState => ({ invoiceId: invoice, invoiceVersion: 3, sourceSchemaVersion: 2, state: "Unmapped",
   stateVersion: 0, mappingRevision: 0, mappingVersionId: null, reviewId: null, reviewOutcomeId: null,
   reviewState: "NotOpened", comparisonId: null, exposureVersion: null, isAuthority: false, canPostToFinance: false });
 const source = (): PrincipalInvoiceSource => ({ orderId: order, orderNumber: "PO-100", issuedVersionId: issued,
@@ -32,6 +33,28 @@ function storage() {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe("principal invoice protocol", () => {
+  it("offers remapping only after a retained terminal review or blocked comparison issue", () => {
+    const first = state();
+    expect(canLinkPrincipalInvoiceLines(first, null)).toBe(true);
+    const mapped = { ...first, state: "Mapped" as const, mappingRevision: 1, mappingVersionId: mapping };
+    expect(canLinkPrincipalInvoiceLines(mapped, null)).toBe(false); // No review yet: request review.
+    expect(canLinkPrincipalInvoiceLines({ ...mapped, reviewState: "Returned", reviewOutcomeId: order }, null)).toBe(true);
+    expect(canLinkPrincipalInvoiceLines({ ...mapped, reviewState: "Rejected", reviewOutcomeId: order }, null)).toBe(true);
+    const blocked = { ...mapped, state: "ComparisonBlocked" as const,
+      reviewState: "Verified", reviewOutcomeId: order };
+    expect(canLinkPrincipalInvoiceLines(blocked, null)).toBe(false);
+    const issues = { invoiceId: invoice, invoiceVersion: 3, page: 1, pageSize: 20, total: 1,
+      items: [{ issueId: key, supplierInvoiceLineId: line, mappingVersionId: mapping,
+        code: "PriceMismatch", state: "Open", ownerPrincipalId: order, version: 1,
+        openedAt: "2026-10-23T10:00:00Z", dueAt: null, resolvedAt: null,
+        resolutionReference: null, history: [] }] };
+    expect(canLinkPrincipalInvoiceLines(blocked, issues)).toBe(true);
+    expect(canLinkPrincipalInvoiceLines({ ...blocked, reviewState: "Pending" }, issues)).toBe(false);
+    expect(canLinkPrincipalInvoiceLines(blocked, { ...issues,
+      items: [{ ...issues.items[0], state: "Resolved" }] })).toBe(false);
+    expect(canLinkPrincipalInvoiceLines(blocked, { ...issues,
+      items: [{ ...issues.items[0], mappingVersionId: order }] })).toBe(false);
+  });
   it("keeps legacy and typed states separate and rejects a false Finance flag", async () => {
     respond(state()); expect((await getPrincipalInvoiceState(company, invoice)).state).toBe("Unmapped");
     respond({ ...state(), state: "LegacyWorkflow" });

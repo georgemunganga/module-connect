@@ -66,6 +66,7 @@ function Detail({ reviewId }: { reviewId: string }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [revision, setRevision] = useState(0), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [terminalConfirmed, setTerminalConfirmed] = useState(false);
   const alive = useRef(true), inFlight = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
@@ -78,7 +79,8 @@ function Detail({ reviewId }: { reviewId: string }) {
         const originals = await listPrincipalReviewDocuments(value.legalEntityId, detail, abort.signal);
         if (!abort.signal.aborted) setDocuments(originals);
       }
-    }).catch(cause => { if (!abort.signal.aborted) setError(errorText(cause)); })
+    }).catch(cause => { if (!abort.signal.aborted && !(cause instanceof PrincipalInvoiceError && cause.status === 404))
+      setError(errorText(cause)); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [allowed, value.legalEntityId, reviewId, revision]);
@@ -109,7 +111,7 @@ function Detail({ reviewId }: { reviewId: string }) {
     try { const receipt = await decidePrincipalReview(value.legalEntityId, data, draft.assignmentId,
       draft.assignmentVersion, draft.action, draft.reason.trim() || null, draft.attested, locator.key);
       if (!clearPrincipalInvoicePending(scope, locator)) throw new Error("The decision was confirmed but browser recovery remains locked.");
-      if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setDraft(null);
+      if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setDraft(null); setTerminalConfirmed(true);
         setNotice(`Original unit decision recorded: ${String(receipt.reviewState)}. Bill approval remains separate.`);
         setRevision(n => n + 1); }
     } catch (cause) { if (cause instanceof PrincipalInvoiceError && [400, 422].includes(cause.status)) clearPrincipalInvoicePending(scope, locator);
@@ -122,7 +124,8 @@ function Detail({ reviewId }: { reviewId: string }) {
     inFlight.current = true; setBusy(true); setError("");
     try { const receipt = await recoverPrincipalReviewDecision(value.legalEntityId, locator);
       if (!clearPrincipalInvoicePending(scope, locator)) throw new Error("The decision was found, but browser recovery remains locked.");
-      if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setNotice(`Saved ${String(receipt.reviewState)} decision found.`); setRevision(n => n + 1); }
+      if (alive.current) { setPending(readPrincipalInvoicePending(scope)); setTerminalConfirmed(true);
+        setNotice(`Saved ${String(receipt.reviewState)} decision found.`); setRevision(n => n + 1); }
     } catch (cause) { if (alive.current) setError(errorText(cause)); }
     finally { inFlight.current = false; if (alive.current) setBusy(false); }
   }
@@ -132,7 +135,16 @@ function Detail({ reviewId }: { reviewId: string }) {
     actions={<Badge>{data?.reviewState ?? "Review"}</Badge>} />
     {error && <p role="alert" className="mb-4 text-destructive">{error}</p>}
     {notice && <p role="status" className="mb-4">{notice}</p>}
-    {loading ? <p role="status">Loading assigned original bill check…</p> : !data ? <p role="alert">Review details are unavailable. Refresh before continuing.</p> : <>
+    {pending.blocked && <Panel title="Check a saved decision" className="mb-5"><div className="space-y-2 p-5 text-sm">
+      <p role="alert">A previous decision has an unconfirmed result. No second decision can be sent.</p>
+      {pending.locator?.operation === "DecideReview"
+        ? <Button variant="secondary" disabled={busy} onClick={() => void recover()}>Check saved decision</Button>
+        : <p>Recovery information is unavailable in this tab. Ask an administrator to inspect the history.</p>}
+    </div></Panel>}
+    {loading ? <p role="status">Loading assigned original bill check…</p> : !data
+      ? <p role="status">{terminalConfirmed ? "The saved decision is complete. This is no longer an active assignment."
+        : pending.blocked ? "This assignment may have completed. Check the saved decision using its original key."
+          : "This assignment is not active or is unavailable for your account."}</p> : <>
       <Panel title="Original bill"><div className="space-y-3 p-5 text-sm">
         {data.original ? <><p className="font-medium">{data.original.invoiceNumber} · {data.original.invoiceDate}</p>
           <p>{data.original.currencyCode} {data.original.grossAmount} total · Net {data.original.netAmount} · Tax {data.original.taxAmount}</p>
@@ -152,10 +164,7 @@ function Detail({ reviewId }: { reviewId: string }) {
             <td>{line.documentLineReference}</td><td>{line.unitCode}</td></tr>)}</tbody></RecordTable></div>}
       </div></Panel>
       <Panel title="Decision" className="mt-5"><div className="space-y-3 p-5 text-sm">
-        {pending.blocked ? <><p role="alert">A previous decision has an unconfirmed result. No second decision can be sent.</p>
-          {pending.locator ? <Button variant="secondary" disabled={busy} onClick={() => void recover()}>Check saved decision</Button>
-            : <p>Recovery information is unavailable in this tab. Ask an administrator to inspect the history.</p>}</>
-          : canDecide ? data.actionCandidates.map(action => <Button key={action} variant={action === "Approve" ? "primary" : "secondary"}
+        {canDecide ? data.actionCandidates.map(action => <Button key={action} variant={action === "Approve" ? "primary" : "secondary"}
             onClick={() => setDraft({ action, reason: "", attested: false, assignmentId: data.assignments[0].assignmentId,
               assignmentVersion: data.assignments[0].assignmentVersion })}>{action === "Approve" ? "Confirm original units" : action === "Return" ? "Return for changes" : "Reject"}</Button>)
             : <p>No current decision is available for this assignment.</p>}

@@ -5,6 +5,7 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { claimPrincipalInvoicePending, clearPrincipalInvoicePending, readPrincipalInvoicePending } from "../lib/principal-invoice-command-memory";
+import { canLinkPrincipalInvoiceLines } from "../lib/principal-invoice-link-eligibility";
 import { listInvoiceDocuments, type InvoiceDocument } from "../../../src/platform/procurement-invoices-api";
 import { getPrincipalInvoiceState, listPrincipalAcceptances, listPrincipalInvoiceSources,
   listPrincipalInvoiceIssues, recoverPrincipalInvoiceCommand, recoverPrincipalIssueAction,
@@ -89,6 +90,7 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
     return () => abort.abort();
   }, [editing, canMap, company, invoiceId, context.capabilities.invoiceDocuments]);
   const selected = drafts[activeLine];
+  const canLinkLines = canLinkPrincipalInvoiceLines(state, issues);
   useEffect(() => {
     if (!selected || !editing || pending.blocked) return;
     const abort = new AbortController(); setAcceptances(null);
@@ -160,7 +162,7 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
   }
   function save(event: FormEvent) {
     event.preventDefault();
-    if (!state || !canMap || state.invoiceVersion !== invoiceVersion || !["Unmapped", "Mapped"].includes(state.state)) return;
+    if (!state || !canMap || state.invoiceVersion !== invoiceVersion || !canLinkLines) return;
     try {
       if (lines.length < 1 || lines.some(line => !drafts[line.id]) || Object.keys(drafts).length !== lines.length)
         throw new Error("Choose an issued order line for every original bill line.");
@@ -236,8 +238,8 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
       {pending.locator ? <Button variant="secondary" disabled={busy} onClick={() => void recover()}>Check saved action</Button>
         : <p>The saved recovery information cannot be read in this tab. Ask an administrator to inspect the history.</p>}</div>}
     {!pending.blocked && state?.invoiceVersion === invoiceVersion && <>
-      {canMap && ["Unmapped", "Mapped", "ComparisonBlocked"].includes(state.state) && !editing && <Button variant="secondary" disabled={busy} onClick={() => setEditing(true)}>Link bill lines</Button>}
-      {editing && canMap && ["Unmapped", "Mapped", "ComparisonBlocked"].includes(state.state) && <form onSubmit={save} className="space-y-4">
+      {canMap && canLinkLines && !editing && <Button variant="secondary" disabled={busy} onClick={() => setEditing(true)}>Link bill lines</Button>}
+      {editing && canMap && canLinkLines && <form onSubmit={save} className="space-y-4">
         <div className="flex flex-wrap items-end gap-3"><Field label="Bill line"><Select value={activeLine} disabled={busy} onChange={event => setActiveLine(event.target.value)}>
           {lines.map(line => <option key={line.id} value={line.id}>Line {line.lineNumber} · {line.description}</option>)}</Select></Field>
           <Field label="Find order or item"><Input value={search} maxLength={120} disabled={busy} onChange={event => setSearch(event.target.value)} /></Field>
