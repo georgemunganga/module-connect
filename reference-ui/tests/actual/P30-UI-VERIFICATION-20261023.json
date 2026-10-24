@@ -1,5 +1,5 @@
 {
-  "status": "UI_UNIT_TYPE_BUILD_AND_MOCKED_BROWSER_PASSED_ACTUAL_COOKIE_PENDING",
+  "status": "UI_CURRENT_TYPE_BUILD_TARGETED_BROWSER_PASSED_ACTUAL_COOKIE_PENDING",
   "source": "873b64844b87e5c4895d3cc756cb77762c202694",
   "unitPassed": 484,
   "unitFailed": 0,
@@ -33,5 +33,19 @@
     "evidence": "procurement-p30-ui-20261023_run06",
     "routeMocks": true,
     "actualPersistenceClaim": false
-  }
+  },
+  "currentProductSource": "7c575d2",
+  "currentTargetedVerification": {
+    "evidence": "procurement-p30-ui-20261024_run07",
+    "typecheckExit": 0,
+    "buildExit": 0,
+    "mockedBrowserPassed": 16,
+    "mockedBrowserFailed": 0,
+    "scope": [
+      "policy lifecycle and explicit zero quote requirement",
+      "principal PO draft creation and interrupted-response recovery"
+    ]
+  },
+  "unitSuiteEvidenceSource": "873b64844b87e5c4895d3cc756cb77762c202694",
+  "unitSuiteRerunAfterHelpTextOnlyChange": false
 }
