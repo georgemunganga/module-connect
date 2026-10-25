@@ -75,8 +75,8 @@ async function confirm(page:Page){await page.getByLabel("Evidence reference",{ex
 
 test("principal delivery directory uses retained PO labels and server-wide stable sort",async({page})=>{
   const state=await mock(page);await page.goto(root);
-  await expect(page.getByRole("cell",{name:"Goods delivery"})).toHaveCount(2);
-  await expect(page.getByRole("cell",{name:"PO-RETAINED"})).toHaveCount(1);
+  await expect(page.getByRole("cell",{name:"Goods delivery",exact:true})).toHaveCount(2);
+  await expect(page.getByRole("cell",{name:"PO-RETAINED",exact:true})).toHaveCount(1);
   await page.getByRole("button",{name:"More Actions"}).click();
   await page.getByRole("menuitem",{name:"Sort by"}).click();
   await page.getByRole("menuitem",{name:"Oldest first"}).click();
