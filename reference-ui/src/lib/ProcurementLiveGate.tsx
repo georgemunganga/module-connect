@@ -15,7 +15,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const { selection,authEpoch,procurementScopeStatus } = useErpShell();
   const location = useLocation();
   const paymentPath = /^\/payments(?:\/|$)/.test(location.pathname);
-  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",procurementScopeStatus,paymentPath]);
+  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",selection.branchScope ?? "",procurementScopeStatus,paymentPath]);
   const currentKey=useRef(readinessKey);currentKey.current=readinessKey;
   const [storedState, setState] = useState<{ key:string; readiness?: ProcurementReadiness; error?: string }>({key:""});
   // Never render old scope readiness for even the render before passive effect cleanup.
@@ -32,7 +32,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
           setState({ key:capturedKey,error: error instanceof ProcurementLiveError ? error.message : "Procurement data is not ready. Please try again later." });
       });
     return () => controller.abort();
-  }, [selection.entityId, selection.branch,authEpoch,readinessKey,procurementScopeStatus,paymentPath]);
+  }, [selection.entityId, selection.branch,selection.branchScope,authEpoch,readinessKey,procurementScopeStatus,paymentPath]);
 
   if (!liveMode) return <>{children}</>;
   if (procurementScopeStatus !== "ready") return <>{scopeUnavailable ?? <ProcurementScopeSelectionState />}</>;
@@ -54,6 +54,17 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const configurationSettingsPath = /^\/settings(?:\/|$)/.test(location.pathname);
   const newRecord = /\/new\/?$/.test(location.pathname);
   const editRecord = /\/[^/]+\/edit\/?$/.test(location.pathname);
+  // Only routes with a reviewed server All contract enter live content. The
+  // shell stays available so the operator can choose a branch for other work.
+  const requestList = /^\/(?:requests|procurement-requests)\/?$/.test(location.pathname);
+  const planList = /^\/plans\/?$/.test(location.pathname);
+  const contractList = /^\/contracts\/?$/.test(location.pathname);
+  const allReadSupported = vendorPath || itemPath || paymentPath
+    || requestList || planList || contractList;
+  if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
+    const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
+    return blockedShell ? blockedShell(chooseBranch) : chooseBranch;
+  }
   const permission = state.readiness?.permissions ?? [];
   const permits = (read: string, create: string, edit: string) => permission.includes(newRecord ? create : editRecord ? edit : read);
   const deniedCrud = vendorPath && !permits("procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit")

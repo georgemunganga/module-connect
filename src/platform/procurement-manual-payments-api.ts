@@ -92,7 +92,8 @@ function paymentScopeHeaders(identity: ManualPaymentIdentity): Record<string, st
   let selected: unknown;
   try { selected = JSON.parse(localStorage.getItem(ERP_SHELL_STORAGE_KEY) || "null"); }
   catch { throw new ManualPaymentApiError(0, "Choose an ERP company before opening all payment branches."); }
-  if (!obj(selected) || selected.entityId !== identity.legalEntityId || selected.branch)
+  if (!obj(selected) || selected.entityId !== identity.legalEntityId || selected.branch
+    || selected.branchScope !== "all")
     throw new ManualPaymentApiError(0, "Choose an ERP company before opening all payment branches.");
   headers["X-Shell-Branch-Scope"] = "all";
   return headers;

@@ -33,11 +33,16 @@ describe("Procurement system-user readiness", () => {
   });
   it("requests explicit All branches only for a selected company's payment workspace", async () => {
     const all = fixture({ branch: null });
-    const result = await fetchProcurementReadiness({ entityId: entity }, undefined, all, true);
+    const result = await fetchProcurementReadiness({ entityId: entity, branchScope: "all" }, undefined, all, true);
     expect(result.effectiveBranchId).toBeNull();
     expect(all.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity,
       "X-Shell-Branch-Scope": "all" });
-    expect(all.mock.calls[2][1].headers).toEqual({ "X-Shell-Entity": entity });
+    expect(all.mock.calls[2][1].headers).toEqual({ "X-Shell-Entity": entity,
+      "X-Shell-Branch-Scope": "all" });
+    const requestList = fixture({ branch: null });
+    await fetchProcurementReadiness({ entityId: entity, branchScope: "all" }, undefined, requestList);
+    expect(requestList.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity,
+      "X-Shell-Branch-Scope": "all" });
     const selected = fixture({ branch: { id: branch } });
     await fetchProcurementReadiness({ entityId: entity, branch }, undefined, selected, true);
     expect(selected.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity,
@@ -47,8 +52,15 @@ describe("Procurement system-user readiness", () => {
     expect(legacy.mock.calls[1][1].headers).toEqual({});
   });
   it("refuses a default branch response for an explicit payment All request", async () => {
-    await expect(fetchProcurementReadiness({ entityId: entity }, undefined,
+    await expect(fetchProcurementReadiness({ entityId: entity, branchScope: "all" }, undefined,
       fixture({ branch: { id: branch } }), true)).rejects.toMatchObject({ code: "invalid-response" });
+  });
+  it("never infers All from an omitted branch or accepts All with a selected branch", async () => {
+    const unset = fixture({ branch: { id: branch } });
+    await fetchProcurementReadiness({ entityId: entity }, undefined, unset);
+    expect(unset.mock.calls[1][1].headers).toEqual({ "X-Shell-Entity": entity });
+    await expect(fetchProcurementReadiness({ entityId: entity, branch, branchScope: "all" },
+      undefined, fixture())).rejects.toMatchObject({ code: "invalid-scope" });
   });
   it("preserves an optional employee projection without using it as the acting principal", async () => {
     const result = await fetchProcurementReadiness({ entityId: entity }, undefined, fixture({ workerId: worker }));

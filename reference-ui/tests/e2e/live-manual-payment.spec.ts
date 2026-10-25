@@ -31,13 +31,18 @@ async function fixture(page: Page, enabled: boolean, options: {
   const writes: { path: string; body: Record<string, unknown>; key: string | undefined }[] = [];
   let status = options.paymentStatus ?? "Draft", version = status === "Approved" ? 3 : 1;
   await page.addInitScript(({ company, branch, allBranches }) => localStorage.setItem("erp.shell.state.v1",
-    JSON.stringify({ entityId: company, ...(allBranches ? {} : { branch }) })),
+    JSON.stringify({ entityId: company, branch: allBranches ? "" : branch,
+      branchScope: allBranches ? "all" : undefined })),
     { company, branch, allBranches: options.allBranches ?? false });
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, roles: ["procurement_buyer"] } });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: options.principalId ?? requester, isActive: true, roles: ["procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1,
+      tenantId: "test", principalId: options.principalId ?? requester, organisationWide: false,
+      companies: [{ id: company, code: "AMIZO", registeredName: "Amizo Power", currency: "ZMW", isDefault: true }],
+      branches: [{ id: branch, code: "HQ", name: "Lusaka", legalEntityId: company, type: "Headquarters" }] });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branch, name: "Lusaka", legalEntityId: company }] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const companyId = "11111111-1111-4111-8111-111111111111";
+const branchId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const workerId = "22222222-2222-4222-8222-222222222222";
 const itemId = "66666666-6666-4666-8666-666666666666";
 const priceId = "77777777-7777-4777-8777-777777777777";
@@ -24,14 +25,18 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1,
+      tenantId: "amizo", principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organisationWide: false,
+      companies: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power", currency: "ZMW", isDefault: true }],
+      branches: [{ id: branchId, code: "HQ", name: "Lusaka", legalEntityId: companyId, type: "Headquarters" }] });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
-    if (path === "/api/hrm/admin/locations") return json({ items: [] });
+    if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branchId, name: "Lusaka", legalEntityId: companyId }] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId,
       permissions: options.canApprove ? ["procurement-access", "procurement-item-approve", "procurement-item-manage", "procurement-catalog-approve"] : ["procurement-access", "procurement-item-manage"],
-      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" }, branch: { id: branchId } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/vendors") return json({ items: [{ id: vendorId, number: "SUP-1", displayName: "Office Supply", legalName: "Office Supply Ltd", countryCode: "ZM", status: "Active", isOrderable: true, version: 2, createdAt: "2026-10-19T00:00:00Z" }], total: 1, page: 1, pageSize: 100 });
     if (path === "/api/procurement/v1/items") {

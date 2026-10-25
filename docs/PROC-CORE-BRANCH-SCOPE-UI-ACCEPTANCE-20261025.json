@@ -1,0 +1,39 @@
+{
+  "status": "ACCEPTED_TARGETED_UI_TYPES_UNITS_MOCK_BROWSER_ONLY",
+  "dateUtc": "2026-10-25",
+  "testedSourceCommit": "de4235203a2b34b0384941e3982a31eb48264588",
+  "backendCompanion": "georgemunganga/erp#80",
+  "actualResults": {
+    "typescript": "PASS",
+    "unitPassed": 98,
+    "mockedChromiumPassed": 51,
+    "failed": 0,
+    "skipped": 0,
+    "workers": 1,
+    "retries": 0
+  },
+  "coverage": [
+    "Core-authorized headquarters default and explicit All permitted branches",
+    "Item create/reload/edit/activation and catalog publication",
+    "Vendor create/reload/edit/qualification/review/hold and workerless administrator access",
+    "Request catalog selection/create/edit/withdraw/review and exact numeric values",
+    "Manual payment draft/recording/unknown or stale response behavior and explicit transaction branch"
+  ],
+  "evidence": {
+    "directory": "/home/amizo/erp-backups/procurement-all-branches-ui-validation-20261025_run04",
+    "resultSha256": "9cb94a61eb63abd588dccabb6f10388c86f8c899384b1858f3b17b1e2902a888",
+    "planSha256": "984da7de145bb4f07654c4732f02c547b8e3d559dac5a10161b8c0eafd14510a",
+    "unitLogSha256": "25ce752fdaf2a4b90cdd11de4fe445c3cbe8378719e3a5efd099c49cbe4cd7b0",
+    "browserLogSha256": "a0abe8c380f3646bcc4676de09c78bcc8397411931bae299ac21d62bba04c37f"
+  },
+  "retainedFailedAttempts": [
+    "UI01: TypeScript literal widening corrected by explicit ShellSelection annotation",
+    "UI02: older browser fixtures omitted authorized branch context; stopped after three failures and one interrupted case",
+    "UI03: corrected Core responses required matching session identity IDs; three failed cases preserved"
+  ],
+  "limits": [
+    "Mocked browser responses are not real backend or production acceptance",
+    "Backend scope and P32 correction require their independent current SDK/API and rollout gates",
+    "No deployment, bank execution, Finance posting, inventory movement or complete module acceptance"
+  ]
+}

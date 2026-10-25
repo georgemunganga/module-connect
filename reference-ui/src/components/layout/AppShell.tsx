@@ -49,9 +49,8 @@ const payables = [
 export function AppShell() {
   const procurementReadiness = useLiveReadiness();
   const location = useLocation();
-  const paymentWorkspace = /^\/payments(?:\/|$)/.test(location.pathname);
   const { records, notify } = useApp();
-  const { branding, entities, branches, selection, contextAvailable, verifiedContext, procurementScopeStatus, assignedRoles, selectEntity, selectBranch } = useErpShell();
+  const { branding, entities, branches, selection, contextAvailable, verifiedContext, procurementScopeStatus, assignedRoles, selectEntity, selectBranch, selectAllBranches } = useErpShell();
   const roleSet = new Set(assignedRoles.map((role) => role.toLowerCase()));
   const canOpenHrm = ["employee", "manager", "hr_ops", "payroll", "finance_approver", "hr_admin", "investigator", "timesheet_operator"].some((role) => roleSet.has(role));
   const canOpenCore = roleSet.has("erp_admin") || roleSet.has("hr_admin");
@@ -79,7 +78,8 @@ export function AppShell() {
     window.localStorage.setItem("erp.sidebar.collapsed.v1", String(compact));
   }, [compact]);
   const activeEntity = entities.find((item) => item.id === selection.entityId) ?? entities[0] ?? verifiedContext?.company;
-  const activeBranch = branches.find((item) => item.id === selection.branch) ?? verifiedContext?.branch;
+  const activeBranch = selection.branchScope === "all" ? null
+    : branches.find((item) => item.id === selection.branch) ?? verifiedContext?.branch;
   const results = (isProcurementLiveMode ? [] : records)
     .filter((record) =>
       `${record.id} ${record.title} ${record.party}`
@@ -135,23 +135,23 @@ export function AppShell() {
             className="flex max-w-64 items-center gap-2 rounded-full border border-primary-foreground/40 bg-surface px-2 py-1.5 text-sm text-foreground md:px-3"
           >
             <Building2 size={15} className="shrink-0" />
-            <span className="hidden truncate md:inline">{activeEntity?.name || branding?.displayName || "Organisation"}{activeBranch ? ` · ${activeBranch.name}` : ""}</span>
+            <span className="hidden truncate md:inline">{activeEntity?.name || branding?.displayName || "Organisation"}{selection.branchScope === "all" ? " · All permitted branches" : activeBranch ? ` · ${activeBranch.name}` : ""}</span>
             <ChevronDown size={14} className="hidden shrink-0 md:block" />
           </button>
           {contextOpen && <div className="fixed inset-x-3 top-14 z-50 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl md:absolute md:inset-x-auto md:left-0 md:top-11 md:w-80">
             <p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">Organisation context</p>
             {contextAvailable ? entities.map((entity) => <div key={entity.id}>
-              <button type="button" onClick={() => selectEntity(entity.id)} className={`w-full rounded px-2 py-2 text-left text-sm hover:bg-secondary ${selection.entityId === entity.id && !selection.branch ? "bg-primary-soft font-semibold text-primary" : ""}`}>{entity.name}{paymentWorkspace ? " · All branches" : ""}</button>
+              <button type="button" onClick={() => selectEntity(entity.id)} className="w-full rounded px-2 py-2 text-left text-sm hover:bg-secondary">{entity.name}</button>
+              <button type="button" onClick={() => selectAllBranches(entity.id)} className={`block w-full rounded px-6 py-1.5 text-left text-xs hover:bg-secondary ${selection.entityId === entity.id && selection.branchScope === "all" ? "bg-primary-soft font-semibold text-primary" : "text-muted-foreground"}`}>All permitted branches</button>
               {branches.filter((branch) => branch.legalEntityId === entity.id).map((branch) => <button key={branch.id} type="button" onClick={() => selectBranch(branch.id, entity.id)} className={`block w-full rounded px-6 py-1.5 text-left text-xs hover:bg-secondary ${selection.branch === branch.id ? "bg-primary-soft font-semibold text-primary" : "text-muted-foreground"}`}>{branch.name}</button>)}
             </div>) : verifiedContext ? <div className="space-y-1 px-2 py-2" aria-label="Verified current organisation">
               <p className="text-sm font-medium">{verifiedContext.company.name}</p>
-              {verifiedContext.branch && paymentWorkspace && selection.entityId === verifiedContext.company.id && !selection.branch
-                ? <p className="text-sm text-muted-foreground">Payments Made shows the branches your account can access.</p>
+              {verifiedContext.branch && selection.entityId === verifiedContext.company.id && selection.branchScope === "all"
+                ? <p className="text-sm text-muted-foreground">This view shows only branches your account can access.</p>
                 : verifiedContext.branch && (procurementScopeStatus === "selection-required"
                 ? <button type="button" className="rounded px-2 py-2 text-left text-sm hover:bg-secondary" onClick={() => selectBranch(verifiedContext.branch!.id, verifiedContext.company.id)}>Use {verifiedContext.branch.name}</button>
                 : <p className="text-sm text-muted-foreground">{verifiedContext.branch.name}</p>)}
-              {paymentWorkspace && <button type="button" className={`rounded px-2 py-2 text-left text-sm hover:bg-secondary ${selection.entityId === verifiedContext.company.id && !selection.branch ? "bg-primary-soft font-semibold text-primary" : ""}`} onClick={() => selectEntity(verifiedContext.company.id)}>All branches for Payments Made</button>}
-              {!paymentWorkspace && verifiedContext.branch === null && procurementScopeStatus === "selection-required" && <button type="button" className="rounded px-2 py-2 text-left text-sm hover:bg-secondary" onClick={() => selectEntity(verifiedContext.company.id)}>Use {verifiedContext.company.name} workspace</button>}
+              <button type="button" className={`rounded px-2 py-2 text-left text-sm hover:bg-secondary ${selection.entityId === verifiedContext.company.id && selection.branchScope === "all" ? "bg-primary-soft font-semibold text-primary" : ""}`} onClick={() => selectAllBranches(verifiedContext.company.id)}>All permitted branches</button>
               <p className="pt-2 text-xs text-muted-foreground">Current workspace. Organisation switching is not available for this account.</p>
             </div> : <p className="px-2 py-2 text-xs text-muted-foreground">Organisation choices are not available for this account.</p>}
           </div>}
