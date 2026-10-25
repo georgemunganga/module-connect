@@ -41,6 +41,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const approvalPath = /^\/approvals(?:\/|$)/.test(location.pathname);
   const requestPath = /^\/(?:requests|procurement-requests)(?:\/|$)/.test(location.pathname);
   const sourcingPath = /^\/rfqs(?:\/|$)/.test(location.pathname);
+  const recommendationPath = /^\/rfqs\/recommendations(?:\/|$)/.test(location.pathname);
   const contractPath = /^\/contracts(?:\/|$)/.test(location.pathname);
   const contractReviewPath = /^\/contracts\/internal-review(?:\/|$)/.test(location.pathname);
   const recurringPurchasePath = /^\/recurring-bills(?:\/|$)/.test(location.pathname);
@@ -49,6 +50,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
+  const returnPath = /^\/purchase-receives\/returns(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
   const overviewPath = location.pathname === "/" || location.pathname === "/analytics";
   const configurationSettingsPath = /^\/settings(?:\/|$)/.test(location.pathname);
@@ -98,7 +100,12 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
       || state.readiness.capabilities.invoiceOriginalUnitReview && state.readiness.permissions.some((permission) =>
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))
       || state.readiness.capabilities.principalInvoiceMatching && state.readiness.permissions.includes("procurement-invoice-unit-review")))
-    || (sourcingPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
+    || (recommendationPath && state.readiness.capabilities.principalRfqRecommendationDrafts === true
+      && state.readiness.permissions.includes("procurement-sourcing-recommend-draft")
+      && state.readiness.permissions.includes("procurement-sourcing-opened-offer-read"))
+    || (sourcingPath && !recommendationPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts
+      || state.readiness.capabilities.principalRfqRecommendationDrafts && state.readiness.permissions.includes("procurement-sourcing-recommend-draft")
+        && state.readiness.permissions.includes("procurement-sourcing-opened-offer-read")))
     || (contractReviewPath && state.readiness.capabilities.contractInternalReview)
     || (contractPath && !contractReviewPath && state.readiness.capabilities.contractDraft)
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
@@ -107,7 +114,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders || state.readiness.capabilities.principalDirectOrderDrafts))
-    || (receivingPath && (state.readiness.capabilities.principalReceiving || state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
+    || (returnPath && state.readiness.capabilities.principalGoodsReturnDrafts)
+    || (receivingPath && !returnPath && (state.readiness.capabilities.principalReceiving || state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
     return <LiveReadiness.Provider value={state.readiness}>{requestPath || approvalPath

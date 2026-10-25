@@ -469,7 +469,7 @@ function InvoiceDetailRecord() {
             <p className="font-medium">More actions</p>
             <Button role="menuitem" variant="ghost" disabled={loading || busy} onClick={() => { setMenuOpen(false); refreshSavedInvoice(); }}>Refresh invoice</Button>
             <p className="mt-1 text-muted-foreground">{canCancel && !uncertain && !stale ? "Cancel is available in Overview after a reason is entered." : uncertain || stale ? "Refresh the saved bill before another action." : "No cancellation action is allowed for this saved invoice."}</p>
-            <p className="mt-2 text-muted-foreground">Saved bills cannot be deleted. Payment recording is not connected yet.</p>
+            <p className="mt-2 text-muted-foreground">Saved bills cannot be deleted. Manual payments are recorded separately when your access allows it.</p>
           </div>}
         </div>
       </div>
@@ -530,7 +530,12 @@ function InvoiceDetailRecord() {
       {activeTab === "related" && <DetailSection title="Related Records"><dl className="grid gap-5 sm:grid-cols-2">
         <DetailValue label="Purchase order reference" value={invoice.purchaseOrderId || "Not linked"} />
         <DetailValue label="Vendor" value={invoice.supplierName || "Vendor"} />
-      </dl><p className="mt-4 text-sm text-muted-foreground">Linked orders, credits and payments are not shown here yet. Open their workspaces to check the latest records.</p></DetailSection>}
+      </dl><div className="mt-4 flex flex-wrap gap-4">
+        {capabilities.vendorCreditDraft && permissions.includes("procurement-invoice-read")
+          && <Link className="text-sm text-primary hover:underline" to={`/vendor-credits?invoiceId=${encodeURIComponent(invoice.id)}`}>View credits for this bill</Link>}
+        {capabilities.manualPaymentWorkflow && permissions.includes("procurement-payment-read")
+          && <Link className="text-sm text-primary hover:underline" to={`/payments?invoiceId=${encodeURIComponent(invoice.id)}`}>View manual payments for this bill</Link>}
+      </div><p className="mt-4 text-sm text-muted-foreground">Credits and manual payment requests open in their own workspaces, filtered to this bill. A recorded request does not mean Finance has posted or paid the bill.</p></DetailSection>}
       {activeTab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not available for bills yet.</p></DetailSection>}
       {activeTab === "history" && <DetailSection title="History"><dl className="grid gap-5 sm:grid-cols-2"><DetailValue label="Saved revision" value={invoice.version} /><DetailValue label="Created at" value={invoice.createdAt || "—"} /></dl><p className="mt-4 text-sm text-muted-foreground">A detailed activity log is not available here yet. The saved revision above is confirmed.</p></DetailSection>}
     </div>

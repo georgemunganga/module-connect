@@ -17,17 +17,17 @@ function page<T>(value: unknown, currentPage: number, row: (item: unknown) => T)
     || value.limit < 1 || value.limit > 25 || value.offset !== (currentPage - 1) * value.limit || value.records.length > value.limit) throw invalid();
   return { items: value.records.map(row), total: value.total, page: currentPage, pageSize: value.limit };
 }
-export async function listPrincipalReceiving(company: string, view: ReceivingView, currentPage: number, signal?: AbortSignal, state = "") {
+export async function listPrincipalReceiving(company: string, view: ReceivingView, currentPage: number, signal?: AbortSignal, state = "", sort: "newest" | "oldest" = "newest") {
   const task = view === "inspection" || view === "acceptance" || view === "certification";
   const size = task ? 25 : 10;
   const path = view === "inspection" ? "/receiving/principal-inspection-tasks" : view === "acceptance" ? "/receiving/principal-acceptance-tasks"
     : view === "certification" ? "/receiving/principal-service-tasks" : `/receiving/principal-worklist?kind=${view === "services" ? "Service" : "Goods"}`;
-  const body = await receivingCall(company, `${path}${path.includes("?") ? "&" : "?"}offset=${(currentPage - 1) * size}&limit=${size}${state && !task ? `&status=${encodeURIComponent(state)}` : ""}`, { signal });
+  const body = await receivingCall(company, `${path}${path.includes("?") ? "&" : "?"}offset=${(currentPage - 1) * size}&limit=${size}${state && !task ? `&status=${encodeURIComponent(state)}` : ""}${!task ? `&sort=${sort}` : ""}`, { signal });
   return page<ReceivingSummary>(body, currentPage, (value) => {
     if (!object(value) || !uuid.test(String(value.id)) || !uuid.test(String(value.purchaseOrderId)) || !integer(value.version) || typeof value.status !== "string" || value.version < 1
       || task && (!uuid.test(String(value.lineId)) || value.isAuthority !== false)) throw invalid();
-    return { id: String(value.id), number: String(value.id), status: value.status, version: value.version, executionVersion: 2,
-      orderId: String(value.purchaseOrderId), orderNumber: typeof value.purchaseOrderNumber === "string" ? value.purchaseOrderNumber : String(value.purchaseOrderId),
+    return { id: String(value.id), number: task ? view === "inspection" ? "Inspection task" : view === "acceptance" ? "Acceptance task" : "Service task" : view === "services" ? "Service completion" : "Goods delivery", status: value.status, version: value.version, executionVersion: 2,
+      orderId: String(value.purchaseOrderId), orderNumber: typeof value.purchaseOrderNumber === "string" && value.purchaseOrderNumber.trim() ? value.purchaseOrderNumber : "Order reference unavailable",
       ...(task ? { lineId: String(value.lineId) } : {}), ...(typeof value.createdAt === "string" ? { receivedAt: value.createdAt } : {}) };
   });
 }

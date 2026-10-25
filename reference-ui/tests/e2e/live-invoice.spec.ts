@@ -13,7 +13,7 @@ const capabilities = Object.fromEntries([
   "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "vendorDraft" || key === "invoiceIntake"]));
 
-async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number; crud?: boolean; staleUpdate?: boolean; loseUpdate?: boolean } = {}) {
+async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number; crud?: boolean; staleUpdate?: boolean; loseUpdate?: boolean; related?: boolean; paymentRead?: boolean } = {}) {
   let invoice: Record<string, unknown> | null = options.seed ? {
     id: invoiceId, supplierId: vendorId, supplierName: "Office Supplier", invoiceNumber: "INV-DOC-1",
     invoiceDate: "2026-10-20", currencyCode: "ZMW", status: "Received", intakeChannel: "Manual",
@@ -45,16 +45,16 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
     if (url.pathname === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId,
       code: "AMIZO", registeredName: "Amizo Power" }] });
-    if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
-    if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (url.pathname === "/api/hrm/admin/locations") return json({ items: [{ id: branchId, code: "HQ", name: "Main site", legalEntityId: companyId }] });
+    if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [branchId], confined: true });
     if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo",
       legalEntityId: companyId, workerId,
       permissions: canCapture ? ["procurement-access", "procurement-vendor-read",
-        "procurement-invoice-read", "procurement-invoice-capture"]
+        "procurement-invoice-read", "procurement-invoice-capture", ...(options.paymentRead ? ["procurement-payment-read"] : [])]
         : ["procurement-access", "procurement-invoice-read"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo",
-      legalEntityId: companyId, schemaReady: true, capabilities: { ...capabilities, invoiceDocuments: options.documents === true } });
+      legalEntityId: companyId, schemaReady: true, capabilities: { ...capabilities, vendorCreditDraft: options.related === true, manualPaymentWorkflow: options.related === true, invoiceDocuments: options.documents === true } });
     if (url.pathname === "/api/procurement/v1/vendors") return json({ items: [{ id: vendorId,
       number: "VEN-001", displayName: "Office Supplier", legalName: "Office Supplier Ltd",
       countryCode: "ZM", status: "Active", isOrderable: true, version: 1,
@@ -410,13 +410,13 @@ test("live bill detail keeps the ERP-adapted tabs while showing only saved invoi
   await expect(page.getByRole("heading", { name: "Items / Line Details" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Supplies" })).toBeVisible();
   await page.getByRole("tab", { name: "Related" }).click();
-  await expect(page.getByText("Linked orders, credits and payments are not shown here yet", { exact: false })).toBeVisible();
+  await expect(page.getByText("Credits and manual payment requests open in their own workspaces, filtered to this bill.", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Comments" }).click();
   await expect(page.getByText("Comments are not available for bills yet.")).toBeVisible();
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByText("A detailed activity log is not available here yet", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "More invoice actions" }).click();
-  await expect(page.getByText("Saved bills cannot be deleted. Payment recording is not connected yet.")).toBeVisible();
+  await expect(page.getByText("Saved bills cannot be deleted. Manual payments are recorded separately when your access allows it.")).toBeVisible();
 });
 
 test("read-only bill detail keeps tabs and documents without offering a write action", async ({ page }) => {
@@ -470,4 +470,31 @@ test("restored Bills screens retain the ERP layout at desktop and phone widths",
     expect(editorLayout.scrollWidth).toBeLessThanOrEqual(editorLayout.width + 1);
     await page.screenshot({ path: testInfo.outputPath(`bill-editor-${width}.png`), fullPage: true });
   }
+});
+
+
+test("bill related links retain invoice filters and do not imply payment execution", async ({ page }) => {
+  await mockErp(page, true, { seed: true, related: true, paymentRead: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await page.getByRole("tab", { name: "Related", exact: true }).click();
+  await expect(page.getByRole("link", { name: "View credits for this bill" })).toHaveAttribute("href", `/procurement/workspace/vendor-credits?invoiceId=${invoiceId}`);
+  await expect(page.getByRole("link", { name: "View manual payments for this bill" })).toHaveAttribute("href", `/procurement/workspace/payments?invoiceId=${invoiceId}`);
+  await expect(page.getByText("A recorded request does not mean Finance has posted or paid the bill.", { exact: false })).toBeVisible();
+});
+
+test("bill related links require each capability and payment read permission", async ({ page }) => {
+  await mockErp(page, true, { seed: true, related: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await page.getByRole("tab", { name: "Related", exact: true }).click();
+  await expect(page.getByRole("link", { name: "View credits for this bill" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "View manual payments for this bill" })).toHaveCount(0);
+});
+
+
+test("bill related workspaces are hidden when their server capabilities are absent", async ({ page }) => {
+  await mockErp(page, true, { seed: true, paymentRead: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await page.getByRole("tab", { name: "Related", exact: true }).click();
+  await expect(page.getByRole("link", { name: "View credits for this bill" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "View manual payments for this bill" })).toHaveCount(0);
 });

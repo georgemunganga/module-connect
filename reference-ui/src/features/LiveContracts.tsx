@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
@@ -7,6 +7,7 @@ import { ContractDraftRates } from "./ContractDraftRates";
 import { ContractInternalReview } from "./ContractInternalReview";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { useErpShell } from "../lib/erpShell";
+import { isDefiniteHttpRejection } from "../lib/http-write-outcome";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import {
   ContractApiError,
@@ -185,6 +186,8 @@ export function LiveContractEditor() {
 
 export function LiveContractDetail() {
   const { id } = useParams();
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const navigate = useNavigate();
   const { tenantId, legalEntityId, principalId, effectiveBranchId, permissions, capabilities } = useCompany();
   const { authEpoch } = useErpShell();
@@ -194,12 +197,29 @@ export function LiveContractDetail() {
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [cancelBlock, setCancelBlock] = useState<"unknown" | "stale" | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const [rateSafety, setRateSafety] = useState<{ scope: string; safe: boolean } | null>(null);
+  const rateSafeRef = useRef(false);
+  const ratesEnabled = capabilities.contractDraftRates === true;
+  const rateSafe = !ratesEnabled || (rateSafety?.scope === viewScope && rateSafety.safe);
+  const onRateSafetyChange = useCallback((captured: string, safe: boolean) => {
+    if (currentViewScope.current !== captured) return;
+    rateSafeRef.current = safe;
+    setRateSafety((old) => old?.scope === captured && old.safe === safe ? old : { scope: captured, safe });
+  }, []);
+  const onFreshChildContract = useCallback((fresh: ContractDetail) => {
+    if (currentViewScope.current !== viewScope || fresh.id !== id) return;
+    setRecord((old) => old && fresh.version >= old.version ? fresh : old);
+  }, [id, viewScope]);
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
     setLoading(true); setRecord(null); setLoadedScope(null); setError(""); setReason("");
+    busyRef.current = false; rateSafeRef.current = false; setRateSafety(null);
+    setBusy(false); setCancelBlock(null);
     getOwnContractDraft(legalEntityId, id, controller.signal).then((value) => {
       if (!controller.signal.aborted) { setRecord(value); setLoadedScope(viewScope); }
     })
@@ -207,20 +227,51 @@ export function LiveContractDetail() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, effectiveBranchId, authEpoch, viewScope]);
+  const stillCurrent = (captured: string) => alive.current && currentViewScope.current === captured;
   async function cancel() {
-    if (!permissions.includes("procurement-contract-edit")) return;
-    if (!record || loadedScope !== viewScope || !reason.trim()) { setError("Give a reason for cancelling the current draft."); return; }
-    setBusy(true); setError("");
+    if (busyRef.current || (ratesEnabled && !rateSafeRef.current) || cancelBlock || loading || !permissions.includes("procurement-contract-edit")) return;
+    if (!record || record.id !== id || record.status !== "Draft" || loadedScope !== viewScope || !reason.trim()) return;
+    busyRef.current = true; setBusy(true); setError("");
     const captured = viewScope;
-    try { await cancelOwnContractDraft(legalEntityId, record.id, record.version, reason.trim());
-      if (currentViewScope.current === captured) navigate("/contracts"); }
-    catch (cause) { if (currentViewScope.current === captured) setError(errorText(cause)); }
-    finally { if (currentViewScope.current === captured) setBusy(false); }
+    try {
+      const saved = await cancelOwnContractDraft(legalEntityId, record.id, record.version, reason.trim());
+      if (!stillCurrent(captured)) return;
+      if (saved.id !== record.id || saved.version !== record.version + 1)
+        throw new ContractApiError(0, "The cancellation response does not match this contract. Refresh the saved record before another change.");
+      navigate("/contracts");
+    } catch (cause) {
+      if (!stillCurrent(captured)) return;
+      setError(errorText(cause));
+      if (cause instanceof ContractApiError && cause.status === 409) setCancelBlock("stale");
+      else if (!(cause instanceof ContractApiError) || !isDefiniteHttpRejection(cause.status)) setCancelBlock("unknown");
+    } finally { if (stillCurrent(captured)) { busyRef.current = false; setBusy(false); } }
   }
+  async function refreshSavedContract() {
+    if (!id || busyRef.current || loading || loadedScope !== viewScope) return;
+    const captured = viewScope;
+    busyRef.current = true; setBusy(true); setError("");
+    try {
+      // Cancel has no original-key receipt endpoint. This GET inspects saved
+      // state only; it never retries the command or claims receipt recovery.
+      const saved = await getOwnContractDraft(legalEntityId, id);
+      if (!stillCurrent(captured)) return;
+      if (saved.id !== id) throw new ContractApiError(0, "The saved response does not match this contract.");
+      setRecord(saved);
+      if (cancelBlock === "unknown" && saved.status === "Draft") {
+        setError("The saved contract is still a draft. The cancellation result remains unconfirmed; no cancellation was retried.");
+      } else { setCancelBlock(null); }
+    } catch (cause) { if (stillCurrent(captured)) setError(errorText(cause)); }
+    finally { if (stillCurrent(captured)) { busyRef.current = false; setBusy(false); } }
+  }
+  const writesBlocked = busy || loading || cancelBlock !== null || !rateSafe;
   return <div className="p-5 sm:p-8">
     {loading || loadedScope !== viewScope ? <p role="status">Loading contract…</p> : record && record.id === id ? <>
-      <PageHeader title={record.title} subtitle={`${record.number} · Supplier agreement`} actions={permissions.includes("procurement-contract-edit") && record.status === "Draft" ? <Link to={`/contracts/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
+      <PageHeader title={record.title} subtitle={`${record.number} · Supplier agreement`} actions={!writesBlocked && permissions.includes("procurement-contract-edit") && record.status === "Draft" ? <Link to={`/contracts/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
+      {cancelBlock && <div role="status" className="mb-4 rounded-lg border border-border p-4 text-sm">
+        <p>{cancelBlock === "unknown" ? "Cancellation was not confirmed. Your reason is kept here. Check the saved contract before another change." : "The contract changed. Refresh its saved details before another change."}</p>
+        <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void refreshSavedContract()}>Refresh saved contract</Button>
+      </div>}
       <Panel title="Contract details"><dl className="grid gap-5 p-5 text-sm sm:grid-cols-2">
         <div><dt className="text-muted-foreground">Status</dt><dd className="mt-1"><Badge>{record.status}</Badge></dd></div>
         <div><dt className="text-muted-foreground">Supplier reference</dt><dd className="mt-1"><Link className="text-primary hover:underline" to={`/vendors/${record.supplierId}`}>Open supplier</Link></dd></div>
@@ -232,17 +283,20 @@ export function LiveContractDetail() {
         <div><dt className="text-muted-foreground">Draft revision</dt><dd className="mt-1">{record.draftVersion?.revisionNumber ?? "—"}</dd></div>
         {record.terminationReason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Cancellation reason</dt><dd className="mt-1">{record.terminationReason}</dd></div>}
       </dl></Panel>
-      <ContractDraftRates key={`${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`} companyId={legalEntityId}
+      <ContractDraftRates key={`rates:${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`} companyId={legalEntityId}
         scopeKey={`${tenantId}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
+        safetyScopeKey={viewScope}
         contract={record} enabled={capabilities.contractDraftRates === true}
-        canEdit={permissions.includes("procurement-contract-edit")}
-        onFreshContract={setRecord} />
-      <ContractInternalReview key={`${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
+        canEdit={!busy && !loading && cancelBlock === null
+          && permissions.includes("procurement-contract-edit")}
+        onFreshContract={onFreshChildContract} onSafetyChange={onRateSafetyChange} />
+      <ContractInternalReview key={`review:${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
         companyId={legalEntityId} principalId={principalId} contract={record}
         branchId={effectiveBranchId} enabled={capabilities.contractInternalReview === true}
         canSubmit={permissions.includes("procurement-contract-submit")}
-        onFreshContract={setRecord} />
-      {permissions.includes("procurement-contract-edit") && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
+        submitBlocked={writesBlocked}
+        onFreshContract={onFreshChildContract} />
+      {permissions.includes("procurement-contract-edit") && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} disabled={writesBlocked} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={writesBlocked || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
     </> : <p role="alert">{error || "Contract not found."}</p>}
     <Link to="/contracts" className="mt-5 inline-block text-sm text-primary hover:underline">Back to contracts</Link>
   </div>;
