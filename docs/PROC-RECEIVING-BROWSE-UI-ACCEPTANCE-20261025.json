@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "dateUtc": "2026-10-25",
+  "status": "PASS_MOCKED_RECEIVING_BROWSE_UI_ONLY",
+  "applicationSourceCommit": "3b1815b51f23b4942728e91a9a5427edf98712be",
+  "browserSpecCommit": "4ffc24390deeea07af3b30630f8c0e19da99bb94",
+  "acceptedChecks": {
+    "typeScript": {
+      "source": "3b1815b51f23b4942728e91a9a5427edf98712be",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "carriedOnUnchangedApplication": true
+    },
+    "targetedUnits": {
+      "passed": 8,
+      "source": "3b1815b51f23b4942728e91a9a5427edf98712be",
+      "logSha256": "59911bcd66758645048b3569b2fcf0e05e58ecfa8c44f3690a9d37a68f8f03ec",
+      "carriedOnUnchangedApplication": true
+    },
+    "mockedChromium": {
+      "passed": 9,
+      "workers": 1,
+      "retries": 0,
+      "logSha256": "376e0af2bfacfad6e0dc80826c941a5da7b1bd55d3431864d5bfba8b8d783f14",
+      "resultSha256": "f72d7a6dc5acefe5f6501febca3fde970f372c918e1dbfa306b2825571b1baa9"
+    }
+  },
+  "retainedFirstAttempt": {
+    "passed": 8,
+    "failed": 1,
+    "failure": "New test counted both label cells and action cells by partial accessible-name match. Exact cell names fix the locator; application unchanged.",
+    "resultSha256": "0b5c1f91f42cedb61df136e9774426ecf44d8750961d49fa67d37ab0a1eb09e3",
+    "logSha256": "bc183154fcca450c977afcabf31578b5cc574ee9eb3905474fd90500d7096242",
+    "evidencePreserved": true
+  },
+  "scope": [
+    "Retained PO numbers with neutral delivery/service task labels, no UUID label fallback",
+    "Existing toolbar newest/oldest query and page reset for principal delivery directory",
+    "Existing missing-capability, workerless, exact-quantity, stale-CAS, lost-create GET-recovery and assigned-task scenarios"
+  ],
+  "remaining": [
+    "Corresponding backend sort SDK regression and actual HTTP acceptance",
+    "Paired UI/API release and deployment"
+  ],
+  "actualBackend": false,
+  "productionTouched": false
+}
