@@ -100,6 +100,20 @@ export async function validatePolicy(companyId: string, rulesJson: string): Prom
     throw new PolicyActionError("ERP returned an invalid buying rule check.", 0);
   return body as PolicyValidation;
 }
+export async function validateSourcingPolicy(companyId: string, rulesJson: string):
+  Promise<PolicyValidation & { reviewConfigurationComplete: boolean; reviewIssues: PolicyIssue[];
+    supportedSourcingRuleSchemas: number[] }> {
+  const body = await call(companyId, "/validate", { method: "POST", body: JSON.stringify({ rulesJson }) });
+  if (!object(body) || typeof body.isValid !== "boolean" || !Array.isArray(body.issues)
+    || typeof body.reviewConfigurationComplete !== "boolean" || !Array.isArray(body.reviewIssues)
+    || !Array.isArray(body.supportedSourcingRuleSchemas)
+    || body.supportedSourcingRuleSchemas.some(value => value !== 1 && value !== 2)
+    || [...body.issues, ...body.reviewIssues].some(issue => !object(issue)
+      || typeof issue.path !== "string" || typeof issue.message !== "string"))
+    throw new PolicyActionError("ERP returned an invalid sourcing rule check.", 0);
+  return body as PolicyValidation & { reviewConfigurationComplete: boolean;
+    reviewIssues: PolicyIssue[]; supportedSourcingRuleSchemas: number[] };
+}
 export async function validateManualPaymentPolicy(companyId: string, rulesJson: string):
   Promise<PolicyValidation & { reviewReady: boolean; reviewIssues: PolicyIssue[] }> {
   const body = await call(companyId, "/validate", { method: "POST", body: JSON.stringify({ rulesJson }) });
@@ -160,19 +174,24 @@ export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUE
     policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null };
 }
 
-/** Canonical active workers eligible to be named for sourcing publication review. */
-export type SourcingReviewerPage = { items: Array<{ principalId: string; displayName: string; workerId: string }>;
-  total: number; offset: number; limit: number; nextOffset: number | null; isAuthority: false; configurationVersion: 1 };
+/** Scoped current Core accounts. A schema-2 reviewer may have no HRMS worker. */
+export type SourcingReviewerPage = { items: Array<{ principalId: string; displayName: string; workerId: string | null }>;
+  total: number; offset: number; limit: number; nextOffset: number | null; isAuthority: false;
+  configurationVersion: 1; supportedSourcingRuleSchemas: number[] };
 const canonicalId = (value: unknown): value is string => typeof value === "string" && guid.test(value)
   && value === value.toLowerCase() && value !== "00000000-0000-0000-0000-000000000000";
 function reviewerPage(body: unknown, offset: number): SourcingReviewerPage {
   if (!object(body) || !Array.isArray(body.items) || body.items.length > 25 || body.isAuthority !== false || body.configurationVersion !== 1
-    || body.items.some(item => !object(item) || !canonicalId(item.principalId) || !canonicalId(item.workerId) || typeof item.displayName !== "string")
+    || body.items.some(item => !object(item) || !canonicalId(item.principalId)
+      || item.workerId !== null && !canonicalId(item.workerId) || typeof item.displayName !== "string")
     || !Number.isInteger(body.total) || body.offset !== offset || body.limit !== 25 || Number(body.total) < 0
     || body.nextOffset !== null && (!Number.isInteger(body.nextOffset) || body.nextOffset !== offset + 25 || Number(body.nextOffset) >= Number(body.total))
-    || new Set(body.items.map(item => object(item) ? item.principalId : "")).size !== body.items.length)
+    || new Set(body.items.map(item => object(item) ? item.principalId : "")).size !== body.items.length
+    || body.supportedSourcingRuleSchemas !== undefined && (!Array.isArray(body.supportedSourcingRuleSchemas)
+      || body.supportedSourcingRuleSchemas.some(value => value !== 1 && value !== 2)))
     throw new PolicyActionError("Reviewer names are unavailable. Selected people have not changed.", 0);
-  return body as SourcingReviewerPage;
+  return { ...body, supportedSourcingRuleSchemas: Array.isArray(body.supportedSourcingRuleSchemas)
+    ? body.supportedSourcingRuleSchemas : [] } as SourcingReviewerPage;
 }
 export async function lookupSourcingReviewers(companyId: string, search: string, offset: number, signal?: AbortSignal): Promise<SourcingReviewerPage> {
   if (search.trim().length > 100 || !Number.isInteger(offset) || offset < 0 || offset > 100000)

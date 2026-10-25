@@ -109,6 +109,19 @@ test("buying rule draft checks and saves with company currency", async ({ page }
   await expect(page.getByLabel("Amount from (ZMW)")).toHaveValue("5000");
 });
 
+test("direct purchase rule keeps an explicitly entered zero quote count", async ({ page }) => {
+  const state = await mockErp(page);
+  await page.goto("/procurement/workspace/settings/buying-rules");
+  await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await expect(page.getByText("For a direct purchase, enter 0 explicitly.", { exact: false })).toBeVisible();
+  await page.getByLabel("Buying method code (optional)").fill("DIRECT");
+  await page.getByLabel("Quotes needed (optional)").fill("0");
+  await page.getByRole("button", { name: "Check and save draft" }).click();
+  expect(state.rules()).toMatchObject({ rules: [{ result: {
+    sourcingMethodCode: "DIRECT", minimumQuoteCount: 0,
+  } }] });
+});
+
 test("invalid buying rule stays in the editor with a field issue", async ({ page }) => {
   await mockErp(page, { invalid: true });
   await page.goto("/procurement/workspace/settings/buying-rules");

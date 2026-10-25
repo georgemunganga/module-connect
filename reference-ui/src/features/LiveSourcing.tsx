@@ -37,8 +37,12 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
   const company = useCompany(); const { selection, authEpoch } = useErpShell(); const { id = "" } = useParams();
   const [query] = useSearchParams();
   const source = query.get("source");
-  const principalDefault = source === null && company.capabilities.principalSourcingSourceDrafts
-    && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts;
+  const publicationReviewerDefault = company.capabilities.principalSourcingPublication === true
+    && company.permissions.includes("procurement-sourcing-publish")
+    && !company.permissions.includes("procurement-sourcing-convert");
+  const principalDefault = source === null && (publicationReviewerDefault
+    || company.capabilities.principalSourcingSourceDrafts
+      && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts);
   const governed = source === "approved" || source === "principal-approved" || principalDefault;
   const mode: RfqSourceMode = source === "principal-approved" || principalDefault ? "principal" : "worker";
   const key = JSON.stringify([authEpoch, company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
@@ -48,13 +52,23 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
 function SourcingPageContent({ view, governed, mode, id }: { view: "list" | "editor" | "detail"; governed: boolean; mode: RfqSourceMode; id: string }) {
   const { capabilities, permissions } = useCompany();
   const canConvert = permissions.includes("procurement-sourcing-convert");
-  const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel");
-  const enabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
-  const anyGoverned = capabilities.sourcingSourceDrafts || capabilities.principalSourcingSourceDrafts;
+  const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel")
+    || capabilities.principalSourcingPublication === true && mode === "principal"
+      && (permissions.includes("procurement-sourcing-submit") || permissions.includes("procurement-sourcing-publish"));
+  const sourceEnabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
+  const publicationViewer = capabilities.principalSourcingPublication === true
+    && permissions.includes("procurement-sourcing-publish");
+  const canReadWorkerSource = canConvert || permissions.includes("procurement-sourcing-cancel");
+  // A named publication reviewer can read the assigned list and RFQ detail
+  // without the separate approved-source conversion capability.
+  const enabled = sourceEnabled || view !== "editor" && mode === "principal"
+    && capabilities.principalSourcingPublication === true
+    && permissions.includes("procurement-sourcing-publish");
+  const anyGoverned = capabilities.sourcingSourceDrafts || capabilities.principalSourcingSourceDrafts || publicationViewer;
   return <>
     {view === "list" && anyGoverned && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">
-      {capabilities.principalSourcingSourceDrafts && <Link to="/rfqs?source=principal-approved"><Button variant={governed && mode === "principal" ? "primary" : "secondary"}>From approved requests</Button></Link>}
-      {capabilities.sourcingSourceDrafts && <Link to="/rfqs?source=approved"><Button variant={governed && mode === "worker" ? "primary" : "secondary"}>{capabilities.principalSourcingSourceDrafts ? "Earlier approved request drafts" : "From approved requests"}</Button></Link>}
+      {(capabilities.principalSourcingSourceDrafts || publicationViewer) && <Link to="/rfqs?source=principal-approved"><Button variant={governed && mode === "principal" ? "primary" : "secondary"}>{publicationViewer ? "Assigned reviews" : "From approved requests"}</Button></Link>}
+      {capabilities.sourcingSourceDrafts && canReadWorkerSource && <Link to="/rfqs?source=approved"><Button variant={governed && mode === "worker" ? "primary" : "secondary"}>{capabilities.principalSourcingSourceDrafts ? "Earlier approved request drafts" : "From approved requests"}</Button></Link>}
       {capabilities.sourcingDraft && <Link to="/rfqs"><Button variant={!governed ? "primary" : "secondary"}>Ad hoc drafts</Button></Link>}
     </div>}
     {governed ? !enabled || !canReadGoverned || view === "editor" && (!canConvert || Boolean(id))

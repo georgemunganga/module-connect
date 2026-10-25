@@ -81,18 +81,19 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
-    || (approvalPath && (requestApprovalsAvailable(state.readiness.capabilities) || state.readiness.capabilities.orders
+    || (approvalPath && (requestApprovalsAvailable(state.readiness.capabilities) || state.readiness.capabilities.orders || state.readiness.capabilities.principalOrderGovernance
       || state.readiness.capabilities.invoiceOriginalUnitReview && state.readiness.permissions.some((permission) =>
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))))
-    || (sourcingPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
+    || (sourcingPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts
+      || state.readiness.capabilities.principalSourcingSourceDrafts || state.readiness.capabilities.principalSourcingPublication))
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
     || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
-    || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders))
-    || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
+    || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders || state.readiness.capabilities.principalDirectOrderDrafts))
+    || (receivingPath && (state.readiness.capabilities.principalReceiving || state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
     return <LiveReadiness.Provider value={state.readiness}>{requestPath || approvalPath

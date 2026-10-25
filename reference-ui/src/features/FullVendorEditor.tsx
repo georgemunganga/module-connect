@@ -11,10 +11,10 @@ import { VendorApiError, createVendorDraft, getVendorDraft, updateVendorDraft,
   type VendorChildReceipt, type VendorDetail, type VendorContactDraft, type VendorSiteDraft, type VendorQualificationDraft } from "../../../src/platform/procurement-vendors-api";
 const errorText = (error: unknown) => error instanceof Error ? error.message : "The vendor change was not confirmed.";
 export function FullVendorEditor() {
-  const readiness=useLiveReadiness(); const {selection}=useErpShell(); const {id}=useParams();
+  const readiness=useLiveReadiness(); const {selection,authEpoch}=useErpShell(); const {id}=useParams();
   if (!readiness) return <p role="alert">Choose a company before opening vendors.</p>;
   if (selection.entityId && selection.entityId!==readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <VendorEditorSession key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id ?? "new"}`} id={id} />;
+  return <VendorEditorSession key={`${authEpoch}:${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id ?? "new"}`} id={id} />;
 }
 function VendorEditorSession({id}:{id?:string}) {
   const readiness=useLiveReadiness()!; const company=readiness.legalEntityId; const navigate=useNavigate();
@@ -25,7 +25,7 @@ function VendorEditorSession({id}:{id?:string}) {
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   useEffect(()=>{if(!id)return;const abort=new AbortController();getVendorDraft(company,id,abort.signal).then(value=>{if(abort.signal.aborted)return;setModel(readVendorModel(value,readiness.defaultCurrencyCode));setDetail(value);}).catch(cause=>{if(!abort.signal.aborted)setError(errorText(cause));}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});return()=>abort.abort();},[company,id,readiness.defaultCurrencyCode]);
   const permitted=readiness.permissions.includes(id ? "procurement-vendor-edit" : "procurement-vendor-create");
-  const editable=!id || Boolean(detail && ["Draft","More Information Required"].includes(detail.status));
+  const editable=!id || detail?.canEdit === true;
   const disabled=!permitted || !editable || busy || blocked || loading || Boolean(id&&!detail);
   function change(value:VendorEditorModel,key:string){setModel(value);setDirty(current=>new Set(current).add(key));setSaved("");}
   function failed(cause:unknown){setError(errorText(cause));if(!(cause instanceof VendorApiError) || cause.status===0 || cause.status===409 || cause.status>=500)setBlocked(true);}
@@ -70,7 +70,7 @@ function VendorEditorSession({id}:{id?:string}) {
     {error&&<p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}{saved&&<p role="status" className="mb-4 text-sm">{saved}</p>}
     {blocked&&<div className="mb-4 space-y-2"><p className="text-sm">A change is unconfirmed or the vendor changed. Do not submit it again. Reload the saved record and compare; reloading discards unsaved form changes.</p>{id?<Button disabled={busy} variant="secondary" onClick={()=>void reconcile()}>Reload saved vendor and discard edits</Button>:<Link to="/vendors">Review vendor list before creating again</Link>}</div>}
     {loading?<p role="status">Loading vendor…</p>:<><VendorEditorForm model={model} editing={Boolean(id)} disabled={disabled} dirty={dirty} retainedAttributeKeys={new Set((detail?.attributes || []).map(row=>`${row.kind}:${row.key}`))} onChange={change} onSaveChild={(kind,row)=>void saveChild(kind,row)} onRemoveChild={(kind,row)=>void saveChild(kind,row,true)} />
-      <div className="mt-6 flex gap-3"><Button disabled={disabled} onClick={()=>void saveHeader()}>{busy?"Saving…":id?"Save vendor details":"Save draft"}</Button><Link to={id?`/vendors/${id}`:"/vendors"}><Button variant="secondary">Cancel</Button></Link></div>
+      <div className="mt-6 flex gap-3"><Button disabled={disabled} onClick={()=>void saveHeader()}>{busy?"Saving…":id?"Save vendor details":"Save draft"}</Button><Link to={id?`/vendors/${id}`:"/vendors"} onClick={event=>{if(busy||blocked){event.preventDefault();return;}if(dirty.size&& !window.confirm("Discard unsaved vendor form changes?"))event.preventDefault();}}><Button variant="secondary" disabled={busy||blocked}>Cancel</Button></Link></div>
       {id&&<p className="mt-3 text-sm text-muted-foreground">Save vendor details updates the header, custom fields, tags and remarks only. Save each contact, address and qualification separately. Saved-record removal remains available from the vendor details page.</p>}
     </>}
   </div>;
