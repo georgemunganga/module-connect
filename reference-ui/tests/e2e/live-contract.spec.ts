@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const companyId = "11111111-1111-4111-8111-111111111111";
-const workerId = "22222222-2222-4222-8222-222222222222";
+const branchId = "22222222-2222-4222-8222-222222222222";
+const actorId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const vendorId = "33333333-3333-4333-8333-333333333333";
 const contractId = "44444444-4444-4444-8444-444444444444";
 const capabilities = Object.fromEntries([
@@ -21,17 +22,24 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
   const cancellationReleased = new Promise<void>(resolve => { releaseCancellation = resolve; });
   let savedRate: Record<string, unknown> | null = null;
   let rateWrites = 0;
-  await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
+  await page.addInitScript(({ entityId, branch }) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })), { entityId: companyId, branch: branchId });
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
+    if (path.startsWith("/api/procurement/v1")) {
+      expect(request.headers()["x-shell-entity"]).toBe(companyId);
+      expect(request.headers()["x-shell-location"]).toBe(branchId);
+    }
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: actorId, isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1, tenantId: "amizo", principalId: actorId, organisationWide: false,
+      companies: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power", currency: "ZMW", isDefault: true }],
+      branches: [{ id: branchId, code: "HQ", name: "Main site", legalEntityId: companyId }] });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
-    if (path === "/api/hrm/admin/locations") return json({ items: [] });
-    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId: null, permissions: ["procurement-access", "procurement-contract-read", "procurement-contract-create", "procurement-contract-edit"], company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+    if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branchId, code: "HQ", name: "Main site", legalEntityId: companyId }] });
+    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [branchId], confined: true });
+    if (path === "/api/procurement/v1/context") return json({ principalId: actorId, tenantId: "amizo", legalEntityId: companyId, workerId: null, branch: { id: branchId, code: "HQ", name: "Main site" }, permissions: ["procurement-access", "procurement-contract-read", "procurement-contract-create", "procurement-contract-edit"], company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities: { ...capabilities, contractDraftRates: options.ratesEnabled === true } });
     if (path === "/api/procurement/v1/vendors") {
       const found = !options.noSupplier && (!options.searchOnly || new URL(request.url()).searchParams.get("search")?.toLowerCase().includes("copper"));
