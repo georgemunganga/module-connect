@@ -107,7 +107,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders || state.readiness.capabilities.principalDirectOrderDrafts))
-    || (receivingPath && (state.readiness.capabilities.principalReceiving || state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
+    || (receivingPath && (state.readiness.capabilities.principalGoodsReturnDrafts || state.readiness.capabilities.principalReceiving || state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
     return <LiveReadiness.Provider value={state.readiness}>{requestPath || approvalPath

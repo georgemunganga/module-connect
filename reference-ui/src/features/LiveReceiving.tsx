@@ -1,4 +1,5 @@
 import { receivingAdapter } from "./receiving-live-adapter";
+import { ReturnTabs } from "./LiveGoodsReturns";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Switch, Textarea } from "../components/ui";
@@ -49,6 +50,7 @@ function ReceivingList() {
     return () => controller.abort();
   }, [company, view, page, revision, allowed, status, api]);
   return <div className="p-5 sm:p-8"><PageHeader title="Purchase Receives" subtitle="Record deliveries, inspect goods and confirm completed services." actions={(principal || context.capabilities.receivingDrafts) && context.permissions.includes("procurement-receipt-create") && context.permissions.includes("procurement-receipt-view") ? <Link className="text-sm text-primary hover:underline" to={`${base}/new${principal ? "" : "?receivingProtocol=legacy"}`}>Add delivery</Link> : undefined} />
+    {context.capabilities.principalGoodsReturnDrafts === true && context.permissions.includes("procurement-return-read") && <ReturnTabs active="deliveries" />}
     {context.capabilities.principalReceiving && <Field label="Receiving records"><Select value={principal ? "current" : "legacy"} onChange={(event) => { const next = new URLSearchParams(search); if (event.target.value === "legacy") next.set("receivingProtocol", "legacy"); else next.delete("receivingProtocol"); setSearch(next); }}><option value="current">Current deliveries</option><option value="legacy" disabled={!legacyAvailable}>Earlier deliveries</option></Select></Field>}
     {!views.length ? <p role="alert">You do not have access to delivery records or assigned tasks.</p> : <>
       <div role="tablist" aria-label="Receiving responsibilities" className="mb-5 flex flex-wrap gap-3">{views.map((item) => <Button role="tab" key={item.code} aria-selected={view === item.code} variant={view === item.code ? "primary" : "secondary"} onClick={() => { setData(null); setView(item.code); setFilters({}); setSelected([]); setPreview(null); setToolNotice(""); setPage(1); }}>{item.label}</Button>)}</div>
