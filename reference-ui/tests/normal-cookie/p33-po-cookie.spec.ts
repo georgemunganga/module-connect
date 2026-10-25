@@ -192,6 +192,7 @@ test('workerless buyer creates, revises, reloads and cancels an internal purchas
     expect((revised.lines as Array<Record<string, unknown>>)[0].quantity).toBe('0.5');
 
     progress('cancel-internal-draft');
+    await page.getByRole('tab', { name: 'Overview' }).click();
     await page.getByRole('button', { name: 'Cancel internal draft' }).click();
     await page.getByRole('textbox', { name: 'Reason' }).fill('Private PO draft cancellation');
     const cancelledWaiting = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/${created.orderId}/principal-direct-cancel`)
@@ -227,7 +228,8 @@ test('workerless buyer creates, revises, reloads and cancels an internal purchas
         expect(revoked.status()).toBe(401);
         evidence.localSessionRevoked = true;
       } catch {
-        failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step;
+        if (!failed) evidence.failedStep = step;
+        failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE';
         evidence.localSessionRevoked = false; retain();
       }
     }
@@ -240,5 +242,5 @@ test('workerless buyer creates, revises, reloads and cancels an internal purchas
       { mode: 0o600, flag: 'wx' });
     retain();
   }
-  if (failed) throw new Error(`Normal-cookie P33 PO proof failed at ${step}; inspect protected typed result and owning-store evidence`);
+  if (failed) throw new Error(`Normal-cookie P33 PO proof failed at ${String(evidence.failedStep ?? step)}; inspect protected typed result and owning-store evidence`);
 });
