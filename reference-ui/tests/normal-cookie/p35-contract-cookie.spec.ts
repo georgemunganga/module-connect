@@ -167,7 +167,7 @@ test('buyer and independent reviewer complete an internal contract review with n
     progress('add-rate');
     await buyerPage.getByRole('button', { name: 'Add rate' }).click();
     await buyerPage.getByLabel('Description').fill('Browser review supply');
-    await buyerPage.getByLabel('Unit').fill('unit');
+    await buyerPage.getByLabel('Unit', { exact: true }).fill('unit');
     await buyerPage.getByLabel('Unit price').fill('5.1234');
     await buyerPage.getByLabel('Maximum quantity (optional)').fill('2.0001');
     const rateWait = buyerPage.waitForResponse(response => /\/contracts\/[^/]+\/rates$/.test(new URL(response.url()).pathname)
