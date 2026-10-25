@@ -19,7 +19,8 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
   onPage: (page: number) => void; onRefresh: () => void; action?: ReactNode;
   emptyTitle: string; emptyDescription: string; tabs?: boolean; serverQuery?: DirectoryServerQuery;
   sortComparators?: DirectorySortComparators; contextControls?: ReactNode; initialSort?: string;
-  exportCsv?: { allowed: boolean; busy: boolean; error: string; notice: string; onExport: (scope: ExportScope) => void };
+  exportCsv?: { allowed: boolean; selectedAllowed?: boolean; busy: boolean; error: string; notice: string;
+    onExport: (scope: ExportScope, selectedIds?: readonly string[]) => void };
 }) {
   const [query, setQuery] = useState(""), [serverInput, setServerInput] = useState(serverQuery?.search ?? "");
   const [sort, setSort] = useState(initialSort ?? (serverQuery ? "server" : "newest"));
@@ -60,16 +61,20 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
         onViewChange={serverQuery ? undefined : view => applyFilters({ ...filters, status: view === `All ${title}` ? "" : view })}
         showSavedView={!serverQuery}
         selectedCount={selection.length} onExport={exportCsv ? scope => {
+          if (loading || error) return;
+          if (scope === "selected" && (!exportCsv.selectedAllowed || !selection.length)) return;
           if (scope === "view" && Object.values(filters).some(Boolean)) return;
-          exportCsv.onExport(scope);
+          exportCsv.onExport(scope, scope === "selected" ? [...selection] : undefined);
         } : () => setNotice("Export is not connected for this directory.")}
         onRefresh={() => { setSelected([]); setPreviewId(null); onRefresh(); }} onResetWidths={() => setWidths({})} notify={setNotice}
         unavailableImportReason="Import is not available yet. Add records individually."
         unavailableExportReason={exportCsv ? !exportCsv.allowed ? "You do not have permission to export these records."
-          : exportCsv.busy ? "Preparing your CSV…" : undefined : "Export is not available for this page yet."}
+          : exportCsv.busy ? "Preparing your CSV…" : loading ? "Wait for the list to load."
+            : error ? "Refresh the list before exporting." : undefined : "Export is not available for this page yet."}
         unavailableAllExportReason={exportCsv ? undefined : "Only the current page is loaded."}
         unavailableViewExportReason={exportCsv && Object.values(filters).some(Boolean) ? "Clear page-only filters to export search results." : undefined}
-        unavailableSelectedExportReason={exportCsv ? "Selected export is not available yet." : undefined}
+        unavailableSelectedExportReason={exportCsv ? !exportCsv.selectedAllowed ? "Selected export is not available yet."
+          : !selection.length ? "Select records on this page first." : loading || error ? "Wait for the list to load successfully." : undefined : undefined}
         viewExportLabel={exportCsv ? "Search results (default order)" : "Export Current Page View"} />
       {action}</>} />
     {contextControls}
@@ -107,7 +112,7 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
         {loading && <p role="status" className="my-4">Loading {entity}…</p>}
       </div>
       {!loading && !error && <>
-        {selection.length > 0 && <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-5 py-3 text-sm"><span>{selection.length} selected on this page</span><span className="text-muted-foreground">Bulk changes and selected export are not available yet.</span><Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}
+        {selection.length > 0 && <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-5 py-3 text-sm"><span>{selection.length} selected on this page</span><span className="text-muted-foreground">{exportCsv?.selectedAllowed ? "Export selected records from the export menu. Bulk changes are not available yet." : "Bulk changes and selected export are not available yet."}</span><Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}
         {filtered.length ? <StandardDataTable rows={filtered} columns={columns} visibleColumns={visible} columnWidths={widths} clipText={clip}
           selected={selection} onSelectedChange={setSelected} onSort={setSort} onOpen={row => setPreviewId(row.id)} rowLabel={row => `Open ${row.number}`}
           renderCell={(row, column) => column.key === "number" ? <Link to={row.path} className="block text-primary"><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm">{row.title}</span></Link>

@@ -1,7 +1,7 @@
 import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 export type ScopedCsvKind = "vendors" | "items";
-export type ScopedCsvFilters = { search?: string; status?: string };
+export type ScopedCsvFilters = { search?: string; status?: string; ids?: readonly string[] };
 export type ScopedCsvFile = { blob: Blob; fileName: string };
 
 export class ScopedCsvExportError extends Error {
@@ -31,6 +31,14 @@ export async function fetchScopedCsv(kind: ScopedCsvKind, companyId: string,
   const query = new URLSearchParams();
   if (filters.search?.trim()) query.set("search", filters.search.trim());
   if (filters.status?.trim()) query.set("status", filters.status.trim());
+  if (filters.ids !== undefined) {
+    const ids = filters.ids.map(id => id.toLowerCase());
+    if (ids.length < 1 || ids.length > 100 || new Set(ids).size !== ids.length
+      || ids.some(id => !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id)
+        || id === "00000000-0000-0000-0000-000000000000") || query.size)
+      throw new ScopedCsvExportError(400, "Select up to 100 different records on this page and try again.");
+    query.set("ids", ids.sort().join(","));
+  }
   const suffix = query.size ? `?${query}` : "";
   let response: Response;
   try {
@@ -43,6 +51,8 @@ export async function fetchScopedCsv(kind: ScopedCsvKind, companyId: string,
     throw new ScopedCsvExportError(0, "The CSV export is unavailable. Check your connection and try again.");
   }
   if (!response.ok) {
+    if (response.status === 404 && filters.ids !== undefined)
+      throw new ScopedCsvExportError(404, "This selection is no longer available. Refresh the list and select the records again.");
     if (response.status === 422) {
       let code = "";
       try { code = String((await response.json() as { code?: unknown }).code ?? ""); } catch { /* Safe generic error below. */ }

@@ -7,6 +7,28 @@ const csvHeaders = { "Content-Type": "text/csv; charset=utf-8",
 afterEach(() => vi.unstubAllGlobals());
 
 describe("server scoped CSV export", () => {
+  it("exports selected IDs through the server and canonicalizes the exact set", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("\ufeffnumber,displayName\r\n", { headers: csvHeaders }));
+    vi.stubGlobal("fetch", fetch);
+    const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", b = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    await fetchScopedCsv("vendors", company, { ids: [b.toUpperCase(), a] }, new AbortController().signal);
+    expect(fetch.mock.calls[0][0]).toBe(`/api/procurement/v1/vendors/export?ids=${a}%2C${b}`);
+    expect(fetch.mock.calls[0][1].body).toBeUndefined();
+  });
+  it("never turns an empty, duplicate, excessive or malformed selection into All", async () => {
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    for (const ids of [[], [id, id.toUpperCase()], ["bad"], ["00000000-0000-0000-0000-000000000000"],
+      Array.from({ length: 101 }, (_, i) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, "0")}`)])
+      await expect(fetchScopedCsv("vendors", company, { ids }, new AbortController().signal)).rejects.toThrow("Select up to 100");
+    await expect(fetchScopedCsv("vendors", company, { ids: [id], search: "steel" }, new AbortController().signal)).rejects.toThrow("Select up to 100");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("asks for refresh when any selected record is unavailable without starting a download", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "selected-records-unavailable" }), { status: 404 })));
+    await expect(fetchScopedCsv("vendors", company, { ids: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"] }, new AbortController().signal))
+      .rejects.toThrow("Refresh the list");
+  });
   it("sends only server search/status under the company cookie and accepts a CSV attachment", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response("\ufeffnumber,displayName\r\n", { headers: csvHeaders }));
     vi.stubGlobal("fetch", fetch);

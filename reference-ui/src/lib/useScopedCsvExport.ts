@@ -18,14 +18,16 @@ export function useScopedCsvExport(kind: ScopedCsvKind, companyId: string, scope
     return () => { controller.current?.abort(); controller.current = null; };
   }, [scopeKey, allowed]);
 
-  async function onExport(scope: ExportScope) {
-    if (!currentAllowed.current || scope === "selected" || controller.current) return;
+  async function onExport(scope: ExportScope, selectedIds?: readonly string[]) {
+    if (!currentAllowed.current || controller.current) return;
+    if (scope === "selected" && !selectedIds?.length) { setError("Select records on this page first."); return; }
     const request = new AbortController();
     const requestedScope = scopeKey;
     controller.current = request;
     setBusy(true); setError(""); setNotice("");
     try {
-      const file = await fetchScopedCsv(kind, companyId, scope === "all" ? {} : viewFilters, request.signal);
+      const file = await fetchScopedCsv(kind, companyId, scope === "selected" ? { ids: [...selectedIds!] }
+        : scope === "all" ? {} : viewFilters, request.signal);
       if (!request.signal.aborted && currentAllowed.current && currentScope.current === requestedScope && controller.current === request) {
         beginScopedCsvDownload(file);
         setNotice("CSV download is starting.");
@@ -37,5 +39,5 @@ export function useScopedCsvExport(kind: ScopedCsvKind, companyId: string, scope
       if (controller.current === request) { controller.current = null; setBusy(false); }
     }
   }
-  return { allowed, onExport, busy, error, notice };
+  return { allowed, selectedAllowed: true, onExport, busy, error, notice };
 }
