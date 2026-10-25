@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const companyId = "11111111-1111-4111-8111-111111111111";
+const branchId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const workerId = "22222222-2222-4222-8222-222222222222";
 const vendorId = "33333333-3333-4333-8333-333333333333";
 const capabilities = Object.fromEntries([
@@ -29,14 +30,18 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: options.reviewer ? "Reviewer" : "Buyer", email: "buyer@example.test", roles: [options.adminViewOnly ? "erp_admin" : options.reviewer ? "procurement_manager" : "procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1,
+      tenantId: "amizo", principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organisationWide: false,
+      companies: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power", currency: "ZMW", isDefault: true }],
+      branches: [{ id: branchId, code: "HQ", name: "Lusaka", legalEntityId: companyId, type: "Headquarters" }] });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
-    if (path === "/api/hrm/admin/locations") return json({ items: [] });
+    if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branchId, name: "Lusaka", legalEntityId: companyId }] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId: options.adminViewOnly ? null : workerId, adminViewOnly: options.adminViewOnly || undefined,
       permissions: options.adminViewOnly ? ["procurement-access", "procurement-vendor-read"] : options.approveOnly
         ? ["procurement-access", "procurement-vendor-read", "procurement-vendor-approve"]
         : ["procurement-access", "procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit", "procurement-vendor-manage", "procurement-vendor-approve"],
-      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" }, branch: { id: branchId } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/vendors") {
       if (request.method() === "GET") {

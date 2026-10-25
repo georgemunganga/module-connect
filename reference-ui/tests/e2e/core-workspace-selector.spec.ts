@@ -5,12 +5,13 @@ const companyA = "22222222-2222-4222-8222-222222222222";
 const companyC = "33333333-3333-4333-8333-333333333333";
 const branchA = "44444444-4444-4444-8444-444444444444";
 const branchC = "55555555-5555-4555-8555-555555555555";
+const lowerBranchC = "00000000-0000-4000-8000-000000000001";
 const capabilities = ["vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
   "orders", "receiving", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft",
   "configurationDraft", "contractDraft", "sourcingDraft", "manualPaymentWorkflow"];
 
-async function setup(page: Page, coreStatus = 200) {
-  const seen: { path: string; company: string | undefined; all: string | undefined }[] = [];
+async function setup(page: Page, coreStatus = 200, multipleCompanyCBranches = false) {
+  const seen: { path: string; company: string | undefined; all: string | undefined; branch: string | undefined }[] = [];
   let adminCalls = 0;
   await page.route("**/api/**", route => {
     const request = route.request(), path = new URL(request.url()).pathname;
@@ -32,11 +33,12 @@ async function setup(page: Page, coreStatus = 200) {
       ],
       branches: [
         { id: branchA, code: "A1", name: "Company A branch", legalEntityId: companyA },
-        { id: branchC, code: "C1", name: "Company C branch", legalEntityId: companyC },
+        { id: branchC, code: "HQ", name: "Company C headquarters", legalEntityId: companyC, type: "Headquarters" },
+        ...(multipleCompanyCBranches ? [{ id: lowerBranchC, code: "C1", name: "Other permitted C site", legalEntityId: companyC, type: "Branch" }] : []),
       ],
     }, coreStatus);
     if (path === "/api/procurement/v1/context") {
-      seen.push({ path, company: headers["x-shell-entity"], all: headers["x-shell-branch-scope"] });
+      seen.push({ path, company: headers["x-shell-entity"], all: headers["x-shell-branch-scope"], branch: headers["x-shell-location"] });
       const company = headers["x-shell-entity"] || companyC;
       return json({ tenantId: "synthetic", legalEntityId: company, principalId: principal,
         workerId: null, branch: headers["x-shell-branch-scope"] === "all" ? null : { id: branchC },
@@ -48,7 +50,7 @@ async function setup(page: Page, coreStatus = 200) {
       legalEntityId: headers["x-shell-entity"] || companyC, schemaReady: true,
       capabilities: Object.fromEntries(capabilities.map(key => [key, true])) });
     if (path === "/api/procurement/v1/manual-payments") {
-      seen.push({ path, company: headers["x-shell-entity"], all: headers["x-shell-branch-scope"] });
+      seen.push({ path, company: headers["x-shell-entity"], all: headers["x-shell-branch-scope"], branch: headers["x-shell-location"] });
       return json({ items: [], total: 0, page: 1, pageSize: 25 });
     }
     return json({ code: "not-found" }, 404);
@@ -76,4 +78,17 @@ test("Core selector denial never falls back to broad administrator choices", asy
   await expect(page.getByText("Your ERP account could not open verified organisation choices", { exact: false })).toBeVisible();
   expect(scope.adminCalls()).toBe(0);
   expect(scope.seen).toEqual([]);
+});
+
+test("the unique Core headquarters is the default before explicit All permitted branches", async ({ page }) => {
+  const scope = await setup(page, 200, true);
+  await page.goto("/procurement/workspace/payments");
+  await expect.poll(() => scope.seen.some(request => request.path === "/api/procurement/v1/context"
+    && request.company === companyC && request.branch === branchC && request.all === undefined)).toBe(true);
+  expect(scope.seen.some(request => request.branch === lowerBranchC)).toBe(false);
+  await page.getByRole("button", { name: "Organisation context" }).click();
+  await page.getByRole("button", { name: "Company C", exact: true }).locator("..")
+    .getByRole("button", { name: "All permitted branches" }).click();
+  await expect.poll(() => scope.seen.some(request => request.path === "/api/procurement/v1/context"
+    && request.company === companyC && request.all === "all" && request.branch === undefined)).toBe(true);
 });
