@@ -94,10 +94,23 @@ async function readyPage(context: BrowserContext, route: string) {
   await page.goto('/procurement/workspace' + route, { waitUntil: 'domcontentloaded' });
   return page;
 }
-async function saved(page: Page, pathname: string, action: () => Promise<void>) {
+async function recordPost(label: string, response: Response) {
+  evidence[`${label}HttpStatus`] = response.status();
+  const body = response.request().postDataJSON() as Record<string, unknown>;
+  const version = body.expectedContractVersion ?? body.contractVersion;
+  if (Number.isSafeInteger(version)) evidence[`${label}RequestVersion`] = version;
+  try {
+    const reply = await response.json() as Record<string, unknown>;
+    if (typeof reply.code === 'string' && /^[A-Za-z0-9_]{1,80}$/.test(reply.code))
+      evidence[`${label}SafeCode`] = reply.code;
+  } catch { /* The HTTP status remains authoritative. */ }
+  retain();
+}
+async function saved(page: Page, pathname: string, action: () => Promise<void>, label: string) {
   const waited = page.waitForResponse(response => new URL(response.url()).pathname === pathname
     && response.request().method() === 'POST', { timeout: 90_000 });
   await action(); const response = await waited;
+  await recordPost(label, response);
   expect([200, 201]).toContain(response.status());
   return response;
 }
@@ -193,15 +206,20 @@ test('buyer and independent reviewer complete an internal contract review with n
     const rateWait = buyerPage.waitForResponse(response => /\/contracts\/[^/]+\/rates$/.test(new URL(response.url()).pathname)
       && response.request().method() === 'POST');
     await buyerPage.getByRole('button', { name: 'Save rate' }).click();
-    const rateResponse = await rateWait; expect([200, 201]).toContain(rateResponse.status());
+    const rateResponse = await rateWait;
+    await recordPost('rate', rateResponse);
+    expect([200, 201]).toContain(rateResponse.status());
     expect(rateResponse.request().postDataJSON()).toMatchObject({ contractVersion: created.version,
       rate: { unitPrice: '5.1234', maximumQuantity: '2.0001' } });
     evidence.rateBody = rateResponse.request().postData(); retain();
+    await expect(buyerPage.getByRole('button', { name: 'Save rate' })).toHaveCount(0);
+    await expect(buyerPage.getByRole('cell', { name: 'Browser review supply' })).toBeVisible();
+    await expect(buyerPage.getByRole('button', { name: 'Submit for internal review' })).toBeEnabled();
     const beforeSubmit = await contractState(buyerContext, contractId, 'Draft');
     const submitPath = `/api/procurement/v1/contracts/${contractId}/internal-review/submit`;
     progress('submit');
     const submit = await saved(buyerPage, submitPath,
-      () => buyerPage.getByRole('button', { name: 'Submit for internal review' }).click());
+      () => buyerPage.getByRole('button', { name: 'Submit for internal review' }).click(), 'firstSubmit');
     const first = capture(submit, ['expectedContractVersion', 'reviewBranchId']);
     expect(first.body).toMatchObject({ expectedContractVersion: beforeSubmit, reviewBranchId: fixture.branchId });
     const firstAck = await submit.json() as Record<string, unknown>;
@@ -229,7 +247,7 @@ test('buyer and independent reviewer complete an internal contract review with n
     await reviewerPage.getByLabel('Reason for Return or Reject').fill('Correct the private browser terms');
     const decidePath = `/api/procurement/v1/contracts/${contractId}/internal-review/assignments/${assignmentId}/decide`;
     const returned = await saved(reviewerPage, decidePath,
-      () => reviewerPage.getByRole('button', { name: 'Return for correction' }).click());
+      () => reviewerPage.getByRole('button', { name: 'Return for correction' }).click(), 'returnDecision');
     const returnCommand = capture(returned,
       ['expectedContractVersion', 'expectedCaseVersion', 'expectedAssignmentVersion', 'action', 'reason']);
     expect(returnCommand.body).toMatchObject({ action: 'Return', reason: 'Correct the private browser terms',
@@ -246,7 +264,7 @@ test('buyer and independent reviewer complete an internal contract review with n
     await buyerPage.getByLabel('Correction reason').fill('Revised the private browser terms');
     const correctionPath = `/api/procurement/v1/contracts/${contractId}/internal-review/correct`;
     const correction = await saved(buyerPage, correctionPath,
-      () => buyerPage.getByRole('button', { name: 'Return to draft for correction' }).click());
+      () => buyerPage.getByRole('button', { name: 'Return to draft for correction' }).click(), 'correction');
     const corrected = capture(correction, ['expectedContractVersion', 'reason']);
     expect(corrected.body).toMatchObject({ expectedContractVersion: returnedVersion,
       reason: 'Revised the private browser terms' });
@@ -269,7 +287,7 @@ test('buyer and independent reviewer complete an internal contract review with n
     const beforeResubmit = await contractState(buyerContext, contractId, 'Draft');
     progress('resubmit');
     const resubmitted = await saved(buyerPage, submitPath,
-      () => buyerPage.getByRole('button', { name: 'Submit for internal review' }).click());
+      () => buyerPage.getByRole('button', { name: 'Submit for internal review' }).click(), 'secondSubmit');
     const second = capture(resubmitted, ['expectedContractVersion', 'reviewBranchId']);
     if (second.key === first.key) throw new Error('New submission must use its own command key');
     expect(second.body).toMatchObject({ expectedContractVersion: beforeResubmit, reviewBranchId: fixture.branchId });
@@ -297,7 +315,7 @@ test('buyer and independent reviewer complete an internal contract review with n
       contractVersion: secondPendingVersion, ReviewBranchId: fixture.branchId });
     const approved = await saved(reviewerPage,
       `/api/procurement/v1/contracts/${contractId}/internal-review/assignments/${finalAssignmentId}/decide`,
-      () => reviewerPage.getByRole('button', { name: 'Approve internal review' }).click());
+      () => reviewerPage.getByRole('button', { name: 'Approve internal review' }).click(), 'approveDecision');
     const approveCommand = capture(approved,
       ['expectedContractVersion', 'expectedCaseVersion', 'expectedAssignmentVersion', 'action', 'reason']);
     expect(approveCommand.body).toMatchObject({ action: 'Approve', reason: null,

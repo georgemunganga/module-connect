@@ -15,10 +15,11 @@ const blank = (): ContractRateDraft => ({
 const explain = (cause: unknown) => cause instanceof Error ? cause.message : "The rate result is unavailable.";
 
 /** This panel extends the imported contract detail; it never supplies approval or release authority. */
-export function ContractDraftRates({ companyId, contract, enabled, canEdit, scopeKey, onFreshContract }: {
+export function ContractDraftRates({ companyId, contract, enabled, canEdit, scopeKey, onFreshContract, onSafetyChange }: {
   companyId: string; contract: ContractDetail; enabled: boolean; canEdit: boolean;
   scopeKey: string;
   onFreshContract: (value: ContractDetail) => void;
+  onSafetyChange: (safe: boolean) => void;
 }) {
   const scope = scopeKey;
   const currentScope = useRef(scope);
@@ -32,6 +33,11 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, scop
   const [draft, setDraft] = useState<ContractRateDraft>(blank);
   const [removing, setRemoving] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const rates = loaded?.scope === scope ? loaded.rates : null;
+  useEffect(() => {
+    onSafetyChange(!enabled || (!busy && !loading && !blocked && rates !== null
+      && rates.contractVersion === contract.version));
+  }, [enabled, busy, loading, blocked, rates, contract.version, onSafetyChange]);
 
   useEffect(() => {
     currentScope.current = scope;
@@ -54,6 +60,7 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, scop
   async function review() {
     if (busy) return;
     const captured = scope;
+    onSafetyChange(false);
     setLoading(true); setError("");
     try {
       const [freshContract, rates] = await Promise.all([
@@ -73,7 +80,6 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, scop
       if (currentScope.current === captured) { setError(explain(cause)); setBlocked(true); }
     } finally { if (currentScope.current === captured) setLoading(false); }
   }
-  const rates = loaded?.scope === scope ? loaded.rates : null;
   const writable = enabled && canEdit && contract.status === "Draft"
     && contract.draftVersion?.status === "Draft" && !busy && !loading && !blocked
     && rates !== null && rates.contractVersion === contract.version;
@@ -93,6 +99,7 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, scop
     const current = editing === "new" ? null : rates.items.find((row) => row.id === editing);
     if (editing !== "new" && (!current || current.status !== "Active")) return;
     const captured = scope;
+    onSafetyChange(false);
     setBusy(true); setError("");
     try {
       contractRateJournal.claim(window.sessionStorage, captured);
@@ -115,6 +122,7 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, scop
     const current = rates.items.find((row) => row.id === removing);
     if (!current || current.status !== "Active") return;
     const captured = scope;
+    onSafetyChange(false);
     setBusy(true); setError("");
     try {
       contractRateJournal.claim(window.sessionStorage, captured);
