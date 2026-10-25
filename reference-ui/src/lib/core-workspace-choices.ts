@@ -5,8 +5,16 @@ export type CoreWorkspaceChoices = {
   principalId: string;
   organisationWide: boolean;
   companies: { id: string; code: string; registeredName: string; currency: string; isDefault: boolean }[];
-  branches: { id: string; code: string; name: string; legalEntityId: string }[];
+  branches: { id: string; code: string; name: string; legalEntityId: string; type?: string | null }[];
 };
+
+/** Uses only branches already admitted by the current Core workspace response. */
+export function configuredDefaultBranch(branches: readonly { id: string; legalEntityId: string; type?: string | null }[], companyId: string): string | null {
+  const permitted = branches.filter(branch => branch.legalEntityId === companyId);
+  const headquarters = permitted.filter(branch => branch.type?.toLowerCase() === "headquarters");
+  if (headquarters.length === 1) return headquarters[0].id;
+  return permitted.length === 1 ? permitted[0].id : null;
+}
 
 const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -29,7 +37,8 @@ export function parseCoreWorkspaceChoices(value: unknown, currentPrincipalId: st
       && typeof company.currency === "string" && /^[A-Z]{3}$/.test(company.currency)
       && typeof company.isDefault === "boolean")
     || !branches.every(branch => object(branch) && canonicalScopeId(branch.id)
-      && label(branch.code) && label(branch.name) && canonicalScopeId(branch.legalEntityId)))
+      && label(branch.code) && label(branch.name) && canonicalScopeId(branch.legalEntityId)
+      && (branch.type === undefined || branch.type === null || label(branch.type))))
     throw new Error("ERP organisation choices could not be verified.");
   const companyIds = new Set(companies.map(company => company.id));
   if (companyIds.size !== companies.length || companies.filter(company => company.isDefault).length > 1

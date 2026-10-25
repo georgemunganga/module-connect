@@ -29,6 +29,14 @@ describe("Procurement requests use Core shell scope", () => {
       .toEqual({ "X-Shell-Entity": company });
   });
 
+  it("distinguishes unset from explicit All and rejects contradictory branch scope", () => {
+    expect(procurementScopeHeaders(company, storage(company, ""))).toEqual({ "X-Shell-Entity": company });
+    expect(procurementScopeHeaders(company, { getItem: () => JSON.stringify({ entityId: company,
+      branch: "", branchScope: "all" }) })).toEqual({ "X-Shell-Entity": company, "X-Shell-Branch-Scope": "all" });
+    expect(() => procurementScopeHeaders(company, { getItem: () => JSON.stringify({ entityId: company,
+      branch, branchScope: "all" }) })).toThrow("cannot also select a branch");
+  });
+
   const adapters = [
     ["budget", () => listBudgetQueue(company)],
     ["catalog", () => listPublishedCatalog(company)],

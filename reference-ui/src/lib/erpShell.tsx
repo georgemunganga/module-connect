@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useStat
 import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../shared/branding";
 import { ERP_SHELL_STORAGE_KEY } from "../../../shared/shell-scope";
 import { canonicalScopeId, resolveLegacyBranchSelection } from "./legacy-branch-selection";
-import { parseCoreWorkspaceChoices } from "./core-workspace-choices";
+import { configuredDefaultBranch, parseCoreWorkspaceChoices } from "./core-workspace-choices";
 
 type Branding = {
   displayName: string;
@@ -28,8 +28,8 @@ type Branding = {
 };
 
 type Entity = { id: string; name: string; code: string };
-type Branch = { id: string; name: string; legalEntityId: string };
-type ShellSelection = { entityId?: string; branch?: string; [key: string]: unknown };
+type Branch = { id: string; name: string; legalEntityId: string; type?: string | null };
+type ShellSelection = { entityId?: string; branch?: string; branchScope?: "all"; [key: string]: unknown };
 type ErpShellContext = {
   authEpoch: number;
   branding: Branding | null;
@@ -43,6 +43,7 @@ type ErpShellContext = {
   assignedRoles: string[];
   selectEntity: (id: string) => void;
   selectBranch: (id: string, entityId: string) => void;
+  selectAllBranches: (entityId: string) => void;
 };
 
 const SHELL_KEY = ERP_SHELL_STORAGE_KEY;
@@ -86,7 +87,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const [lookupDenied, setLookupDenied] = useState(false);
   const [selectorDenied, setSelectorDenied] = useState(false);
   const [verifiedSelection, setVerifiedSelection] = useState<{ key: string; value: VerifiedOrganisationContext } | null>(null);
-  const verifiedKey = JSON.stringify([authEpoch, selection.entityId ?? "", selection.branch ?? ""]);
+  const verifiedKey = JSON.stringify([authEpoch, selection.entityId ?? "", selection.branch ?? "", selection.branchScope ?? ""]);
   const currentVerifiedKey = useRef(verifiedKey); currentVerifiedKey.current = verifiedKey;
   const verifiedContext = verifiedSelection?.key === verifiedKey ? verifiedSelection.value : null;
 
@@ -199,15 +200,19 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
           setEntities(choices.companies.map(company => ({ id: company.id,
             name: company.registeredName, code: company.code })));
           setBranches(choices.branches.map(branch => ({ id: branch.id,
-            name: branch.name, legalEntityId: branch.legalEntityId })));
+            name: branch.name, legalEntityId: branch.legalEntityId, type: branch.type })));
           setLookupDenied(false); setSelectorDenied(false); setContextAvailable(true);
           const saved = readSelection();
-          if (!saved.entityId) {
-            const preferred = choices.companies.find(company => company.isDefault);
+          if (!saved.entityId || !saved.branch && saved.branchScope !== "all") {
+            const preferred = saved.entityId
+              ? choices.companies.find(company => company.id === saved.entityId)
+              : choices.companies.find(company => company.isDefault);
             if (preferred) {
-              const next = { ...saved, entityId: preferred.id, branch: "" };
+              const defaultBranch = configuredDefaultBranch(choices.branches, preferred.id);
+              const next = { ...saved, entityId: preferred.id,
+                branch: defaultBranch ?? "", branchScope: defaultBranch ? undefined : "all" };
               try { localStorage.setItem(SHELL_KEY, JSON.stringify(next)); setStorageFailure(null); setSelection(next); }
-              catch { setStorageFailure(JSON.stringify([epoch, saved.entityId ?? "", saved.branch ?? ""])); }
+              catch { setStorageFailure(JSON.stringify([epoch, saved.entityId ?? "", saved.branch ?? "", saved.branchScope ?? ""])); }
             }
           }
           return;
@@ -270,15 +275,18 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [lookupDenied, verifiedKey, selection.entityId, selection.branch, authEpoch]);
 
-  const selectionKey = JSON.stringify([authEpoch, selection.entityId ?? "", selection.branch ?? ""]);
+  const selectionKey = JSON.stringify([authEpoch, selection.entityId ?? "", selection.branch ?? "", selection.branchScope ?? ""]);
   const resolution = resolveLegacyBranchSelection(selection, branches,
     contextAvailable ? "ready" : lookupFinished ? "unavailable" : "loading");
   const failedStorage = storageFailure === selectionKey;
   const validSelection = !contextAvailable || (!selection.entityId || entities.some(entity => entity.id === selection.entityId))
     && (!selection.branch || branches.some(branch => branch.id === selection.branch
-      && branch.legalEntityId === selection.entityId));
+      && branch.legalEntityId === selection.entityId))
+    && (selection.branchScope === undefined || selection.branchScope === "all")
+    && !(selection.branchScope === "all" && selection.branch);
   const procurementScopeStatus = !lookupFinished ? "resolving"
     : failedStorage || selectorDenied || !validSelection ? "selection-required"
+    : !canonicalScopeId(selection.branch) && selection.branchScope !== "all" ? "selection-required"
     : resolution.kind === "ready" ? "ready" : resolution.kind === "waiting" || resolution.kind === "canonicalize" ? "resolving" : "selection-required";
   const scopeMessage = selectorDenied ? "Your ERP account could not open verified organisation choices. Sign in again or contact your administrator."
     : failedStorage ? "Your branch could not be saved in this browser. Allow local storage, then choose your branch again."
@@ -301,8 +309,13 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   };
   const value = useMemo<ErpShellContext>(() => ({
     authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, verifiedContext, assignedRoles,
-    selectEntity: (id) => updateSelection({ ...selection, entityId: id, branch: "" }),
-    selectBranch: (id, entityId) => updateSelection({ ...selection, entityId, branch: id }),
+    selectEntity: (id) => {
+      const defaultBranch = configuredDefaultBranch(branches, id);
+      updateSelection({ ...selection, entityId: id,
+        branch: defaultBranch ?? "", branchScope: defaultBranch ? undefined : "all" });
+    },
+    selectBranch: (id, entityId) => updateSelection({ ...selection, entityId, branch: id, branchScope: undefined }),
+    selectAllBranches: (entityId) => updateSelection({ ...selection, entityId, branch: "", branchScope: "all" }),
   }), [authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, verifiedContext, assignedRoles]);
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }

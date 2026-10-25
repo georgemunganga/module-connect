@@ -15,7 +15,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const { selection,authEpoch,procurementScopeStatus } = useErpShell();
   const location = useLocation();
   const paymentPath = /^\/payments(?:\/|$)/.test(location.pathname);
-  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",procurementScopeStatus,paymentPath]);
+  const readinessKey=JSON.stringify([authEpoch,selection.entityId ?? "",selection.branch ?? "",selection.branchScope ?? "",procurementScopeStatus,paymentPath]);
   const currentKey=useRef(readinessKey);currentKey.current=readinessKey;
   const [storedState, setState] = useState<{ key:string; readiness?: ProcurementReadiness; error?: string }>({key:""});
   // Never render old scope readiness for even the render before passive effect cleanup.
@@ -32,7 +32,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
           setState({ key:capturedKey,error: error instanceof ProcurementLiveError ? error.message : "Procurement data is not ready. Please try again later." });
       });
     return () => controller.abort();
-  }, [selection.entityId, selection.branch,authEpoch,readinessKey,procurementScopeStatus,paymentPath]);
+  }, [selection.entityId, selection.branch,selection.branchScope,authEpoch,readinessKey,procurementScopeStatus,paymentPath]);
 
   if (!liveMode) return <>{children}</>;
   if (procurementScopeStatus !== "ready") return <>{scopeUnavailable ?? <ProcurementScopeSelectionState />}</>;

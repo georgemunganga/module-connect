@@ -37,7 +37,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("manual payment API client", () => {
   it("marks an explicitly selected company's All payment scope without changing transaction branch", async () => {
-    let selected: Record<string, unknown> = { entityId: company, branch: "" };
+    let selected: Record<string, unknown> = { entityId: company, branch: "", branchScope: "all" };
     identity = { tenantId: "test-tenant", legalEntityId: company, principalId: principal,
       branchId: null, authEpoch: 1 };
     vi.stubGlobal("localStorage", { getItem: () => JSON.stringify(selected) });
