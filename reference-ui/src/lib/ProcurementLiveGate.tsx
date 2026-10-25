@@ -54,6 +54,16 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const configurationSettingsPath = /^\/settings(?:\/|$)/.test(location.pathname);
   const newRecord = /\/new\/?$/.test(location.pathname);
   const editRecord = /\/[^/]+\/edit\/?$/.test(location.pathname);
+  // Only routes with a reviewed server All contract enter live content. The
+  // shell stays available so the operator can choose a branch for other work.
+  const allReadSupported = vendorPath || itemPath || paymentPath
+    || requestPath && !newRecord && !editRecord
+    || planPath && !newRecord && !editRecord
+    || contractPath && !contractReviewPath && !newRecord && !editRecord;
+  if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
+    const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
+    return blockedShell ? blockedShell(chooseBranch) : chooseBranch;
+  }
   const permission = state.readiness?.permissions ?? [];
   const permits = (read: string, create: string, edit: string) => permission.includes(newRecord ? create : editRecord ? edit : read);
   const deniedCrud = vendorPath && !permits("procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit")
