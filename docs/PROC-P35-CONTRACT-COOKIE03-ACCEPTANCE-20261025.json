@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS_PRIVATE_P35_COOKIE_E03_OWNER_CORE_AND_DOMAIN_AUDIT_SUPPLEMENT",
+  "sourceAppAndProof": "1b5354194cadccbac74bebf8611ef185ae22a464",
+  "mergedUi": "13efbaf6908408aa3dfb30c6b2fd2d263b5854fe",
+  "mergedTool": "ea2065ac30688f7f8a50195f3451df15b4125a44",
+  "mockedCasesPassedAcrossTwoBoundedRuns": 50,
+  "additionalFocusedRegressionsPassed": 2,
+  "firstFullRunTimedOutAfter40Passes": true,
+  "remaining10PassedSeparatelySameSource": true,
+  "typescriptAppAndProofPassed": true,
+  "freshViteBuildPassed": true,
+  "actualNormalCookieBrowserCasesPassed": 1,
+  "actualNativeHttpObservations": 138,
+  "bothBrowserSessionsRevoked": true,
+  "independentOwnerSupplementPassed": true,
+  "erpAcceptanceFile": "docs/procurement/release/P35-NORMAL-COOKIE03-ACCEPTANCE-20261025.json",
+  "erpAcceptanceFileSha256": "5e8c06da9d9e1d186700d99baf74cf10676ff1e3d8bb02be679b5c35550989ee",
+  "scope": "Contract draft/rate/internal review Return/correction/resubmit/Approve; no signatures, activation, framework execution or external-ledger effects. Original failed runs retained; exact Core bootstrap/logout and named domain audits separately verified.",
+  "productionDeployment": false,
+  "moduleComplete": false
+}
