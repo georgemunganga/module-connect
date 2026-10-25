@@ -110,17 +110,20 @@ export async function listOwnContractRates(companyId: string, contractId: string
   return value as ContractRates;
 }
 export async function getOwnContractRate(companyId: string, contractId: string, rateId: string,
-  signal?: AbortSignal): Promise<ContractRateResult> =>
-  verified(await call(companyId, path(contractId, rateId), { signal }), contractId, undefined, rateId);
+  signal?: AbortSignal): Promise<ContractRateResult> {
+  return verified(await call(companyId, path(contractId, rateId), { signal }), contractId, undefined, rateId);
+}
 export async function addOwnContractRate(companyId: string, contractId: string,
-  contractVersion: number, input: ContractRateDraft): Promise<ContractRateResult> =>
-  verified(await call(companyId, path(contractId), { method: "POST",
+  contractVersion: number, input: ContractRateDraft): Promise<ContractRateResult> {
+  return verified(await call(companyId, path(contractId), { method: "POST",
     body: JSON.stringify({ contractVersion, rate: checked(input) }) }), contractId, contractVersion + 1);
+}
 export async function updateOwnContractRate(companyId: string, contractId: string, rateId: string,
-  contractVersion: number, rateVersion: number, input: ContractRateDraft): Promise<ContractRateResult> =>
-  verified(await call(companyId, path(contractId, rateId), { method: "PUT",
+  contractVersion: number, rateVersion: number, input: ContractRateDraft): Promise<ContractRateResult> {
+  return verified(await call(companyId, path(contractId, rateId), { method: "PUT",
     body: JSON.stringify({ contractVersion, rateVersion, rate: checked(input) }) }),
   contractId, contractVersion + 1, rateId, rateVersion + 1);
+}
 export async function removeOwnContractRate(companyId: string, contractId: string, rateId: string,
   contractVersion: number, rateVersion: number, reason: string): Promise<ContractRateResult> {
   if (!reason.trim() || reason.trim().length > 1000)
