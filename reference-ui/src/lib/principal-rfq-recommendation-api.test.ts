@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ERP_SHELL_STORAGE_KEY } from "../../../shared/shell-scope";
 import { openedRecommendationRounds, recommendationSource, recommendationCommand, recommendationAck,
-  recommendationDetail, recommendationLines, recoverRecommendation, saveRecommendation } from "./principal-rfq-recommendation-api";
+  recommendationDetail, recommendationLines, recommendationMatchesSavedDetail, ownRecommendations,
+  recoverRecommendation, saveRecommendation } from "./principal-rfq-recommendation-api";
 
 const id = (n: number) => `${String(n).padStart(8, "0")}-1111-4111-8111-111111111111`;
 const company = id(1), branch = id(2), round = id(3), offer = id(4), line = id(5), draft = id(6), key = id(7);
@@ -68,5 +69,26 @@ describe("purpose-scoped recommendation adapter", () => {
     const transport = vi.fn(); vi.stubGlobal("fetch", transport);
     await expect(recommendationSource(company, round)).rejects.toThrow(/Choose a permitted branch/);
     expect(transport).not.toHaveBeenCalled();
+  });
+  it("pages all maker-owned drafts rather than treating a valid second draft as corruption", async () => {
+    branchSelected();vi.stubGlobal("fetch",vi.fn(async()=>json({items:[
+      {draftId:draft,roundId:round,revision:1,revisionId:id(9),snapshotSha256:hash,state:"Draft",canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false},
+      {draftId:id(10),roundId:round,revision:3,revisionId:id(11),snapshotSha256:hash,state:"Draft",canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false},
+    ],total:27,offset:0,limit:25})));
+    const page=await ownRecommendations(company,round);
+    expect(page.items.map(item=>item.draftId)).toEqual([draft,id(10)]);
+    expect(page.hasMore).toBe(true);
+  });
+  it("binds the original-key receipt to every saved line independent of order or trailing decimal zeros", () => {
+    const command=recommendationCommand(round,null,0,null,[selected[0],
+      {offerId:id(10),sourcingLineId:id(11),quantityExact:"1.0000",proposedValueExact:"2.00000000",rationale:"Other offer"}],key);
+    const ack={draftId:draft,roundId:round,revisionId:id(9),revision:1,state:"Draft" as const,snapshotSha256:hash,
+      awardCreatedByThisCommand:false as const,purchaseOrderCreatedByThisCommand:false as const};
+    const detail={draftId:draft,roundId:round,currentRevision:1,currentRevisionId:id(9),currentSnapshotSha256:hash,
+      lines:[{offerId:id(10),sourcingLineId:id(11),quantityExact:"1",proposedValueExact:"2",rationale:"Other offer"},selected[0]],
+      revisions:[{id:id(9),revision:1,recordedAt:"2026-10-25T10:00:00Z",snapshotSha256:hash}]};
+    expect(recommendationMatchesSavedDetail(command,ack,detail)).toBe(true);
+    expect(recommendationMatchesSavedDetail(command,ack,{...detail,lines:[{...detail.lines[0],proposedValueExact:"3"},detail.lines[1]]})).toBe(false);
+    expect(recommendationMatchesSavedDetail(command,ack,{...detail,currentRevisionId:id(12)})).toBe(false);
   });
 });

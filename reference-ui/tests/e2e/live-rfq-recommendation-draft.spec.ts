@@ -10,9 +10,10 @@ const sha="a".repeat(64), source={roundId:round,unsealingId:id(9),rfqTitle:"Veri
   canSubmit:false,awardAvailable:false,purchaseOrderAvailable:false};
 const required=Object.fromEntries(["vendorDraft","itemDraft","requestDraft","approvals","sourcing","contracts","orders","receiving",
   "invoiceValidation","financeHandoff","supplierPortal","planningDraft","configurationDraft","contractDraft","sourcingDraft"].map(key=>[key,false]));
-async function fixture(page:Page,{unavailable=false,lost=false,revoked=false,all=false,unverified=false,stale=false,revokedAtSave=false,wrongBranch=false}={}){
+async function fixture(page:Page,{unavailable=false,lost=false,revoked=false,all=false,unverified=false,stale=false,revokedAtSave=false,wrongBranch=false,
+  multiple=false,unprocessableOnce=false,afterAckDetailFails=false,wrongAck=false,wrongDetail=false}={}){
   const writes:{key:string;body:Record<string,unknown>}[]=[], reads:string[]=[];
-  const receipts=new Map<string,unknown>();let saved=false,version=0,hash=sha,interrupted=false;
+  const receipts=new Map<string,unknown>();let saved=multiple,version=multiple?1:0,hash=sha,interrupted=false,rejected=false,detailFailed=false;
   await page.addInitScript(({company,branch,all})=>localStorage.setItem("erp.shell.state.v1",JSON.stringify(all?{entityId:company,branchScope:"all"}:{entityId:company,branch})),{company,branch,all});
   await page.route("**/api/**",async route=>{
     const request=route.request(),url=new URL(request.url()),routePath=url.pathname,method=request.method();
@@ -39,14 +40,18 @@ async function fixture(page:Page,{unavailable=false,lost=false,revoked=false,all
         openedAt:"2026-10-25T10:00:00Z",unsealingId:id(9)}],total:1,offset:0,limit:3,
         priceReadRequiresRetainedProof:true,evaluationAvailable:false,awardAvailable:false,purchaseOrderAvailable:false});
       if(routePath===api+`/commercial-rounds/${round}/recommendation-source`)return unverified||wrongBranch?json({message:"Not available"},wrongBranch?404:409):json(source);
-      if(routePath===api+`/commercial-rounds/${round}/recommendation-drafts/own`)return json({items:saved?[{draftId:draft,roundId:round,revision:version,
-        revisionId,snapshotSha256:hash,state:"Draft",canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false}]:[],
-        total:saved?1:0,offset:0,limit:25});
-      if(routePath===api+`/commercial-rounds/${round}/recommendation-drafts/${draft}`)return json({draftId:draft,roundId:round,state:"Draft",
-        currentRevision:version,currentRevisionId:revisionId,currentSnapshotSha256:hash,
-        lines:[{offerId:offer,supplierId:id(11),sourcingLineId:line,quantityExact:"0.0001",proposedValueExact:"0.00000001",currencyCode:"ZMW",rationale:"Human comparison"}],
-        revisions:Array.from({length:version},(_,index)=>({id:revisionId,revision:index+1,recordedAt:"2026-10-25T10:00:00Z",snapshotSha256:hash})),
-        assessmentCoverageComplete:null,canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false});
+      if(routePath===api+`/commercial-rounds/${round}/recommendation-drafts/own`)return json({items:[...(saved?[{draftId:draft,roundId:round,revision:version,
+        revisionId,snapshotSha256:hash,state:"Draft",canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false}]:[]),
+        ...(multiple?[{draftId:id(12),roundId:round,revision:1,revisionId:id(13),snapshotSha256:sha,state:"Draft",canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false}]:[])],
+        total:multiple?2:saved?1:0,offset:0,limit:25});
+      if(routePath===api+`/commercial-rounds/${round}/recommendation-drafts/${draft}` || routePath===api+`/commercial-rounds/${round}/recommendation-drafts/${id(12)}`){
+        if(afterAckDetailFails&&saved&&!detailFailed){detailFailed=true;return json({message:"Read failed"},503);}
+        const selectedDraft=routePath.endsWith(id(12))?id(12):draft;
+        return json({draftId:selectedDraft,roundId:round,state:"Draft",
+        currentRevision:selectedDraft===draft?version:1,currentRevisionId:selectedDraft===draft?revisionId:id(13),currentSnapshotSha256:selectedDraft===draft?hash:sha,
+        lines:[{offerId:offer,supplierId:id(11),sourcingLineId:line,quantityExact:"0.0001",proposedValueExact:wrongDetail?"0.00000002":"0.00000001",currencyCode:"ZMW",rationale:"Human comparison"}],
+        revisions:Array.from({length:selectedDraft===draft?version:1},(_,index)=>({id:selectedDraft===draft?revisionId:id(13),revision:index+1,recordedAt:"2026-10-25T10:00:00Z",snapshotSha256:selectedDraft===draft?hash:sha})),
+        assessmentCoverageComplete:null,canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false});}
       if(routePath.startsWith(api+`/commercial-rounds/${round}/recommendation-commands/`)){
         const key=routePath.split("/").at(-1)!;return receipts.has(key)?json(receipts.get(key),201):json({message:"Unknown"},404);
       }
@@ -55,10 +60,12 @@ async function fixture(page:Page,{unavailable=false,lost=false,revoked=false,all
         writes.push({key,body});expect(key).toMatch(/^[0-9a-f-]{36}$/);
         if(revokedAtSave)return json({message:"Action revoked"},403);
         if(stale)return json({message:"Draft changed"},409);
+        if(unprocessableOnce&&!rejected){rejected=true;return json({message:"Check lines"},422);}
         expect(body.expectedRevision).toBe(version);version++;saved=true;hash="b".repeat(64);
         const ack={draftId:draft,roundId:round,revisionId,revision:version,state:"Draft",snapshotSha256:hash,
           awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false};receipts.set(key,ack);
-        if(lost&&!interrupted){interrupted=true;return route.abort("failed");}return json(ack,201);
+        if(lost&&!interrupted){interrupted=true;return route.abort("failed");}
+        return json(wrongAck?{...ack,revisionId:id(14)}:ack,201);
       }
       throw new Error(`Unmocked recommendation API: ${method} ${routePath}`);
     }
@@ -86,9 +93,20 @@ test("a round denied in the selected branch has no selectable link",async({page}
   await expect(page.getByRole("link",{name:"Open recommendation draft"})).toHaveCount(0);
   expect(state.writes).toHaveLength(0);
 });
+test("all owned drafts remain selectable with human ordinal and revision labels",async({page})=>{
+  const state=await fixture(page,{multiple:true});await page.goto(path+"/"+round);
+  await expect(page.getByRole("link",{name:"Draft 1 · Revision 1"})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Draft 2 · Revision 1"})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Start a new recommendation draft"})).toHaveCount(0);
+  await page.getByRole("link",{name:"Draft 2 · Revision 1"}).click();
+  await expect(page.getByRole("link",{name:"Draft 1 · Revision 1"})).toBeVisible();
+  await expect(page.getByText(id(12))).toHaveCount(0);
+  expect(state.writes).toHaveLength(0);
+});
 test("save and revise use typed exact strings, original CAS and no award effect",async({page})=>{
   const state=await fixture(page);await page.goto(path+"/"+round);
   await expect(page.getByText("Verified goods RFQ")).toBeVisible();
+  await page.getByRole("link",{name:"Start a new recommendation draft"}).click();
   await page.getByRole("button",{name:"Add offer line"}).click();
   await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
@@ -97,19 +115,61 @@ test("save and revise use typed exact strings, original CAS and no award effect"
   await expect(page.getByText("Current draft revision: 1")).toBeVisible();
   expect(state.writes[0].body).toEqual({draftId:null,expectedRevision:0,expectedSnapshotSha256:null,
     lines:[{offerId:offer,sourcingLineId:line,quantityExact:"0.0001",proposedValueExact:"0.00000001",rationale:"Human comparison"}]});
+  await page.getByRole("link",{name:"Draft 1 · Revision 1"}).click();
+  await expect(page.getByText("Current draft revision: 1")).toBeVisible();
   await page.getByRole("button",{name:"Save revised draft"}).click();
   expect(state.writes[1].body).toMatchObject({draftId:draft,expectedRevision:1,expectedSnapshotSha256:"b".repeat(64)});
 });
 test("lost save survives a hard reload and checks original key without a second POST",async({page})=>{
-  const state=await fixture(page,{lost:true});await page.goto(path+"/"+round);
+  const state=await fixture(page,{lost:true});await page.goto(path+"/"+round+"?new=1");
   await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();
-  await page.reload();await expect(page.getByRole("button",{name:"Save revised draft"})).toBeDisabled();
+  await page.reload();await expect(page.getByRole("button",{name:"Save recommendation draft"})).toHaveCount(0);
   await page.getByRole("button",{name:"Check saved draft"}).click();
-  await expect(page.getByText("Current draft revision: 1")).toBeVisible();
+  await expect(page.getByRole("link",{name:"Draft 1 · Revision 1"})).toBeVisible();
   expect(state.writes).toHaveLength(1);expect(state.reads.some(value=>value.includes("/recommendation-commands/"))).toBe(true);
+});
+test("definitive 422 clears only the rejected key and lets the author correct entered lines",async({page})=>{
+  const state=await fixture(page,{unprocessableOnce:true});await page.goto(path+"/"+round+"?new=1");
+  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
+  await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
+  await expect(page.getByRole("alert").filter({hasText:"Check the recommendation lines"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Check saved draft"})).toHaveCount(0);
+  await expect(page.getByLabel("Reason")).toHaveValue("Human comparison");
+  await page.getByLabel("Reason").fill("Corrected human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
+  await expect(page.getByRole("link",{name:"Draft 1 · Revision 1"})).toBeVisible();
+  expect(state.writes).toHaveLength(2);expect(state.writes[0].key).not.toBe(state.writes[1].key);
+});
+test("GET after a valid acknowledgement can fail; hard reload still recovers without a second POST",async({page})=>{
+  const state=await fixture(page,{afterAckDetailFails:true});await page.goto(path+"/"+round+"?new=1");
+  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
+  await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
+  await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();
+  await page.reload();await expect(page.getByLabel("Reason")).toHaveValue("Human comparison");
+  await page.getByRole("button",{name:"Check saved draft"}).click();
+  expect(state.writes).toHaveLength(1);expect(state.reads.some(value=>value.includes("/recommendation-commands/"))).toBe(true);
+});
+test("a substituted POST acknowledgement never clears the original command journal",async({page})=>{
+  const state=await fixture(page,{wrongAck:true});await page.goto(path+"/"+round+"?new=1");
+  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
+  await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
+  await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();
+  await page.reload();await page.getByRole("button",{name:"Check saved draft"}).click();
+  expect(state.writes).toHaveLength(1);
+});
+test("a substituted retained line denies recovery despite a valid receipt",async({page})=>{
+  const state=await fixture(page,{wrongDetail:true});await page.goto(path+"/"+round+"?new=1");
+  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
+  await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
+  await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();
+  await page.getByRole("button",{name:"Check saved draft"}).click();
+  await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();expect(state.writes).toHaveLength(1);
 });
 test("absent capability, revoked action and Organisation All do not call recommendation APIs",async({page})=>{
   for(const options of [{unavailable:true},{revoked:true},{all:true}]){
@@ -120,15 +180,17 @@ test("absent capability, revoked action and Organisation All do not call recomme
   }
 });
 test("a stale revision produces one write and no automatic POST retry",async({page})=>{
-  const state=await fixture(page,{stale:true});await page.goto(path+"/"+round);
+  const state=await fixture(page,{stale:true});await page.goto(path+"/"+round+"?new=1");
   await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("alert").filter({hasText:"changed"})).toBeVisible();
+  await page.getByRole("button",{name:"Refresh current draft and compare your entries"}).click();
+  await expect(page.getByLabel("Reason")).toHaveValue("Human comparison");
   expect(state.writes).toHaveLength(1);
 });
 test("a revoked current recommendation action denies the save without a replacement key",async({page})=>{
-  const state=await fixture(page,{revokedAtSave:true});await page.goto(path+"/"+round);
+  const state=await fixture(page,{revokedAtSave:true});await page.goto(path+"/"+round+"?new=1");
   await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
@@ -136,7 +198,7 @@ test("a revoked current recommendation action denies the save without a replacem
   expect(state.writes).toHaveLength(1);
 });
 test("a substituted tab journal remains blocked after hard reload",async({page})=>{
-  const state=await fixture(page);await page.goto(path+"/"+round);
+  const state=await fixture(page);await page.goto(path+"/"+round+"?new=1");
   const slot="erp.procurement.recommendation-draft.v1:"+["amizo",company,actor,branch,round,"new"].join(":");
   await page.evaluate(([name,value])=>sessionStorage.setItem(name,JSON.stringify(value)),[slot,{schemaVersion:1,
     scope:{tenantId:"amizo",companyId:company,principalId:actor,branchId:id(12),roundId:round,recordId:"new"},

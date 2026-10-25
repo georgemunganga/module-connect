@@ -22,6 +22,7 @@ export type RecommendationSource = { roundId: string; unsealingId: string; rfqTi
     lines: { sourceLineId: string; lineLabel: string; offeredQuantityExact: string; currencyCode: string }[] }[] };
 export type OpenedRound = { roundId: string; sourcingEventId: string; branchId: string; openedAt: string; unsealingId: string };
 export type OwnRecommendation = { draftId: string; roundId: string; revision: number; revisionId: string; snapshotSha256: string; state: "Draft" };
+export type OwnRecommendationPage = { items: OwnRecommendation[]; total: number; offset: number; hasMore: boolean };
 export type RecommendationDetail = { draftId: string; roundId: string; currentRevision: number; currentRevisionId: string;
   currentSnapshotSha256: string; lines: RecommendationLine[]; revisions: { id: string; revision: number; recordedAt: string; snapshotSha256: string }[] };
 
@@ -139,16 +140,19 @@ export async function recommendationSource(company: string, roundId: string, sig
       !== offers.reduce((count, offer) => count + offer.lines.length, 0)) return fail();
   return { roundId, unsealingId: value.unsealingId, rfqTitle: value.rfqTitle, sourceLines: lines, offers };
 }
-export async function ownRecommendation(company: string, roundId: string, signal?: AbortSignal): Promise<OwnRecommendation | null> {
-  const value = await request(company, path(roundId) + "/recommendation-drafts/own?offset=0&limit=25", { signal });
-  if (!record(value) || !Array.isArray(value.items) || value.items.length > 1 || !integer(value.total)
-    || value.total !== value.items.length || value.offset !== 0 || value.limit !== 25) return fail();
-  if (!value.items.length) return null;
-  const item = value.items[0];
-  if (!record(item) || !id(item.draftId) || item.roundId !== roundId || !integer(item.revision) || item.revision < 1
-    || !id(item.revisionId) || !sha(item.snapshotSha256) || item.state !== "Draft"
-    || item.canSubmit !== false || item.awardCreatedByThisCommand !== false || item.purchaseOrderCreatedByThisCommand !== false) return fail();
-  return item as OwnRecommendation;
+export async function ownRecommendations(company: string, roundId: string, offset = 0, signal?: AbortSignal): Promise<OwnRecommendationPage> {
+  if (!integer(offset) || offset > 100000) return fail();
+  const value = await request(company, path(roundId) + `/recommendation-drafts/own?offset=${offset}&limit=25`, { signal });
+  if (!record(value) || !Array.isArray(value.items) || value.items.length > 25 || !integer(value.total)
+    || value.total < offset + value.items.length || value.offset !== offset || value.limit !== 25) return fail();
+  const items = value.items.map((item): OwnRecommendation => {
+    if (!record(item) || !id(item.draftId) || item.roundId !== roundId || !integer(item.revision) || item.revision < 1
+      || !id(item.revisionId) || !sha(item.snapshotSha256) || item.state !== "Draft"
+      || item.canSubmit !== false || item.awardCreatedByThisCommand !== false || item.purchaseOrderCreatedByThisCommand !== false) return fail();
+    return item as OwnRecommendation;
+  });
+  if (new Set(items.map(item => item.draftId)).size !== items.length) return fail();
+  return { items, total: value.total, offset, hasMore: offset + items.length < value.total };
 }
 export async function recommendationDetail(company: string, roundId: string, draftId: string, signal?: AbortSignal): Promise<RecommendationDetail> {
   if (!id(draftId)) return fail();
@@ -179,4 +183,21 @@ export async function recoverRecommendation(company: string, command: Recommenda
   const checked = validateRecommendationCommand(command);
   return recommendationAck(await request(company,
     path(checked.roundId) + `/recommendation-commands/${checked.key}`), checked);
+}
+const canonical = (value: string) => {
+  const [whole, fraction = ""] = value.split(".");
+  const trimmed = fraction.replace(/0+$/, "");
+  return trimmed ? `${whole}.${trimmed}` : whole;
+};
+/** The original command receipt and current retained revision must agree on every proposed line. */
+export function recommendationMatchesSavedDetail(command: RecommendationCommand, ack: RecommendationAck, detail: RecommendationDetail): boolean {
+  const checked = validateRecommendationCommand(command);
+  if (detail.roundId !== command.roundId || detail.draftId !== ack.draftId
+    || detail.currentRevision !== ack.revision || detail.currentSnapshotSha256 !== ack.snapshotSha256
+    || detail.currentRevisionId !== ack.revisionId) return false;
+  const submitted = recommendationLines(JSON.parse(checked.body).lines);
+  const ordered = (lines: RecommendationLine[]) => lines.map(line => JSON.stringify([
+    line.sourcingLineId, line.offerId, canonical(line.quantityExact), canonical(line.proposedValueExact), line.rationale]))
+    .sort();
+  return JSON.stringify(ordered(submitted)) === JSON.stringify(ordered(detail.lines));
 }
