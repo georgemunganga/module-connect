@@ -489,3 +489,12 @@ test("bill related links require each capability and payment read permission", a
   await expect(page.getByRole("link", { name: "View credits for this bill" })).toBeVisible();
   await expect(page.getByRole("link", { name: "View manual payments for this bill" })).toHaveCount(0);
 });
+
+
+test("bill related workspaces are hidden when their server capabilities are absent", async ({ page }) => {
+  await mockErp(page, true, { seed: true, paymentRead: true });
+  await page.goto(`/procurement/workspace/bills/${invoiceId}`);
+  await page.getByRole("tab", { name: "Related", exact: true }).click();
+  await expect(page.getByRole("link", { name: "View credits for this bill" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "View manual payments for this bill" })).toHaveCount(0);
+});
