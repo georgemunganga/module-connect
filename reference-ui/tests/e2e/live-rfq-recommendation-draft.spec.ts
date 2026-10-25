@@ -97,9 +97,11 @@ test("all owned drafts remain selectable with human ordinal and revision labels"
   const state=await fixture(page,{multiple:true});await page.goto(path+"/"+round);
   await expect(page.getByRole("link",{name:"Draft 1 · Revision 1"})).toBeVisible();
   await expect(page.getByRole("link",{name:"Draft 2 · Revision 1"})).toBeVisible();
-  await expect(page.getByRole("link",{name:"Start a new recommendation draft"})).toHaveCount(0);
+  await expect(page.getByRole("link",{name:"Start a new recommendation draft"})).toBeVisible();
   await page.getByRole("link",{name:"Draft 2 · Revision 1"}).click();
   await expect(page.getByRole("link",{name:"Draft 1 · Revision 1"})).toBeVisible();
+  await page.getByRole("link",{name:"Start a new recommendation draft"}).click();
+  await expect(page.getByRole("button",{name:"Save recommendation draft"})).toBeEnabled();
   await expect(page.getByText(id(12))).toHaveCount(0);
   expect(state.writes).toHaveLength(0);
 });

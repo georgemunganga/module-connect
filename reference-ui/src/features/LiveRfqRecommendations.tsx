@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Badge, Button, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
 import { RfqDetailLayout } from "./RfqPresentation";
@@ -85,6 +85,7 @@ export function LiveRfqRecommendationDetail() {
 function RecommendationPage({ roundId, draftId, newDraft, context, branch, enabled }: {
   roundId: string; draftId: string | null; newDraft: boolean; context: ReturnType<typeof useRecommendationContext>["context"]; branch: string; enabled: boolean;
 }) {
+  const navigate = useNavigate();
   const company = context?.legalEntityId ?? "";
   const [loaded, setLoaded] = useState<Loaded | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
   const [entries, setEntries] = useState<Entry[]>([]), [activeTab, setActiveTab] = useState("related");
@@ -148,13 +149,17 @@ function RecommendationPage({ roundId, draftId, newDraft, context, branch, enabl
       const current = await recommendationDetail(company, roundId, ack.draftId);
       if (!recommendationMatchesSavedDetail(pending, ack, current)) throw new Error("The saved revision needs review before another change.");
       recommendationJournal.clear(journalScope(pending.draftId ?? "new"), pending);
-      if (alive.current) { setPending(null); setRefresh(value => value + 1); }
+      if (alive.current) {
+        setPending(null);
+        if (pending.draftId === null) navigate(`${root}/${roundId}?draft=${ack.draftId}`);
+        else setRefresh(value => value + 1);
+      }
     } catch (cause) { if (alive.current) setError(message(cause)); }
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
   async function save(event: FormEvent) {
     event.preventDefault(); if (!loaded || pending || journalError || busyRef.current || !enabled || needsRefresh
-      || loaded.own.total > 0 && !loaded.detail) return;
+      || (!loaded.detail && !newDraft)) return;
     const detail = loaded.detail;
     let command: RecommendationCommand;
     try {
@@ -175,7 +180,11 @@ function RecommendationPage({ roundId, draftId, newDraft, context, branch, enabl
       const current = await recommendationDetail(company, roundId, ack.draftId);
       if (!recommendationMatchesSavedDetail(command, receipt, current)) throw new Error("The saved revision needs review before another change.");
       recommendationJournal.clear(journalScope(command.draftId ?? "new"), command);
-      if (alive.current) { setPending(null); preserveEntries.current = false; setRefresh(value => value + 1); }
+      if (alive.current) {
+        setPending(null); preserveEntries.current = false;
+        if (command.draftId === null) navigate(`${root}/${roundId}?draft=${ack.draftId}`);
+        else setRefresh(value => value + 1);
+      }
     } catch (cause) {
       if (alive.current) {
         setError(message(cause));
@@ -200,7 +209,7 @@ function RecommendationPage({ roundId, draftId, newDraft, context, branch, enabl
   if (loading) return <div className="p-5 sm:p-8" role="status">Checking the opened offers and your draft…</div>;
   if (!loaded) return <div className="p-5 sm:p-8" role="alert">{error || "This recommendation is unavailable in your current access."}</div>;
   const { source, detail, own } = loaded;
-  const canAuthor = Boolean(detail) || newDraft && (own.total === 0 || pending?.draftId === null);
+  const canAuthor = Boolean(detail) || newDraft;
   return <RfqDetailLayout title={source.rfqTitle} number="Opened offers" method="Recommendation draft" currency="" status="Draft"
     back={root} activeTab={activeTab} onTabChange={setActiveTab} itemCount={source.sourceLines.length}
     overview={<div className="space-y-3"><p>This is a draft recommendation for opened offers. It does not choose a winner, send a supplier notice or create a purchase order.</p>
@@ -216,7 +225,7 @@ function RecommendationPage({ roundId, draftId, newDraft, context, branch, enabl
         </div>) : <p>No recommendation drafts have been saved for this round.</p>}
         <div className="flex gap-3"><Button type="button" variant="secondary" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous drafts</Button>
           <Button type="button" variant="secondary" disabled={!own.hasMore || loading} onClick={() => setOffset(offset + 25)}>Next drafts</Button></div>
-        {own.total === 0 && !newDraft && <Link className="text-primary hover:underline" to={`${root}/${roundId}?new=1`}>Start a new recommendation draft</Link>}
+        {!newDraft && <Link className="text-primary hover:underline" to={`${root}/${roundId}?new=1`}>Start a new recommendation draft</Link>}
       </div></Panel>
       <Panel title="Recommendation draft"><div className="space-y-4 p-5">
         <p>Current draft revision: {detail?.currentRevision ?? "Not saved"}</p>
@@ -237,7 +246,7 @@ function RecommendationPage({ roundId, draftId, newDraft, context, branch, enabl
           <Button type="button" variant="secondary" disabled={busy || Boolean(pending) || Boolean(journalError)} onClick={() => setEntries(value => value.filter((_, position) => position !== index))}>Remove line</Button>
         </div>)}
         <div className="flex gap-3"><Button type="button" variant="secondary" disabled={busy || Boolean(pending) || Boolean(journalError) || entries.length >= 500} onClick={() => setEntries(value => [...value, emptyEntry()])}>Add offer line</Button>
-          <Button type="submit" disabled={busy || Boolean(pending) || Boolean(journalError) || needsRefresh || loaded.own.total > 0 && !detail}>{detail ? "Save revised draft" : "Save recommendation draft"}</Button></div>
+          <Button type="submit" disabled={busy || Boolean(pending) || Boolean(journalError) || needsRefresh}>{detail ? "Save revised draft" : "Save recommendation draft"}</Button></div>
         </form>}<p className="text-sm text-muted-foreground">This draft has no submission, award or purchase order effect. Quantities and values are kept exactly as entered and checked by ERP.</p>
       </div></Panel></div>}
     relatedFootnote="Recommendation drafts are internal notes about opened offers. No award or purchase order is created."
