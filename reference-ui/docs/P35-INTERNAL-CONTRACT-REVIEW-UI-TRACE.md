@@ -19,8 +19,9 @@ reason, terms, credentials and supplier data are never stored in that locator.
 
 `contractInternalReview` is an optional, default-off server capability. The six
 backend routes are mapped under an explicit P35 option. Metadata advertises the
-capability only when that option, physical readiness, and shared execution are
-available; each route rechecks current Core authority and branch scope. Mapping
+capability only when that option and configured physical readiness are available;
+each route additionally requires shared execution and rechecks current Core authority
+and branch scope. Mapping
 these routes is source preparation, not a production activation claim. The reviewer worklist
 uses the additive `AssignmentId` projection; an older host without it renders an
 unavailable link instead of substituting a submission ID. Signature, activation,
