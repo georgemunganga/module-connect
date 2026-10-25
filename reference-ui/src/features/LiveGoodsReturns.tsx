@@ -12,11 +12,11 @@ import { assertReturnScope, getReturnDraft, listEligibleGoods, listReturnDrafts,
 const base = "/purchase-receives/returns";
 const pending = new Map<string, ReturnCommand>();
 const text = (error: unknown) => error instanceof Error ? error.message : "Returns are unavailable. Refresh before continuing.";
-function scopeKey(company: string, actor: string, branch: string, id: string) { return `${company}:${actor}:${branch}:${id}`; }
-function useReturnContext(id: string) {
+function scopeKey(tenant: string, company: string, actor: string, branch: string, id: string) { return `${tenant}:${company}:${actor}:${branch}:${id}`; }
+function useReturnContext() {
   const context = useLiveReadiness()!;
   const branch = procurementScopeHeaders(context.legalEntityId)["X-Shell-Location"] ?? "";
-  return { context, branch, key: scopeKey(context.legalEntityId, context.principalId, branch, id),
+  return { context, branch,
     enabled: context.capabilities.principalGoodsReturnDrafts === true && !!branch };
 }
 function SourceLabel({ labels }: { labels: ReturnDetail["labels"] }) {
@@ -26,7 +26,7 @@ export function ReturnTabs({ active }: { active: "deliveries" | "returns" }) {
   return <div role="tablist" aria-label="Purchase Receives" className="mb-5 flex flex-wrap gap-3"><Link role="tab" aria-selected={active === "deliveries"} className="rounded-full border border-border px-4 py-2 text-sm" to="/purchase-receives">Deliveries</Link><Link role="tab" aria-selected={active === "returns"} className="rounded-full border border-border px-4 py-2 text-sm" to={base}>Return drafts</Link></div>;
 }
 export function LiveGoodsReturnList() {
-  const { context, branch, enabled } = useReturnContext("list");
+  const { context, branch, enabled } = useReturnContext();
   return <ReturnList key={`${context.tenantId}:${context.legalEntityId}:${context.principalId}:${branch}`} enabled={enabled} />;
 }
 function ReturnList({ enabled }: { enabled: boolean }) {
@@ -53,13 +53,13 @@ function ReturnList({ enabled }: { enabled: boolean }) {
   </div>;
 }
 export function LiveGoodsReturnDetail() {
-  const { id = "" } = useParams(), { context, branch, enabled } = useReturnContext(id);
+  const { id = "" } = useParams(), { context, branch, enabled } = useReturnContext();
   return <ReturnDetailPage key={`${context.tenantId}:${context.legalEntityId}:${context.principalId}:${branch}:${id}`} id={id} enabled={enabled} />;
 }
 function ReturnDetailPage({ id, enabled }: { id: string; enabled: boolean }) {
   const context = useLiveReadiness()!, company = context.legalEntityId;
   const branch = procurementScopeHeaders(company)["X-Shell-Location"] ?? "";
-  const key = scopeKey(company, context.principalId, branch, id);
+  const key = scopeKey(context.tenantId, company, context.principalId, branch, id);
   const canRead = enabled && context.permissions.includes("procurement-return-read");
   const [detail, setDetail] = useState<ReturnDetail | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("overview"), [refresh, setRefresh] = useState(0), [cancelOpen, setCancelOpen] = useState(false), [reason, setReason] = useState("");
@@ -110,14 +110,14 @@ function ReturnDetailPage({ id, enabled }: { id: string; enabled: boolean }) {
   </div>;
 }
 export function LiveGoodsReturnEditor() {
-  const { id } = useParams(), { context, branch, enabled } = useReturnContext(id ?? "new");
+  const { id } = useParams(), { context, branch, enabled } = useReturnContext();
   return <ReturnEditor key={`${context.tenantId}:${context.legalEntityId}:${context.principalId}:${branch}:${id ?? "new"}`} id={id} enabled={enabled} branch={branch} />;
 }
 function ReturnEditor({ id, enabled, branch }: { id?: string; enabled: boolean; branch: string }) {
   const context = useLiveReadiness()!, company = context.legalEntityId, navigate = useNavigate();
   const canCreate = enabled && context.permissions.includes("procurement-return-read") && context.permissions.includes("procurement-return-create");
   const canEdit = enabled && context.permissions.includes("procurement-return-edit");
-  const key = scopeKey(company, context.principalId, branch, id ?? "new");
+  const key = scopeKey(context.tenantId, company, context.principalId, branch, id ?? "new");
   const [detail, setDetail] = useState<ReturnDetail | null>(null), [eligible, setEligible] = useState<ReturnPage<ReturnEligible> | null>(null), [offset, setOffset] = useState(0), [selected, setSelected] = useState<ReturnEligible | null>(null);
   const [quantity, setQuantity] = useState(""), [reason, setReason] = useState(""), [reference, setReference] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState(""), [discard, setDiscard] = useState(false);
