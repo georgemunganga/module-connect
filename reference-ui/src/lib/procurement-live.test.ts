@@ -94,6 +94,12 @@ describe("Procurement system-user readiness", () => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { manualPaymentWorkflow: flag }));
     expect(result.capabilities.manualPaymentWorkflow).toBe(flag === true);
   });
+  it.each([undefined, false, true, "true", 1, null])("keeps internal contract review off without its own server capability (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { contractDraft: true, contractDraftRates: true, contractInternalReview: flag }));
+    expect(result.capabilities.contractInternalReview).toBe(flag === true);
+    expect(result.capabilities.contractDraft).toBe(true);
+  });
   it.each([undefined, false, true, "true", 1, null])("requires explicit separate principal approval availability (%s)", async flag => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { principalApprovals: flag }));
     expect(result.capabilities.principalApprovals).toBe(flag === true);

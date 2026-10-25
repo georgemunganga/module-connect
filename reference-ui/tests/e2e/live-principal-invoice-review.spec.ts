@@ -22,11 +22,12 @@ async function setup(page: Page, enabled: boolean, onApi: (route: Route, path: s
     }
     if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Reviewer", roles: [] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo" });
+    if (path === "/api/core/v1/workspace-context") return json({ code: "Unavailable" }, 404);
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo" }] });
-    if (path === "/api/hrm/admin/locations") return json({ items: [] });
-    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branch, name: "Head office", legalEntityId: company }] });
+    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [branch], confined: true });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "tenant-a", legalEntityId: company,
-      principalId: principal, workerId: null, company: { id: company, currencyCode: "ZMW" },
+      principalId: principal, workerId: null, branch: { id: branch }, company: { id: company, currencyCode: "ZMW" },
       permissions: ["procurement-access", "procurement-invoice-unit-review"] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "tenant-a", legalEntityId: company,
       schemaReady: true, capabilities: { ...baseFlags, principalInvoiceMatching: enabled } });

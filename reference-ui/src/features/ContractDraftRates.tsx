@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Field, Input, Panel, Textarea } from "../components/ui";
 import { RecordTable } from "../components/data/RecordTable";
+import { contractRateJournal } from "../lib/contract-rate-journal";
 import { ContractApiError, getOwnContractDraft, type ContractDetail } from "../../../src/platform/procurement-contracts-api";
 import {
   addOwnContractRate, listOwnContractRates, removeOwnContractRate, updateOwnContractRate,
@@ -14,11 +15,12 @@ const blank = (): ContractRateDraft => ({
 const explain = (cause: unknown) => cause instanceof Error ? cause.message : "The rate result is unavailable.";
 
 /** This panel extends the imported contract detail; it never supplies approval or release authority. */
-export function ContractDraftRates({ companyId, contract, enabled, canEdit, onFreshContract }: {
+export function ContractDraftRates({ companyId, contract, enabled, canEdit, scopeKey, onFreshContract }: {
   companyId: string; contract: ContractDetail; enabled: boolean; canEdit: boolean;
+  scopeKey: string;
   onFreshContract: (value: ContractDetail) => void;
 }) {
-  const scope = companyId + ":" + contract.id;
+  const scope = scopeKey;
   const currentScope = useRef(scope);
   currentScope.current = scope;
   const [loaded, setLoaded] = useState<{ scope: string; rates: ContractRates } | null>(null);
@@ -32,8 +34,11 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, onFr
   const [reason, setReason] = useState("");
 
   useEffect(() => {
-    setLoaded(null); setError(""); setBlocked(false); setEditing(null); setRemoving(null); setReason("");
+    currentScope.current = scope;
+    setLoaded(null); setError(""); setEditing(null); setRemoving(null); setReason("");
     if (!enabled) return;
+    try { setBlocked(contractRateJournal.read(window.sessionStorage, scope)); }
+    catch (cause) { setBlocked(true); setError(explain(cause)); }
     const controller = new AbortController();
     setLoading(true);
     listOwnContractRates(companyId, contract.id, controller.signal)
@@ -43,7 +48,7 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, onFr
         setError(explain(cause)); })
       .finally(() => { if (!controller.signal.aborted && currentScope.current === scope)
         setLoading(false); });
-    return () => controller.abort();
+    return () => { controller.abort(); currentScope.current = ""; };
   }, [companyId, contract.id, enabled, scope]);
 
   async function review() {
@@ -59,6 +64,8 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, onFr
       if (freshContract.id !== contract.id || rates.contractId !== contract.id
         || freshContract.version !== rates.contractVersion)
         throw new ContractApiError(0, "The contract and rates changed during refresh. Try reviewing again.");
+      if (contractRateJournal.read(window.sessionStorage, captured))
+        contractRateJournal.clear(window.sessionStorage, captured);
       onFreshContract(freshContract);
       setLoaded({ scope: captured, rates }); setBlocked(false);
       setEditing(null); setRemoving(null); setReason("");
@@ -88,6 +95,7 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, onFr
     const captured = scope;
     setBusy(true); setError("");
     try {
+      contractRateJournal.claim(window.sessionStorage, captured);
       if (current) await updateOwnContractRate(companyId, contract.id, current.id,
         rates.contractVersion, current.version, draft);
       else await addOwnContractRate(companyId, contract.id, rates.contractVersion, draft);
@@ -95,8 +103,10 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, onFr
     } catch (cause) {
       if (currentScope.current === captured) {
         setError(explain(cause));
-        // Only a definite input failure can be corrected without a new server read.
-        if (!(cause instanceof ContractApiError && cause.status === 422)) setBlocked(true);
+        if (cause instanceof ContractApiError && cause.status === 422) {
+          try { contractRateJournal.clear(window.sessionStorage, captured); }
+          catch { setBlocked(true); }
+        } else setBlocked(true);
       }
     } finally { if (currentScope.current === captured) setBusy(false); }
   }
@@ -107,13 +117,17 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, onFr
     const captured = scope;
     setBusy(true); setError("");
     try {
+      contractRateJournal.claim(window.sessionStorage, captured);
       await removeOwnContractRate(companyId, contract.id, current.id,
         rates.contractVersion, current.version, reason);
       if (currentScope.current === captured) await reviewAfterWrite(captured);
     } catch (cause) {
       if (currentScope.current === captured) {
         setError(explain(cause));
-        if (!(cause instanceof ContractApiError && cause.status === 422)) setBlocked(true);
+        if (cause instanceof ContractApiError && cause.status === 422) {
+          try { contractRateJournal.clear(window.sessionStorage, captured); }
+          catch { setBlocked(true); }
+        } else setBlocked(true);
       }
     } finally { if (currentScope.current === captured) setBusy(false); }
   }
@@ -126,6 +140,7 @@ export function ContractDraftRates({ companyId, contract, enabled, canEdit, onFr
     if (freshContract.id !== contract.id || freshRates.contractId !== contract.id
       || freshContract.version !== freshRates.contractVersion)
       throw new ContractApiError(0, "The saved rates changed during refresh. Review again.");
+    contractRateJournal.clear(window.sessionStorage, captured);
     onFreshContract(freshContract);
     setLoaded({ scope: captured, rates: freshRates });
     setEditing(null); setRemoving(null); setReason(""); setDraft(blank());

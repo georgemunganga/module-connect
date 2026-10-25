@@ -110,22 +110,29 @@ export async function listOwnContractRates(companyId: string, contractId: string
   return value as ContractRates;
 }
 export async function getOwnContractRate(companyId: string, contractId: string, rateId: string,
-  signal?: AbortSignal): Promise<ContractRateResult> =>
-  verified(await call(companyId, path(contractId, rateId), { signal }), contractId, undefined, rateId);
+  signal?: AbortSignal): Promise<ContractRateResult> {
+  return verified(await call(companyId, path(contractId, rateId), { signal }), contractId, undefined, rateId);
+}
 export async function addOwnContractRate(companyId: string, contractId: string,
-  contractVersion: number, input: ContractRateDraft): Promise<ContractRateResult> =>
-  verified(await call(companyId, path(contractId), { method: "POST",
+  contractVersion: number, input: ContractRateDraft): Promise<ContractRateResult> {
+  return verified(await call(companyId, path(contractId), { method: "POST",
     body: JSON.stringify({ contractVersion, rate: checked(input) }) }), contractId, contractVersion + 1);
+}
 export async function updateOwnContractRate(companyId: string, contractId: string, rateId: string,
-  contractVersion: number, rateVersion: number, input: ContractRateDraft): Promise<ContractRateResult> =>
-  verified(await call(companyId, path(contractId, rateId), { method: "PUT",
+  contractVersion: number, rateVersion: number, input: ContractRateDraft): Promise<ContractRateResult> {
+  return verified(await call(companyId, path(contractId, rateId), { method: "PUT",
     body: JSON.stringify({ contractVersion, rateVersion, rate: checked(input) }) }),
   contractId, contractVersion + 1, rateId, rateVersion + 1);
+}
 export async function removeOwnContractRate(companyId: string, contractId: string, rateId: string,
   contractVersion: number, rateVersion: number, reason: string): Promise<ContractRateResult> {
   if (!reason.trim() || reason.trim().length > 1000)
     throw new ContractApiError(422, "Enter a removal reason of up to 1,000 characters.");
-  return verified(await call(companyId, path(contractId, rateId) + "/remove", { method: "POST",
-    body: JSON.stringify({ contractVersion, rateVersion, reason: reason.trim() }) }),
+  const normalizedReason = reason.trim();
+  const result = verified(await call(companyId, path(contractId, rateId) + "/remove", { method: "POST",
+    body: JSON.stringify({ contractVersion, rateVersion, reason: normalizedReason }) }),
   contractId, contractVersion + 1, rateId, rateVersion + 1);
+  if (result.rate.status !== "Removed" || result.rate.statusReason !== normalizedReason)
+    throw new ContractApiError(0, "The ERP did not confirm the rate change. Review the contract before trying again.");
+  return result;
 }

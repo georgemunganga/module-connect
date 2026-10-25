@@ -30,7 +30,7 @@ import { modules } from "../../data/modules";
 import { Modal, Button } from "../ui";
 import { BrandMark, useErpShell } from "../../lib/erpShell";
 import { ErpSidebarHeader, ErpTopBar } from "@amizopower/erp-ui";
-import { isProcurementLiveMode } from "../../lib/ProcurementLiveGate";
+import { isProcurementLiveMode, useLiveReadiness } from "../../lib/ProcurementLiveGate";
 
 const procurement = [
   ["/procurement-requests", "Purchase Requests"],
@@ -47,6 +47,7 @@ const payables = [
   ["/vendor-credits", "Vendor Credits"],
 ];
 export function AppShell() {
+  const procurementReadiness = useLiveReadiness();
   const location = useLocation();
   const paymentWorkspace = /^\/payments(?:\/|$)/.test(location.pathname);
   const { records, notify } = useApp();
@@ -320,6 +321,9 @@ export function AppShell() {
           {procOpen && <>
             {procurement.map(([to, label]) => nav(to, label, null, true))}
             {isProcurementLiveMode && nav("/contracts", "Contracts", null, true)}
+            {isProcurementLiveMode && procurementReadiness?.capabilities.contractInternalReview === true
+              && procurementReadiness.permissions.includes("procurement-contract-review-read")
+              && nav("/contracts/internal-review", "Contract Reviews", null, true)}
             {isProcurementLiveMode && nav("/plans", "Purchase Plans", null, true)}
           </>}
           <button

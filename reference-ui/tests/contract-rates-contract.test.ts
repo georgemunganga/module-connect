@@ -56,4 +56,19 @@ describe("contract draft rates", () => {
       .rejects.toThrow("did not confirm");
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+  it("accepts only the removed rate and exact saved reason as a removal acknowledgement", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      contractId: contract, contractVersion: 5, rate: { ...rate, status: "Removed",
+        statusReason: "No longer offered", version: 2 },
+    }))).mockResolvedValueOnce(new Response(JSON.stringify({
+      contractId: contract, contractVersion: 5, rate: { ...rate, status: "Removed",
+        statusReason: "Different reason", version: 2 },
+    }))); vi.stubGlobal("fetch", fetch);
+    expect((await removeOwnContractRate(company, contract, rateId, 4, 1, "  No longer offered  ")).rate.status)
+      .toBe("Removed");
+    expect(JSON.parse(fetch.mock.calls[0][1].body).reason).toBe("No longer offered");
+    await expect(removeOwnContractRate(company, contract, rateId, 4, 1, "No longer offered"))
+      .rejects.toThrow("did not confirm");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 });
