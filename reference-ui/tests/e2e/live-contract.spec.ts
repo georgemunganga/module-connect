@@ -157,7 +157,7 @@ test("draft rates keep exact prices, removed history and parent CAS in the exist
   await expect(page.getByRole("cell", { name: "0.0001" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("cell", { name: "0.0001" })).toBeVisible();
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Unit price").fill("1.2500");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("cell", { name: "1.25" })).toBeVisible();
@@ -165,7 +165,7 @@ test("draft rates keep exact prices, removed history and parent CAS in the exist
   await page.getByLabel("Why remove this rate?").fill("No longer offered");
   await page.getByRole("button", { name: "Remove rate" }).click();
   await expect(page.getByText("Reason: No longer offered")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
 });
 
 test("lost rate response requires GET review and never retries POST", async ({ page }) => {
