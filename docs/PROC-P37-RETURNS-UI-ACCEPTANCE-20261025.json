@@ -1,0 +1,40 @@
+{
+  "status": "ACCEPTED_P37_TARGETED_UI_ONLY",
+  "dateUtc": "2026-10-25",
+  "testedApplicationCommit": "0e7e3b70dfa3bb82608aae2b7a3673b82f1aaa57",
+  "results": {
+    "typescript": "PASS",
+    "unitPassed": 106,
+    "mockedLiveChromiumPassed": 20,
+    "previewChromiumPassed": 4,
+    "failed": 0,
+    "skipped": 0,
+    "workers": 1,
+    "retries": 0
+  },
+  "coverage": [
+    "Return-only capability stays separate from receiving permissions",
+    "Create/revise/cancel typed drafts with exact quantity and original receipt recovery",
+    "Current server action hints and revoked access",
+    "Stale edits, branch selection and no automatic write retries",
+    "Existing principal receiving and contract review regressions",
+    "All four non-live Returns routes keep the shell without mounting forms or calling Returns APIs"
+  ],
+  "evidence": {
+    "directory": "/home/amizo/erp-backups/procurement-p37-return-ui-validation-20261025_run03",
+    "resultSha256": "e7f7b9fd259fae7d3244245d32e14cc48acc1eff2c46e1901282d9206a7b7c3c",
+    "planSha256": "d91bb3830ad1e5be4db7fab830591f580d4e931b7c43d3f5b2222402696f3f59",
+    "unitLogSha256": "0537828da9d54bdcd96933f0754116adc900346faa7942ffd10f8c753af4b72d",
+    "mockBrowserLogSha256": "334712670b761e72ea2c422533ba8a0a75051f129719b8efeb11eebcbc2f77b8",
+    "previewBrowserLogSha256": "06973cb0e983ac96739838e1015fed754369fef86d1f96ceffa826ae0f36a779"
+  },
+  "retainedFailures": [
+    "Run01: TypeScript narrowing of GET-only labels/actions corrected",
+    "Run02: mock API omitted required sourcingDraft capability; strict app guard retained"
+  ],
+  "limits": [
+    "Mocked APIs do not establish backend runtime or production acceptance",
+    "P37 API composition/projections and independent owner reconciliation remain separate gates",
+    "No dispatch, stock adjustment, supplier credit/refund or Finance posting is provided by a return draft"
+  ]
+}
