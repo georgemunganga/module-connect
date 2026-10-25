@@ -15,12 +15,13 @@ const capabilityKeys = ["vendorDraft","itemDraft","requestDraft","approvals","so
   "planningDraft","configurationDraft","contractDraft","sourcingDraft"];
 
 async function mockReview(page: Page, options: { enabled: boolean; actor: "owner" | "reviewer";
-  loseSubmit?: boolean; pending?: boolean }) {
+  loseSubmit?: boolean; loseDecision?: boolean; pending?: boolean }) {
   let state = options.pending ? "PendingReview" : "Draft";
   let contractVersion = options.pending ? 2 : 1;
   let submitWrites = 0;
   let decideWrites = 0;
   let submitAck: Record<string, unknown> | null = null;
+  let decisionAck: Record<string, unknown> | null = null;
   const actorId = options.actor === "owner" ? owner : reviewer;
   const permissions = options.actor === "owner"
     ? ["procurement-access","procurement-contract-read","procurement-contract-submit"]
@@ -57,7 +58,7 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
         Number: "CON-001", Title: "Service agreement", CurrencyCode: "ZMW", Version: contractVersion }] : [],
       total: options.actor === "reviewer" && state === "PendingReview" ? 1 : 0, page: 1, pageSize: 25 });
     if (path === `/api/procurement/v1/contracts/${contract}/internal-review/assignments/${assignment}`
-      && request.method() === "GET") return json({ Id: submission, ContractId: contract,
+      && request.method() === "GET") return state !== "PendingReview" ? json({ code: "NotFound" }, 404) : json({ Id: submission, ContractId: contract,
       CoreCaseId: caseId, ReviewBranchId: branch, SubmissionNumber: 1,
       SubmittedAt: "2026-10-24T10:00:00Z", TermsSha256: "a".repeat(64),
       terms: { schemaVersion: 1, contractId: contract, contractVersionId: versionId,
@@ -84,7 +85,7 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
       return json(submitAck,201);
     }
     if (path.startsWith("/api/procurement/v1/contracts/internal-review/commands/"))
-      return submitAck ? json(submitAck) : json({ code: "NotFound" },404);
+      return decisionAck ? json(decisionAck) : submitAck ? json(submitAck) : json({ code: "NotFound" },404);
     if (path === `/api/procurement/v1/contracts/${contract}/internal-review/assignments/${assignment}/decide`
       && request.method() === "POST") {
       decideWrites++;
@@ -92,10 +93,12 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
       expect(input).toMatchObject({ expectedContractVersion: 2, expectedCaseVersion: 2,
         expectedAssignmentVersion: 1, action: "Return", reason: "Correct the rate terms" });
       state = "Returned"; contractVersion = 3;
-      return json({ schemaVersion: 1, ContractId: contract, SubmissionId: submission,
+      decisionAck = { schemaVersion: 1, ContractId: contract, SubmissionId: submission,
         ReviewBranchId: branch, VoteId: versionId, CorrectionId: null, Operation: "Decide",
         CommandKey: request.headers()["idempotency-key"], ActorPrincipalId: reviewer,
-        contractVersion, contractStatus: state });
+        contractVersion, contractStatus: state };
+      if (options.loseDecision) return route.abort("failed");
+      return json(decisionAck);
     }
     return json({ message: `Unexpected route: ${path}` },404);
   });
@@ -135,4 +138,18 @@ test("named reviewer sees frozen terms and returns through the original review w
   await expect(page.getByRole("heading",{ name: "Assigned contract reviews" })).toBeVisible();
   expect(state.decideWrites()).toBe(1);
   await expect(page.getByText("No assigned reviews")).toBeVisible();
+});
+
+test("lost terminal decision retains its original key when active detail becomes 404", async ({ page }) => {
+  const state = await mockReview(page,{ enabled: true, actor: "reviewer", pending: true, loseDecision: true });
+  await page.goto(`/procurement/workspace/contracts/internal-review/${contract}/assignments/${assignment}`);
+  await page.getByLabel("Reason for Return or Reject").fill("Correct the rate terms");
+  await page.getByRole("button",{ name: "Return for correction" }).click();
+  await expect(page.getByRole("button",{ name: "Check saved decision" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("This review is not available to you",{ exact: false })).toBeVisible();
+  await expect(page.getByRole("button",{ name: "Check saved decision" })).toBeVisible();
+  await page.getByRole("button",{ name: "Check saved decision" }).click();
+  await expect(page.getByRole("heading",{ name: "Assigned contract reviews" })).toBeVisible();
+  expect(state.decideWrites()).toBe(1);
 });
