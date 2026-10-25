@@ -8,6 +8,7 @@ import { useErpShell } from "../lib/erpShell";
 import { RecordTable } from "../components/data/RecordTable";
 import { LiveCatalogDirectory } from "../components/data/LiveCatalogDirectory";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { useScopedCsvExport } from "../lib/useScopedCsvExport";
 import {
   addVendorContact, addVendorSite, addVendorQualification, createVendorDraft, getVendorDraft,
   getVendorOpenOrders,
@@ -40,7 +41,7 @@ export function LiveVendorList() {
   const { selection, authEpoch } = useErpShell();
   if (selection.entityId && selection.entityId !== legalEntityId)
     return <p role="status">Checking the selected company…</p>;
-  return <VendorListRecord key={[authEpoch, readiness.tenantId, legalEntityId, selection.branch ?? "",
+  return <VendorListRecord key={[authEpoch, readiness.tenantId, legalEntityId, selection.entityId ?? "", selection.branch ?? "", selection.branchScope ?? "",
     readiness.principalId, permissions.slice().sort().join("|")].join(":")} />;
 }
 
@@ -48,7 +49,8 @@ const vendorStatuses = ["Submitted", "More Information Required", "Draft", "Appr
   .map(value => ({ value, label: value === "Submitted" ? "Submitted for review" : value }));
 
 function VendorListRecord() {
-  const { legalEntityId, permissions } = useCompany();
+  const { legalEntityId, permissions, capabilities, tenantId, principalId } = useCompany();
+  const { selection, authEpoch } = useErpShell();
   const canCreate = permissions.includes("procurement-vendor-create");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -57,6 +59,11 @@ function VendorListRecord() {
   const [data, setData] = useState<VendorPage | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const scopeKey = [authEpoch, tenantId, legalEntityId, principalId, selection.entityId, selection.branch,
+    selection.branchScope, permissions.slice().sort().join("|")].join(":");
+  const csv = useScopedCsvExport("vendors", legalEntityId, scopeKey,
+    capabilities.vendorDraft === true && ["procurement-access", "procurement-vendor-read", "procurement-vendor-export"]
+      .every(action => permissions.includes(action)), { search, status });
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(""); setData(null);
@@ -78,6 +85,7 @@ function VendorListRecord() {
       total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25} loading={loading} error={error}
       search={search} onSearch={value => { setPage(1); setSearch(value); }} status={status} statuses={vendorStatuses}
       onStatusChange={value => { setPage(1); setStatus(value); }} onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
+      exportCsv={csv}
       action={canCreate ? <Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link> : undefined}
       emptyTitle="Every purchase starts with a vendor"
       emptyDescription="Create and manage your vendors and their contact persons, all in one place." />
