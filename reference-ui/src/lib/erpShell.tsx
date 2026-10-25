@@ -209,7 +209,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
               : choices.companies.find(company => company.isDefault);
             if (preferred) {
               const defaultBranch = configuredDefaultBranch(choices.branches, preferred.id);
-              const next = { ...saved, entityId: preferred.id,
+              const next: ShellSelection = { ...saved, entityId: preferred.id,
                 branch: defaultBranch ?? "", branchScope: defaultBranch ? undefined : "all" };
               try { localStorage.setItem(SHELL_KEY, JSON.stringify(next)); setStorageFailure(null); setSelection(next); }
               catch { setStorageFailure(JSON.stringify([epoch, saved.entityId ?? "", saved.branch ?? "", saved.branchScope ?? ""])); }
