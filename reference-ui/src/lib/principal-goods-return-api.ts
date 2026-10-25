@@ -50,10 +50,14 @@ function base(value: unknown): value is ReturnAck {
     && value.draftOnly === true && value.stockChanged === false && value.financeChanged === false && value.supplierNotified === false;
 }
 export function readReturnDetail(value: unknown, expectedId?: string): ReturnDetail {
-  if (!base(value) || expectedId && value.id !== expectedId || !record(value)
-    || !labels(value.labels) || !Array.isArray(value.allowedActions)
-    || !value.allowedActions.every((x) => x === "Edit" || x === "Cancel")
-    || value.status !== "Draft" && value.allowedActions.length > 0) throw invalid();
+  if (!record(value)) throw invalid();
+  // Keep the GET-only metadata separate from the immutable acknowledgement
+  // predicate, whose type deliberately has neither labels nor actions.
+  const responseLabels: unknown = value.labels, responseActions: unknown = value.allowedActions;
+  if (!base(value) || expectedId && value.id !== expectedId
+    || !labels(responseLabels) || !Array.isArray(responseActions)
+    || !responseActions.every((action: unknown) => action === "Edit" || action === "Cancel")
+    || value.status !== "Draft" && responseActions.length > 0) throw invalid();
   return value as unknown as ReturnDetail;
 }
 export function readReturnEligible(value: unknown): ReturnEligible {
