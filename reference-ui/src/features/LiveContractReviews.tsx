@@ -100,7 +100,7 @@ export function LiveContractReviewDetail() {
       .finally(() => { if (!controller.signal.aborted && current.current === key) setLoading(false); });
     return () => { if (current.current === key) current.current = ""; controller.abort(); };
   }, [key,enabled,legalEntityId,principalId,id,assignmentId]);
-  const actual = record?.ContractId === id && record.assignmentId === assignmentId && loadedKey === key && !loading ? record : null;
+  const actual = record !== null && record.ContractId === id && record.assignmentId === assignmentId && loadedKey === key && !loading ? record : null;
   const canDecide = enabled && permissions.includes("procurement-contract-review")
     && Boolean(actual) && !blocked && !pending && !busy;
 
