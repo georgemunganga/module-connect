@@ -73,6 +73,17 @@ async function mock(page:Page,options:Options={}){
 }
 async function confirm(page:Page){await page.getByLabel("Evidence reference",{exact:true}).fill("REF:actual-evidence");await page.getByRole("switch",{name:"I checked the delivery evidence"}).click();await page.getByRole("button",{name:"Confirm delivery action"}).click();}
 
+test("principal delivery directory uses retained PO labels and server-wide stable sort",async({page})=>{
+  const state=await mock(page);await page.goto(root);
+  await expect(page.getByRole("cell",{name:"Goods delivery",exact:true})).toHaveCount(2);
+  await expect(page.getByRole("cell",{name:"PO-RETAINED",exact:true})).toHaveCount(1);
+  await page.getByRole("button",{name:"More Actions"}).click();
+  await page.getByRole("menuitem",{name:"Sort by"}).click();
+  await page.getByRole("menuitem",{name:"Oldest first"}).click();
+  await expect(page.getByText("Showing oldest deliveries first.")).toBeVisible();
+  await expect.poll(()=>state.reads.filter(path=>path.includes("principal-worklist")&&path.includes("sort=oldest")).length).toBeGreaterThan(0);
+  expect(state.writes).toHaveLength(0);
+});
 test("absent principal capability never loads or mutates receiving despite Core permissions",async({page})=>{
   const state=await mock(page,{absent:true});await page.goto(root+"/new");await expect(page.getByText(/This workflow is being connected to your ERP/)).toBeVisible();await expect(page.getByRole("button",{name:"Save delivery draft"})).toHaveCount(0);
   expect(state.writes).toHaveLength(0);expect(state.reads.filter(path=>path.includes("principal-"))).toHaveLength(0);
