@@ -160,7 +160,9 @@ test('buyer and independent reviewer complete an internal contract review with n
     const createdResponse = await createWait; expect(createdResponse.status()).toBe(201);
     const created = await createdResponse.json() as Record<string, unknown>;
     if (!guid(created.id) || created.id === fixture.nativeContractId || created.supplierId !== fixture.supplierId
-      || created.status !== 'Draft' || !Number.isSafeInteger(created.version)) throw new Error('New owned draft mismatch');
+      || created.status !== 'Draft' || created.title !== 'Private browser review agreement'
+      || created.ceilingAmountExact !== '100.0001' || !Number.isSafeInteger(created.version))
+      throw new Error('New owned draft mismatch');
     const contractId = created.id;
     evidence.contractId = contractId; evidence.createBody = createdResponse.request().postData(); retain();
     await expect(buyerPage).toHaveURL(new RegExp(`/contracts/${contractId}$`));
@@ -189,11 +191,13 @@ test('buyer and independent reviewer complete an internal contract review with n
       CommandKey: first.key, Operation: 'Submit', contractStatus: 'PendingReview' });
     evidence.firstSubmit = first; retain(); await original(buyerContext, first.key, contractId, 'Submit', submit);
     const pendingVersion = await contractState(buyerContext, contractId, 'PendingReview');
+    expect(firstAck.contractVersion).toBe(pendingVersion);
     progress('independent-return');
     const reviewerPage = await readyPage(reviewerContext, '/contracts/internal-review');
     const row = reviewerPage.getByRole('row').filter({ has: reviewerPage.locator(`a[href*="${contractId}"]`) });
     await expect(row.getByRole('link', { name: 'Open review' })).toBeVisible();
     await row.getByRole('link', { name: 'Open review' }).click();
+    await expect(reviewerPage).toHaveURL(new RegExp(`/contracts/internal-review/${contractId}/assignments/`));
     const assignmentUrl = new URL(reviewerPage.url());
     const assignmentId = assignmentUrl.pathname.split('/').at(-1);
     if (!guid(assignmentId) || !assignmentUrl.pathname.includes(contractId)) throw new Error('Wrong reviewer assignment');
@@ -210,12 +214,14 @@ test('buyer and independent reviewer complete an internal contract review with n
       () => reviewerPage.getByRole('button', { name: 'Return for correction' }).click());
     const returnCommand = capture(returned,
       ['expectedContractVersion', 'expectedCaseVersion', 'expectedAssignmentVersion', 'action', 'reason']);
-    expect(returnCommand.body).toMatchObject({ action: 'Return', expectedContractVersion: pendingVersion,
+    expect(returnCommand.body).toMatchObject({ action: 'Return', reason: 'Correct the private browser terms',
+      expectedContractVersion: pendingVersion,
       expectedCaseVersion: assigned.caseVersion, expectedAssignmentVersion: assigned.assignmentVersion });
     expect(await returned.json()).toMatchObject({ ContractId: contractId,
       ActorPrincipalId: fixture.reviewerPrincipalId, CommandKey: returnCommand.key, contractStatus: 'Returned' });
     evidence.returnDecision = returnCommand; retain(); await original(reviewerContext, returnCommand.key, contractId, 'Decide', returned);
     const returnedVersion = await contractState(buyerContext, contractId, 'Returned');
+    expect((await returned.json() as Record<string, unknown>).contractVersion).toBe(returnedVersion);
     progress('buyer-correction');
     await buyerPage.reload({ waitUntil: 'domcontentloaded' });
     await expect(buyerPage.getByText('Returned', { exact: true }).first()).toBeVisible();
@@ -224,11 +230,13 @@ test('buyer and independent reviewer complete an internal contract review with n
     const correction = await saved(buyerPage, correctionPath,
       () => buyerPage.getByRole('button', { name: 'Return to draft for correction' }).click());
     const corrected = capture(correction, ['expectedContractVersion', 'reason']);
-    expect(corrected.body.expectedContractVersion).toBe(returnedVersion);
+    expect(corrected.body).toMatchObject({ expectedContractVersion: returnedVersion,
+      reason: 'Revised the private browser terms' });
     expect(await correction.json()).toMatchObject({ ContractId: contractId,
       ActorPrincipalId: fixture.buyerPrincipalId, CommandKey: corrected.key, contractStatus: 'Draft' });
     evidence.correction = corrected; retain(); await original(buyerContext, corrected.key, contractId, 'Correction', correction);
-    await contractState(buyerContext, contractId, 'Draft');
+    expect((await correction.json() as Record<string, unknown>).contractVersion)
+      .toBe(await contractState(buyerContext, contractId, 'Draft'));
     await buyerPage.reload({ waitUntil: 'domcontentloaded' });
     await buyerPage.getByRole('link', { name: 'Edit draft' }).click();
     await buyerPage.getByLabel('Contract title').fill('Private browser corrected agreement');
@@ -254,11 +262,13 @@ test('buyer and independent reviewer complete an internal contract review with n
       throw new Error('Resubmission must own a fresh submission');
     evidence.secondSubmit = second; retain(); await original(buyerContext, second.key, contractId, 'Submit', resubmitted);
     const secondPendingVersion = await contractState(buyerContext, contractId, 'PendingReview');
+    expect(secondAck.contractVersion).toBe(secondPendingVersion);
     progress('independent-approve');
     await reviewerPage.goto('/procurement/workspace/contracts/internal-review', { waitUntil: 'domcontentloaded' });
     const secondRow = reviewerPage.getByRole('row').filter({ has: reviewerPage.locator(`a[href*="${contractId}"]`) });
     await expect(secondRow.getByRole('link', { name: 'Open review' })).toBeVisible();
     await secondRow.getByRole('link', { name: 'Open review' }).click();
+    await expect(reviewerPage).toHaveURL(new RegExp(`/contracts/internal-review/${contractId}/assignments/`));
     const finalAssignmentId = new URL(reviewerPage.url()).pathname.split('/').at(-1);
     if (!guid(finalAssignmentId) || finalAssignmentId === assignmentId) throw new Error('Fresh review assignment required');
     const finalAssignment = await reviewerContext.request.get(
@@ -272,12 +282,14 @@ test('buyer and independent reviewer complete an internal contract review with n
       () => reviewerPage.getByRole('button', { name: 'Approve internal review' }).click());
     const approveCommand = capture(approved,
       ['expectedContractVersion', 'expectedCaseVersion', 'expectedAssignmentVersion', 'action', 'reason']);
-    expect(approveCommand.body).toMatchObject({ action: 'Approve', expectedContractVersion: secondPendingVersion,
+    expect(approveCommand.body).toMatchObject({ action: 'Approve', reason: null,
+      expectedContractVersion: secondPendingVersion,
       expectedCaseVersion: finalAssigned.caseVersion, expectedAssignmentVersion: finalAssigned.assignmentVersion });
     expect(await approved.json()).toMatchObject({ ContractId: contractId,
       ActorPrincipalId: fixture.reviewerPrincipalId, CommandKey: approveCommand.key, contractStatus: 'Approved' });
     evidence.approveDecision = approveCommand; retain(); await original(reviewerContext, approveCommand.key, contractId, 'Decide', approved);
-    await contractState(buyerContext, contractId, 'Approved');
+    expect((await approved.json() as Record<string, unknown>).contractVersion)
+      .toBe(await contractState(buyerContext, contractId, 'Approved'));
     evidence.contractReviewUiVerified = true; retain();
   } catch {
     failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step; retain();
