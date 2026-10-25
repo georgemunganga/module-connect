@@ -36,5 +36,15 @@
     "Mocked APIs do not establish backend runtime or production acceptance",
     "P37 API composition/projections and independent owner reconciliation remain separate gates",
     "No dispatch, stock adjustment, supplier credit/refund or Finance posting is provided by a return draft"
-  ]
+  ],
+  "emptyStateFollowup": {
+    "testedApplicationCommit": "728d41766e31bbcb2d19c38385d86b2982c3c30d",
+    "typescript": "PASS",
+    "mockedChromiumPassed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "scope": "Shared centered ERP empty state, permitted create navigation, read-only no-create/no-write",
+    "resultSha256": "94f16697027e5fc11c9a86efa419cbef3fb6ca74479fcbe8d5a243d8fa19a68b",
+    "priorRuleAndOtherBrowserCases": "Unchanged; earlier evidence retained and not relabelled as rerun"
+  }
 }
