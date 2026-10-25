@@ -17,13 +17,18 @@ The browser keeps only a scoped command key locator in session storage after a w
 An uncertain response blocks another POST until the original result is checked. The
 reason, terms, credentials and supplier data are never stored in that locator.
 
-`contractInternalReview` is an optional, default-off server capability. The P35
-backend branch currently does not register these routes or advertise that capability;
-this UI change is source preparation, not an activation claim. The reviewer worklist
+`contractInternalReview` is an optional, default-off server capability. The six
+backend routes are mapped under an explicit P35 option. Metadata advertises the
+capability only when that option and configured physical readiness are available;
+each route additionally requires shared execution and rechecks current Core authority
+and branch scope. Mapping
+these routes is source preparation, not a production activation claim. The reviewer worklist
 uses the additive `AssignmentId` projection; an older host without it renders an
 unavailable link instead of substituting a submission ID. Signature, activation,
 drawdown, dispatch and award remain separate workflows.
 
 Focused Vitest and mocked Playwright cases are authored in this branch but have not
-been run. Real normal-cookie and schema acceptance are required after backend
-registration and genuine migration/readiness verification.
+been run here. The terminal decision recovery case keeps the saved key when its
+active assignment detail returns 404, then uses the actor-owned command GET without
+sending a second decision. Genuine schema, positive private HTTP, normal-cookie and
+independent owner acceptance remain separate gates.
