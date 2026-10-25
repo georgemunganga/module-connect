@@ -149,7 +149,7 @@ test("draft rates keep exact prices, removed history and parent CAS in the exist
   await expect(page.getByText("ZMW 99,999,999,999,999.9999")).toBeVisible();
   await page.getByRole("button", { name: "Add rate" }).click();
   await page.getByLabel("Description").fill("Monthly support");
-  await page.getByLabel("Unit").fill("month");
+  await page.getByLabel("Unit", { exact: true }).fill("month");
   await page.getByLabel("Unit price").fill("0.0001");
   await page.getByLabel("Maximum quantity (optional)").fill("2.5000");
   await page.getByRole("button", { name: "Save rate" }).click();
@@ -177,7 +177,7 @@ test("lost rate response requires GET review and never retries POST", async ({ p
   await page.getByRole("button", { name: "Save draft" }).click();
   await page.getByRole("button", { name: "Add rate" }).click();
   await page.getByLabel("Description").fill("Monthly support");
-  await page.getByLabel("Unit").fill("month");
+  await page.getByLabel("Unit", { exact: true }).fill("month");
   await page.getByLabel("Unit price").fill("0.0001");
   await page.getByRole("button", { name: "Save rate" }).click();
   await expect(page.getByText("The last result needs review.")).toBeVisible();
