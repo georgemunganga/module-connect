@@ -19,16 +19,17 @@ test("separate issue notes recover by original key even when current status beco
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Invoice owner", roles: [] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo" });
+    if (path === "/api/core/v1/workspace-context") return json({ code: "Unavailable" }, 404);
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo" }] });
-    if (path === "/api/hrm/admin/locations") return json({ items: [] });
-    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branch, name: "Head office", legalEntityId: company }] });
+    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [branch], confined: true });
     if (path.startsWith("/api/procurement/v1")) {
       expect(request.headers()["x-shell-entity"]).toBe(company);
       expect(request.headers()["x-shell-location"]).toBe(branch);
     }
     if (path.startsWith(`/api/procurement/v1/invoices/${invoice}/matching`)) legacyMatchingReads++;
     if (path === "/api/procurement/v1/context") return json({ tenantId: "tenant-a", legalEntityId: company,
-      principalId: actor, workerId: null, company: { id: company, currencyCode: "ZMW" },
+      principalId: actor, workerId: null, branch: { id: branch }, company: { id: company, currencyCode: "ZMW" },
       permissions: ["procurement-access", "procurement-invoice-read", "procurement-invoice-match", "procurement-invoice-capture"] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "tenant-a", legalEntityId: company,
       schemaReady: true, capabilities: { invoiceIntake: true, principalInvoiceMatching: true } });
@@ -86,11 +87,12 @@ test("issue owner can choose an eligible named matcher and Assign keeps the save
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Issue owner", roles: [] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo" });
+    if (path === "/api/core/v1/workspace-context") return json({ code: "Unavailable" }, 404);
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo" }] });
-    if (path === "/api/hrm/admin/locations") return json({ items: [] });
-    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branch, name: "Head office", legalEntityId: company }] });
+    if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [branch], confined: true });
     if (path === "/api/procurement/v1/context") return json({ tenantId: "tenant-a", legalEntityId: company,
-      principalId: actor, workerId: null, company: { id: company, currencyCode: "ZMW" },
+      principalId: actor, workerId: null, branch: { id: branch }, company: { id: company, currencyCode: "ZMW" },
       permissions: ["procurement-access", "procurement-invoice-read", "procurement-invoice-match"] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "tenant-a", legalEntityId: company,
       schemaReady: true, capabilities: { invoiceIntake: true, principalInvoiceMatching: true } });
