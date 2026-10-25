@@ -46,5 +46,25 @@
     "scope": "Shared centered ERP empty state, permitted create navigation, read-only no-create/no-write",
     "resultSha256": "94f16697027e5fc11c9a86efa419cbef3fb6ca74479fcbe8d5a243d8fa19a68b",
     "priorRuleAndOtherBrowserCases": "Unchanged; earlier evidence retained and not relabelled as rerun"
+  },
+  "reloadRecoveryFollowup": {
+    "testedApplicationCommit": "cbe05a344d64d07ddfe3b5fb48349e65fe74c2fd",
+    "typescript": "PASS",
+    "targetedUnitPassed": 13,
+    "mockedChromiumPassed": 11,
+    "failed": 0,
+    "skipped": 0,
+    "workers": 1,
+    "retries": 0,
+    "scope": "Exact scoped session journal survives hard reload; original-key GET recovery without a second POST; scope/storage/corrupt journal denial; current actor actions; edit/cancel/empty-state regressions",
+    "evidenceDirectory": "/home/amizo/erp-backups/procurement-p37-return-journal-ui-validation-20261025_run02",
+    "resultSha256": "6593face7c224c11c55f42ec2afac2b5916ef401335a7430d93331871bc321a6",
+    "runnerSha256": "d9cbbdce29b6a30a143d7c599ebdf114730c4e2eb60a5048cde430384ed7351f",
+    "unitLogSha256": "f8a1652b76346ac30c5cc615c1cf43f7a8e925407f088112586ae87337b9fd8a",
+    "mockBrowserLogSha256": "4afdcafcb1c32114bae1271eb4456f83ff23d6279fb80e649edebc0745e3308f",
+    "actualBackend": false,
+    "productionTouched": false,
+    "retainedFailure": "Journal run01: incomplete GUID regex rejected real identity scopes; corrected in cbe05a3. All failed logs and result retained.",
+    "priorOtherTests": "Earlier 106-unit/20-mock/4-preview evidence remains separately attributed; only the listed targeted tests rerun here."
   }
 }
