@@ -410,13 +410,13 @@ test("live bill detail keeps the ERP-adapted tabs while showing only saved invoi
   await expect(page.getByRole("heading", { name: "Items / Line Details" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Supplies" })).toBeVisible();
   await page.getByRole("tab", { name: "Related" }).click();
-  await expect(page.getByText("Linked orders, credits and payments are not shown here yet", { exact: false })).toBeVisible();
+  await expect(page.getByText("Credits and manual payment requests open in their own workspaces, filtered to this bill.", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Comments" }).click();
   await expect(page.getByText("Comments are not available for bills yet.")).toBeVisible();
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByText("A detailed activity log is not available here yet", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "More invoice actions" }).click();
-  await expect(page.getByText("Saved bills cannot be deleted. Payment recording is not connected yet.")).toBeVisible();
+  await expect(page.getByText("Saved bills cannot be deleted. Manual payments are recorded separately when your access allows it.")).toBeVisible();
 });
 
 test("read-only bill detail keeps tabs and documents without offering a write action", async ({ page }) => {
