@@ -1,7 +1,7 @@
 import { returnCommandPath, returnQuantity, returnText, type ReturnCommand } from "./principal-goods-return-api";
 
 const prefix = "erp.procurement.goods-return-command.v1:";
-const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const tenant = /^[a-zA-Z0-9._-]{1,128}$/;
 const limit = 16384;
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);

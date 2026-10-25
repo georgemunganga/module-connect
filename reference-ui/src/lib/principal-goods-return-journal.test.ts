@@ -9,6 +9,10 @@ function memory(){const values=new Map<string,string>();return{
   removeItem:(key:string)=>{values.delete(key);},key:(_index:number)=>null,get length(){return values.size;},clear:()=>values.clear(),values,
 } as Storage&{values:Map<string,string>};}
 describe("goods return session recovery journal",()=>{
+  it("accepts a full GUID scope and rejects a missing GUID segment",()=>{
+    expect(goodsReturnJournal.read(scope,memory())).toBeNull();
+    expect(()=>goodsReturnJournal.read({...scope,branchId:"00000003-1111-4111-111111111111"},memory())).toThrow("permitted branch");
+  });
   it("retains the exact typed command across reload and clears only its matching key and body",()=>{
     const storage=memory();goodsReturnJournal.claim(scope,command,storage);
     expect(goodsReturnJournal.read(scope,storage)).toEqual(command);
