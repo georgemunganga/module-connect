@@ -17,7 +17,15 @@ async function chooseOpenedLine(page: Page) {
 async function fixture(page:Page,{unavailable=false,lost=false,revoked=false,all=false,unverified=false,stale=false,revokedAtSave=false,wrongBranch=false,
   multiple=false,unprocessableOnce=false,afterAckDetailFails=false,wrongAck=false,wrongDetail=false}={}){
   const writes:{key:string;body:Record<string,unknown>}[]=[], reads:string[]=[];
-  const receipts=new Map<string,unknown>();let saved=multiple,version=multiple?1:0,hash=sha,interrupted=false,rejected=false,detailFailed=false;
+  type SavedDraft={version:number;revisionId:string;hash:string;lines:Record<string,unknown>[];
+    revisions:{id:string;revision:number;recordedAt:string;snapshotSha256:string}[]};
+  const originalLines=[{offerId:offer,sourcingLineId:line,quantityExact:"0.0001",proposedValueExact:"0.00000001",rationale:"Human comparison"}];
+  const initial=():SavedDraft=>({version:1,revisionId,hash:sha,lines:originalLines,
+    revisions:[{id:revisionId,revision:1,recordedAt:"2026-10-25T10:00:00Z",snapshotSha256:sha}]});
+  const drafts=new Map<string,SavedDraft>();
+  if(multiple){drafts.set(draft,initial());drafts.set(id(12),{...initial(),revisionId:id(13),
+    revisions:[{id:id(13),revision:1,recordedAt:"2026-10-25T10:00:00Z",snapshotSha256:sha}]});}
+  const receipts=new Map<string,unknown>();let interrupted=false,rejected=false,detailFailed=false;
   await page.addInitScript(({company,branch,all})=>localStorage.setItem("erp.shell.state.v1",JSON.stringify(all?{entityId:company,branchScope:"all"}:{entityId:company,branch})),{company,branch,all});
   await page.route("**/api/**",async route=>{
     const request=route.request(),url=new URL(request.url()),routePath=url.pathname,method=request.method();
@@ -44,17 +52,18 @@ async function fixture(page:Page,{unavailable=false,lost=false,revoked=false,all
         openedAt:"2026-10-25T10:00:00Z",unsealingId:id(9)}],total:1,offset:0,limit:3,
         priceReadRequiresRetainedProof:true,evaluationAvailable:false,awardAvailable:false,purchaseOrderAvailable:false});
       if(routePath===api+`/commercial-rounds/${round}/recommendation-source`)return unverified||wrongBranch?json({message:"Not available"},wrongBranch?404:409):json(source);
-      if(routePath===api+`/commercial-rounds/${round}/recommendation-drafts/own`)return json({items:[...(saved?[{draftId:draft,roundId:round,revision:version,
-        revisionId,snapshotSha256:hash,state:"Draft",canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false}]:[]),
-        ...(multiple?[{draftId:id(12),roundId:round,revision:1,revisionId:id(13),snapshotSha256:sha,state:"Draft",canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false}]:[])],
-        total:multiple?2:saved?1:0,offset:0,limit:25});
-      if(routePath===api+`/commercial-rounds/${round}/recommendation-drafts/${draft}` || routePath===api+`/commercial-rounds/${round}/recommendation-drafts/${id(12)}`){
-        if(afterAckDetailFails&&saved&&!detailFailed){detailFailed=true;return json({message:"Read failed"},503);}
-        const selectedDraft=routePath.endsWith(id(12))?id(12):draft;
+      if(routePath===api+`/commercial-rounds/${round}/recommendation-drafts/own`)return json({items:[...drafts].map(([draftId,item])=>({draftId,roundId:round,revision:item.version,
+        revisionId:item.revisionId,snapshotSha256:item.hash,state:"Draft",canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false})),
+        total:drafts.size,offset:0,limit:25});
+      if(routePath.startsWith(api+`/commercial-rounds/${round}/recommendation-drafts/`) && method==="GET"){
+        const selectedDraft=routePath.split("/").at(-1)!;const item=drafts.get(selectedDraft);
+        if(!item)return json({message:"Not found"},404);
+        if(afterAckDetailFails&&!detailFailed){detailFailed=true;return json({message:"Read failed"},503);}
         return json({draftId:selectedDraft,roundId:round,state:"Draft",
-        currentRevision:selectedDraft===draft?version:1,currentRevisionId:selectedDraft===draft?revisionId:id(13),currentSnapshotSha256:selectedDraft===draft?hash:sha,
-        lines:[{offerId:offer,supplierId:id(11),sourcingLineId:line,quantityExact:"0.0001",proposedValueExact:wrongDetail?"0.00000002":"0.00000001",currencyCode:"ZMW",rationale:"Human comparison"}],
-        revisions:Array.from({length:selectedDraft===draft?version:1},(_,index)=>({id:selectedDraft===draft?revisionId:id(13),revision:index+1,recordedAt:"2026-10-25T10:00:00Z",snapshotSha256:selectedDraft===draft?hash:sha})),
+        currentRevision:item.version,currentRevisionId:item.revisionId,currentSnapshotSha256:item.hash,
+        lines:item.lines.map(value=>({...value,supplierId:id(11),currencyCode:"ZMW",
+          proposedValueExact:wrongDetail?"0.00000002":value.proposedValueExact})),
+        revisions:item.revisions,
         assessmentCoverageComplete:null,canSubmit:false,awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false});}
       if(routePath.startsWith(api+`/commercial-rounds/${round}/recommendation-commands/`)){
         const key=routePath.split("/").at(-1)!;return receipts.has(key)?json(receipts.get(key),201):json({message:"Unknown"},404);
@@ -65,8 +74,13 @@ async function fixture(page:Page,{unavailable=false,lost=false,revoked=false,all
         if(revokedAtSave)return json({message:"Action revoked"},403);
         if(stale)return json({message:"Draft changed"},409);
         if(unprocessableOnce&&!rejected){rejected=true;return json({message:"Check lines"},422);}
-        expect(body.expectedRevision).toBe(version);version++;saved=true;hash="b".repeat(64);
-        const ack={draftId:draft,roundId:round,revisionId,revision:version,state:"Draft",snapshotSha256:hash,
+        const savedId=typeof body.draftId==="string"?body.draftId:multiple?id(15):draft;
+        const prior=drafts.get(savedId);expect(body.expectedRevision).toBe(prior?.version??0);
+        const version=(prior?.version??0)+1,hash="b".repeat(64),nextRevisionId=prior?id(20+version):revisionId;
+        const lines=body.lines as Record<string,unknown>[];
+        drafts.set(savedId,{version,revisionId:nextRevisionId,hash,lines,
+          revisions:[...(prior?.revisions??[]),{id:nextRevisionId,revision:version,recordedAt:"2026-10-25T10:00:00Z",snapshotSha256:hash}]});
+        const ack={draftId:savedId,roundId:round,revisionId:nextRevisionId,revision:version,state:"Draft",snapshotSha256:hash,
           awardCreatedByThisCommand:false,purchaseOrderCreatedByThisCommand:false};receipts.set(key,ack);
         if(lost&&!interrupted){interrupted=true;return route.abort("failed");}
         return json(wrongAck?{...ack,revisionId:id(14)}:ack,201);
@@ -106,8 +120,14 @@ test("all owned drafts remain selectable with human ordinal and revision labels"
   await expect(page.getByRole("link",{name:"Draft 1 · Revision 1"})).toBeVisible();
   await page.getByRole("link",{name:"Start a new recommendation draft"}).click();
   await expect(page.getByRole("button",{name:"Save recommendation draft"})).toBeEnabled();
+  await page.getByRole("button",{name:"Add offer line"}).click();await chooseOpenedLine(page);
+  await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
+  await page.getByLabel("Reason").fill("Another human comparison");
+  await page.getByRole("button",{name:"Save recommendation draft"}).click();
+  await expect(page.getByRole("link",{name:"Draft 3 · Revision 1"})).toBeVisible();
+  expect(state.writes).toHaveLength(1);
+  expect(state.writes[0].body).toMatchObject({draftId:null,expectedRevision:0});
   await expect(page.getByText(id(12))).toHaveCount(0);
-  expect(state.writes).toHaveLength(0);
 });
 test("save and revise use typed exact strings, original CAS and no award effect",async({page})=>{
   const state=await fixture(page);await page.goto(path+"/"+round);
