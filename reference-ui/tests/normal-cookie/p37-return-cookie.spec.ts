@@ -133,7 +133,10 @@ test('workerless receiver creates, reloads, revises and cancels one goods return
       { entityId: fixture.companyId, branch: fixture.branchId });
     await page.goto(`${route}/new`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Add return draft' })).toBeVisible();
-    await page.getByRole('radio', { name: `Select ${labels.purchaseOrderNumber} line ${labels.lineNumber}` }).check();
+    // P30 retained two acceptance facts on the same PO line; the label alone is not unique.
+    const acceptedRow = page.getByRole('row').filter({ hasText: fixture.acceptedFactQuantityExact });
+    await expect(acceptedRow).toHaveCount(1);
+    await acceptedRow.getByRole('radio', { name: `Select ${labels.purchaseOrderNumber} line ${labels.lineNumber}` }).check();
     await page.getByLabel('Proposed quantity').fill('0.5');
     await page.getByLabel('Evidence reference').fill('PRIVATE-RETURN:browser-original');
     await page.getByLabel('Reason').fill('Browser proposed goods return');
