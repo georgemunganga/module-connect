@@ -14,7 +14,8 @@ export function LiveCatalogDirectory({ title, subtitle, entity, columns, rows, t
   statuses?: ReadonlyArray<{ value: string; label: string }>;
   onStatusChange?: (value: string) => void; onPage: (page: number) => void; onRefresh: () => void;
   action?: ReactNode; emptyTitle: string; emptyDescription: string;
-  exportCsv?: { allowed: boolean; busy: boolean; error: string; notice: string; onExport: (scope: ExportScope) => void };
+  exportCsv?: { allowed: boolean; selectedAllowed?: boolean; busy: boolean; error: string; notice: string;
+    onExport: (scope: ExportScope, selectedIds?: readonly string[]) => void };
 }) {
   return <LiveRecordDirectory title={title} subtitle={subtitle} entity={entity} columns={columns} rows={rows}
     total={total} page={page} pageSize={pageSize} loading={loading} error={error}

@@ -10,7 +10,7 @@ const capabilities = Object.fromEntries([
 ].map(key => [key, ["vendorDraft", "itemDraft"].includes(key)]));
 
 async function setup(page: Page, options: { exportAction?: boolean; kind?: "vendors" | "items";
-  limit?: boolean; hold?: (resume: () => void) => void } = {}) {
+  limit?: boolean; unavailableSelection?: boolean; hold?: (resume: () => void) => void } = {}) {
   const kind = options.kind ?? "vendors";
   const exports: string[] = [];
   await page.addInitScript(id => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: id })), company);
@@ -41,6 +41,8 @@ async function setup(page: Page, options: { exportAction?: boolean; kind?: "vend
       isPurchasable: true, version: 1 }], total: 51, page: 1, pageSize: 25 });
     if (path === `/api/procurement/v1/${kind}/export`) {
       exports.push(`${request.method()} ${url.search} ${request.headers()["x-shell-entity"]}`);
+      if (options.unavailableSelection && url.searchParams.has("ids"))
+        return json({ code: "selected-records-unavailable" }, 404);
       if (options.limit) return json({ code: "export-limit-exceeded" }, 422);
       if (options.hold) await new Promise<void>(resolve => options.hold?.(resolve));
       return route.fulfill({ status: 200, headers: { "Content-Type": "text/csv; charset=utf-8",
@@ -56,7 +58,7 @@ async function openExport(page: Page) {
   await page.getByRole("menuitem", { name: "Export", exact: true }).click();
 }
 
-test("vendor All and View use scoped server CSV across pages; Selected stays unavailable", async ({ page }) => {
+test("vendor All, View and exact Selected exports use the existing server CSV menu", async ({ page }) => {
   const requests = await setup(page, { exportAction: true });
   await page.goto("/procurement/workspace/vendors");
   await expect(page.getByRole("heading", { name: "Vendors" })).toBeVisible();
@@ -87,8 +89,35 @@ test("vendor All and View use scoped server CSV across pages; Selected stays una
   await page.getByRole("button", { name: "More Actions" }).click();
   await page.getByRole("checkbox", { name: "Select Open VEN-001" }).check();
   await openExport(page);
-  await expect(page.getByRole("menuitem", { name: "Export Selected (1)" })).toBeDisabled();
-  expect(requests).toHaveLength(2);
+  const selected = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: "Export Selected (1)" }).click();
+  expect((await selected).suggestedFilename()).toBe("vendors-20261025.csv");
+  expect(requests).toEqual([`GET  ${company}`, `GET ?search=steel&status=Active ${company}`,
+    `GET ?ids=33333333-3333-4333-8333-333333333333 ${company}`]);
+});
+
+test("an unavailable selected member shows recovery and starts no partial download", async ({ page }) => {
+  const requests = await setup(page, { exportAction: true, unavailableSelection: true });
+  let downloads = 0; page.on("download", () => { downloads += 1; });
+  await page.goto("/procurement/workspace/vendors");
+  await page.getByRole("checkbox", { name: "Select Open VEN-001" }).check();
+  await openExport(page);
+  await page.getByRole("menuitem", { name: "Export Selected (1)" }).click();
+  await expect(page.getByRole("alert")).toContainText("Refresh the list and select the records again");
+  expect(requests).toEqual([`GET ?ids=33333333-3333-4333-8333-333333333333 ${company}`]);
+  expect(downloads).toBe(0);
+});
+
+test("page changes clear the selection rather than exporting stale selected rows", async ({ page }) => {
+  const requests = await setup(page, { exportAction: true });
+  await page.goto("/procurement/workspace/vendors");
+  await page.getByRole("checkbox", { name: "Select Open VEN-001" }).check();
+  await expect(page.getByText("1 selected on this page", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByText("1 selected on this page", { exact: true })).toHaveCount(0);
+  await openExport(page);
+  await expect(page.getByRole("menuitem", { name: "Export Selected", exact: true })).toBeDisabled();
+  expect(requests).toEqual([]);
 });
 
 test("missing export action and over-limit response never start a download", async ({ page }) => {
@@ -141,4 +170,10 @@ test("the compact toolbar retains the same server export action", async ({ page 
   await page.getByRole("menuitem", { name: "Export Items" }).click();
   expect((await download).suggestedFilename()).toBe("items-20261025.csv");
   expect(requests).toEqual([`GET  ${company}`]);
+  await page.getByRole("checkbox", { name: "Select Open ITEM-001" }).check();
+  await openExport(page);
+  const selected = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: "Export Selected (1)" }).click();
+  expect((await selected).suggestedFilename()).toBe("items-20261025.csv");
+  expect(requests).toEqual([`GET  ${company}`, `GET ?ids=33333333-3333-4333-8333-333333333333 ${company}`]);
 });
