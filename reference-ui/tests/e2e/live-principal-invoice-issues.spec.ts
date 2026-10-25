@@ -10,8 +10,8 @@ const outcome = "77777777-7777-4777-8777-777777777777";
 const first = "88888888-8888-4888-8888-888888888888";
 const second = "99999999-9999-4999-8999-999999999999";
 
-test("separate issue notes stay with their own owner record and unknown POST recovers by GET", async ({ page }) => {
-  let posted = 0, legacyMatchingReads = 0, originalKey = "";
+test("separate issue notes recover by original key even when current status becomes unavailable", async ({ page }) => {
+  let posted = 0, legacyMatchingReads = 0, originalKey = "", statusUnavailable = false;
   await page.addInitScript(({ entity, site }) => localStorage.setItem("erp.shell.state.v1",
     JSON.stringify({ entityId: entity, branch: site })), { entity: company, site: branch });
   await page.route("**/api/**", async route => {
@@ -38,6 +38,8 @@ test("separate issue notes stay with their own owner record and unknown POST rec
       createdAt: "2026-10-23T10:00:00Z", netAmount: "1", taxAmount: "0", grossAmount: "1",
       nextStep: "Resolve the recorded comparison issues.", lines: [{ id: line, lineNumber: 1,
         description: "Service", quantity: "1", unitPrice: "1", taxAmount: "0" }] });
+    if (path === `/api/procurement/v1/invoices/${invoice}/principal-matching/status` && statusUnavailable)
+      return json({ code: "CurrentStatusUnavailable" }, 503);
     if (path === `/api/procurement/v1/invoices/${invoice}/principal-matching/status`) return json({
       invoiceId: invoice, invoiceVersion: 2, sourceSchemaVersion: 2, state: "ComparisonBlocked",
       stateVersion: 2, mappingRevision: 1, mappingVersionId: mapping, reviewId: outcome,
@@ -50,7 +52,7 @@ test("separate issue notes stay with their own owner record and unknown POST rec
         state: "Open", ownerPrincipalId: actor, version: 1, openedAt: "2026-10-23T10:00:00Z",
         dueAt: null, resolvedAt: null, resolutionReference: null, history: [] })) });
     if (path === `/api/procurement/v1/invoices/${invoice}/principal-matching/exceptions/${second}/actions`) {
-      posted++; originalKey = request.headers()["idempotency-key"];
+      posted++; originalKey = request.headers()["idempotency-key"]; statusUnavailable = true;
       expect(request.postDataJSON()).toEqual({ expectedVersion: 1, action: "Comment",
         reason: "Second issue note", evidenceReference: null, newOwnerPrincipalId: null });
       return json({ code: "ResponseUnknown" }, 503);

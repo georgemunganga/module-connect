@@ -165,10 +165,11 @@ export function PrincipalInvoiceMatching({ invoiceId, invoiceVersion, lines, ref
     if (!locator || inFlight.current || busy) return;
     inFlight.current = true; setBusy(true); setError("");
     try {
-      const current = await refreshState();
-      // OpenReview's ID is assigned by the server. A current status supplies the
-      // route only; the actor-owned original-key receipt proves this POST.
+      // Map, Compare and IssueAction have invoice-scoped original-key routes.
+      // Their retained receipt can be checked even when the current status
+      // cannot be read. OpenReview needs the server-assigned review ID first.
       if (locator.operation === "OpenReview") {
+        const current = await refreshState();
         if (!current.reviewId || current.mappingVersionId !== locator.mappingVersionId)
           throw new Error("The review reference is not available. Ask an administrator to inspect the saved action.");
         locator = { ...locator, reviewId: current.reviewId };
