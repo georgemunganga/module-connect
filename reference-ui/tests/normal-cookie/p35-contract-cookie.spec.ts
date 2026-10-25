@@ -129,18 +129,31 @@ test('buyer and independent reviewer complete an internal contract review with n
   try {
     buyerIn = true; await login(buyerContext, buyer);
     reviewerIn = true; await login(reviewerContext, reviewer);
-    progress('create-draft');
-    const supplierResponse = await buyerContext.request.get(`/api/procurement/v1/vendors/${fixture.supplierId}`,
+    progress('supplier-summary-list');
+    // Match the editor's bounded summary lookup. Vendor detail loads unrelated
+    // child tables and is not required to choose this retained supplier.
+    const supplierResponse = await buyerContext.request.get('/api/procurement/v1/vendors?page=1&pageSize=100',
       { headers: selection });
+    evidence.supplierSummaryHttpStatus = supplierResponse.status();
+    progress(`supplier-summary-http-${supplierResponse.status()}`);
     expect(supplierResponse.status()).toBe(200);
-    const supplier = await json(supplierResponse);
-    if (supplier.id !== fixture.supplierId || typeof supplier.displayName !== 'string'
+    const supplierPage = await json(supplierResponse);
+    if (!Array.isArray(supplierPage.items) || supplierPage.items.length > 100
+      || supplierPage.page !== 1 || supplierPage.pageSize !== 100
+      || !Number.isSafeInteger(supplierPage.total)) throw new Error('Bounded supplier summary page required');
+    const supplier = supplierPage.items.find((item: unknown) => item !== null
+      && typeof item === 'object' && !Array.isArray(item)
+      && (item as Record<string, unknown>).id === fixture.supplierId) as Record<string, unknown> | undefined;
+    if (!supplier || supplier.id !== fixture.supplierId || typeof supplier.displayName !== 'string'
       || !supplier.displayName.trim() || typeof supplier.status !== 'string'
       || !['Draft', 'Active', 'Approved'].includes(supplier.status)
       || supplier.status !== 'Draft' && supplier.isOrderable !== true)
       throw new Error('Retained eligible supplier label required');
+    progress('supplier-summary-matched');
+    progress('contract-form-load');
     const buyerPage = await readyPage(buyerContext, '/contracts/new');
     await expect(buyerPage.getByRole('heading', { name: 'New contract' })).toBeVisible();
+    progress('contract-form-ready');
     await buyerPage.getByLabel('Search suppliers').fill(supplier.displayName);
     await buyerPage.getByRole('combobox', { name: 'Supplier' }).click();
     await buyerPage.getByRole('option',
@@ -154,10 +167,14 @@ test('buyer and independent reviewer complete an internal contract review with n
     await buyerPage.getByLabel('Starts on').fill(today.toISOString().slice(0, 10));
     today.setUTCDate(today.getUTCDate() + 30);
     await buyerPage.getByLabel('Expires on').fill(today.toISOString().slice(0, 10));
+    progress('create-post');
     const createWait = buyerPage.waitForResponse(response => new URL(response.url()).pathname === '/api/procurement/v1/contracts'
       && response.request().method() === 'POST');
     await buyerPage.getByRole('button', { name: 'Save draft' }).click();
-    const createdResponse = await createWait; expect(createdResponse.status()).toBe(201);
+    const createdResponse = await createWait;
+    evidence.createHttpStatus = createdResponse.status();
+    progress(`create-post-http-${createdResponse.status()}`);
+    expect(createdResponse.status()).toBe(201);
     const created = await createdResponse.json() as Record<string, unknown>;
     if (!guid(created.id) || created.id === fixture.nativeContractId || created.supplierId !== fixture.supplierId
       || created.status !== 'Draft' || created.title !== 'Private browser review agreement'
@@ -166,6 +183,7 @@ test('buyer and independent reviewer complete an internal contract review with n
     const contractId = created.id;
     evidence.contractId = contractId; evidence.createBody = createdResponse.request().postData(); retain();
     await expect(buyerPage).toHaveURL(new RegExp(`/contracts/${contractId}$`));
+    progress('created-detail-ready');
     progress('add-rate');
     await buyerPage.getByRole('button', { name: 'Add rate' }).click();
     await buyerPage.getByLabel('Description').fill('Browser review supply');
@@ -292,14 +310,18 @@ test('buyer and independent reviewer complete an internal contract review with n
       .toBe(await contractState(buyerContext, contractId, 'Approved'));
     evidence.contractReviewUiVerified = true; retain();
   } catch {
-    failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE'; evidence.failedStep = step; retain();
+    failed = true; evidence.status = 'FAILED_RETAIN_FIXTURE';
+    evidence.failureCode = 'P35_COOKIE_UI_STEP_FAILED'; evidence.failedStep = step; retain();
   } finally {
     for (const [name, context, signedIn] of [
       ['buyer', buyerContext, buyerIn], ['reviewer', reviewerContext, reviewerIn],
     ] as const) {
       if (!signedIn) continue;
       try { await logout(context); evidence[`${name}SessionRevoked`] = true; }
-      catch { failed = true; evidence[`${name}SessionRevoked`] = false; }
+      catch {
+        failed = true; evidence[`${name}SessionRevoked`] = false;
+        evidence.failureCode = 'P35_COOKIE_SESSION_REVOCATION_FAILED'; evidence.failedStep = `${name}-logout`;
+      }
       retain();
     }
     if (!failed && evidence.contractReviewUiVerified === true

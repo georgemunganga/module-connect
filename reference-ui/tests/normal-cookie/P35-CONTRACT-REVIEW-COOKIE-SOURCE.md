@@ -2,6 +2,8 @@
 
 This source extends the existing ERP contract editor, rate panel and assigned review worklist. It is unrun until an isolated private P35 runtime produces the exact 15-minute `p35-contract-review-cookie-fixture.private.json`. The backend hook supplies ten synthetic workerless Core accounts and a challenged completion file; its completion only closes the runtime window. It does not certify the browser or owner graph.
 
+The buyer selects the retained supplier through the editor's bounded `GET /api/procurement/v1/vendors?page=1&pageSize=100` summary contract, matching its ID to the returned display label and status. A vendor detail read is unnecessary for this form and is outside the fixture's finite child-table read grants. The browser result stores HTTP status and a bounded step code on failure, without raw server error bodies or credentials.
+
 ## Purpose and boundary
 
 The buyer signs in through normal `/api/hrm/auth/login`, selects the fixture company and branch, creates a **new** contract for the fixture's already eligible supplier, adds an exact-value rate, and submits for internal review. A different signed-in reviewer opens the current Core assignment and returns it. The buyer corrects and revises the draft, resubmits under a new key, and the reviewer approves that new assignment. Both sessions log out and must receive 401 from `/api/procurement/v1/context` afterward. The browser records original request bodies, idempotency keys, responses, server versions and GET-only original-key recoveries in a protected private file. The created contract must differ from the native fixture contract.
