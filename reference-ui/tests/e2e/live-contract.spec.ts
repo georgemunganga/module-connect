@@ -12,7 +12,7 @@ const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "contractDraft"]));
 type ContractRecord = Record<string, unknown> & { id: string; version: number; title: string; status: string };
 
-async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; noSupplier?: boolean; searchOnly?: boolean; ratesEnabled?: boolean; loseFirstRate?: boolean; initialContract?: boolean; cancelMode?: "lost-ack" | "malformed" | "delayed" | "stale" | "validation" | "unconfirmed-draft" } = {}) {
+async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; noSupplier?: boolean; searchOnly?: boolean; ratesEnabled?: boolean; loseFirstRate?: boolean; initialContract?: boolean; cancelMode?: "lost-ack" | "malformed" | "delayed" | "stale" | "validation" | "unconfirmed-draft" | "unexpected-revision" | "substituted-id" } = {}) {
   let record: ContractRecord | null = options.initialContract ? { id: contractId, number: "CON-001", supplierId: vendorId,
     title: "Existing supplier agreement", contractType: "Supply", currencyCode: "ZMW", ceilingAmount: 100,
     ceilingAmountExact: "100", effectiveFrom: null, expiresOn: null, renewalNoticeOn: null,
@@ -78,6 +78,8 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
       if (options.cancelMode === "delayed") await cancellationReleased;
       if (options.cancelMode === "lost-ack") return route.abort("connectionreset");
       if (options.cancelMode === "malformed") return json({ status: "Cancelled" });
+      if (options.cancelMode === "unexpected-revision") return json({ ...record, version: record.version + 7 });
+      if (options.cancelMode === "substituted-id") return json({ ...record, id: "66666666-6666-4666-8666-666666666666" });
       return json(record);
     }
     if (path === `/api/procurement/v1/contracts/${contractId}/rates` && record) {
@@ -277,7 +279,7 @@ test("unconfirmed contracts create preserves entries and blocks repeat submissio
 });
 
 // These cases use scoped mocked APIs; they do not claim real backend persistence.
-for (const cancelMode of ["lost-ack", "malformed"] as const) {
+for (const cancelMode of ["lost-ack", "malformed", "unexpected-revision", "substituted-id"] as const) {
   test(`contract cancellation ${cancelMode} locks writes and GET inspects retained saved state`, async ({ page }) => {
     const fixture = await mockErp(page, { initialContract: true, cancelMode });
     await page.goto(`/procurement/workspace/contracts/${contractId}`);
@@ -290,7 +292,10 @@ for (const cancelMode of ["lost-ack", "malformed"] as const) {
     await expect(page.getByRole("link", { name: "Edit draft", exact: true })).toHaveCount(0);
     expect(fixture.cancelWrites()).toBe(1);
     const reads = fixture.detailReads();
+    const savedRead = page.waitForResponse(value => value.request().method() === "GET"
+      && new URL(value.url()).pathname === `/api/procurement/v1/contracts/${contractId}`);
     await page.getByRole("button", { name: "Refresh saved contract", exact: true }).click();
+    expect(await (await savedRead).json()).toMatchObject({ id: contractId, version: 2, status: "Cancelled" });
     await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Cancel draft", exact: true })).toHaveCount(0);
     expect(fixture.detailReads()).toBe(reads + 1); expect(fixture.cancelWrites()).toBe(1);

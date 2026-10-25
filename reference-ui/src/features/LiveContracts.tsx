@@ -222,7 +222,7 @@ export function LiveContractDetail() {
     try {
       const saved = await cancelOwnContractDraft(legalEntityId, record.id, record.version, reason.trim());
       if (!stillCurrent(captured)) return;
-      if (saved.id !== record.id || saved.version <= record.version)
+      if (saved.id !== record.id || saved.version !== record.version + 1)
         throw new ContractApiError(0, "The cancellation response does not match this contract. Refresh the saved record before another change.");
       navigate("/contracts");
     } catch (cause) {
