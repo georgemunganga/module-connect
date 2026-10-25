@@ -114,14 +114,14 @@ async function request(company: string, path: string, init: RequestInit = {}): P
   if (init.body) headers.set("Content-Type", "application/json");
   let response: Response;
   try { response = await fetch(path, { ...init, headers, cache: "no-store", credentials: "include" }); }
-  catch { throw new GoodsReturnError(0, "The response was interrupted. Check the original saved command before another change."); }
+  catch { throw new GoodsReturnError(0, "The response was interrupted. Check whether this return was saved before another change."); }
   let body: unknown;
   try { body = await response.json(); } catch { if (response.ok) throw invalid(); }
   if (!response.ok) throw new GoodsReturnError(response.status, response.status === 403 ? "Your current access does not permit this return action."
-    : response.status === 404 ? "This return or saved command is unavailable in the selected branch."
+    : response.status === 404 ? "This return or saved result is unavailable in the selected branch."
     : response.status === 409 ? "The return or its source changed. Refresh before continuing."
     : response.status === 422 ? "Review the return quantity, reason and evidence reference."
-    : "The return service is unavailable. Check the saved command if a write was interrupted.");
+    : "The return service is unavailable. If you just saved, check whether the return was saved.");
   return body;
 }
 export async function listReturnDrafts(company: string, offset: number, signal?: AbortSignal) {
