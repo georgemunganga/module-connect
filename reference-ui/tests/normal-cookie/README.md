@@ -149,3 +149,19 @@ bodies (no authentication request, cookies or headers) for possible independent
 fingerprint reconstruction. The test calls real local-auth logout, verifies
 the session is no longer authenticated, and records success only after that
 revocation check. Closing a browser context is not treated as logout.
+
+`p33-po-cookie.spec.ts` is an opt-in real local-cookie UI proof for the P33
+unfunded purchase-order Draft edit. It requires a fresh protected schema-4
+`p33-po-local-cookie-fixture.private.json` from the exclusive
+`P33_HTTP_SERVE_NORMAL_COOKIE=1` backend profile, the SHA-bound receipt from
+`p33-po-cookie-browser-proxy.mjs`, and `P33_PO_COOKIE_FIXTURE`,
+`P33_PO_COOKIE_PROXY_RECEIPT`, `P33_PO_COOKIE_EXPECTED_DATABASE`, and
+`P33_PO_COOKIE_BROWSER_RESULT` environment paths. Run with
+`playwright.p33-po-cookie.config.ts` after the independent owner baseline is
+captured. The browser creates a real internal Draft, saves one reduced-quantity
+Edit through the retained five-tab screen, reloads its history, cancels the
+Draft, logs out, and records three original command bodies/keys privately.
+The browser result and lifecycle completion are not owner proof; run the
+separate P33 four-to-five-order read-only verifier after the browser finishes.
+No supplier send, Finance posting, API mocks, private identity headers or
+production credentials are involved.
