@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPrincipalReceipt, getPrincipalService, listPrincipalReceivingSources, principalReceivingCommandPath, recoverPrincipalReceiving, sendPrincipalReceiving } from "../../src/platform/procurement-principal-receiving-api";
+import { getPrincipalReceipt, getPrincipalService, listPrincipalReceiving, listPrincipalReceivingSources, principalReceivingCommandPath, recoverPrincipalReceiving, sendPrincipalReceiving } from "../../src/platform/procurement-principal-receiving-api";
 import { receivingCommandPath, type ReceivingCommand } from "../../src/platform/procurement-receiving-api";
 const company="11111111-1111-4111-8111-111111111111", branch="22222222-2222-4222-8222-222222222222", order="33333333-3333-4333-8333-333333333333";
 const issued="44444444-4444-4444-8444-444444444444", target="55555555-5555-4555-8555-555555555555", line="66666666-6666-4666-8666-666666666666", key="77777777-7777-4777-8777-777777777777", sourceLine="88888888-8888-4888-8888-888888888888";
@@ -8,6 +8,15 @@ const result=(kind="Goods")=>({id:target,version:2,executionVersion:2,status:kin
 const json=(body:unknown)=>new Response(JSON.stringify(body),{headers:{"Content-Type":"application/json"}});
 afterEach(()=>vi.unstubAllGlobals());
 describe("principal receiving exact scoped transport",()=>{
+  it("requests server ordering only for the principal directory and never renders a UUID as a receipt number",async()=>{
+    const fetch=vi.fn().mockImplementation(async()=>json({records:[{id:target,version:2,status:"Draft",kind:"Goods",purchaseOrderId:order,
+      purchaseOrderNumber:"PO-EXACT",createdAt:"2026-10-24T09:00:00Z"}],total:1,offset:0,limit:10,executionVersion:2}));
+    vi.stubGlobal("fetch",fetch);
+    const page=await listPrincipalReceiving(company,"receipts",1,undefined,"Draft","oldest");
+    expect(String(fetch.mock.calls[0][0])).toContain("kind=Goods&offset=0&limit=10&status=Draft&sort=oldest");
+    expect(page.items[0].number).toBe("Goods delivery");expect(page.items[0].orderNumber).toBe("PO-EXACT");
+    expect(page.items[0].number).not.toContain(target);
+  });
   it("preserves exact original source digits and identifies unknown history without a fabricated zero",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockImplementation(async()=>json({records:[{purchaseOrderId:order,purchaseOrderNumber:"PO-EXACT",issuedVersionId:issued,
       purchaseOrderLineId:sourceLine,siteId:branch,description:"Retained source",unitCode:"EA",currencyCode:"ZMW",authorizedQuantity:"99999999999999.9999",

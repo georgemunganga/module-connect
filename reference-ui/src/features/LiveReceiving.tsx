@@ -36,26 +36,33 @@ function ReceivingList() {
   if (principal && context.permissions.includes("procurement-receipt-accept")) views.push({ code: "acceptance", label: "Goods to accept" });
   if ((principal || context.capabilities.receivingServices) && context.permissions.includes("procurement-service-certify")) views.push({ code: "certification", label: "Services to confirm" });
   const [view, setView] = useState<ReceivingView>(() => views[0]?.code ?? "receipts"), [page, setPage] = useState(1), [revision, setRevision] = useState(0);
+  const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [data, setData] = useState<ReceivingPage<ReceivingSummary> | null>(null), [error, setError] = useState(""), [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string[]>([]), [visibleColumns, setVisibleColumns] = useState(["number", "order", "status", "date"]), [widths, setWidths] = useState<Record<string, number>>({}), [clip, setClip] = useState(false), [filters, setFilters] = useState<Record<string, string>>({}), [toolNotice, setToolNotice] = useState(""), [preview, setPreview] = useState<ReceivingSummary | null>(null);
   const columns: ListColumn[] = [{ key: "number", label: "Delivery / service", width: 230 }, { key: "order", label: "Order", width: 210 }, { key: "status", label: "Status", width: 150 }, { key: "date", label: "Date / period", width: 230 }];
   const statusFields = [{ key: "status", label: "Status", type: "select" as const, options: principal ? view === "services" ? ["Draft", "Certified", "Cancelled"] : ["Draft", "Recorded", "Cancelled"] : view === "services" ? ["PendingCertification", "Accepted", "Cancelled"] : ["Draft", "Recorded", "Held", "Inspected", "Partially Accepted", "Accepted", "Rejected", "Cancelled"] }];
   const status = filters.status ?? "";
   const allowed = views.some((item) => item.code === view);
+  const chooseSort = (key: string) => {
+    if (!principal || (view !== "receipts" && view !== "services") || (key !== "newest" && key !== "oldest")) {
+      setToolNotice("Sorting this delivery view is not connected yet. The list keeps the server's current order."); return;
+    }
+    setSort(key); setPage(1); setToolNotice(key === "oldest" ? "Showing oldest deliveries first." : "Showing newest deliveries first.");
+  };
   useEffect(() => {
     const controller = new AbortController(); setData(null); setSelected([]); setPreview(null); setError(""); setLoading(true);
     if (!allowed) { setLoading(false); return () => controller.abort(); }
-    api.listReceiving(company, view, page, controller.signal, status).then((result) => { if (!controller.signal.aborted) setData(result); })
+    api.listReceiving(company, view, page, controller.signal, status, sort).then((result) => { if (!controller.signal.aborted) setData(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(message(cause)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [company, view, page, revision, allowed, status, api]);
+  }, [company, view, page, revision, allowed, status, sort, api]);
   return <div className="p-5 sm:p-8"><PageHeader title="Purchase Receives" subtitle="Record deliveries, inspect goods and confirm completed services." actions={(principal || context.capabilities.receivingDrafts) && context.permissions.includes("procurement-receipt-create") && context.permissions.includes("procurement-receipt-view") ? <Link className="text-sm text-primary hover:underline" to={`${base}/new${principal ? "" : "?receivingProtocol=legacy"}`}>Add delivery</Link> : undefined} />
     {context.capabilities.principalGoodsReturnDrafts === true && context.permissions.includes("procurement-return-read") && <ReturnTabs active="deliveries" />}
     {context.capabilities.principalReceiving && <Field label="Receiving records"><Select value={principal ? "current" : "legacy"} onChange={(event) => { const next = new URLSearchParams(search); if (event.target.value === "legacy") next.set("receivingProtocol", "legacy"); else next.delete("receivingProtocol"); setSearch(next); }}><option value="current">Current deliveries</option><option value="legacy" disabled={!legacyAvailable}>Earlier deliveries</option></Select></Field>}
     {!views.length ? <p role="alert">You do not have access to delivery records or assigned tasks.</p> : <>
-      <div role="tablist" aria-label="Receiving responsibilities" className="mb-5 flex flex-wrap gap-3">{views.map((item) => <Button role="tab" key={item.code} aria-selected={view === item.code} variant={view === item.code ? "primary" : "secondary"} onClick={() => { setData(null); setView(item.code); setFilters({}); setSelected([]); setPreview(null); setToolNotice(""); setPage(1); }}>{item.label}</Button>)}</div>
+      <div role="tablist" aria-label="Receiving responsibilities" className="mb-5 flex flex-wrap gap-3">{views.map((item) => <Button role="tab" key={item.code} aria-selected={view === item.code} variant={view === item.code ? "primary" : "secondary"} onClick={() => { setData(null); setView(item.code); setFilters({}); setSelected([]); setPreview(null); setToolNotice(""); setSort("newest"); setPage(1); }}>{item.label}</Button>)}</div>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><ListTools entity="Purchase Receives" columns={columns} visibleColumns={visibleColumns} onVisibleColumnsChange={setVisibleColumns} columnWidths={widths} onColumnWidthsChange={setWidths} clipText={clip} onClipTextChange={setClip}
-        sortOptions={[{ key: "newest", label: "Newest first" }, { key: "oldest", label: "Oldest first" }, { key: "number", label: "Number" }]} onSort={() => setToolNotice("Sorting all deliveries is not connected yet. The list keeps the server's current order.")}
+        sortOptions={principal && (view === "receipts" || view === "services") ? [{ key: "newest", label: "Newest first" }, { key: "oldest", label: "Oldest first" }] : [{ key: "newest", label: "Newest first" }, { key: "oldest", label: "Oldest first" }, { key: "number", label: "Number" }]} onSort={chooseSort}
         filterFields={view === "receipts" || view === "services" ? statusFields : []} activeFilters={filters} onApplyFilters={(next) => { setFilters(next); setPage(1); }} showSavedView={false}
         onExport={() => setToolNotice("Secure receiving exports are not connected yet. No file was downloaded.")} selectedCount={selected.length}
         onRefresh={() => setRevision((n) => n + 1)} onResetWidths={() => setWidths({})} notify={setToolNotice} />
@@ -65,7 +72,7 @@ function ReceivingList() {
       {selected.length > 0 && <div className="mb-3 flex flex-wrap items-center gap-3 text-sm"><span>{selected.length} selected</span><Button variant="secondary" onClick={() => setToolNotice("Secure receiving exports are not connected yet. No file was downloaded.")}>Export selected</Button><Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}
       {error && <p role="alert" className="my-4 text-sm text-red-700">{error}</p>}
       {loading ? <p role="status" className="mt-5">Loading deliveries…</p> : data?.items.length ? <Panel><StandardDataTable rows={data.items.map((row) => ({ ...row, id: `${row.receiptId ?? row.id}:${row.lineId ?? ""}` }))} columns={columns} visibleColumns={visibleColumns} columnWidths={widths} clipText={clip} selected={selected} onSelectedChange={setSelected}
-        onSort={() => setToolNotice("Sorting all deliveries is not connected yet. The list keeps the server's current order.")} onOpen={(row) => setPreview(data.items.find((item) => `${item.receiptId ?? item.id}:${item.lineId ?? ""}` === row.id) ?? null)} rowLabel={(row) => row.number ?? row.deliverableRef ?? "Service"}
+        onSort={(key) => chooseSort(key === "newest" && principal && (view === "receipts" || view === "services") ? sort === "newest" ? "oldest" : "newest" : key)} onOpen={(row) => setPreview(data.items.find((item) => `${item.receiptId ?? item.id}:${item.lineId ?? ""}` === row.id) ?? null)} rowLabel={(row) => row.number ?? row.deliverableRef ?? "Service"}
         renderCell={(row, column) => column.key === "number" ? row.number ?? row.deliverableRef ?? "Service" : column.key === "order" ? row.orderNumber : column.key === "status" ? <Badge>{row.status}</Badge> : row.receivedAt ? new Date(row.receivedAt).toLocaleString() : `${row.periodFrom ?? ""} – ${row.periodTo ?? ""}`}
         renderActions={(row) => { const original = data.items.find((item) => `${item.receiptId ?? item.id}:${item.lineId ?? ""}` === row.id)!; return <Link className="text-sm text-primary hover:underline" to={target(original, view, !principal)}>Review delivery</Link>; }} /></Panel> : !error && <EmptyState title="No deliveries need your attention" description="Records and tasks within your current company, branch and responsibilities will appear here." />}
       {data && data.total > data.pageSize && <div className="mt-5 flex gap-3"><Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous deliveries</Button><span>Page {page}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next deliveries</Button></div>}
