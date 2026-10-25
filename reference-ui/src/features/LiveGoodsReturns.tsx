@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Badge, Button, Field, Input, Modal, PageHeader, Panel, Textarea } from "../components/ui";
+import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Textarea } from "../components/ui";
 import { DetailSection, DetailTabs } from "../components/data/DetailPrimitives";
 import { RecordTable } from "../components/data/RecordTable";
 import { TransactionEditorFrame } from "./TransactionEditor";
@@ -30,7 +30,7 @@ export function LiveGoodsReturnList() {
   return <ReturnList key={`${context.tenantId}:${context.legalEntityId}:${context.principalId}:${branch}`} enabled={enabled} />;
 }
 function ReturnList({ enabled }: { enabled: boolean }) {
-  const context = useLiveReadiness()!, company = context.legalEntityId;
+  const context = useLiveReadiness()!, company = context.legalEntityId, navigate = useNavigate();
   const canRead = enabled && context.permissions.includes("procurement-return-read");
   const canCreate = canRead && context.permissions.includes("procurement-return-create");
   const [offset, setOffset] = useState(0), [page, setPage] = useState<ReturnPage<ReturnDetail> | null>(null);
@@ -47,7 +47,7 @@ function ReturnList({ enabled }: { enabled: boolean }) {
     <ReturnTabs active="returns" />
     {!canRead ? <p role="alert">Select a permitted branch and obtain current return access to view drafts.</p> : <>
       <div className="mb-4"><Button variant="secondary" onClick={() => setRevision((n) => n + 1)}>Refresh return drafts</Button></div>
-      {error && <p role="alert">{error}</p>}{loading ? <p role="status">Loading return drafts…</p> : page?.items.length ? <Panel><div className="overflow-x-auto"><RecordTable><thead><tr><th>Purchase order</th><th>Goods</th><th>Proposed quantity</th><th>Status</th><th>Action</th></tr></thead><tbody>{page.items.map((item) => <tr key={item.id}><td>{item.labels.purchaseOrderNumber}</td><td>{item.labels.description} · {item.labels.unitCode}</td><td>{item.quantityExact}</td><td><Badge>{item.status}</Badge></td><td><Link className="text-primary hover:underline" to={`${base}/${item.id}`}>View return draft</Link></td></tr>)}</tbody></RecordTable></div></Panel> : <p>No return drafts are available in this branch.</p>}
+      {error && <p role="alert">{error}</p>}{loading ? <p role="status">Loading return drafts…</p> : page?.items.length ? <Panel><div className="overflow-x-auto"><RecordTable><thead><tr><th>Purchase order</th><th>Goods</th><th>Proposed quantity</th><th>Status</th><th>Action</th></tr></thead><tbody>{page.items.map((item) => <tr key={item.id}><td>{item.labels.purchaseOrderNumber}</td><td>{item.labels.description} · {item.labels.unitCode}</td><td>{item.quantityExact}</td><td><Badge>{item.status}</Badge></td><td><Link className="text-primary hover:underline" to={`${base}/${item.id}`}>View return draft</Link></td></tr>)}</tbody></RecordTable></div></Panel> : !error && <EmptyState title="No return drafts yet" description="Draft returns for accepted goods in this branch will appear here." action={canCreate ? <Button onClick={() => navigate(`${base}/new`)}>Create your first return draft</Button> : undefined} />}
       <div className="mt-4 flex gap-3"><Button variant="secondary" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</Button><Button variant="secondary" disabled={!page?.hasMore || loading || page?.nextOffset === null} onClick={() => { if (page?.nextOffset != null) setOffset(page.nextOffset); }}>Next</Button></div>
     </>}
   </div>;

@@ -10,12 +10,12 @@ const mandatoryCapabilities=Object.fromEntries([
   "invoiceValidation","financeHandoff","supplierPortal","planningDraft","configurationDraft","contractDraft","sourcingDraft",
 ].map((key)=>[key,false]));
 const labels={purchaseOrderNumber:"PO-RETAINED",supplierDisplayName:"Approved supplier",lineNumber:1,description:"Accepted goods",unitCode:"EA",currencyCode:"ZMW",deliveryNoteReference:"DN-1",receivedAt:"2026-10-25T10:00:00Z"};
-async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,returnsAbsent=false,allBranches=false,stale=false}={}){
+async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,returnsAbsent=false,allBranches=false,stale=false,empty=false,denyCreate=false}={}){
   const writes:{url:string;body:Record<string,unknown>;key:string}[]=[], reads:string[]=[];
   const receipts=new Map<string,unknown>();let version=1,status="Draft",quantity="0.5",reason="Wrong colour",interrupted=false,rejected=false;
   const current=()=>({id:draft,status,version,branchId:branch,receiptId:receipt,acceptanceFactId:fact,purchaseOrderId:order,purchaseOrderLineId:line,acceptedFactQuantityExact:"1.0001",quantityExact:quantity,reason,evidenceReference:null,draftOnly:true,stockChanged:false,financeChanged:false,supplierNotified:false});
   const detail=()=>({...current(),allowedActions:status==="Draft"&&!revoked?["Edit","Cancel"]:[],labels});
-  const perms=["procurement-access","procurement-return-read","procurement-return-create",...(revoked?[]:["procurement-return-edit"]),...(returnOnly?[]:["procurement-receipt-view"])];
+  const perms=["procurement-access","procurement-return-read",...(denyCreate?[]:["procurement-return-create"]),...(revoked?[]:["procurement-return-edit"]),...(returnOnly?[]:["procurement-receipt-view"])];
   await page.addInitScript(({company,branch,allBranches})=>localStorage.setItem("erp.shell.state.v1",JSON.stringify(allBranches?{entityId:company,branchScope:"all"}:{entityId:company,branch})),{company,branch,allBranches});
   await page.route("**/api/**",async route=>{
     const request=route.request(),url=new URL(request.url()),urlPath=url.pathname;
@@ -32,7 +32,7 @@ async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,retu
     if(request.method()==="GET"){
       reads.push(urlPath);
       if(urlPath===root+"/eligible-goods")return json({items:[{acceptanceFactId:fact,receiptId:receipt,purchaseOrderId:order,purchaseOrderLineId:line,branchId:branch,acceptedFactQuantityExact:"1.0001",labels}],hasMore:false,nextOffset:null});
-      if(urlPath===root)return json({items:status==="Draft"?[]:[detail()],hasMore:false,nextOffset:null});
+      if(urlPath===root)return json({items:empty?[]:[detail()],hasMore:false,nextOffset:null});
       if(urlPath.startsWith(root+"/commands/"))return receipts.has(urlPath.split("/").at(-1)!)?json(receipts.get(urlPath.split("/").at(-1)!)):json({message:"Not found"},404);
       if(urlPath===root+"/"+draft)return json(detail());
     }
@@ -97,4 +97,17 @@ test("a receiving-only capability does not open Returns",async({page})=>{
 test("Organisation All remains blocked until a branch is selected",async({page})=>{
   const state=await fixture(page,{allBranches:true});await page.goto(path);
   await expect(page.getByText(/Choose a permitted branch/)).toBeVisible();expect(state.writes).toHaveLength(0);
+});
+test("an empty return list uses the existing ERP empty state and a permitted create action",async({page})=>{
+  const state=await fixture(page,{empty:true});await page.goto(path);
+  await expect(page.getByRole("heading",{name:"No return drafts yet"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Create your first return draft"})).toBeVisible();
+  await page.getByRole("button",{name:"Create your first return draft"}).click();
+  await expect(page.getByRole("heading",{name:"Add return draft"})).toBeVisible();expect(state.writes).toHaveLength(0);
+});
+test("an empty readable return list hides create when the grant is absent",async({page})=>{
+  const state=await fixture(page,{empty:true,denyCreate:true});await page.goto(path);
+  await expect(page.getByRole("heading",{name:"No return drafts yet"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Create your first return draft"})).toHaveCount(0);
+  await expect(page.getByRole("link",{name:"Add return draft"})).toHaveCount(0);expect(state.writes).toHaveLength(0);
 });
