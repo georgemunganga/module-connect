@@ -12,7 +12,9 @@ export type ReturnLabels = { purchaseOrderNumber: string; supplierDisplayName: s
 export type ReturnEligible = { acceptanceFactId: string; receiptId: string; purchaseOrderId: string; purchaseOrderLineId: string; branchId: string; acceptedFactQuantityExact: string; labels: ReturnLabels };
 export type ReturnDetail = { id: string; status: "Draft" | "Cancelled"; version: number; branchId: string; receiptId: string; acceptanceFactId: string; purchaseOrderId: string; purchaseOrderLineId: string; acceptedFactQuantityExact: string; quantityExact: string; reason: string; evidenceReference: string | null; allowedActions: Array<"Edit" | "Cancel">; labels: ReturnLabels; draftOnly: true; stockChanged: false; financeChanged: false; supplierNotified: false };
 export type ReturnPage<T> = { items: T[]; nextOffset: number | null; hasMore: boolean };
-export type ReturnCommand = { operation: "Create" | "Revise" | "Cancel"; key: string; targetId: string | null; body: string; method: "POST" | "PUT" };
+export type ReturnCommand = { operation: "Create" | "Revise" | "Cancel"; key: string; targetId: string | null; body: string; method: "POST" | "PUT";
+  /** Original GET detail pins retained for cancellation, which has no quantity in its POST body. */
+  prior?: { quantityExact: string; evidenceReference: string | null } };
 export type ReturnAck = Omit<ReturnDetail, "allowedActions" | "labels">;
 
 export function returnQuantity(value: string, ceiling: string): string {
@@ -60,10 +62,36 @@ export function readReturnEligible(value: unknown): ReturnEligible {
   return value as unknown as ReturnEligible;
 }
 export function readReturnAck(value: unknown, command: ReturnCommand): ReturnAck {
+  returnCommandPath(command);
   if (!base(value) || !record(value) || Object.hasOwn(value, "allowedActions") || Object.hasOwn(value, "labels")
-    || command.targetId && value.id !== command.targetId
-    || command.operation === "Cancel" && value.status !== "Cancelled") throw invalid();
+    || command.targetId && value.id !== command.targetId) throw invalid();
+  let body: unknown;
+  try { body = JSON.parse(command.body); } catch { throw invalid(); }
+  if (!record(body) || typeof body.reason !== "string" || typeof value.reason !== "string") throw invalid();
+  let normalized: { reason: string; evidenceReference: string | null };
+  try { normalized = returnText(body.reason, typeof body.evidenceReference === "string" ? body.evidenceReference : undefined); }
+  catch { throw invalid(); }
+  if (value.reason !== normalized.reason) throw invalid();
+  if (command.operation === "Create" || command.operation === "Revise") {
+    if (typeof body.quantity !== "string" || body.evidenceReference !== null && typeof body.evidenceReference !== "string"
+      || value.evidenceReference !== normalized.evidenceReference || value.status !== "Draft") throw invalid();
+    try { returnQuantity(body.quantity, value.acceptedFactQuantityExact); } catch { throw invalid(); }
+    if (scaled(body.quantity) !== scaled(value.quantityExact)) throw invalid();
+  }
+  if (command.operation === "Create") {
+    if (body.acceptanceFactId !== value.acceptanceFactId || value.version !== 1) throw invalid();
+  } else if (!integer(body.expectedRevision) || body.expectedRevision < 1 || value.version !== body.expectedRevision + 1) throw invalid();
+  if (command.operation === "Cancel") {
+    if (value.status !== "Cancelled" || body.evidenceReference !== undefined || !command.prior
+      || scaled(command.prior.quantityExact) !== scaled(value.quantityExact)
+      || command.prior.evidenceReference !== value.evidenceReference) throw invalid();
+  }
   return value as unknown as ReturnAck;
+}
+function scaled(value: string): bigint {
+  if (!exact.test(value)) throw invalid();
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole) * 10000n + BigInt(fraction.padEnd(4, "0"));
 }
 function readPage<T>(value: unknown, parse: (item: unknown) => T): ReturnPage<T> {
   if (!record(value) || Object.hasOwn(value, "total") || Object.hasOwn(value, "sort") || Object.hasOwn(value, "search")

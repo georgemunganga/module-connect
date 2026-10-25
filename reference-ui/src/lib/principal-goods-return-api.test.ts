@@ -70,4 +70,26 @@ describe("goods return source and command boundary", () => {
     vi.stubGlobal("fetch", vi.fn(async () => json({ items: [detail], nextOffset: null, hasMore: false, total: 1 })));
     await expect(listReturnDrafts(company, 0)).rejects.toThrow("incomplete");
   });
+  it("binds saved Create and Revise acknowledgements to the original exact command body", async () => {
+    expect(() => readReturnAck({ ...base, acceptanceFactId: id(9) }, command)).toThrow("incomplete");
+    expect(() => readReturnAck({ ...base, quantityExact: "0.5002" }, command)).toThrow("incomplete");
+    expect(() => readReturnAck({ ...base, reason: "Substituted reason" }, command)).toThrow("incomplete");
+    const revise: ReturnCommand = { operation: "Revise", key, targetId: draft, method: "PUT",
+      body: JSON.stringify({ expectedRevision: 1, quantity: "0.1000", reason: "Changed", evidenceReference: "REF-1" }) };
+    const revised = { ...base, version: 2, quantityExact: "0.1", reason: "Changed", evidenceReference: "REF-1" };
+    expect(readReturnAck(revised, revise).version).toBe(2);
+    expect(() => readReturnAck({ ...revised, version: 1 }, revise)).toThrow("incomplete");
+    expect(() => readReturnAck({ ...revised, quantityExact: "0.2" }, revise)).toThrow("incomplete");
+    selectedBranch();vi.stubGlobal("fetch", vi.fn(async () => json({ ...base, acceptanceFactId: id(9) })));
+    await expect(recoverReturnCommand(company, command)).rejects.toThrow("incomplete");
+  });
+  it("binds cancellation to its original revision and retained proposal values", () => {
+    const cancel: ReturnCommand = { operation: "Cancel", key, targetId: draft, method: "POST",
+      body: JSON.stringify({ expectedRevision: 1, reason: "Withdrawn" }),
+      prior: { quantityExact: "0.5001", evidenceReference: null } };
+    const saved = { ...base, status: "Cancelled", version: 2, reason: "Withdrawn" };
+    expect(readReturnAck(saved, cancel).status).toBe("Cancelled");
+    expect(() => readReturnAck({ ...saved, quantityExact: "0.5" }, cancel)).toThrow("incomplete");
+    expect(() => readReturnAck({ ...saved, version: 3 }, cancel)).toThrow("incomplete");
+  });
 });
