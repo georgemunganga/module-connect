@@ -10,6 +10,10 @@ const sha="a".repeat(64), source={roundId:round,unsealingId:id(9),rfqTitle:"Veri
   canSubmit:false,awardAvailable:false,purchaseOrderAvailable:false};
 const required=Object.fromEntries(["vendorDraft","itemDraft","requestDraft","approvals","sourcing","contracts","orders","receiving",
   "invoiceValidation","financeHandoff","supplierPortal","planningDraft","configurationDraft","contractDraft","sourcingDraft"].map(key=>[key,false]));
+async function chooseOpenedLine(page: Page) {
+  await page.getByLabel("Opened offer and line").click();
+  await page.getByRole("option", { name: "Offer 1 · Line 1" }).click();
+}
 async function fixture(page:Page,{unavailable=false,lost=false,revoked=false,all=false,unverified=false,stale=false,revokedAtSave=false,wrongBranch=false,
   multiple=false,unprocessableOnce=false,afterAckDetailFails=false,wrongAck=false,wrongDetail=false}={}){
   const writes:{key:string;body:Record<string,unknown>}[]=[], reads:string[]=[];
@@ -110,7 +114,7 @@ test("save and revise use typed exact strings, original CAS and no award effect"
   await expect(page.getByText("Verified goods RFQ")).toBeVisible();
   await page.getByRole("link",{name:"Start a new recommendation draft"}).click();
   await page.getByRole("button",{name:"Add offer line"}).click();
-  await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await chooseOpenedLine(page);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");
   await page.getByRole("button",{name:"Save recommendation draft"}).click();
@@ -124,7 +128,7 @@ test("save and revise use typed exact strings, original CAS and no award effect"
 });
 test("lost save survives a hard reload and checks original key without a second POST",async({page})=>{
   const state=await fixture(page,{lost:true});await page.goto(path+"/"+round+"?new=1");
-  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByRole("button",{name:"Add offer line"}).click();await chooseOpenedLine(page);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();
@@ -135,7 +139,7 @@ test("lost save survives a hard reload and checks original key without a second 
 });
 test("definitive 422 clears only the rejected key and lets the author correct entered lines",async({page})=>{
   const state=await fixture(page,{unprocessableOnce:true});await page.goto(path+"/"+round+"?new=1");
-  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByRole("button",{name:"Add offer line"}).click();await chooseOpenedLine(page);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("alert").filter({hasText:"Check the recommendation lines"})).toBeVisible();
@@ -147,7 +151,7 @@ test("definitive 422 clears only the rejected key and lets the author correct en
 });
 test("GET after a valid acknowledgement can fail; hard reload still recovers without a second POST",async({page})=>{
   const state=await fixture(page,{afterAckDetailFails:true});await page.goto(path+"/"+round+"?new=1");
-  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByRole("button",{name:"Add offer line"}).click();await chooseOpenedLine(page);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();
@@ -157,7 +161,7 @@ test("GET after a valid acknowledgement can fail; hard reload still recovers wit
 });
 test("a substituted POST acknowledgement never clears the original command journal",async({page})=>{
   const state=await fixture(page,{wrongAck:true});await page.goto(path+"/"+round+"?new=1");
-  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByRole("button",{name:"Add offer line"}).click();await chooseOpenedLine(page);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();
@@ -166,7 +170,7 @@ test("a substituted POST acknowledgement never clears the original command journ
 });
 test("a substituted retained line denies recovery despite a valid receipt",async({page})=>{
   const state=await fixture(page,{wrongDetail:true});await page.goto(path+"/"+round+"?new=1");
-  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByRole("button",{name:"Add offer line"}).click();await chooseOpenedLine(page);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("button",{name:"Check saved draft"})).toBeVisible();
@@ -183,7 +187,7 @@ test("absent capability, revoked action and Organisation All do not call recomme
 });
 test("a stale revision produces one write and no automatic POST retry",async({page})=>{
   const state=await fixture(page,{stale:true});await page.goto(path+"/"+round+"?new=1");
-  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByRole("button",{name:"Add offer line"}).click();await chooseOpenedLine(page);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("alert").filter({hasText:"changed"})).toBeVisible();
@@ -193,7 +197,7 @@ test("a stale revision produces one write and no automatic POST retry",async({pa
 });
 test("a revoked current recommendation action denies the save without a replacement key",async({page})=>{
   const state=await fixture(page,{revokedAtSave:true});await page.goto(path+"/"+round+"?new=1");
-  await page.getByRole("button",{name:"Add offer line"}).click();await page.getByLabel("Opened offer and line").selectOption(`${offer}:${line}`);
+  await page.getByRole("button",{name:"Add offer line"}).click();await chooseOpenedLine(page);
   await page.getByLabel("Quantity").fill("0.0001");await page.getByLabel("Proposed value").fill("0.00000001");
   await page.getByLabel("Reason").fill("Human comparison");await page.getByRole("button",{name:"Save recommendation draft"}).click();
   await expect(page.getByRole("alert").filter({hasText:"access"})).toBeVisible();
