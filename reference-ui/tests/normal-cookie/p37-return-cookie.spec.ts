@@ -199,6 +199,9 @@ test('workerless receiver creates, reloads, revises and cancels one goods return
     expect(reviseCommand.body).toEqual({ expectedRevision: 1, quantity: '0.75', reason: 'Revised browser proposal',
       evidenceReference: 'PRIVATE-RETURN:browser-revised' });
     evidence.reviseCommandKey = reviseCommand.key; retain();
+    progress('wait-revised-detail');
+    await expect(page).toHaveURL(new RegExp(`${route}/${String(create.id)}$`));
+    progress('reload-revised-detail');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByText('Proposed quantity: 0.75', { exact: false })).toBeVisible();
     await expect(page.getByText('Draft version 2', { exact: false })).toBeVisible();
