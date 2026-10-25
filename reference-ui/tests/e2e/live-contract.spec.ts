@@ -196,7 +196,8 @@ test("contract list denial does not show local records", async ({ page }) => {
   await mockErp(page, { denyList: true });
   await page.goto("/procurement/workspace/contracts");
   await expect(page.getByRole("alert")).toContainText("do not have access");
-  await expect(page.getByText("No contracts yet")).toBeVisible();
+  await expect(page.getByText("No contracts yet")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Office supplies agreement", exact: true })).toHaveCount(0);
 });
 
 test("stale contract save keeps entered values", async ({ page }) => {
