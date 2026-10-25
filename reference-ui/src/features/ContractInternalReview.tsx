@@ -10,9 +10,10 @@ const explain = (cause: unknown) => cause instanceof Error ? cause.message : "Th
 
 /** An addition to the imported contract detail, with no signature or activation action. */
 export function ContractInternalReview({ companyId, principalId, contract, branchId, enabled,
-  canSubmit, onFreshContract }: {
+  canSubmit, submitBlocked, onFreshContract }: {
   companyId: string; principalId: string; contract: ContractDetail; branchId: string | null | undefined;
-  enabled: boolean; canSubmit: boolean; onFreshContract: (value: ContractDetail) => void;
+  enabled: boolean; canSubmit: boolean; submitBlocked: boolean;
+  onFreshContract: (value: ContractDetail) => void;
 }) {
   const scope = `${companyId}:${principalId}:${contract.id}`;
   const liveScope = useRef(scope); liveScope.current = scope;
@@ -45,7 +46,7 @@ export function ContractInternalReview({ companyId, principalId, contract, branc
   }
 
   async function send(operation: "Submit" | "Correction") {
-    if (!enabled || !canSubmit || busy || blocked || pending) return;
+    if (!enabled || !canSubmit || submitBlocked || busy || blocked || pending) return;
     if (operation === "Submit" && (contract.status !== "Draft" || !branchId)) {
       setError("Select an ERP branch and review the current draft before submitting."); return;
     }
@@ -96,12 +97,12 @@ export function ContractInternalReview({ companyId, principalId, contract, branc
         {busy ? "Checking…" : "Check saved review result"}</Button>}
       {canSubmit && contract.status === "Draft" && !pending && <>
         {!branchId && <p role="status" className="text-sm">Choose an ERP branch in the header before submitting.</p>}
-        <Button disabled={busy || blocked || !branchId} onClick={() => void send("Submit")}>Submit for internal review</Button>
+        <Button disabled={submitBlocked || busy || blocked || !branchId} onClick={() => void send("Submit")}>Submit for internal review</Button>
       </>}
       {canSubmit && contract.status === "Returned" && !pending && <>
         <Field label="Correction reason"><Textarea maxLength={2000} value={reason}
           onChange={(event) => setReason(event.target.value)} /></Field>
-        <Button disabled={busy || blocked || !reason.trim()} onClick={() => void send("Correction")}>Return to draft for correction</Button>
+        <Button disabled={submitBlocked || busy || blocked || !reason.trim()} onClick={() => void send("Correction")}>Return to draft for correction</Button>
       </>}
     </>}
   </div></Panel>;

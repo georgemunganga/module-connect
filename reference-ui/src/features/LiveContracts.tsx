@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Select, Textarea } from "../components/ui";
@@ -201,11 +201,25 @@ export function LiveContractDetail() {
   const [cancelBlock, setCancelBlock] = useState<"unknown" | "stale" | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const [rateSafety, setRateSafety] = useState<{ scope: string; safe: boolean } | null>(null);
+  const rateSafeRef = useRef(false);
+  const ratesEnabled = capabilities.contractDraftRates === true;
+  const rateSafe = !ratesEnabled || (rateSafety?.scope === viewScope && rateSafety.safe);
+  const onRateSafetyChange = useCallback((captured: string, safe: boolean) => {
+    if (currentViewScope.current !== captured) return;
+    rateSafeRef.current = safe;
+    setRateSafety((old) => old?.scope === captured && old.safe === safe ? old : { scope: captured, safe });
+  }, []);
+  const onFreshChildContract = useCallback((fresh: ContractDetail) => {
+    if (currentViewScope.current !== viewScope || fresh.id !== id) return;
+    setRecord((old) => old && fresh.version >= old.version ? fresh : old);
+  }, [id, viewScope]);
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
     setLoading(true); setRecord(null); setLoadedScope(null); setError(""); setReason("");
-    busyRef.current = false; setBusy(false); setCancelBlock(null);
+    busyRef.current = false; rateSafeRef.current = false; setRateSafety(null);
+    setBusy(false); setCancelBlock(null);
     getOwnContractDraft(legalEntityId, id, controller.signal).then((value) => {
       if (!controller.signal.aborted) { setRecord(value); setLoadedScope(viewScope); }
     })
@@ -215,7 +229,7 @@ export function LiveContractDetail() {
   }, [id, legalEntityId, effectiveBranchId, authEpoch, viewScope]);
   const stillCurrent = (captured: string) => alive.current && currentViewScope.current === captured;
   async function cancel() {
-    if (busyRef.current || cancelBlock || loading || !permissions.includes("procurement-contract-edit")) return;
+    if (busyRef.current || (ratesEnabled && !rateSafeRef.current) || cancelBlock || loading || !permissions.includes("procurement-contract-edit")) return;
     if (!record || record.id !== id || record.status !== "Draft" || loadedScope !== viewScope || !reason.trim()) return;
     busyRef.current = true; setBusy(true); setError("");
     const captured = viewScope;
@@ -249,7 +263,7 @@ export function LiveContractDetail() {
     } catch (cause) { if (stillCurrent(captured)) setError(errorText(cause)); }
     finally { if (stillCurrent(captured)) { busyRef.current = false; setBusy(false); } }
   }
-  const writesBlocked = busy || loading || cancelBlock !== null;
+  const writesBlocked = busy || loading || cancelBlock !== null || !rateSafe;
   return <div className="p-5 sm:p-8">
     {loading || loadedScope !== viewScope ? <p role="status">Loading contract…</p> : record && record.id === id ? <>
       <PageHeader title={record.title} subtitle={`${record.number} · Supplier agreement`} actions={!writesBlocked && permissions.includes("procurement-contract-edit") && record.status === "Draft" ? <Link to={`/contracts/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
@@ -269,16 +283,19 @@ export function LiveContractDetail() {
         <div><dt className="text-muted-foreground">Draft revision</dt><dd className="mt-1">{record.draftVersion?.revisionNumber ?? "—"}</dd></div>
         {record.terminationReason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Cancellation reason</dt><dd className="mt-1">{record.terminationReason}</dd></div>}
       </dl></Panel>
-      <ContractDraftRates key={`${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`} companyId={legalEntityId}
+      <ContractDraftRates key={`rates:${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`} companyId={legalEntityId}
         scopeKey={`${tenantId}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
+        safetyScopeKey={viewScope}
         contract={record} enabled={capabilities.contractDraftRates === true}
-        canEdit={!writesBlocked && permissions.includes("procurement-contract-edit")}
-        onFreshContract={setRecord} />
-      <ContractInternalReview key={`${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
+        canEdit={!busy && !loading && cancelBlock === null
+          && permissions.includes("procurement-contract-edit")}
+        onFreshContract={onFreshChildContract} onSafetyChange={onRateSafetyChange} />
+      <ContractInternalReview key={`review:${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
         companyId={legalEntityId} principalId={principalId} contract={record}
         branchId={effectiveBranchId} enabled={capabilities.contractInternalReview === true}
-        canSubmit={!writesBlocked && permissions.includes("procurement-contract-submit")}
-        onFreshContract={setRecord} />
+        canSubmit={permissions.includes("procurement-contract-submit")}
+        submitBlocked={writesBlocked}
+        onFreshContract={onFreshChildContract} />
       {permissions.includes("procurement-contract-edit") && record.status === "Draft" && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} disabled={writesBlocked} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={writesBlocked || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
     </> : <p role="alert">{error || "Contract not found."}</p>}
     <Link to="/contracts" className="mt-5 inline-block text-sm text-primary hover:underline">Back to contracts</Link>
