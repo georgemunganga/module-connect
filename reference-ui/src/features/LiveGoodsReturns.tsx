@@ -8,11 +8,14 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { procurementScopeHeaders } from "../../../shared/shell-scope";
 import { assertReturnScope, getReturnDraft, listEligibleGoods, listReturnDrafts, recoverReturnCommand, returnQuantity, returnText, sendReturnCommand,
   GoodsReturnError, type ReturnCommand, type ReturnDetail, type ReturnEligible, type ReturnPage } from "../lib/principal-goods-return-api";
+import { goodsReturnJournal, type ReturnJournalScope } from "../lib/principal-goods-return-journal";
 
 const base = "/purchase-receives/returns";
-const pending = new Map<string, ReturnCommand>();
 const text = (error: unknown) => error instanceof Error ? error.message : "Returns are unavailable. Refresh before continuing.";
-function scopeKey(tenant: string, company: string, actor: string, branch: string, id: string) { return `${tenant}:${company}:${actor}:${branch}:${id}`; }
+function recoveryState(scope: ReturnJournalScope) {
+  try { return { command: goodsReturnJournal.read(scope), error: "" }; }
+  catch (cause) { return { command: null, error: text(cause) }; }
+}
 function useReturnContext() {
   const context = useLiveReadiness()!;
   const branch = procurementScopeHeaders(context.legalEntityId)["X-Shell-Location"] ?? "";
@@ -59,11 +62,12 @@ export function LiveGoodsReturnDetail() {
 function ReturnDetailPage({ id, enabled }: { id: string; enabled: boolean }) {
   const context = useLiveReadiness()!, company = context.legalEntityId;
   const branch = procurementScopeHeaders(company)["X-Shell-Location"] ?? "";
-  const key = scopeKey(context.tenantId, company, context.principalId, branch, id);
+  const journalScope: ReturnJournalScope = { tenantId: context.tenantId, companyId: company, principalId: context.principalId, branchId: branch, recordId: id };
+  const [initial] = useState(() => recoveryState(journalScope));
   const canRead = enabled && context.permissions.includes("procurement-return-read");
   const [detail, setDetail] = useState<ReturnDetail | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("overview"), [refresh, setRefresh] = useState(0), [cancelOpen, setCancelOpen] = useState(false), [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState<ReturnCommand | null>(() => pending.get(key) ?? null);
+  const [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState<ReturnCommand | null>(initial.command), [journalError, setJournalError] = useState(initial.error);
   const alive = useRef(true), busyRef = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
@@ -78,36 +82,42 @@ function ReturnDetailPage({ id, enabled }: { id: string; enabled: boolean }) {
     if (!uncertain || busyRef.current) return;
     try { assertReturnScope(company, branch); } catch (cause) { setError(text(cause)); return; }
     busyRef.current = true; setBusy(true); setError("");
-    try { await recoverReturnCommand(company, uncertain); const current = await getReturnDraft(company, id); if (alive.current) { setDetail(current); setUncertain(null); pending.delete(key); setRefresh((n) => n + 1); } }
+    try { await recoverReturnCommand(company, uncertain); const current = await getReturnDraft(company, id); goodsReturnJournal.clear(journalScope, uncertain);
+      if (alive.current) { setDetail(current); setUncertain(null); setRefresh((n) => n + 1); } }
     catch (cause) { if (alive.current) setError(text(cause)); }
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
   async function cancel(event: FormEvent) {
-    event.preventDefault(); if (!detail || !detail.allowedActions.includes("Cancel") || !enabled || uncertain || busyRef.current) return;
+    event.preventDefault(); if (!detail || !detail.allowedActions.includes("Cancel") || !enabled || uncertain || journalError || busyRef.current) return;
     try { assertReturnScope(company, branch); } catch (cause) { setError(text(cause)); return; }
     let clean: string;
     try { clean = returnText(reason).reason; } catch (cause) { setError(text(cause)); return; }
     const command: ReturnCommand = { operation: "Cancel", targetId: id, key: crypto.randomUUID(), method: "POST", body: JSON.stringify({ expectedRevision: detail.version, reason: clean }),
       prior: { quantityExact: detail.quantityExact, evidenceReference: detail.evidenceReference } };
-    busyRef.current = true; setBusy(true); setError(""); pending.set(key, command);
+    try { goodsReturnJournal.claim(journalScope, command); }
+    catch (cause) { setJournalError(text(cause)); setError(text(cause)); return; }
+    busyRef.current = true; setBusy(true); setError("");
     let acknowledged = false;
-    try { await sendReturnCommand(company, command); acknowledged = true; const current = await getReturnDraft(company, id); if (alive.current) { setDetail(current); pending.delete(key); setCancelOpen(false); setRefresh((n) => n + 1); } }
-    catch (cause) { if (alive.current) { if (!acknowledged && cause instanceof GoodsReturnError && cause.status > 0 && cause.status < 500 && cause.status !== 408) pending.delete(key); else setUncertain(command); setError(text(cause)); } }
+    try { await sendReturnCommand(company, command); acknowledged = true; const current = await getReturnDraft(company, id); goodsReturnJournal.clear(journalScope, command);
+      if (alive.current) { setDetail(current); setCancelOpen(false); setRefresh((n) => n + 1); } }
+    catch (cause) { if (alive.current) { if (!acknowledged && cause instanceof GoodsReturnError && cause.status > 0 && cause.status < 500 && cause.status !== 408) {
+      try { goodsReturnJournal.clear(journalScope, command); } catch (storageError) { setUncertain(command); setJournalError(text(storageError)); }
+    } else setUncertain(command); setError(text(cause)); } }
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
   return <div className="p-5 sm:p-8"><PageHeader title="Return draft" subtitle="This is a draft proposal only. No goods are returned, and no credit or refund is created." /><ReturnTabs active="returns" />
     {!canRead ? <p role="alert">Select a permitted branch and obtain current return access.</p> : <>
-      {error && <p role="alert">{error}</p>}{loading ? <p role="status">Loading return evidence…</p> : detail ? <>
+      {journalError && <p role="alert">{journalError}</p>}{error && <p role="alert">{error}</p>}{loading ? <p role="status">Loading return evidence…</p> : detail ? <>
         <DetailTabs tabs={[{ key: "overview", label: "Overview" }, { key: "related", label: "Related" }]} active={activeTab} onChange={setActiveTab} />
         {activeTab === "overview" && <div className="space-y-5 pt-5"><Panel title="Received goods"><div className="space-y-3 p-5"><SourceLabel labels={detail.labels} /><p>Accepted quantity: {detail.acceptedFactQuantityExact} {detail.labels.unitCode}</p><p>Proposed quantity: {detail.quantityExact} {detail.labels.unitCode}</p><p>Reason: {detail.reason}</p><p>Evidence reference: {detail.evidenceReference ?? "None"}</p><Badge>{detail.status}</Badge></div></Panel>
           <DetailSection title="Draft controls"><p>Draft only · Stock unchanged · Finance unchanged · Supplier not contacted.</p><p className="mt-2 text-sm">Draft version {detail.version}. ERP checks your access and the accepted quantity again when you save.</p></DetailSection>
-          <div className="flex gap-3">{!uncertain && detail.allowedActions.includes("Edit") && <Link className="text-primary hover:underline" to={`${base}/${id}/edit`}>Edit return draft</Link>}{!uncertain && detail.allowedActions.includes("Cancel") && <Button variant="secondary" onClick={() => setCancelOpen(true)}>Cancel draft</Button>}</div></div>}
+          <div className="flex gap-3">{!uncertain && !journalError && detail.allowedActions.includes("Edit") && <Link className="text-primary hover:underline" to={`${base}/${id}/edit`}>Edit return draft</Link>}{!uncertain && !journalError && detail.allowedActions.includes("Cancel") && <Button variant="secondary" onClick={() => setCancelOpen(true)}>Cancel draft</Button>}</div></div>}
         {activeTab === "related" && <DetailSection title="Related records"><p>Purchase order: {context.permissions.includes("procurement-po-read") ? <Link className="text-primary hover:underline" to={`/purchase-orders/${detail.purchaseOrderId}`}>{detail.labels.purchaseOrderNumber}</Link> : detail.labels.purchaseOrderNumber}</p><p>Delivery note: {detail.labels.deliveryNoteReference}</p><p>The accepted goods record remains unchanged.</p></DetailSection>}
       </> : null}
       {uncertain && <Panel title="Check the saved result"><div className="space-y-3 p-5"><p>The response was interrupted. Check whether this return was saved before making another change.</p><Button disabled={busy} onClick={recover}>Check saved return</Button></div></Panel>}
       <div className="mt-5 flex gap-3"><Link className="text-primary hover:underline" to={base}>Back to return drafts</Link><Button variant="secondary" disabled={busy} onClick={() => setRefresh((n) => n + 1)}>Refresh</Button></div>
     </>}
-    {cancelOpen && <Modal title="Cancel return draft" onClose={() => { if (!busy) setCancelOpen(false); }}><form className="space-y-4" onSubmit={cancel}><Field label="Cancellation reason"><Textarea value={reason} maxLength={2000} onChange={(event) => setReason(event.target.value)} required /></Field><Button type="submit" disabled={busy || !!uncertain}>Cancel draft</Button></form></Modal>}
+    {cancelOpen && <Modal title="Cancel return draft" onClose={() => { if (!busy) setCancelOpen(false); }}><form className="space-y-4" onSubmit={cancel}><Field label="Cancellation reason"><Textarea value={reason} maxLength={2000} onChange={(event) => setReason(event.target.value)} required /></Field><Button type="submit" disabled={busy || !!uncertain || !!journalError}>Cancel draft</Button></form></Modal>}
   </div>;
 }
 export function LiveGoodsReturnEditor() {
@@ -118,34 +128,41 @@ function ReturnEditor({ id, enabled, branch }: { id?: string; enabled: boolean; 
   const context = useLiveReadiness()!, company = context.legalEntityId, navigate = useNavigate();
   const canCreate = enabled && context.permissions.includes("procurement-return-read") && context.permissions.includes("procurement-return-create");
   const canEdit = enabled && context.permissions.includes("procurement-return-edit");
-  const key = scopeKey(context.tenantId, company, context.principalId, branch, id ?? "new");
+  const journalScope: ReturnJournalScope = { tenantId: context.tenantId, companyId: company, principalId: context.principalId, branchId: branch, recordId: id ?? "new" };
+  const [initial] = useState(() => recoveryState(journalScope));
   const [detail, setDetail] = useState<ReturnDetail | null>(null), [eligible, setEligible] = useState<ReturnPage<ReturnEligible> | null>(null), [offset, setOffset] = useState(0), [selected, setSelected] = useState<ReturnEligible | null>(null);
   const [quantity, setQuantity] = useState(""), [reason, setReason] = useState(""), [reference, setReference] = useState("");
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState(""), [discard, setDiscard] = useState(false);
-  const [uncertain, setUncertain] = useState<ReturnCommand | null>(() => pending.get(key) ?? null);
+  const [uncertain, setUncertain] = useState<ReturnCommand | null>(initial.command), [journalError, setJournalError] = useState(initial.error);
   const alive = useRef(false), busyRef = useRef(false);
   const allowed = id ? canEdit && context.permissions.includes("procurement-return-read") : canCreate;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     const controller = new AbortController(); setError(""); setLoading(true);
     if (!allowed) { setLoading(false); return () => controller.abort(); }
-    if (id) getReturnDraft(company, id, controller.signal).then((item) => { if (!controller.signal.aborted) { setDetail(item); if (item.allowedActions.includes("Edit")) { setQuantity(item.quantityExact); setReason(item.reason); setReference(item.evidenceReference ?? ""); } } })
+    if (id) getReturnDraft(company, id, controller.signal).then((item) => { if (!controller.signal.aborted) { setDetail(item); if (item.allowedActions.includes("Edit")) { setQuantity(item.quantityExact); setReason(item.reason); setReference(item.evidenceReference ?? ""); }
+      if (uncertain?.operation === "Revise") { const saved = JSON.parse(uncertain.body) as { quantity: string; reason: string; evidenceReference: string | null };
+        setQuantity(saved.quantity); setReason(saved.reason); setReference(saved.evidenceReference ?? ""); } } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(text(cause)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    else listEligibleGoods(company, offset, controller.signal).then((page) => { if (!controller.signal.aborted) setEligible(page); })
+    else listEligibleGoods(company, offset, controller.signal).then((page) => { if (!controller.signal.aborted) { setEligible(page);
+      if (uncertain?.operation === "Create") { const saved = JSON.parse(uncertain.body) as { acceptanceFactId: string; quantity: string; reason: string; evidenceReference: string | null };
+        setSelected(page.items.find((item) => item.acceptanceFactId === saved.acceptanceFactId) ?? null);
+        setQuantity(saved.quantity); setReason(saved.reason); setReference(saved.evidenceReference ?? ""); } } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(text(cause)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [allowed, company, id, offset]);
+  }, [allowed, company, id, offset, uncertain]);
   function close() { if (dirty || uncertain) setDiscard(true); else navigate(id ? `${base}/${id}` : base); }
   async function recover() {
     if (!uncertain || busyRef.current) return;
     try { assertReturnScope(company, branch); } catch (cause) { setError(text(cause)); return; }
     busyRef.current = true; setBusy(true); setError("");
-    try { const ack = await recoverReturnCommand(company, uncertain); const current = await getReturnDraft(company, ack.id); if (alive.current) { pending.delete(key); setUncertain(null); navigate(`${base}/${current.id}`); } }
+    try { const ack = await recoverReturnCommand(company, uncertain); const current = await getReturnDraft(company, ack.id); goodsReturnJournal.clear(journalScope, uncertain);
+      if (alive.current) { setUncertain(null); navigate(`${base}/${current.id}`); } }
     catch (cause) { if (alive.current) setError(text(cause)); }
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
   async function save(event: FormEvent) {
-    event.preventDefault(); if (!allowed || busyRef.current || uncertain || id && !detail?.allowedActions.includes("Edit") || !id && !selected) return;
+    event.preventDefault(); if (!allowed || busyRef.current || uncertain || journalError || id && !detail?.allowedActions.includes("Edit") || !id && !selected) return;
     try { assertReturnScope(company, branch); } catch (cause) { setError(text(cause)); return; }
     let clean: { quantity: string; reason: string; evidenceReference: string | null };
     try { const textFields = returnText(reason, reference); const limit = id ? detail!.acceptedFactQuantityExact : selected!.acceptedFactQuantityExact;
@@ -153,19 +170,24 @@ function ReturnEditor({ id, enabled, branch }: { id?: string; enabled: boolean; 
     catch (cause) { setError(text(cause)); return; }
     const command: ReturnCommand = { operation: id ? "Revise" : "Create", key: crypto.randomUUID(), targetId: id ?? null, method: id ? "PUT" : "POST",
       body: JSON.stringify(id ? { expectedRevision: detail!.version, ...clean } : { acceptanceFactId: selected!.acceptanceFactId, ...clean }) };
-    busyRef.current = true; setBusy(true); setError(""); pending.set(key, command);
+    try { goodsReturnJournal.claim(journalScope, command); }
+    catch (cause) { setJournalError(text(cause)); setError(text(cause)); return; }
+    busyRef.current = true; setBusy(true); setError("");
     let acknowledged = false;
-    try { const ack = await sendReturnCommand(company, command); acknowledged = true; const current = await getReturnDraft(company, ack.id); if (alive.current) { pending.delete(key); navigate(`${base}/${current.id}`); } }
-    catch (cause) { if (alive.current) { if (!acknowledged && cause instanceof GoodsReturnError && cause.status > 0 && cause.status < 500 && cause.status !== 408) pending.delete(key); else setUncertain(command); setError(text(cause)); } }
+    try { const ack = await sendReturnCommand(company, command); acknowledged = true; const current = await getReturnDraft(company, ack.id); goodsReturnJournal.clear(journalScope, command);
+      if (alive.current) navigate(`${base}/${current.id}`); }
+    catch (cause) { if (alive.current) { if (!acknowledged && cause instanceof GoodsReturnError && cause.status > 0 && cause.status < 500 && cause.status !== 408) {
+      try { goodsReturnJournal.clear(journalScope, command); } catch (storageError) { setUncertain(command); setJournalError(text(storageError)); }
+    } else setUncertain(command); setError(text(cause)); } }
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
-  return <TransactionEditorFrame title={id ? "Edit return draft" : "Add return draft"} close={close} closeDisabled={busy} footer={<><Button form="goods-return-form" type="submit" disabled={!allowed || loading || busy || !!uncertain || !!id && !detail?.allowedActions.includes("Edit") || !id && !selected}>Save return draft</Button><Button variant="ghost" onClick={close}>Cancel</Button></>}>
+  return <TransactionEditorFrame title={id ? "Edit return draft" : "Add return draft"} close={close} closeDisabled={busy} footer={<><Button form="goods-return-form" type="submit" disabled={!allowed || loading || busy || !!uncertain || !!journalError || !!id && !detail?.allowedActions.includes("Edit") || !id && !selected}>Save return draft</Button><Button variant="ghost" onClick={close}>Cancel</Button></>}>
     <p className="text-sm text-muted-foreground">Start a draft for accepted goods. This does not change stock or Finance records, contact the supplier, or create a credit.</p>
     {!allowed ? <p role="alert">Select a permitted branch and obtain current return access.</p> : <>
-      {error && <p role="alert">{error}</p>}{loading && <p role="status">Loading accepted goods evidence…</p>}
+      {journalError && <p role="alert">{journalError}</p>}{error && <p role="alert">{error}</p>}{loading && <p role="status">Loading accepted goods evidence…</p>}
       {id && detail && !detail.allowedActions.includes("Edit") && <p role="alert">This draft cannot be edited with your current access or state.</p>}
       {uncertain && <Panel title="Check the saved draft"><div className="space-y-3 p-5"><p>The response was interrupted. Check whether this return was saved before making another change.</p><Button disabled={busy} onClick={recover}>Check saved return</Button></div></Panel>}
-      <form id="goods-return-form" onSubmit={save} onChange={() => setDirty(true)} className="space-y-5"><fieldset disabled={busy || !!uncertain || !allowed || !!id && !detail?.allowedActions.includes("Edit")} className="space-y-5">
+      <form id="goods-return-form" onSubmit={save} onChange={() => setDirty(true)} className="space-y-5"><fieldset disabled={busy || !!uncertain || !!journalError || !allowed || !!id && !detail?.allowedActions.includes("Edit")} className="space-y-5">
         {!id && <Panel title="Received goods"><div className="space-y-3 p-5"><div className="overflow-x-auto"><RecordTable><thead><tr><th>Select</th><th>Purchase order and goods</th><th>Accepted quantity</th></tr></thead><tbody>{eligible?.items.map((item) => <tr key={item.acceptanceFactId}><td><Input type="radio" name="accepted-goods" aria-label={`Select ${item.labels.purchaseOrderNumber} line ${item.labels.lineNumber}`} checked={selected?.acceptanceFactId === item.acceptanceFactId} onChange={() => { setSelected(item); setQuantity(item.acceptedFactQuantityExact); setDirty(true); }} /></td><td><SourceLabel labels={item.labels} /></td><td>{item.acceptedFactQuantityExact} {item.labels.unitCode}</td></tr>)}</tbody></RecordTable></div>{!eligible?.items.length && <p>No accepted goods are available in this branch.</p>}<div className="flex gap-3"><Button variant="secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</Button><Button variant="secondary" disabled={!eligible?.hasMore || eligible?.nextOffset === null} onClick={() => { if (eligible?.nextOffset != null) setOffset(eligible.nextOffset); }}>Next</Button></div></div></Panel>}
         {id && detail && <Panel title="Received goods"><div className="p-5"><SourceLabel labels={detail.labels} /><p>Accepted quantity: {detail.acceptedFactQuantityExact} {detail.labels.unitCode}</p></div></Panel>}
         <Panel title="Draft proposal"><div className="grid gap-4 p-5 sm:grid-cols-2"><Field label="Proposed quantity"><Input value={quantity} inputMode="decimal" onChange={(event) => setQuantity(event.target.value)} required /></Field><Field label="Evidence reference"><Input value={reference} maxLength={300} onChange={(event) => setReference(event.target.value)} /></Field><Field label="Reason"><Textarea value={reason} maxLength={2000} onChange={(event) => setReason(event.target.value)} required /></Field></div></Panel>

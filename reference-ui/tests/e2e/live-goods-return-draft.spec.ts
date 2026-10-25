@@ -59,12 +59,24 @@ test("return-only capability opens a contextual draft without receiving write pe
   expect(state.writes).toHaveLength(1);expect(state.writes[0].body).toMatchObject({acceptanceFactId:fact,quantity:"1.0001",reason:"Wrong colour"});
   expect(state.reads).toContain(root+"/"+draft);
 });
-test("lost write is recovered by GET without a second POST",async({page})=>{
+test("lost write survives hard reload and is recovered by GET without a second POST",async({page})=>{
   const state=await fixture(page,{lost:true});await page.goto(path+"/new");
   await page.getByRole("radio",{name:/Select PO-RETAINED line 1/}).check();await page.getByLabel("Reason").fill("Wrong colour");
   await page.getByRole("button",{name:"Save return draft"}).click();await expect(page.getByRole("button",{name:"Check saved return"})).toBeVisible();
+  await page.reload();await expect(page.getByRole("button",{name:"Save return draft"})).toBeDisabled();
+  await expect(page.getByLabel("Proposed quantity")).toHaveValue("1.0001");
   await page.getByRole("button",{name:"Check saved return"}).click();await expect(page.getByText(/Draft only · Stock unchanged/)).toBeVisible();
   expect(state.writes).toHaveLength(1);expect(state.reads.some((item)=>item.includes("/commands/"))).toBe(true);
+});
+test("wrong-scope or stale journal blocks another write after reload",async({page})=>{
+  const state=await fixture(page);await page.goto(path+"/new");
+  const key="erp.procurement.goods-return-command.v1:"+["amizo",company,actor,branch,"new"].join(":");
+  for(const entry of [{schemaVersion:1,scope:{tenantId:"amizo",companyId:company,principalId:actor,branchId:order,recordId:"new"},command:{operation:"Create",key:fact,targetId:null,method:"POST",body:JSON.stringify({acceptanceFactId:fact,quantity:"0.5",reason:"R",evidenceReference:null})}},
+    {schemaVersion:0,scope:{tenantId:"amizo",companyId:company,principalId:actor,branchId:branch,recordId:"new"},command:{operation:"Create",key:fact,targetId:null,method:"POST",body:"{}"}}]){
+    await page.evaluate(([slot,value])=>sessionStorage.setItem(slot,JSON.stringify(value)),[key,entry] as const);
+    await page.reload();await expect(page.getByRole("alert").filter({hasText:"needs review"})).toBeVisible();
+    await expect(page.getByRole("button",{name:"Save return draft"})).toBeDisabled();expect(state.writes).toHaveLength(0);
+  }
 });
 test("revoked creator action stays hidden despite read access",async({page})=>{
   const state=await fixture(page,{revoked:true});await page.goto(path+"/"+draft);

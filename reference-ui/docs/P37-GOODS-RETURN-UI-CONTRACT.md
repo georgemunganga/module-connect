@@ -22,8 +22,8 @@ This addendum applies to the 28-section `docs/procurement/PROC-09-P37-GOODS-RETU
 18. **Revise:** PUT `/:id` with the GET detail's `expectedRevision`, exact quantity, reason and reference and a new GUID command key.
 19. **Cancel:** POST `/:id/cancel` with current expected revision and reason, and a new GUID command key. The proposal is cancelled; the accepted goods fact stays immutable.
 20. **Acknowledgements:** POST/PUT/cancel and command recovery return immutable saved acknowledgements without labels or allowed actions. The UI GETs current detail before showing actions.
-21. **Uncertain writes:** A failed or interrupted write keeps its exact command key and body in scoped session memory; the UI checks GET `/commands/:key` and never automatically repeats POST/PUT.
-22. **Scope invalidation:** Mounted company, principal, branch and record keys isolate pending commands. A changed branch blocks save and recovery until reopening.
+21. **Uncertain writes:** Before each write, a bounded typed journal stores the exact command key, body and CAS in tab-local `sessionStorage`. A hard reload can check GET `/commands/:key`; the UI never automatically repeats POST/PUT.
+22. **Scope invalidation:** Tenant, company, principal, branch and record bind each journal entry. Corrupt, stale or wrong-scope storage blocks new writes; a changed branch blocks save and recovery until reopening.
 23. **Denials:** A missing/revoked action or wrong branch hides mutation controls; the server remains authoritative on every request.
 24. **History:** The view identifies the current retained revision. It does not invent a timeline endpoint or aggregate return capacity.
 25. **Effects:** The screen says Draft only. It never claims stock movement, Finance entry, supplier contact, credit, refund, dispatch, approval or return reservation.
