@@ -128,7 +128,11 @@ export async function removeOwnContractRate(companyId: string, contractId: strin
   contractVersion: number, rateVersion: number, reason: string): Promise<ContractRateResult> {
   if (!reason.trim() || reason.trim().length > 1000)
     throw new ContractApiError(422, "Enter a removal reason of up to 1,000 characters.");
-  return verified(await call(companyId, path(contractId, rateId) + "/remove", { method: "POST",
-    body: JSON.stringify({ contractVersion, rateVersion, reason: reason.trim() }) }),
+  const normalizedReason = reason.trim();
+  const result = verified(await call(companyId, path(contractId, rateId) + "/remove", { method: "POST",
+    body: JSON.stringify({ contractVersion, rateVersion, reason: normalizedReason }) }),
   contractId, contractVersion + 1, rateId, rateVersion + 1);
+  if (result.rate.status !== "Removed" || result.rate.statusReason !== normalizedReason)
+    throw new ContractApiError(0, "The ERP did not confirm the rate change. Review the contract before trying again.");
+  return result;
 }
