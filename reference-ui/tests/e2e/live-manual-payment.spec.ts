@@ -37,7 +37,7 @@ async function fixture(page: Page, enabled: boolean, options: {
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, roles: ["procurement_buyer"] } });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: options.principalId ?? requester, isActive: true, roles: ["procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1,
       tenantId: "test", principalId: options.principalId ?? requester, organisationWide: false,
