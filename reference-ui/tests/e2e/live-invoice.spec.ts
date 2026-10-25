@@ -45,8 +45,8 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
     if (url.pathname === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId,
       code: "AMIZO", registeredName: "Amizo Power" }] });
-    if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
-    if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
+    if (url.pathname === "/api/hrm/admin/locations") return json({ items: [{ id: branchId, code: "HQ", name: "Main site", legalEntityId: companyId }] });
+    if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [branchId], confined: true });
     if (url.pathname === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo",
       legalEntityId: companyId, workerId,
       permissions: canCapture ? ["procurement-access", "procurement-vendor-read",
