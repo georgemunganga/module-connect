@@ -94,16 +94,19 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
         return json({ contractId, contractVersion: record.version, rate: savedRate }, 201);
       }
     }
-    if (path === `/api/procurement/v1/contracts/${contractId}/rates/55555555-5555-4555-8555-555555555555` && record && savedRate) {
-      if (request.method() === "GET") return json({ contractId, contractVersion: record.version, rate: savedRate });
+    const ratePath = `/api/procurement/v1/contracts/${contractId}/rates/55555555-5555-4555-8555-555555555555`;
+    if ((path === ratePath || path === `${ratePath}/remove`) && record && savedRate) {
+      if (path === ratePath && request.method() === "GET") return json({ contractId, contractVersion: record.version, rate: savedRate });
+      const updating = path === ratePath && request.method() === "PUT";
+      const removing = path === `${ratePath}/remove` && request.method() === "POST";
+      if (!updating && !removing) return json({ message: "Unexpected method" }, 405);
       const input = request.postDataJSON();
       if (input.contractVersion !== record.version || input.rateVersion !== savedRate.version)
         return json({ message: "Refresh the rate." }, 409);
-      if (request.method() === "PUT") savedRate = { ...savedRate, ...input.rate,
+      if (updating) savedRate = { ...savedRate, ...input.rate,
         unitPriceExact: String(input.rate.unitPrice).replace(/0+$/, "").replace(/\.$/, ""),
         maximumQuantityExact: input.rate.maximumQuantity, version: Number(savedRate.version) + 1 };
-      else if (request.method() === "POST") savedRate = { ...savedRate, status: "Removed", statusReason: input.reason, version: Number(savedRate.version) + 1 };
-      else return json({ message: "Unexpected method" }, 405);
+      else savedRate = { ...savedRate, status: "Removed", statusReason: input.reason, version: Number(savedRate.version) + 1 };
       record = { ...record, version: record.version + 1 };
       return json({ contractId, contractVersion: record.version, rate: savedRate });
     }
@@ -163,7 +166,11 @@ test("draft rates keep exact prices, removed history and parent CAS in the exist
   await expect(page.getByRole("cell", { name: "1.25" })).toBeVisible();
   await page.getByRole("button", { name: "Remove", exact: true }).click();
   await page.getByLabel("Why remove this rate?").fill("No longer offered");
+  const removal = page.waitForRequest(value => new URL(value.url()).pathname === `/api/procurement/v1/contracts/${contractId}/rates/55555555-5555-4555-8555-555555555555/remove`);
   await page.getByRole("button", { name: "Remove rate" }).click();
+  const removalRequest = await removal;
+  expect(removalRequest.method()).toBe("POST");
+  expect(removalRequest.postDataJSON()).toEqual({ contractVersion: 3, rateVersion: 2, reason: "No longer offered" });
   await expect(page.getByText("Reason: No longer offered")).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
 });
@@ -276,7 +283,7 @@ for (const cancelMode of ["lost-ack", "malformed"] as const) {
     await expect(page.getByRole("heading", { name: "Existing supplier agreement" })).toBeVisible();
     await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Agreement withdrawn after review");
     await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("Cancellation was not confirmed");
+    await expect(page.getByRole("main").getByRole("status")).toContainText("Cancellation was not confirmed");
     await expect(page.getByRole("button", { name: "Cancel draft", exact: true })).toBeDisabled();
     await expect(page.getByRole("textbox", { name: "Reason", exact: true })).toHaveValue("Agreement withdrawn after review");
     await expect(page.getByRole("link", { name: "Edit draft", exact: true })).toHaveCount(0);
@@ -294,9 +301,9 @@ test("contract cancellation still unconfirmed after a Draft GET cannot repeat th
   await page.goto(`/procurement/workspace/contracts/${contractId}`);
   await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Agreement withdrawn");
   await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Cancellation was not confirmed");
+  await expect(page.getByRole("main").getByRole("status")).toContainText("Cancellation was not confirmed");
   await page.getByRole("button", { name: "Refresh saved contract", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("cancellation result remains unconfirmed");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("cancellation result remains unconfirmed");
   await expect(page.getByRole("button", { name: "Cancel draft", exact: true })).toBeDisabled();
   expect(fixture.cancelWrites()).toBe(1);
 });
@@ -334,7 +341,7 @@ test("definite cancellation validation rejection permits a corrected reason", as
   await page.goto(`/procurement/workspace/contracts/${contractId}`);
   await page.getByRole("textbox", { name: "Reason", exact: true }).fill("First reason");
   await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Use a clearer cancellation reason");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Use a clearer cancellation reason");
   await expect(page.getByRole("button", { name: "Cancel draft", exact: true })).toBeEnabled();
   await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Agreement withdrawn after review");
   await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
@@ -346,7 +353,7 @@ test("stale contract cancellation requires a GET before another write", async ({
   await page.goto(`/procurement/workspace/contracts/${contractId}`);
   await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Agreement withdrawn");
   await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("The contract changed");
+  await expect(page.getByRole("main").getByRole("status")).toContainText("The contract changed");
   await expect(page.getByRole("button", { name: "Cancel draft", exact: true })).toBeDisabled();
   const reads = fixture.detailReads();
   await page.getByRole("button", { name: "Refresh saved contract", exact: true }).click();
@@ -360,11 +367,11 @@ test("failed saved-contract GET after lost cancellation leaves the write lock", 
   await page.goto(`/procurement/workspace/contracts/${contractId}`);
   await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Agreement withdrawn");
   await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Cancellation was not confirmed");
+  await expect(page.getByRole("main").getByRole("status")).toContainText("Cancellation was not confirmed");
   await page.route(`**/api/procurement/v1/contracts/${contractId}`, route => route.fulfill({
     status: 403, contentType: "application/json", body: JSON.stringify({ message: "Forbidden" }) }));
   await page.getByRole("button", { name: "Refresh saved contract", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("You do not have access to contracts");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("You do not have access to contracts");
   await expect(page.getByRole("button", { name: "Cancel draft", exact: true })).toBeDisabled();
   expect(fixture.cancelWrites()).toBe(1);
 });
