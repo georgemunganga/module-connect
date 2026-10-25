@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "status": "ACCEPTED_FRESH_TYPESCRIPT_AND_MOCKED_CONTRACT_BILL_UI_ONLY",
+  "dateUtc": "2026-10-25",
+  "source": "461bc175cd501911e8d0f8925e50d11f04842553",
+  "publishedBranch": "codex/p37-goods-return-receiving-ui",
+  "publishedHeadVerifiedBeforeDocs": true,
+  "sourceUnchangedDuringVerification": true,
+  "testSuites": [
+    "reference-ui/tests/e2e/live-contract.spec.ts",
+    "reference-ui/tests/e2e/live-invoice.spec.ts"
+  ],
+  "verification": {
+    "evidenceDirectory": "procurement-contract-bill-ui-validation-20261025_run05",
+    "typeScript": {
+      "status": "FRESH_PASS",
+      "command": "tsc --noEmit",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "mockBrowser": {
+      "project": "chromium",
+      "workers": 1,
+      "retries": 0,
+      "planned": 45,
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "notRun": 0,
+      "durationReported": "5.4m",
+      "actualBackend": false,
+      "logSha256": "9384391231533d49068e5039b2360c67eed56d34f43d3f2cb6baff60bd149676"
+    },
+    "resultSha256": "282be349ad74739f6662da30dbe65fc89ed9ecccbab1dc33e135b1b5ccd628d9",
+    "launcherSha256": "a96e43561ecfd4df776d64222ce46b9d1706ee09926c96f9afe597c6862e2c31"
+  },
+  "acceptedCoverage": {
+    "contractCancelCases": {
+      "count": 10,
+      "cases": [
+        "Persisted cancellation with lost acknowledgement locks writes; GET inspects legitimate saved Cancelled state without repeating POST",
+        "Malformed acknowledgement locks; explicit GET reads saved record",
+        "Same-ID unexpected higher revision is denied; GET retains actual Cancelled v2",
+        "Substituted record ID is denied; GET retains actual original-ID Cancelled v2",
+        "Unknown outcome plus still-Draft GET remains blocked",
+        "Late successful cancellation after leaving cannot navigate away from the new editor",
+        "Normal cancellation sends one current version/reason and returns to list",
+        "Definite422 permits a corrected reason",
+        "Stale409 blocks until explicit saved-state GET",
+        "Failed403 reconciliation GET retains unknown-result write lock"
+      ],
+      "apiSemantics": "Cancel is unkeyed and has no original-key receipt recovery endpoint. GET is saved-state inspection only, never POST retry. Current server increments Modified OriginalVersion exactly+1; UI checks sameID and exact next version."
+    },
+    "billRelatedCapabilityLinks": {
+      "count": 3,
+      "cases": [
+        "Invoice-filtered credits/payments workspace links and explanatory copy do not imply payment execution",
+        "Each capability plus payment read permission is required independently",
+        "Missing capabilities hide related workspaces"
+      ],
+      "scope": "Existing typed query-link wiring only; no AP balance/Finance posting/payment execution"
+    },
+    "existingContractCrudAndRates": [
+      "create/revise/cancel existing draft",
+      "exact contract/rate amounts, parent/rate CAS and retained Removed history",
+      "lost rate response uses GET without repeated POST",
+      "read denial, stale edit retention, unavailable edit cannot create replacement, eligible supplier requirement and supplier search",
+      "unknown draft create retains data and blocks repeat"
+    ],
+    "existingBillsAndInbox": [
+      "manual received create/read/edit/cancel and refreshed saved details",
+      "read-only/older-backend markers,403/404 navigation and document upload controls",
+      "lost edit and408/429/499 unknown-response locks",
+      "imported list toolbar/filter/current-page selection, invoice detail tabs/editor/discard/inbox arrangement",
+      "desktop and phone viewport layout checks in Chromium"
+    ]
+  },
+  "retainedPriorAttempts": [
+    {
+      "run": "01",
+      "source": "4192b7c3665da8b8fb875eef605e6c977fba3e56",
+      "status": "FAILED_RETAINED_NOT_RELABELLED",
+      "plannedBrowserCases": 43,
+      "passed": 0,
+      "failed": 3,
+      "notRun": 40,
+      "reportedNonTestErrors": 1,
+      "typeScript": "FRESH_PASS",
+      "causeAndCorrection": "Contract fixture seeded company only and empty Core locations; strict application branch gate correctly showed Choose your branch. No product bypass added.",
+      "resultSha256": "b98a7ca2ca53a968ece24a1974218e878e6d57a9c9555e589a547571d8ab64d0",
+      "browserLogSha256": "185ac706acfc4dbcf373c5a22bebd77f25661c6f4ce7b1faddf42f979fad16e7",
+      "launcherSha256": "0b1dbf1fbaec25a651c6718f4a6662af286df62995c3c95c60a2cfb1234ce685",
+      "rawTracesAndLogsPreserved": true
+    },
+    {
+      "run": "02",
+      "source": "813b15b929f18437fe3ef8808c51e9d79962935f",
+      "status": "FAILED_RETAINED_NOT_RELABELLED",
+      "plannedBrowserCases": 43,
+      "passed": 1,
+      "failed": 3,
+      "notRun": 39,
+      "reportedNonTestErrors": 1,
+      "typeScript": "FRESH_PASS",
+      "causeAndCorrection": "Unit locator also matched Unit price in two rate cases; denial test expected a forbidden empty state. Fixture/locator/denial expectation corrections only.",
+      "resultSha256": "c905e0ac1bee5d43c56c352fe0acfb665fac84630d759ccbcfd3758ce4754c20",
+      "browserLogSha256": "2e3ac8b171b4f7285924997510462f23920cee64da28e3275843abb99aad1a5e",
+      "launcherSha256": "17954c8f23987a24e964c7071e7cec0c83de61ffc404da0b9e0d0b2615f7f494",
+      "rawTracesAndLogsPreserved": true
+    },
+    {
+      "run": "03",
+      "source": "0755b62a9766082861418540769ec07ca9443d21",
+      "status": "FAILED_RETAINED_NOT_RELABELLED",
+      "plannedBrowserCases": 43,
+      "passed": 8,
+      "failed": 3,
+      "notRun": 32,
+      "reportedNonTestErrors": 1,
+      "typeScript": "FRESH_PASS",
+      "causeAndCorrection": "Rate Edit locator also matched Edit draft; retained Reason label locator failed after controlled-textarea rerender. Exact action and textbox-role locator corrections only.",
+      "resultSha256": "d0e2f93fdecfc359385dd5d20aa2ac5c4433baca816d3dd742bc15e16e5101f6",
+      "browserLogSha256": "74691f66340fba4174c53651bd163ac23be3f4846755b80ee8a3a46ce11e431d",
+      "launcherSha256": "03e8496592db24f4f7993ac706e7b0f630ab5b247f40522a47d3cf34ff3bade2",
+      "rawTracesAndLogsPreserved": true
+    },
+    {
+      "run": "04",
+      "source": "814fb78278b7ecf32e21d6b4a89b56d27b64101a",
+      "status": "FAILED_RETAINED_NOT_RELABELLED",
+      "plannedBrowserCases": 43,
+      "passed": 34,
+      "failed": 3,
+      "notRun": 6,
+      "reportedNonTestErrors": 1,
+      "typeScript": "CARRIED run03 PASS; not rerun on04",
+      "causeAndCorrection": "Rate mock omitted actual POST /rates/{id}/remove; global leaving-preloader status conflicted with cancellation feedback; an old bill Related-tab assertion still expected the superseded unavailable-copy. Exact mock path, main-scoped locators and updated existing-tab expectation corrected; no timeout or application guard weakening.",
+      "resultSha256": "9896838dcb0893238d5f46ae543e459e18d3c6d155ad353f439547c447371d3f",
+      "browserLogSha256": "35e782e7d0f97ff6ceb8bf2bdb806ae0605ca7e3b95977b0f70cd6c47968109e",
+      "launcherSha256": "ab78f25da8cfbacf8d49c3fd106038ccdbfeea6f46b537d84a1480c8930df1cc",
+      "rawTracesAndLogsPreserved": true
+    }
+  ],
+  "limitations": {
+    "actualBackend": false,
+    "realPostgreSqlPersistenceProvenByTheseMocks": false,
+    "realScannerProvenByTheseMocks": false,
+    "normalCookieIdentityOrSessionProvenByTheseMocks": false,
+    "productionTouched": false,
+    "productionDeployment": false,
+    "wholeModuleComplete": false,
+    "otherBrowsersOrNativeDevices": "Not claimed; Chromium desktop/phone viewports only",
+    "noClaimedNewBuildOrUnitRun": "This receipt records fresh TypeScript and45 mocked browser cases only; separate prior unit/build evidence is not relabelled as current."
+  },
+  "nextSeparateGates": [
+    "Real scoped backend/normal-cookie/independent-owner contract/bill workflows where not already accepted at their named producer pins",
+    "Production deployment/UAT and external Finance/scanner owner evidence remain separate"
+  ]
+}
