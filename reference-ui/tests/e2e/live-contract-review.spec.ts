@@ -15,16 +15,21 @@ const capabilityKeys = ["vendorDraft","itemDraft","requestDraft","approvals","so
   "planningDraft","configurationDraft","contractDraft","sourcingDraft"];
 
 async function mockReview(page: Page, options: { enabled: boolean; actor: "owner" | "reviewer";
-  loseSubmit?: boolean; loseDecision?: boolean; pending?: boolean }) {
+  loseSubmit?: boolean; loseDecision?: boolean; pending?: boolean; delayedRateRefresh?: boolean }) {
   let state = options.pending ? "PendingReview" : "Draft";
   let contractVersion = options.pending ? 2 : 1;
   let submitWrites = 0;
   let decideWrites = 0;
   let submitAck: Record<string, unknown> | null = null;
   let decisionAck: Record<string, unknown> | null = null;
+  let rateSaved = false;
+  let rateRefreshReleased = false;
+  let releaseRateRefresh: (() => void) | undefined;
+  const rateRefresh = new Promise<void>(resolve => { releaseRateRefresh = resolve; });
   const actorId = options.actor === "owner" ? owner : reviewer;
   const permissions = options.actor === "owner"
-    ? ["procurement-access","procurement-contract-read","procurement-contract-submit"]
+    ? ["procurement-access","procurement-contract-read","procurement-contract-submit",
+      ...(options.delayedRateRefresh ? ["procurement-contract-edit"] : [])]
     : ["procurement-access","procurement-contract-review-read","procurement-contract-review"];
   const record = () => ({ id: contract, number: "CON-001", supplierId: supplier,
     title: "Service agreement", contractType: "Service", currencyCode: "ZMW",
@@ -49,8 +54,24 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company,
       schemaReady: true, capabilities: { ...Object.fromEntries(capabilityKeys.map((key) =>
-        [key, key === "contractDraft"])), contractInternalReview: options.enabled } });
-    if (path === `/api/procurement/v1/contracts/${contract}`) return json(record());
+        [key, key === "contractDraft"])), contractDraftRates: options.delayedRateRefresh === true,
+        contractInternalReview: options.enabled } });
+    if (path === `/api/procurement/v1/contracts/${contract}`) {
+      if (rateSaved && options.delayedRateRefresh && !rateRefreshReleased) await rateRefresh;
+      return json(record());
+    }
+    if (path === `/api/procurement/v1/contracts/${contract}/rates` && request.method() === "POST") {
+      rateSaved = true; contractVersion = 2;
+      return json({ contractId: contract, contractVersion, rate: { id: assignment, version: 1,
+        lineNumber: 1, description: "Monthly support", unitCode: "month",
+        unitPriceExact: "5.1234", maximumQuantityExact: null, catalogItemId: null,
+        status: "Active", statusReason: null } }, 201);
+    }
+    if (path === `/api/procurement/v1/contracts/${contract}/rates` && request.method() === "GET")
+      return json({ contractId: contract, contractVersion, draftVersionId: versionId,
+        items: rateSaved ? [{ id: assignment, lineNumber: 1, description: "Monthly support",
+          unitCode: "month", unitPriceExact: "5.1234", maximumQuantityExact: "2.0000",
+          catalogItemId: null, status: "Active", statusReason: null, version: 1 }] : [] });
     if (path === "/api/procurement/v1/contracts/internal-review/assigned") return json({
       items: options.actor === "reviewer" && state === "PendingReview" ? [{ Id: submission,
         ContractId: contract, CoreCaseId: caseId, ReviewBranchId: branch,
@@ -75,8 +96,8 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
       && request.method() === "POST") {
       submitWrites++;
       expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
-      expect(request.postDataJSON()).toEqual({ expectedContractVersion: 1, reviewBranchId: branch });
-      state = "PendingReview"; contractVersion = 2;
+      expect(request.postDataJSON()).toEqual({ expectedContractVersion: rateSaved ? 2 : 1, reviewBranchId: branch });
+      state = "PendingReview"; contractVersion = rateSaved ? 3 : 2;
       submitAck = { schemaVersion: 1, ContractId: contract, SubmissionId: submission,
         ReviewBranchId: branch, VoteId: null, CorrectionId: null, Operation: "Submit",
         CommandKey: request.headers()["idempotency-key"], ActorPrincipalId: owner,
@@ -102,8 +123,29 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
     }
     return json({ message: `Unexpected route: ${path}` },404);
   });
-  return { submitWrites: () => submitWrites, decideWrites: () => decideWrites };
+  return { submitWrites: () => submitWrites, decideWrites: () => decideWrites,
+    releaseRateRefresh: () => { rateRefreshReleased = true; releaseRateRefresh?.(); } };
 }
+
+test("rate reconciliation gates parent submission until the saved parent version is rendered", async ({ page }) => {
+  const state = await mockReview(page,{ enabled: true, actor: "owner", delayedRateRefresh: true });
+  await page.goto(`/procurement/workspace/contracts/${contract}`);
+  await page.getByRole("button",{ name: "Add rate" }).click();
+  await page.getByLabel("Description").fill("Monthly support");
+  await page.getByLabel("Unit",{ exact: true }).fill("month");
+  await page.getByLabel("Unit price").fill("5.1234");
+  const savedRate = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/contracts/${contract}/rates`)
+    && response.request().method() === "POST");
+  await page.getByRole("button",{ name: "Save rate" }).click();
+  expect((await savedRate).status()).toBe(201);
+  await expect(page.getByRole("button",{ name: "Submit for internal review" })).toBeDisabled();
+  expect(state.submitWrites()).toBe(0);
+  state.releaseRateRefresh();
+  await expect(page.getByRole("cell",{ name: "Monthly support" })).toBeVisible();
+  await expect(page.getByRole("button",{ name: "Submit for internal review" })).toBeEnabled();
+  await page.getByRole("button",{ name: "Submit for internal review" }).click();
+  expect(state.submitWrites()).toBe(1);
+});
 
 test("internal review remains off without a distinct server capability", async ({ page }) => {
   const state = await mockReview(page,{ enabled: false, actor: "owner" });
