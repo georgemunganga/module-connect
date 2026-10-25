@@ -27,6 +27,7 @@ import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/Liv
 import { LiveReceivingList, LiveReceivingDetail } from "../features/LiveReceiving";
 import { LiveReceivingEditor } from "../features/LiveReceivingEditor";
 import { LiveGoodsReturnList, LiveGoodsReturnDetail, LiveGoodsReturnEditor } from "../features/LiveGoodsReturns";
+import { LiveRfqRecommendationList, LiveRfqRecommendationDetail } from "../features/LiveRfqRecommendations";
 import { LiveBudgets } from "../features/LiveBudgets";
 import { LiveOverview } from "../features/LiveOverview";
 import { AppShell } from "../components/layout/AppShell";
@@ -97,6 +98,8 @@ export function App() {
         <ProcurementLiveGate blockedShell={content => <Routes><Route element={<AppShell />}><Route path="*" element={content} /></Route></Routes>} scopeUnavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<ProcurementScopeSelectionState />} /></Route></Routes>} unavailable={<Routes><Route element={<AppShell />}><Route path="*" element={<PendingLiveWorkflow />} /></Route></Routes>}>
         <Routes>
           <Route element={<AppShell />}>
+            <Route path="/rfqs/recommendations" element={isProcurementLiveMode ? <LiveRfqRecommendationList /> : <PendingLiveWorkflow />} />
+            <Route path="/rfqs/recommendations/:roundId" element={isProcurementLiveMode ? <LiveRfqRecommendationDetail /> : <PendingLiveWorkflow />} />
             <Route path="/purchase-receives/returns" element={isProcurementLiveMode ? <LiveGoodsReturnList /> : <PendingLiveWorkflow />} />
             <Route path="/purchase-receives/returns/new" element={isProcurementLiveMode ? <LiveGoodsReturnEditor /> : <PendingLiveWorkflow />} />
             <Route path="/purchase-receives/returns/:id/edit" element={isProcurementLiveMode ? <LiveGoodsReturnEditor /> : <PendingLiveWorkflow />} />

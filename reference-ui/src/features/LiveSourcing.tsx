@@ -53,7 +53,11 @@ function SourcingPageContent({ view, governed, mode, id }: { view: "list" | "edi
       && (permissions.includes("procurement-sourcing-submit") || permissions.includes("procurement-sourcing-publish"));
   const enabled = mode === "principal" ? capabilities.principalSourcingSourceDrafts === true : capabilities.sourcingSourceDrafts === true;
   const anyGoverned = capabilities.sourcingSourceDrafts || capabilities.principalSourcingSourceDrafts;
+  const canRecommend = capabilities.principalRfqRecommendationDrafts === true
+    && permissions.includes("procurement-sourcing-recommend-draft")
+    && permissions.includes("procurement-sourcing-opened-offer-read");
   return <>
+    {view === "list" && canRecommend && <div className="px-5 pt-5 sm:px-8"><Link className="text-sm text-primary hover:underline" to="/rfqs/recommendations">Opened offers · My recommendation drafts</Link></div>}
     {view === "list" && anyGoverned && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">
       {capabilities.principalSourcingSourceDrafts && <Link to="/rfqs?source=principal-approved"><Button variant={governed && mode === "principal" ? "primary" : "secondary"}>From approved requests</Button></Link>}
       {capabilities.sourcingSourceDrafts && <Link to="/rfqs?source=approved"><Button variant={governed && mode === "worker" ? "primary" : "secondary"}>{capabilities.principalSourcingSourceDrafts ? "Earlier approved request drafts" : "From approved requests"}</Button></Link>}
