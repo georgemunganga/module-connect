@@ -3,6 +3,12 @@ import { expect, test, type Page } from "@playwright/test";
 const company="11111111-1111-4111-8111-111111111111", branch="22222222-2222-4222-8222-222222222222", actor="33333333-3333-4333-8333-333333333333";
 const draft="44444444-4444-4444-8444-444444444444", fact="55555555-5555-4555-8555-555555555555", receipt="66666666-6666-4666-8666-666666666666", order="77777777-7777-4777-8777-777777777777", line="88888888-8888-4888-8888-888888888888";
 const path="/procurement/workspace/purchase-receives/returns", api="/api/procurement/v1", root=api+"/returns/principal-drafts";
+// Exact required /meta baseline from ProcurementReadiness; optional P37 and
+// receiving capabilities are layered separately so either can be absent.
+const mandatoryCapabilities=Object.fromEntries([
+  "vendorDraft","itemDraft","requestDraft","approvals","sourcing","contracts","orders","receiving",
+  "invoiceValidation","financeHandoff","supplierPortal","planningDraft","configurationDraft","contractDraft","sourcingDraft",
+].map((key)=>[key,false]));
 const labels={purchaseOrderNumber:"PO-RETAINED",supplierDisplayName:"Approved supplier",lineNumber:1,description:"Accepted goods",unitCode:"EA",currencyCode:"ZMW",deliveryNoteReference:"DN-1",receivedAt:"2026-10-25T10:00:00Z"};
 async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,returnsAbsent=false,allBranches=false,stale=false}={}){
   const writes:{url:string;body:Record<string,unknown>;key:string}[]=[], reads:string[]=[];
@@ -22,7 +28,7 @@ async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,retu
     if(urlPath==="/api/hrm/shell/")return json({assignedLocationIds:[branch],confined:true});
     if(urlPath.startsWith(api)){expect(request.headers()["x-shell-entity"]).toBe(company);if(!allBranches)expect(request.headers()["x-shell-location"]).toBe(branch);}
     if(urlPath===api+"/context")return json({principalId:actor,tenantId:"amizo",legalEntityId:company,workerId:null,permissions:perms,branch:allBranches?null:{id:branch,code:"HQ",name:"Main site"},company:{id:company,code:"AMIZO",name:"Amizo Power",currencyCode:"ZMW"}});
-    if(urlPath===api+"/meta")return json({tenantId:"amizo",legalEntityId:company,schemaReady:true,capabilities:{vendorDraft:false,itemDraft:false,requestDraft:false,approvals:false,sourcing:false,contracts:false,orders:false,receiving:false,invoiceIntake:false,invoiceValidation:false,financeHandoff:false,supplierPortal:false,planningDraft:false,configurationDraft:false,contractDraft:false,...(returnsAbsent?{}:{principalGoodsReturnDrafts:true}),principalReceiving:!returnOnly}});
+    if(urlPath===api+"/meta")return json({tenantId:"amizo",legalEntityId:company,schemaReady:true,capabilities:{...mandatoryCapabilities,...(returnsAbsent?{}:{principalGoodsReturnDrafts:true}),principalReceiving:!returnOnly}});
     if(request.method()==="GET"){
       reads.push(urlPath);
       if(urlPath===root+"/eligible-goods")return json({items:[{acceptanceFactId:fact,receiptId:receipt,purchaseOrderId:order,purchaseOrderLineId:line,branchId:branch,acceptedFactQuantityExact:"1.0001",labels}],hasMore:false,nextOffset:null});
