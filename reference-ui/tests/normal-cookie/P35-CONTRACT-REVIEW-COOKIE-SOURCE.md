@@ -18,3 +18,7 @@ The browser performs no signature, activation, supplier dispatch, Finance postin
 | Session closure | Existing local identity | Real logout, then context 401 for each cookie | Revocation booleans and challenged browser completion |
 
 The feature contract remains in the ERP repository's P35 internal review feature specification. Actual persistence, audit, outbox, role grants and unchanged non-P35 records require an independent read-only owner verifier after the browser run. This source file and a passing UI test alone do not prove those facts.
+
+## Static verification
+
+Source `82ee019ee5ca39ea79c21c0e93b8fd437bc90a52` passed an explicit strict TypeScript check of this browser spec and its configuration, plus Node syntax validation of the HTTPS proxy. The workspace application tsconfig excludes tests, so its ordinary typecheck alone would not cover this proof. The offline check read the existing cached Node22.20.1 typings without changing dependencies. An earlier harness attempt failed because it omitted that type-root input; both attempts remain retained. Protected successful result SHA-256: `fda2f335295e8e8a6b041ac39b16e6c477faffb672462c96e0cc0a2f2b0c43df`. No browser, backend SDK, database, or owner verification is claimed by these static checks.
