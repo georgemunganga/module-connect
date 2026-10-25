@@ -135,15 +135,19 @@ test('buyer and independent reviewer complete an internal contract review with n
     expect(supplierResponse.status()).toBe(200);
     const supplier = await json(supplierResponse);
     if (supplier.id !== fixture.supplierId || typeof supplier.displayName !== 'string'
-      || !supplier.displayName.trim()) throw new Error('Retained supplier label required');
+      || !supplier.displayName.trim() || typeof supplier.status !== 'string'
+      || !['Draft', 'Active', 'Approved'].includes(supplier.status)
+      || supplier.status !== 'Draft' && supplier.isOrderable !== true)
+      throw new Error('Retained eligible supplier label required');
     const buyerPage = await readyPage(buyerContext, '/contracts/new');
     await expect(buyerPage.getByRole('heading', { name: 'New contract' })).toBeVisible();
     await buyerPage.getByLabel('Search suppliers').fill(supplier.displayName);
-    const supplierOption = buyerPage.getByLabel('Supplier').locator(`option[value="${fixture.supplierId}"]`);
-    await expect(supplierOption).toHaveCount(1);
-    await buyerPage.getByLabel('Supplier').selectOption(fixture.supplierId);
+    await buyerPage.getByRole('combobox', { name: 'Supplier' }).click();
+    await buyerPage.getByRole('option',
+      { name: `${supplier.displayName} (${supplier.status})`, exact: true }).click();
     await buyerPage.getByLabel('Contract title').fill('Private browser review agreement');
-    await buyerPage.getByLabel('Contract type').selectOption('Framework');
+    await buyerPage.getByRole('combobox', { name: 'Contract type' }).click();
+    await buyerPage.getByRole('option', { name: 'Framework agreement', exact: true }).click();
     await buyerPage.getByLabel('Spending limit').fill('100.0001');
     await buyerPage.getByLabel('Currency').fill('ZMW');
     const today = new Date();
