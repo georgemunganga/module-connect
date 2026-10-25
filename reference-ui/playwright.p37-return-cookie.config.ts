@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
@@ -11,10 +11,24 @@ const privateFile = (name: string) => {
     || (lstatSync(value).mode & 0o777) !== 0o600) throw new Error('Protected P37 input missing');
   return value;
 };
+const privateDirectory = '/p25-evidence';
+const directory = lstatSync(privateDirectory);
+if (!directory.isDirectory() || directory.isSymbolicLink() || realpathSync(privateDirectory) !== privateDirectory
+  || (directory.mode & 0o777) !== 0o700) throw new Error('Exact private P37 evidence mount required');
+const fresh = (value: string) => {
+  try { lstatSync(value); return false; }
+  catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return true;
+    throw error;
+  }
+};
+const fixturePath = privateFile('P37_RETURN_COOKIE_FIXTURE');
+if (fixturePath !== `${privateDirectory}/p37-return-local-cookie-fixture.private.json`)
+  throw new Error('Exact P37 fixture path required');
 const receipt = JSON.parse(readFileSync(privateFile('P37_RETURN_COOKIE_PROXY_RECEIPT'), 'utf8'));
-const bytes = readFileSync(privateFile('P37_RETURN_COOKIE_FIXTURE'));
+const bytes = readFileSync(fixturePath);
 const result = process.env.P37_RETURN_COOKIE_BROWSER_RESULT;
-if (!result || !path.isAbsolute(result) || (statSync(path.dirname(result)).mode & 0o777) !== 0o700
+if (!result || !path.isAbsolute(result) || path.dirname(result) !== privateDirectory || !fresh(result)
   || receipt.fixtureSha256 !== createHash('sha256').update(bytes).digest('hex'))
   throw new Error('Exact new P37 fixture and protected result required');
 const origin = new URL(receipt.origin);

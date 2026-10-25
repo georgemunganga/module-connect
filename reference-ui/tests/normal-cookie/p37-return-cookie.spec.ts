@@ -1,6 +1,6 @@
 import { expect, test, type APIResponse, type BrowserContext, type Response } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 type Credential = { principalId: string; email: string; password: string };
@@ -21,7 +21,21 @@ const privateFile = (name: string) => {
     || (lstatSync(value).mode & 0o777) !== 0o600) throw new Error('Protected P37 input missing');
   return value;
 };
-const fixtureBytes = readFileSync(privateFile('P37_RETURN_COOKIE_FIXTURE'));
+const privateDirectory = '/p25-evidence';
+const fresh = (value: string) => {
+  try { lstatSync(value); return false; }
+  catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return true;
+    throw error;
+  }
+};
+const directory = lstatSync(privateDirectory);
+if (!directory.isDirectory() || directory.isSymbolicLink() || realpathSync(privateDirectory) !== privateDirectory
+  || (directory.mode & 0o777) !== 0o700) throw new Error('Exact private P37 evidence mount required');
+const fixturePath = privateFile('P37_RETURN_COOKIE_FIXTURE');
+if (fixturePath !== `${privateDirectory}/p37-return-local-cookie-fixture.private.json`)
+  throw new Error('Exact P37 fixture path required');
+const fixtureBytes = readFileSync(fixturePath);
 if (fixtureBytes.length > 65536) throw new Error('Invalid protected P37 fixture');
 const fixture = JSON.parse(fixtureBytes.toString('utf8')) as Fixture;
 const proxy = JSON.parse(readFileSync(privateFile('P37_RETURN_COOKIE_PROXY_RECEIPT'), 'utf8'));
@@ -36,12 +50,13 @@ if (fixture.schemaVersion !== 4 || proxy.schemaVersion !== 4 || fixture.controlP
   || proxy.fixtureSha256 !== createHash('sha256').update(fixtureBytes).digest('hex')
   || proxy.apiUrl !== fixture.apiUrl || proxy.database !== fixture.database
   || proxy.injectsIdentityHeaders !== false || proxy.mocksBusinessResponses !== false
-  || !output || !path.isAbsolute(output) || existsSync(output)
+  || !output || !path.isAbsolute(output) || path.dirname(output) !== privateDirectory || !fresh(output)
   || !/^proc_p37_http_return_[a-z0-9_]{1,30}$/.test(fixture.database)
   || ![fixture.companyId, fixture.branchId, fixture.receiverPrincipalId, fixture.acceptanceFactId,
     fixture.receiptId, fixture.nativeDraftId].every(guid)
-  || !/^[a-f0-9]{64}$/.test(fixture.challenge) || !path.isAbsolute(fixture.completionPath)
-  || existsSync(fixture.completionPath) || !Number.isFinite(Date.parse(fixture.expiresAt))
+  || !/^[a-f0-9]{64}$/.test(fixture.challenge)
+  || fixture.completionPath !== `${privateDirectory}/p37-return-local-cookie-browser-completion.private.json`
+  || !fresh(fixture.completionPath) || !Number.isFinite(Date.parse(fixture.expiresAt))
   || Date.parse(fixture.expiresAt) <= Date.now()) throw new Error('Actual unexpired P37 normal-cookie fixture required');
 if (!Array.isArray(fixture.syntheticCredentials) || fixture.syntheticCredentials.length !== 16)
   throw new Error('Original synthetic receiver cohort missing');
@@ -61,7 +76,13 @@ const evidence: Record<string, unknown> = { schemaVersion: 4, status: 'RUNNING_N
 let sequence = 0;
 function retain() {
   const temporary = `${output}.tmp-${++sequence}`;
-  writeFileSync(temporary, JSON.stringify(evidence, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+  writeFileSync(temporary, JSON.stringify(evidence, null, 2) + String.fromCharCode(10), { mode: 0o600, flag: 'wx' });
+  if (sequence === 1 && !fresh(output!)) throw new Error('Protected P37 result appeared before first write');
+  if (sequence > 1) {
+    const existing = lstatSync(output!);
+    if (!existing.isFile() || existing.isSymbolicLink() || (existing.mode & 0o777) !== 0o600)
+      throw new Error('Protected P37 result was replaced');
+  }
   renameSync(temporary, output!);
 }
 async function api(action: () => Promise<APIResponse>) {
@@ -217,7 +238,7 @@ test('workerless receiver creates, reloads, revises and cancels one goods return
       evidence.status = 'PASS_NORMAL_COOKIE_P37_RETURN_UI_ONLY';
     retain();
     writeFileSync(fixture.completionPath, JSON.stringify({ schemaVersion: 4, challenge: fixture.challenge,
-      status: 'BrowserFinished' }) + '\n', { mode: 0o600, flag: 'wx' });
+      status: 'BrowserFinished' }) + String.fromCharCode(10), { mode: 0o600, flag: 'wx' });
     retain();
   }
   if (failed) throw new Error(`Normal-cookie P37 UI proof failed at ${step}; inspect protected result and owning-store evidence`);
