@@ -1,6 +1,6 @@
 # P36 recommendation draft UI integration gaps
 
-The earlier audit used UI base `00ea9ff4008a79be80d11d578ed4472aeda6e0fc` and held ERP source `152f2b1e62cf3de52f161508a9e51a43d56d7725`. This source-only adapter follows UI `20f7e46eacb2a7dea733f9aa7bd0450ea982b34f` and the candidate P36 API at `61422d5e58e66932d6c96eda3683209e75a2ecad`. Its tests are authored but unrun; no runtime acceptance or production activation follows from this document.
+The earlier audit used UI base `00ea9ff4008a79be80d11d578ed4472aeda6e0fc` and held ERP source `152f2b1e62cf3de52f161508a9e51a43d56d7725`. This source-only adapter follows UI `20f7e46eacb2a7dea733f9aa7bd0450ea982b34f` and the candidate P36 API at `61422d5e58e66932d6c96eda3683209e75a2ecad`. Scoped mocked frontend and non-live preview acceptance at UI `23c104d1fe5630234b1766c9e70c5a44822ced7d` is recorded in `docs/PROC-P36-RECOMMENDATION-UI-ACCEPTANCE-20261025.md`; it does not establish actual backend or production activation.
 
 ## Existing presentation
 
