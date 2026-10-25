@@ -15,14 +15,16 @@ const capabilityKeys = ["vendorDraft","itemDraft","requestDraft","approvals","so
   "planningDraft","configurationDraft","contractDraft","sourcingDraft"];
 
 async function mockReview(page: Page, options: { enabled: boolean; actor: "owner" | "reviewer";
-  loseSubmit?: boolean; loseDecision?: boolean; pending?: boolean; delayedRateRefresh?: boolean }) {
-  let state = options.pending ? "PendingReview" : "Draft";
-  let contractVersion = options.pending ? 2 : 1;
+  loseSubmit?: boolean; loseDecision?: boolean; pending?: boolean; delayedRateRefresh?: boolean;
+  returnedWithStaleRates?: boolean }) {
+  let state = options.returnedWithStaleRates ? "Returned" : options.pending ? "PendingReview" : "Draft";
+  let contractVersion = options.returnedWithStaleRates ? 3 : options.pending ? 2 : 1;
   let submitWrites = 0;
   let decideWrites = 0;
   let submitAck: Record<string, unknown> | null = null;
   let decisionAck: Record<string, unknown> | null = null;
-  let rateSaved = false;
+  let rateSaved = options.returnedWithStaleRates === true;
+  let rateReads = 0, detailReads = 0;
   let rateRefreshReleased = false;
   let releaseRateRefresh: (() => void) | undefined;
   const rateRefresh = new Promise<void>(resolve => { releaseRateRefresh = resolve; });
@@ -54,9 +56,11 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company,
       schemaReady: true, capabilities: { ...Object.fromEntries(capabilityKeys.map((key) =>
-        [key, key === "contractDraft"])), contractDraftRates: options.delayedRateRefresh === true,
+        [key, key === "contractDraft"])), contractDraftRates: options.delayedRateRefresh === true
+          || options.returnedWithStaleRates === true,
         contractInternalReview: options.enabled } });
     if (path === `/api/procurement/v1/contracts/${contract}`) {
+      detailReads++;
       if (rateSaved && options.delayedRateRefresh && !rateRefreshReleased) await rateRefresh;
       return json(record());
     }
@@ -67,11 +71,15 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
         unitPriceExact: "5.1234", maximumQuantityExact: null, catalogItemId: null,
         status: "Active", statusReason: null } }, 201);
     }
-    if (path === `/api/procurement/v1/contracts/${contract}/rates` && request.method() === "GET")
-      return json({ contractId: contract, contractVersion, draftVersionId: versionId,
+    if (path === `/api/procurement/v1/contracts/${contract}/rates` && request.method() === "GET") {
+      rateReads++;
+      return json({ contractId: contract,
+        contractVersion: options.returnedWithStaleRates && state === "Returned" ? 2 : contractVersion,
+        draftVersionId: versionId,
         items: rateSaved ? [{ id: assignment, lineNumber: 1, description: "Monthly support",
           unitCode: "month", unitPriceExact: "5.1234", maximumQuantityExact: "2.0000",
           catalogItemId: null, status: "Active", statusReason: null, version: 1 }] : [] });
+    }
     if (path === "/api/procurement/v1/contracts/internal-review/assigned") return json({
       items: options.actor === "reviewer" && state === "PendingReview" ? [{ Id: submission,
         ContractId: contract, CoreCaseId: caseId, ReviewBranchId: branch,
@@ -105,6 +113,15 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
       if (options.loseSubmit) return route.abort("failed");
       return json(submitAck,201);
     }
+    if (path === `/api/procurement/v1/contracts/${contract}/internal-review/correct`
+      && request.method() === "POST") {
+      expect(request.postDataJSON()).toEqual({ expectedContractVersion: 3, reason: "Corrected terms" });
+      state = "Draft"; contractVersion = 4;
+      return json({ schemaVersion: 1, ContractId: contract, SubmissionId: submission,
+        ReviewBranchId: branch, VoteId: null, CorrectionId: assignment, Operation: "Correction",
+        CommandKey: request.headers()["idempotency-key"], ActorPrincipalId: owner,
+        contractVersion, contractStatus: state });
+    }
     if (path.startsWith("/api/procurement/v1/contracts/internal-review/commands/"))
       return decisionAck ? json(decisionAck) : submitAck ? json(submitAck) : json({ code: "NotFound" },404);
     if (path === `/api/procurement/v1/contracts/${contract}/internal-review/assignments/${assignment}/decide`
@@ -124,6 +141,7 @@ async function mockReview(page: Page, options: { enabled: boolean; actor: "owner
     return json({ message: `Unexpected route: ${path}` },404);
   });
   return { submitWrites: () => submitWrites, decideWrites: () => decideWrites,
+    rateReads: () => rateReads, detailReads: () => detailReads,
     releaseRateRefresh: () => { rateRefreshReleased = true; releaseRateRefresh?.(); } };
 }
 
@@ -143,8 +161,20 @@ test("rate reconciliation gates parent submission until the saved parent version
   state.releaseRateRefresh();
   await expect(page.getByRole("cell",{ name: "Monthly support" })).toBeVisible();
   await expect(page.getByRole("button",{ name: "Submit for internal review" })).toBeEnabled();
+  await expect(page.getByRole("heading",{ name: "Rates and price schedule" })).toHaveCount(1);
+  expect(state.rateReads()).toBeLessThanOrEqual(6);
+  expect(state.detailReads()).toBeLessThanOrEqual(6);
   await page.getByRole("button",{ name: "Submit for internal review" }).click();
   expect(state.submitWrites()).toBe(1);
+});
+
+test("returned review can be corrected despite an older read-only rate snapshot", async ({ page }) => {
+  await mockReview(page,{ enabled: true, actor: "owner", returnedWithStaleRates: true });
+  await page.goto(`/procurement/workspace/contracts/${contract}`);
+  await page.getByLabel("Correction reason").fill("Corrected terms");
+  await expect(page.getByRole("button",{ name: "Return to draft for correction" })).toBeEnabled();
+  await page.getByRole("button",{ name: "Return to draft for correction" }).click();
+  await expect(page.getByRole("button",{ name: "Submit for internal review" })).toBeEnabled();
 });
 
 test("internal review remains off without a distinct server capability", async ({ page }) => {

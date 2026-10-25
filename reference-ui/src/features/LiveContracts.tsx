@@ -205,11 +205,11 @@ export function LiveContractDetail() {
   const rateSafeRef = useRef(false);
   const ratesEnabled = capabilities.contractDraftRates === true;
   const rateSafe = !ratesEnabled || (rateSafety?.scope === viewScope && rateSafety.safe);
-  const onRateSafetyChange = useCallback((safe: boolean) => {
-    if (currentViewScope.current !== viewScope) return;
+  const onRateSafetyChange = useCallback((captured: string, safe: boolean) => {
+    if (currentViewScope.current !== captured) return;
     rateSafeRef.current = safe;
-    setRateSafety({ scope: viewScope, safe });
-  }, [viewScope]);
+    setRateSafety((old) => old?.scope === captured && old.safe === safe ? old : { scope: captured, safe });
+  }, []);
   const onFreshChildContract = useCallback((fresh: ContractDetail) => {
     if (currentViewScope.current !== viewScope || fresh.id !== id) return;
     setRecord((old) => old && fresh.version >= old.version ? fresh : old);
@@ -283,12 +283,14 @@ export function LiveContractDetail() {
         <div><dt className="text-muted-foreground">Draft revision</dt><dd className="mt-1">{record.draftVersion?.revisionNumber ?? "—"}</dd></div>
         {record.terminationReason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Cancellation reason</dt><dd className="mt-1">{record.terminationReason}</dd></div>}
       </dl></Panel>
-      <ContractDraftRates key={`${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`} companyId={legalEntityId}
+      <ContractDraftRates key={`rates:${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`} companyId={legalEntityId}
         scopeKey={`${tenantId}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
+        safetyScopeKey={viewScope}
         contract={record} enabled={capabilities.contractDraftRates === true}
-        canEdit={!writesBlocked && permissions.includes("procurement-contract-edit")}
+        canEdit={!busy && !loading && cancelBlock === null
+          && permissions.includes("procurement-contract-edit")}
         onFreshContract={onFreshChildContract} onSafetyChange={onRateSafetyChange} />
-      <ContractInternalReview key={`${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
+      <ContractInternalReview key={`review:${authEpoch}:${legalEntityId}:${principalId}:${effectiveBranchId ?? ""}:${record.id}`}
         companyId={legalEntityId} principalId={principalId} contract={record}
         branchId={effectiveBranchId} enabled={capabilities.contractInternalReview === true}
         canSubmit={permissions.includes("procurement-contract-submit")}
