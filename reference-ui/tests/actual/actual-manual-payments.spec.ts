@@ -63,10 +63,8 @@ async function login(page: Page, role: string, record = '/payments') {
   else
     await expect(page.getByRole('heading', { name: 'Payments Made', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Organisation context' }).click();
-  await page.getByRole('button', {
-    name: `${company!.registeredName}${landing.startsWith('/payments') ? ' · All branches' : ''}`,
-    exact: true,
-  }).click();
+  await page.getByRole('button', { name: company!.registeredName, exact: true }).locator('..')
+    .getByRole('button', { name: 'All permitted branches' }).click();
   const menu = page.getByRole('button', { name: 'Organisation context' });
   if (await menu.getAttribute('aria-expanded') === 'true') await menu.click();
   if (record !== landing) await page.goto(`/procurement/workspace${record}`);

@@ -61,8 +61,9 @@ test("a payment-only Core account can switch from default C to authorized compan
   await page.goto("/procurement/workspace/payments");
   await expect(page.getByText("You do not have permission to open this Procurement page", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Organisation context" }).click();
-  await expect(page.getByRole("button", { name: "Company A · All branches" })).toBeVisible();
-  await page.getByRole("button", { name: "Company A · All branches" }).click();
+  await expect(page.getByRole("button", { name: "Company A", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Company A", exact: true }).locator("..")
+    .getByRole("button", { name: "All permitted branches" }).click();
   await expect(page.getByRole("heading", { name: "Payments Made" })).toBeVisible();
   await expect.poll(() => scope.seen.some(request => request.path === "/api/procurement/v1/manual-payments"
     && request.company === companyA && request.all === "all")).toBe(true);

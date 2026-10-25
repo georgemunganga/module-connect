@@ -31,7 +31,8 @@ async function fixture(page: Page, enabled: boolean, options: {
   const writes: { path: string; body: Record<string, unknown>; key: string | undefined }[] = [];
   let status = options.paymentStatus ?? "Draft", version = status === "Approved" ? 3 : 1;
   await page.addInitScript(({ company, branch, allBranches }) => localStorage.setItem("erp.shell.state.v1",
-    JSON.stringify({ entityId: company, ...(allBranches ? {} : { branch }) })),
+    JSON.stringify({ entityId: company, branch: allBranches ? "" : branch,
+      branchScope: allBranches ? "all" : undefined })),
     { company, branch, allBranches: options.allBranches ?? false });
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
