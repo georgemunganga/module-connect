@@ -9,6 +9,11 @@ const mapping = "66666666-6666-4666-8666-666666666666";
 const outcome = "77777777-7777-4777-8777-777777777777";
 const first = "88888888-8888-4888-8888-888888888888";
 const second = "99999999-9999-4999-8999-999999999999";
+const baseCapabilities = Object.fromEntries([
+  "vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts", "orders", "receiving",
+  "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft",
+  "contractDraft", "sourcingDraft",
+].map(key => [key, false]));
 
 test("separate issue notes recover by original key even when current status becomes unavailable", async ({ page }) => {
   let posted = 0, legacyMatchingReads = 0, originalKey = "", statusUnavailable = false;
@@ -32,7 +37,7 @@ test("separate issue notes recover by original key even when current status beco
       principalId: actor, workerId: null, branch: { id: branch }, company: { id: company, currencyCode: "ZMW" },
       permissions: ["procurement-access", "procurement-invoice-read", "procurement-invoice-match", "procurement-invoice-capture"] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "tenant-a", legalEntityId: company,
-      schemaReady: true, capabilities: { invoiceIntake: true, principalInvoiceMatching: true } });
+      schemaReady: true, capabilities: { ...baseCapabilities, invoiceIntake: true, principalInvoiceMatching: true } });
     if (path === `/api/procurement/v1/invoices/${invoice}`) return json({ id: invoice,
       supplierId: company, supplierName: "Supplier", invoiceNumber: "BILL-42", invoiceDate: "2026-10-23",
       currencyCode: "ZMW", status: "Received", intakeChannel: "Manual", version: 2,
@@ -95,7 +100,7 @@ test("issue owner can choose an eligible named matcher and Assign keeps the save
       principalId: actor, workerId: null, branch: { id: branch }, company: { id: company, currencyCode: "ZMW" },
       permissions: ["procurement-access", "procurement-invoice-read", "procurement-invoice-match"] });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "tenant-a", legalEntityId: company,
-      schemaReady: true, capabilities: { invoiceIntake: true, principalInvoiceMatching: true } });
+      schemaReady: true, capabilities: { ...baseCapabilities, invoiceIntake: true, principalInvoiceMatching: true } });
     if (path === `/api/procurement/v1/invoices/${invoice}`) return json({ id: invoice,
       supplierId: company, supplierName: "Supplier", invoiceNumber: "BILL-42", invoiceDate: "2026-10-23",
       currencyCode: "ZMW", status: "Received", intakeChannel: "Manual", version: 2,
