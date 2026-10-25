@@ -4,13 +4,13 @@ const company="11111111-1111-4111-8111-111111111111", branch="22222222-2222-4222
 const draft="44444444-4444-4444-8444-444444444444", fact="55555555-5555-4555-8555-555555555555", receipt="66666666-6666-4666-8666-666666666666", order="77777777-7777-4777-8777-777777777777", line="88888888-8888-4888-8888-888888888888";
 const path="/procurement/workspace/purchase-receives/returns", api="/api/procurement/v1", root=api+"/returns/principal-drafts";
 const labels={purchaseOrderNumber:"PO-RETAINED",supplierDisplayName:"Approved supplier",lineNumber:1,description:"Accepted goods",unitCode:"EA",currencyCode:"ZMW",deliveryNoteReference:"DN-1",receivedAt:"2026-10-25T10:00:00Z"};
-async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,stale=false}={}){
+async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,returnsAbsent=false,allBranches=false,stale=false}={}){
   const writes:{url:string;body:Record<string,unknown>;key:string}[]=[], reads:string[]=[];
   const receipts=new Map<string,unknown>();let version=1,status="Draft",quantity="0.5",reason="Wrong colour",interrupted=false,rejected=false;
   const current=()=>({id:draft,status,version,branchId:branch,receiptId:receipt,acceptanceFactId:fact,purchaseOrderId:order,purchaseOrderLineId:line,acceptedFactQuantityExact:"1.0001",quantityExact:quantity,reason,evidenceReference:null,draftOnly:true,stockChanged:false,financeChanged:false,supplierNotified:false});
   const detail=()=>({...current(),allowedActions:status==="Draft"&&!revoked?["Edit","Cancel"]:[],labels});
   const perms=["procurement-access","procurement-return-read","procurement-return-create",...(revoked?[]:["procurement-return-edit"]),...(returnOnly?[]:["procurement-receipt-view"])];
-  await page.addInitScript(({company,branch})=>localStorage.setItem("erp.shell.state.v1",JSON.stringify({entityId:company,branch})),{company,branch});
+  await page.addInitScript(({company,branch,allBranches})=>localStorage.setItem("erp.shell.state.v1",JSON.stringify(allBranches?{entityId:company,branchScope:"all"}:{entityId:company,branch})),{company,branch,allBranches});
   await page.route("**/api/**",async route=>{
     const request=route.request(),url=new URL(request.url()),urlPath=url.pathname;
     const json=(value:unknown,statusCode=200)=>route.fulfill({status:statusCode,contentType:"application/json",body:JSON.stringify(value)});
@@ -20,9 +20,9 @@ async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,stal
     if(urlPath==="/api/hrm/admin/legal-entities")return json({items:[{id:company,code:"AMIZO",registeredName:"Amizo Power"}]});
     if(urlPath==="/api/hrm/admin/locations")return json({items:[{id:branch,code:"HQ",name:"Main site",legalEntityId:company}]});
     if(urlPath==="/api/hrm/shell/")return json({assignedLocationIds:[branch],confined:true});
-    if(urlPath.startsWith(api)){expect(request.headers()["x-shell-entity"]).toBe(company);expect(request.headers()["x-shell-location"]).toBe(branch);}
-    if(urlPath===api+"/context")return json({principalId:actor,tenantId:"amizo",legalEntityId:company,workerId:null,permissions:perms,branch:{id:branch,code:"HQ",name:"Main site"},company:{id:company,code:"AMIZO",name:"Amizo Power",currencyCode:"ZMW"}});
-    if(urlPath===api+"/meta")return json({tenantId:"amizo",legalEntityId:company,schemaReady:true,capabilities:{vendorDraft:false,itemDraft:false,requestDraft:false,approvals:false,sourcing:false,contracts:false,orders:false,receiving:false,invoiceIntake:false,invoiceValidation:false,financeHandoff:false,supplierPortal:false,planningDraft:false,configurationDraft:false,contractDraft:false,principalGoodsReturnDrafts:true,principalReceiving:!returnOnly}});
+    if(urlPath.startsWith(api)){expect(request.headers()["x-shell-entity"]).toBe(company);if(!allBranches)expect(request.headers()["x-shell-location"]).toBe(branch);}
+    if(urlPath===api+"/context")return json({principalId:actor,tenantId:"amizo",legalEntityId:company,workerId:null,permissions:perms,branch:allBranches?null:{id:branch,code:"HQ",name:"Main site"},company:{id:company,code:"AMIZO",name:"Amizo Power",currencyCode:"ZMW"}});
+    if(urlPath===api+"/meta")return json({tenantId:"amizo",legalEntityId:company,schemaReady:true,capabilities:{vendorDraft:false,itemDraft:false,requestDraft:false,approvals:false,sourcing:false,contracts:false,orders:false,receiving:false,invoiceIntake:false,invoiceValidation:false,financeHandoff:false,supplierPortal:false,planningDraft:false,configurationDraft:false,contractDraft:false,...(returnsAbsent?{}:{principalGoodsReturnDrafts:true}),principalReceiving:!returnOnly}});
     if(request.method()==="GET"){
       reads.push(urlPath);
       if(urlPath===root+"/eligible-goods")return json({items:[{acceptanceFactId:fact,receiptId:receipt,purchaseOrderId:order,purchaseOrderLineId:line,branchId:branch,acceptedFactQuantityExact:"1.0001",labels}],hasMore:false,nextOffset:null});
@@ -79,4 +79,16 @@ test("stale edit is denied without an automatic retry",async({page})=>{
   const state=await fixture(page,{stale:true});await page.goto(path+"/"+draft+"/edit");
   await page.getByLabel("Proposed quantity").fill("0.1");await page.getByRole("button",{name:"Save return draft"}).click();
   await expect(page.getByRole("alert").filter({hasText:"changed"})).toBeVisible();expect(state.writes).toHaveLength(1);
+});
+test("a return-only capability does not open goods receiving actions",async({page})=>{
+  const state=await fixture(page,{returnOnly:true});await page.goto("/procurement/workspace/purchase-receives/new");
+  await expect(page.getByText(/workflow is being connected to your ERP/)).toBeVisible();expect(state.writes).toHaveLength(0);
+});
+test("a receiving-only capability does not open Returns",async({page})=>{
+  const state=await fixture(page,{returnsAbsent:true});await page.goto(path);
+  await expect(page.getByText(/workflow is being connected to your ERP/)).toBeVisible();expect(state.writes).toHaveLength(0);
+});
+test("Organisation All remains blocked until a branch is selected",async({page})=>{
+  const state=await fixture(page,{allBranches:true});await page.goto(path);
+  await expect(page.getByText(/Choose a permitted branch/)).toBeVisible();expect(state.writes).toHaveLength(0);
 });
