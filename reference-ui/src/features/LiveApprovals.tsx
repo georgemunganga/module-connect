@@ -7,6 +7,7 @@ import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
 import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
 import { LiveOrderApprovalQueue } from "./LiveOrderApprovalQueue";
+import { LiveGovernedOrderList } from "./LivePrincipalOrderGovernance";
 import { InvoiceUnitReviewQueue } from "./InvoiceUnitReviewTasks";
 import { ApprovalOpeningPanel } from "./ApprovalOpeningPanel";
 import { RecordTable } from "../components/data/RecordTable";
@@ -26,16 +27,20 @@ export function LiveApprovalQueue() {
   const context = useApprovalContext();
   const requests = requestApprovalsAvailable(context.capabilities) && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
   const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
+  const governedOrders = context.capabilities.principalOrderGovernanceRead
+    && context.permissions.includes("procurement-po-approve");
   const units = context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
-  const available = ([requests && "requests", orders && "orders", units && "units"].filter(Boolean) as ("requests" | "orders" | "units")[]);
-  const [type, setType] = useState<"requests" | "orders" | "units">(() => available[0] ?? "requests");
+  const available = ([requests && "requests", orders && "orders", governedOrders && "governed", units && "units"].filter(Boolean) as ("requests" | "orders" | "governed" | "units")[]);
+  const [type, setType] = useState<"requests" | "orders" | "governed" | "units">(() => available[0] ?? "requests");
   const selected = available.includes(type) ? type : available[0];
   if (!selected) return <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
-  const queue = selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "units" ? <InvoiceUnitReviewQueue /> : <RequestApprovalQueue />;
+  const queue = selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "governed"
+    ? <LiveGovernedOrderList task="review" /> : selected === "units" ? <InvoiceUnitReviewQueue /> : <RequestApprovalQueue />;
   if (available.length === 1) return queue;
   return <><div className="flex gap-3 px-5 pt-5 sm:px-8" role="tablist" aria-label="Approval records">
     {requests && <Button role="tab" aria-selected={selected === "requests"} variant={selected === "requests" ? "primary" : "secondary"} onClick={() => setType("requests")}>Purchase requests</Button>}
     {orders && <Button role="tab" aria-selected={selected === "orders"} variant={selected === "orders" ? "primary" : "secondary"} onClick={() => setType("orders")}>Purchase orders</Button>}
+    {governedOrders && <Button role="tab" aria-selected={selected === "governed"} variant={selected === "governed" ? "primary" : "secondary"} onClick={() => setType("governed")}>Orders from approved requests</Button>}
     {units && <Button role="tab" aria-selected={selected === "units"} variant={selected === "units" ? "primary" : "secondary"} onClick={() => setType("units")}>Original invoice units</Button>}
   </div>{queue}</>;
 }

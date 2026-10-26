@@ -51,6 +51,9 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
   const principalOrderList = location.pathname === "/purchase-orders"
     && new URLSearchParams(location.search).get("workflow") === "principal";
+  const governedOrderRead = /^\/purchase-orders\/[^/]+\/?$/.test(location.pathname)
+    && new URLSearchParams(location.search).get("workflow") === "principal"
+    && state.readiness?.capabilities.principalOrderGovernanceRead === true;
   const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
   const overviewPath = location.pathname === "/" || location.pathname === "/analytics";
@@ -62,7 +65,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const planList = /^\/plans\/?$/.test(location.pathname);
   const contractList = /^\/contracts\/?$/.test(location.pathname);
   const allReadSupported = vendorPath || itemPath || paymentPath
-    || requestList || planList || contractList || principalOrderList;
+    || requestList || planList || contractList || principalOrderList || governedOrderRead;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
     return blockedShell ? blockedShell(chooseBranch) : chooseBranch;
@@ -96,6 +99,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
     || (approvalPath && (requestApprovalsAvailable(state.readiness.capabilities) || state.readiness.capabilities.orders
+      || state.readiness.capabilities.principalOrderGovernanceRead
       || state.readiness.capabilities.invoiceOriginalUnitReview && state.readiness.permissions.some((permission) =>
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))))
     || (sourcingPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
@@ -106,7 +110,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders
-      || state.readiness.capabilities.principalDirectOrderDrafts))
+      || state.readiness.capabilities.principalDirectOrderDrafts || state.readiness.capabilities.principalOrderGovernanceRead))
     || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))

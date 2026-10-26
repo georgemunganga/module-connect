@@ -69,7 +69,12 @@ export type AssignedOrderReviewPage = { items: AssignedOrderReview[]; total: num
   supplierSendPerformed: false };
 export type OrderReviewDetail = { id: string; number: string; status: GovernanceStatus;
   version: number; originalDirectSourceSha256: string;
-  assignmentId: string; assignmentVersion: number;
+  currencyCode: string; grossAmountExact: string; lineBaseAmountExact: string;
+  lines: { id: string; lineNumber: number; description: string; unitCode: string;
+    quantity: string; unitPrice: string; taxAmount: string }[];
+  manualCommitmentReference: string; externalEvidenceReference: string;
+  approvedManualPolicyReference: string;
+  assignmentId: string; assignmentState: string; assignmentVersion: number;
   coreCaseId: string; caseVersion: number; caseState: string;
   canApprove: boolean; canReturn: boolean; canReject: boolean;
   approvalNeedsReview: boolean; financePostingCreated: false; supplierSendPerformed: false };
@@ -363,9 +368,21 @@ export async function getPrincipalReview(company: string, orderId: string, assig
     || !text(body.number, 100) || !positiveVersion(body.version)
     || typeof body.originalDirectSourceSha256 !== "string"
     || !digest.test(body.originalDirectSourceSha256)
+    || !currency(body.currencyCode) || typeof body.grossAmountExact !== "string"
+    || !grossMoney.test(body.grossAmountExact) || typeof body.lineBaseAmountExact !== "string"
+    || !grossMoney.test(body.lineBaseAmountExact) || !Array.isArray(body.lines)
+    || body.lines.length === 0 || !body.lines.every(line => object(line) && id(line.id)
+      && positiveVersion(line.lineNumber) && text(line.description, 500)
+      && text(line.unitCode, 50) && typeof line.quantity === "string" && lineMoney.test(line.quantity)
+      && typeof line.unitPrice === "string" && lineMoney.test(line.unitPrice)
+      && typeof line.taxAmount === "string" && lineMoney.test(line.taxAmount))
+    || !text(body.manualCommitmentReference, 200)
+    || !text(body.externalEvidenceReference, 500)
+    || !text(body.approvedManualPolicyReference, 500)
     || typeof body.status !== "string" || !statuses.includes(body.status as GovernanceStatus)
     || !id(body.coreCaseId) || !positiveVersion(body.caseVersion)
     || !positiveVersion(body.assignmentVersion)
+    || typeof body.assignmentState !== "string"
     || !["canApprove", "canReturn", "canReject", "approvalNeedsReview"]
       .every(field => typeof body[field] === "boolean")
     || body.financePostingCreated !== false || body.supplierSendPerformed !== false) throw invalid();

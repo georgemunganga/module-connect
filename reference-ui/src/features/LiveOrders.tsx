@@ -18,6 +18,7 @@ import {
 import { listPrincipalOrders, type PrincipalOrderPage } from "../../../src/platform/procurement-principal-drafts-api";
 import { LivePrincipalOrderEditor } from "./LivePrincipalOrderEditor";
 import { LivePrincipalOrderDetail } from "./LivePrincipalOrderDetail";
+import { LiveGovernedOrderDetail, LiveGovernedOrderList, type GovernedTask } from "./LivePrincipalOrderGovernance";
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Try again. The order was not confirmed.";
 const money = (amount: number, currency: string) =>
@@ -38,6 +39,12 @@ export function LiveOrderList() {
   const [params] = useSearchParams();
   if (selection.entityId && selection.entityId !== context.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
+  if (params.get("workflow") === "principal" && context.capabilities.principalOrderGovernanceRead) {
+    const value = params.get("task");
+    const task: GovernedTask = value === "finance" || value === "review" || value === "issue" || value === "ack" ? value : "buyer";
+    return <LiveGovernedOrderList key={[authEpoch, context.tenantId, context.legalEntityId,
+      selection.branch ?? "all", context.principalId, task].join(":")} task={task} />;
+  }
   if (params.get("workflow") === "principal")
     return <PrincipalDraftList key={[authEpoch, context.tenantId, context.legalEntityId,
       selection.branch ?? "all", context.principalId].join(":")} />;
@@ -45,7 +52,14 @@ export function LiveOrderList() {
     && context.permissions.includes("procurement-po-read")
     ? <div className="px-5 pt-4 sm:px-8"><Link to="/purchase-orders?workflow=principal" className="text-sm text-primary underline">Orders from approved requests</Link></div>
     : null;
-  return <>{entry}{context.capabilities.orders
+  const governed = context.capabilities.principalOrderGovernanceRead
+    ? <div className="flex flex-wrap gap-4 px-5 pt-2 text-sm sm:px-8">
+      {context.permissions.includes("procurement-po-read") && !entry && <Link to="/purchase-orders?workflow=principal" className="text-primary underline">Orders from approved requests</Link>}
+      {context.permissions.includes("procurement-po-finance-confirm") && <Link to="/purchase-orders?workflow=principal&task=finance" className="text-primary underline">Order Finance work</Link>}
+      {context.permissions.includes("procurement-po-issue") && <Link to="/purchase-orders?workflow=principal&task=issue" className="text-primary underline">Orders ready to authorize</Link>}
+      {context.permissions.includes("procurement-po-dispatch-confirm") && <Link to="/purchase-orders?workflow=principal&task=ack" className="text-primary underline">Supplier responses to record</Link>}
+    </div> : null;
+  return <>{entry}{governed}{context.capabilities.orders
     ? <LiveOrderExecutionList key={[context.tenantId, context.legalEntityId, selection.branch, context.principalId].join(":")} />
     : <LegacyOrderList key={[authEpoch, context.tenantId, context.legalEntityId, selection.branch, context.principalId, context.permissions.join("|")].join(":")} />}</>;
 }
@@ -278,7 +292,8 @@ export function LiveOrderDetail() {
   const [params] = useSearchParams();
   if (selection.entityId && selection.entityId !== context.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
-  if (params.get("workflow") === "principal") return <LivePrincipalOrderDetail />;
+  if (params.get("workflow") === "principal") return context.capabilities.principalOrderGovernanceRead
+    ? <LiveGovernedOrderDetail /> : <LivePrincipalOrderDetail />;
   return context.capabilities.orders ? <LiveOrderExecutionDetail /> : <LegacyOrderDetail />;
 }
 function LegacyOrderDetail() {

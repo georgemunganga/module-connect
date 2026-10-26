@@ -184,7 +184,12 @@ describe("principal order governance transport", () => {
       caseVersion: 1, openedAt: "2026-10-26T20:00:00+00:00", grossAmountExact: "10.00000001" };
     const detail = { id: id(3), number: "PO-1", status: "PendingApproval", version: 2,
       originalDirectSourceSha256: sourceDigest,
-      assignmentId: id(9), assignmentVersion: 1, coreCaseId: id(7), caseVersion: 1,
+      currencyCode: "ZMW", grossAmountExact: "10.00000001", lineBaseAmountExact: "10.00000001",
+      lines: [{ id: id(12), lineNumber: 1, description: "Item", unitCode: "EA",
+        quantity: "2", unitPrice: "5", taxAmount: "0" }],
+      manualCommitmentReference: "COM-1", externalEvidenceReference: "EXT-1",
+      approvedManualPolicyReference: "POL-1",
+      assignmentId: id(9), assignmentState: "Pending", assignmentVersion: 1, coreCaseId: id(7), caseVersion: 1,
       canApprove: false, canReturn: true, canReject: true, approvalNeedsReview: true,
       financePostingCreated: false, supplierSendPerformed: false };
     const fetcher = vi.fn().mockResolvedValueOnce(response({ items: [item], total: 1, page: 1,
