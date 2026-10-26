@@ -5,11 +5,11 @@ export type MasterDuplicatePolicy = "reject" | "skip";
 export type MasterImportField = { key: string; label: string; required: boolean };
 export type MasterImportSchema = { schemaVersion: number; kind: MasterImportKind; fields: MasterImportField[] };
 export type MasterPreviewRow = { rowNumber: number; startLine: number; endLine: number;
-  disposition: string; code?: string; message?: string };
+  disposition: "create" | "skip" | "error"; code: string | null; message: string | null };
 export type MasterImportPreview = { batchId: string; previewSha256: string; expiresAt: string;
   rows: MasterPreviewRow[]; willCreate: number; willSkip: number; willError: number };
 export type MasterImportResult = { batchId: string; created: number; skipped: number;
-  rows: Array<{ rowNumber: number; disposition: string; recordId?: string }> };
+  rows: Array<{ rowNumber: number; disposition: "create" | "skip"; recordId: string | null }> };
 export type MasterImportRecovery = ({ state: "Previewed" } & MasterImportPreview)
   | { state: "Committed"; batchId: string; result: MasterImportResult };
 
@@ -19,6 +19,7 @@ export class MasterImportError extends Error {
 
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sha256 = /^[0-9a-f]{64}$/i;
+const isoDateTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$/i;
 const object = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 const nonnegative = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
 const field = (v: unknown): v is MasterImportField => object(v) && typeof v.key === "string"
@@ -29,8 +30,8 @@ const previewRow = (v: unknown): v is MasterPreviewRow => object(v)
   && typeof v.startLine === "number" && Number.isSafeInteger(v.startLine) && v.startLine > 0
   && typeof v.endLine === "number" && Number.isSafeInteger(v.endLine) && v.endLine >= v.startLine
   && ["create", "skip", "error"].includes(String(v.disposition))
-  && (v.code === undefined || typeof v.code === "string")
-  && (v.message === undefined || typeof v.message === "string");
+  && Object.prototype.hasOwnProperty.call(v, "code") && (v.code === null || typeof v.code === "string")
+  && Object.prototype.hasOwnProperty.call(v, "message") && (v.message === null || typeof v.message === "string");
 
 function parseSchema(value: unknown, kind: MasterImportKind): MasterImportSchema {
   if (!object(value) || value.schemaVersion !== 1 || value.kind !== kind || !Array.isArray(value.fields)
@@ -41,7 +42,8 @@ function parseSchema(value: unknown, kind: MasterImportKind): MasterImportSchema
 }
 function parsePreview(value: unknown): MasterImportPreview {
   if (!object(value) || !guid.test(String(value.batchId)) || !sha256.test(String(value.previewSha256))
-      || typeof value.expiresAt !== "string" || !Number.isFinite(Date.parse(value.expiresAt))
+      || typeof value.expiresAt !== "string" || !isoDateTime.test(value.expiresAt)
+      || !Number.isFinite(Date.parse(value.expiresAt))
       || !Array.isArray(value.rows) || value.rows.length > 1000 || !value.rows.every(previewRow)
       || !nonnegative(value.willCreate) || !nonnegative(value.willSkip) || !nonnegative(value.willError)
       || Number(value.willCreate) + Number(value.willSkip) + Number(value.willError) !== value.rows.length
@@ -58,7 +60,11 @@ function parseResult(value: unknown): MasterImportResult {
       || value.rows.length !== value.created + value.skipped
       || !value.rows.every((row: unknown) => object(row) && typeof row.rowNumber === "number" && Number.isSafeInteger(row.rowNumber)
         && (row.rowNumber as number) > 0 && ["create", "skip"].includes(String(row.disposition))
-        && (row.recordId === undefined || guid.test(String(row.recordId))))
+        && Object.prototype.hasOwnProperty.call(row, "recordId")
+        && (row.disposition === "create"
+          ? typeof row.recordId === "string" && guid.test(row.recordId)
+            && row.recordId !== "00000000-0000-0000-0000-000000000000"
+          : row.recordId === null))
       || value.rows.filter((row: { disposition: string }) => row.disposition === "create").length !== value.created
       || value.rows.filter((row: { disposition: string }) => row.disposition === "skip").length !== value.skipped
       || new Set(value.rows.map((row: { rowNumber: number }) => row.rowNumber)).size !== value.rows.length)

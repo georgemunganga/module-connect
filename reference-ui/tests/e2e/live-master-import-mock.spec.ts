@@ -45,14 +45,15 @@ async function setup(page: Page, kind: Kind, options: { grant?: boolean; availab
           { key: "kind", label: "Kind", required: true }, { key: "categoryCode", label: "Category code", required: true },
           { key: "unitCode", label: "Unit code", required: true }] });
     if (path === `/api/procurement/v1/${kind}/import/template`) return route.fulfill({ status: 200,
-      headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${kind}-template.csv"` }, body: "Code,Name\r\n" });
+      headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${kind}-import-template.csv"` }, body: "Code,Name\r\n" });
     if (path === `/api/procurement/v1/${kind}/import/preview`) {
       const body = req.postDataJSON() as Record<string, unknown>; previewBodies.push(body);
       if (options.holdPreview) await new Promise<void>(resolve => options.holdPreview?.(resolve));
       const acknowledged = (body.acknowledgedSimilarityRows as number[]).includes(2);
       return json({ batchId: acknowledged ? finalBatch : firstBatch, previewSha256: acknowledged ? nextDigest : digest, expiresAt: expiry,
         rows: [{ rowNumber: 2, startLine: 2, endLine: 2, disposition: acknowledged || kind === "items" ? "create" : "error",
-          ...(!acknowledged && kind === "vendors" ? { code: "similar-vendor", message: "Review similar vendor." } : {}) }],
+          ...(!acknowledged && kind === "vendors" ? { code: "similar-vendor", message: "Review similar vendor." }
+            : { code: null, message: null }) }],
         willCreate: acknowledged || kind === "items" ? 1 : 0, willSkip: 0, willError: acknowledged || kind === "items" ? 0 : 1 });
     }
     if (path === `/api/procurement/v1/${kind}/import/commit`) {
@@ -85,7 +86,7 @@ test("mocked ERP Vendor import keeps the list and confirms only the acknowledged
   await open(page, "vendors");
   const template = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download the ERP sample CSV file" }).click();
-  expect((await template).suggestedFilename()).toBe("vendors-template.csv");
+  expect((await template).suggestedFilename()).toBe("vendors-import-template.csv");
   await page.getByLabel("Choose import file").setInputFiles({ name: "vendors.csv", mimeType: "text/csv",
     buffer: Buffer.from("Legal name,Display name,Country code\nAcme,Acme,ZM\n") });
   await page.getByRole("button", { name: /Next/ }).click();

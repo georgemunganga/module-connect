@@ -3,6 +3,7 @@ import type { MasterImportKind } from "../../../src/platform/procurement-master-
 const prefix = "erp.procurement.master-import.v1:";
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const hash = /^[0-9a-f]{64}$/i;
+const isoDateTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$/i;
 const identity = /^[a-zA-Z0-9._-]{1,128}$/;
 /** Masters are company-owned; branch changes must not hide an unresolved command. */
 export type ImportScope = { tenantId: string; companyId: string; principalId: string; kind: MasterImportKind };
@@ -18,7 +19,8 @@ function valid(value: unknown): value is ImportLocator {
   const row = value as Record<string, unknown>;
   return Object.keys(row).sort().join("|") === "batchId|commandKey|expiresAt|previewSha256"
     && guid.test(String(row.batchId)) && guid.test(String(row.commandKey)) && hash.test(String(row.previewSha256))
-    && typeof row.expiresAt === "string" && Number.isFinite(Date.parse(row.expiresAt));
+    && typeof row.expiresAt === "string" && isoDateTime.test(row.expiresAt)
+    && Number.isFinite(Date.parse(row.expiresAt));
 }
 /** Only a scoped locator is retained. CSV bytes, mapped rows and credentials remain in memory. */
 export const masterImportJournal = {

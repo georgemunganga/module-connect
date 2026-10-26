@@ -6,7 +6,7 @@ const batchId = "33333333-3333-4333-8333-333333333333";
 const digest = "a".repeat(64);
 const key = "44444444-4444-4444-8444-444444444444";
 const preview = { batchId, previewSha256: digest, expiresAt: "2026-10-27T12:00:00Z",
-  rows: [{ rowNumber: 2, startLine: 2, endLine: 3, disposition: "error", code: "similar-vendor" }],
+  rows: [{ rowNumber: 2, startLine: 2, endLine: 3, disposition: "error", code: "similar-vendor", message: "Review this name." }],
   willCreate: 0, willSkip: 0, willError: 1 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 afterEach(() => vi.unstubAllGlobals());
@@ -34,6 +34,32 @@ describe("server master import transport", () => {
     vi.stubGlobal("fetch", fetch);
     expect((await getMasterImportSchema("vendors", company)).fields[0].key).toBe("legalName");
     await expect(previewMasterImport("vendors", company, { schemaVersion: 1, fileName: "x.csv", csvBase64: "YQ==",
+      mapping: {}, duplicatePolicy: "reject", acknowledgedSimilarityRows: [] })).rejects.toThrow(/preview/);
+  });
+  it("accepts actual nullable preview fields and exact created/skipped record IDs", async () => {
+    const clean = { ...preview, rows: [{ rowNumber: 2, startLine: 2, endLine: 2,
+      disposition: "create", code: null, message: null }], willCreate: 1, willError: 0 };
+    const mixed = { batchId, created: 1, skipped: 1, rows: [
+      { rowNumber: 2, disposition: "create", recordId: "55555555-5555-4555-8555-555555555555" },
+      { rowNumber: 3, disposition: "skip", recordId: null },
+    ] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(clean)).mockResolvedValueOnce(json(mixed))
+      .mockResolvedValueOnce(json({ ...mixed, created: 0, rows: [{ rowNumber: 3, disposition: "skip", recordId: null }], skipped: 1 })));
+    expect((await previewMasterImport("vendors", company, { schemaVersion: 1, fileName: "v.csv", csvBase64: "YQ==",
+      mapping: {}, duplicatePolicy: "reject", acknowledgedSimilarityRows: [] })).rows[0].code).toBeNull();
+    expect((await commitMasterImport("vendors", company, { batchId, previewSha256: digest, commandKey: key })).rows[1].recordId).toBeNull();
+    expect((await commitMasterImport("vendors", company, { batchId, previewSha256: digest, commandKey: key })).skipped).toBe(1);
+  });
+  it("rejects a missing created ID, a skipped existing ID, and a vague expiry", async () => {
+    const invalids = [
+      { batchId, created: 1, skipped: 0, rows: [{ rowNumber: 2, disposition: "create" }] },
+      { batchId, created: 0, skipped: 1, rows: [{ rowNumber: 2, disposition: "skip", recordId: "55555555-5555-4555-8555-555555555555" }] },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(invalids[0])).mockResolvedValueOnce(json(invalids[1]))
+      .mockResolvedValueOnce(json({ ...preview, expiresAt: "tomorrow" })));
+    for (const _ of invalids) await expect(commitMasterImport("vendors", company,
+      { batchId, previewSha256: digest, commandKey: key })).rejects.toThrow(/result/);
+    await expect(previewMasterImport("vendors", company, { schemaVersion: 1, fileName: "v.csv", csvBase64: "YQ==",
       mapping: {}, duplicatePolicy: "reject", acknowledgedSimilarityRows: [] })).rejects.toThrow(/preview/);
   });
   it("denies wrong batch recovery and a late response after scope cancellation", async () => {
