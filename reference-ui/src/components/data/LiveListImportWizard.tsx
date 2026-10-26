@@ -134,7 +134,9 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
     const request = begin(); if (!request) return;
     try {
       masterImportJournal.claim(scope, locator); setPending(locator);
-      const written = await commitMasterImport(kind, companyId, locator, request.signal);
+      const written = await commitMasterImport(kind, companyId, {
+        batchId: locator.batchId, previewSha256: locator.previewSha256, commandKey: locator.commandKey,
+      }, request.signal);
       if (!active.current || request.signal.aborted) return;
       if (written.batchId !== locator.batchId) throw Error("The import acknowledgement did not match the saved preview.");
       const saved = await recoverMasterImport(kind, companyId, locator.batchId, request.signal);
@@ -159,7 +161,9 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
       }
       if (saved.previewSha256 !== pending.previewSha256 || Date.parse(pending.expiresAt) <= Date.now())
         throw Error("The saved preview expired or changed. Contact an administrator before retrying.");
-      const written = await commitMasterImport(kind, companyId, pending, request.signal);
+      const written = await commitMasterImport(kind, companyId, {
+        batchId: pending.batchId, previewSha256: pending.previewSha256, commandKey: pending.commandKey,
+      }, request.signal);
       if (request.signal.aborted || !active.current || written.batchId !== pending.batchId) return;
       const confirmed = await recoverMasterImport(kind, companyId, pending.batchId, request.signal);
       if (confirmed.state !== "Committed" || JSON.stringify(confirmed.result) !== JSON.stringify(written))

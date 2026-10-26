@@ -155,7 +155,8 @@ export async function commitMasterImport(kind: MasterImportKind, companyId: stri
   if (!guid.test(input.batchId) || !sha256.test(input.previewSha256) || !guid.test(input.commandKey))
     throw new MasterImportError(0, "invalid-command", "The import command is invalid.");
   return parseResult(await json(await request(kind, companyId, "/commit", {
-    method: "POST", body: JSON.stringify(input), signal,
+    method: "POST", body: JSON.stringify({ batchId: input.batchId,
+      previewSha256: input.previewSha256, commandKey: input.commandKey }), signal,
   }), companyId, signal));
 }
 export async function recoverMasterImport(kind: MasterImportKind, companyId: string,

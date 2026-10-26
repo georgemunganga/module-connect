@@ -19,7 +19,8 @@ describe("server master import transport", () => {
     const body = { schemaVersion: 1, fileName: "vendors.csv", csvBase64: "YSxi", mapping: { A: "legalName" },
       duplicatePolicy: "reject" as const, acknowledgedSimilarityRows: [] };
     await previewMasterImport("vendors", company, body);
-    await commitMasterImport("vendors", company, { batchId, previewSha256: digest, commandKey: key });
+    const savedLocator = { batchId, previewSha256: digest, commandKey: key, expiresAt: "2099-01-01T00:00:00Z" };
+    await commitMasterImport("vendors", company, savedLocator);
     expect(fetch.mock.calls[0][0]).toBe("/api/procurement/v1/vendors/import/preview");
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(body);
     expect(fetch.mock.calls[0][1].credentials).toBe("include");
