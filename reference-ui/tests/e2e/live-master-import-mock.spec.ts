@@ -79,25 +79,35 @@ async function open(page: Page, kind: Kind) {
   await page.getByRole("menuitem", { name: "Import", exact: true }).click();
   await page.getByRole("menuitem", { name: `Import ${kind === "vendors" ? "Vendors" : "Items"}` }).click();
 }
-test("mocked ERP Vendor import keeps the list and confirms only the acknowledged server preview", async ({ page }) => {
+test("mocked ERP Vendor import keeps the list and confirms only the acknowledged server preview", async ({ page }, testInfo) => {
   const calls = await setup(page, "vendors", { grant: true });
   await page.goto("/procurement/workspace/vendors");
   await expect(page.getByRole("link", { name: "Add vendor" })).toBeVisible();
   await open(page, "vendors");
+  const wizard = page.getByRole("dialog", { name: "Import Vendors" });
+  await expect(wizard.getByText("Page Tips")).toBeVisible();
+  await expect(wizard.locator(".bg-primary.text-primary-foreground")).toBeVisible();
   const template = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download the ERP sample CSV file" }).click();
+  await wizard.getByRole("button", { name: "Download the ERP sample CSV file" }).click();
   expect((await template).suggestedFilename()).toBe("vendors-import-template.csv");
-  await page.getByLabel("Choose import file").setInputFiles({ name: "vendors.csv", mimeType: "text/csv",
+  await wizard.getByLabel("Choose import file").setInputFiles({ name: "vendors.csv", mimeType: "text/csv",
     buffer: Buffer.from("Legal name,Display name,Country code\nAcme,Acme,ZM\n") });
-  await page.getByRole("button", { name: /Next/ }).click();
-  await page.getByRole("button", { name: /Preview on ERP/ }).click();
-  await expect(page.getByText("1 need attention")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Confirm import" })).toBeDisabled();
-  await page.getByRole("switch", { name: /reviewed CSV row 2/ }).click();
-  await page.getByRole("button", { name: "Preview acknowledged rows" }).click();
-  await expect(page.getByText("1 to create")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm import" }).click();
-  await expect(page.getByText("ERP saved this import.")).toBeVisible();
+  await wizard.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(wizard.getByRole("table")).toBeVisible();
+  await expect(wizard.getByRole("columnheader", { name: "Sample value" })).toBeVisible();
+  await expect(wizard.getByRole("row").filter({ has: wizard.getByRole("cell", { name: "Legal name", exact: true }) })
+    .getByRole("cell", { name: "Acme", exact: true })).toBeVisible();
+  await wizard.screenshot({ path: testInfo.outputPath("vendor-import-map-desktop.png") });
+  await wizard.getByRole("button", { name: /Preview on ERP/ }).click();
+  await expect(wizard.getByText("1 need attention")).toBeVisible();
+  await expect(wizard.getByRole("button", { name: "Confirm import" })).toBeDisabled();
+  await expect(wizard.getByRole("table")).toBeVisible();
+  await wizard.screenshot({ path: testInfo.outputPath("vendor-import-preview-desktop.png") });
+  await wizard.getByRole("switch", { name: /reviewed CSV row 2/ }).click();
+  await wizard.getByRole("button", { name: "Preview acknowledged rows" }).click();
+  await expect(wizard.getByText("1 to create")).toBeVisible();
+  await wizard.getByRole("button", { name: "Confirm import" }).click();
+  await expect(wizard.getByText("ERP saved this import.")).toBeVisible();
   expect(calls.previewBodies).toHaveLength(2);
   expect(calls.previewBodies[1].acknowledgedSimilarityRows).toEqual([2]);
   expect(calls.commitBodies).toEqual([{ batchId: finalBatch, previewSha256: nextDigest, commandKey: expect.any(String) }]);
@@ -121,23 +131,29 @@ test("mocked controlled 503 keeps the original toolbar and starts no browser-loc
   expect(calls.commitBodies).toHaveLength(0);
 });
 
-test("mocked lost Item commit survives hard reload and recovers with GET, without a second POST", async ({ page }) => {
+test("mocked lost Item commit survives hard reload and recovers with GET, without a second POST", async ({ page }, testInfo) => {
   const calls = await setup(page, "items", { grant: true, lostCommit: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/procurement/workspace/items");
   await open(page, "items");
-  await page.getByLabel("Choose import file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
+  const wizard = page.getByRole("dialog", { name: "Import Items" });
+  await expect(wizard.getByText("Page Tips")).toBeVisible();
+  await wizard.getByLabel("Choose import file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
     buffer: Buffer.from("Code,Name,Kind,Category code,Unit code\nIT-1,Widget,Goods,IT,each\n") });
-  await page.getByRole("button", { name: /Next/ }).click();
-  await page.getByRole("button", { name: /Preview on ERP/ }).click();
-  await page.getByRole("button", { name: "Confirm import" }).click();
-  await expect(page.getByText("Check whether this import was saved before another change.")).toBeVisible();
+  await wizard.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(wizard.getByRole("columnheader", { name: "Sample value" })).toBeVisible();
+  await wizard.screenshot({ path: testInfo.outputPath("item-import-map-mobile.png") });
+  await wizard.getByRole("button", { name: /Preview on ERP/ }).click();
+  await expect(wizard.getByRole("table")).toBeVisible();
+  await wizard.screenshot({ path: testInfo.outputPath("item-import-preview-mobile.png") });
+  await wizard.getByRole("button", { name: "Confirm import" }).click();
+  await expect(wizard.getByText("Check whether this import was saved before another change.")).toBeVisible();
   await page.evaluate(id => { localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: id, branchScope: "all" }));
     window.dispatchEvent(new StorageEvent("storage", { key: "erp.shell.state.v1" })); }, company);
   await page.reload();
   await open(page, "items");
-  await page.getByRole("button", { name: "Check saved import" }).click();
-  await expect(page.getByText("ERP saved this import.")).toBeVisible();
+  await page.getByRole("dialog", { name: "Import Items" }).getByRole("button", { name: "Check saved import" }).click();
+  await expect(page.getByRole("dialog", { name: "Import Items" }).getByText("ERP saved this import.")).toBeVisible();
   expect(calls.commitBodies).toHaveLength(1);
 });
 
@@ -145,10 +161,11 @@ test("mocked company change aborts a late preview and cannot reach commit", asyn
   let resume: (() => void) | undefined;
   const calls = await setup(page, "items", { grant: true, holdPreview: next => { resume = next; } });
   await page.goto("/procurement/workspace/items"); await open(page, "items");
-  await page.getByLabel("Choose import file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
+  const wizard = page.getByRole("dialog", { name: "Import Items" });
+  await wizard.getByLabel("Choose import file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
     buffer: Buffer.from("Code,Name,Kind,Category code,Unit code\nIT-1,Widget,Goods,IT,each\n") });
-  await page.getByRole("button", { name: /Next/ }).click();
-  await page.getByRole("button", { name: /Preview on ERP/ }).click();
+  await wizard.getByRole("button", { name: "Next", exact: true }).click();
+  await wizard.getByRole("button", { name: /Preview on ERP/ }).click();
   await expect.poll(() => calls.previewBodies.length).toBe(1);
   await page.evaluate(() => { localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: "77777777-7777-4777-8777-777777777777" }));
     window.dispatchEvent(new StorageEvent("storage", { key: "erp.shell.state.v1" })); });
