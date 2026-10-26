@@ -68,7 +68,8 @@ export type AssignedOrderReviewPage = { items: AssignedOrderReview[]; total: num
   pageSize: number; assignedToCurrentPrincipal: true; financePostingCreated: false;
   supplierSendPerformed: false };
 export type OrderReviewDetail = { id: string; number: string; status: GovernanceStatus;
-  version: number; assignmentId: string; assignmentVersion: number;
+  version: number; originalDirectSourceSha256: string;
+  assignmentId: string; assignmentVersion: number;
   coreCaseId: string; caseVersion: number; caseState: string;
   canApprove: boolean; canReturn: boolean; canReject: boolean;
   approvalNeedsReview: boolean; financePostingCreated: false; supplierSendPerformed: false };
@@ -360,6 +361,8 @@ export async function getPrincipalReview(company: string, orderId: string, assig
   const { body } = await call(company, `/${orderId}/principal-review/${assignmentId}`, { signal });
   if (!object(body) || body.id !== orderId || body.assignmentId !== assignmentId
     || !text(body.number, 100) || !positiveVersion(body.version)
+    || typeof body.originalDirectSourceSha256 !== "string"
+    || !digest.test(body.originalDirectSourceSha256)
     || typeof body.status !== "string" || !statuses.includes(body.status as GovernanceStatus)
     || !id(body.coreCaseId) || !positiveVersion(body.caseVersion)
     || !positiveVersion(body.assignmentVersion)

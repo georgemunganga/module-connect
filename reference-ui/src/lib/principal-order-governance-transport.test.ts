@@ -183,6 +183,7 @@ describe("principal order governance transport", () => {
       branchRef: id(5), assignmentId: id(9), assignmentVersion: 1, caseId: id(7),
       caseVersion: 1, openedAt: "2026-10-26T20:00:00+00:00", grossAmountExact: "10.00000001" };
     const detail = { id: id(3), number: "PO-1", status: "PendingApproval", version: 2,
+      originalDirectSourceSha256: sourceDigest,
       assignmentId: id(9), assignmentVersion: 1, coreCaseId: id(7), caseVersion: 1,
       canApprove: false, canReturn: true, canReject: true, approvalNeedsReview: true,
       financePostingCreated: false, supplierSendPerformed: false };
@@ -192,6 +193,13 @@ describe("principal order governance transport", () => {
     vi.stubGlobal("fetch", fetcher);
     expect((await listPrincipalAssignedReviews(id(1), 1)).items[0].assignmentId).toBe(id(9));
     expect((await getPrincipalReview(id(1), id(3), id(9))).canReturn).toBe(true);
+    vi.stubGlobal("fetch", vi.fn(async () => response({ ...detail,
+      originalDirectSourceSha256: "invalid" })));
+    await expect(getPrincipalReview(id(1), id(3), id(9))).rejects.toThrow();
+    const missingPin = { ...detail } as Record<string, unknown>;
+    delete missingPin.originalDirectSourceSha256;
+    vi.stubGlobal("fetch", vi.fn(async () => response(missingPin)));
+    await expect(getPrincipalReview(id(1), id(3), id(9))).rejects.toThrow();
     expect(String(fetcher.mock.calls[0][0])).toContain("/principal-assigned-reviews?");
     expect(String(fetcher.mock.calls[1][0])).toContain(`/${id(3)}/principal-review/${id(9)}`);
   });
