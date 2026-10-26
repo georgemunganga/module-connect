@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { csvHeaders } from "./LiveListImportWizard";
+import { csvHeaderSample, csvHeaders } from "./LiveListImportWizard";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 describe("server mapped CSV header admission", () => {
@@ -7,6 +7,7 @@ describe("server mapped CSV header admission", () => {
     expect(csvHeaders(bytes('\uFEFF"Legal, name",CountryCode\r\nAcme,ZM\r\n'))).toEqual(["Legal, name", "CountryCode"]);
     expect(csvHeaders(bytes('"Display ""public""\nname",CountryCode\r\nAcme,ZM\r\n')))
       .toEqual(['Display "public"\nname', "CountryCode"]);
+    expect(csvHeaderSample(bytes("Code,Name\nA1,Widget\n")).sample).toEqual({ Code: "A1", Name: "Widget" });
   });
   it("denies duplicate headers and malformed quote boundaries before preview", () => {
     expect(() => csvHeaders(bytes("Name,Name\nA,B"))).toThrow(/duplicated/);

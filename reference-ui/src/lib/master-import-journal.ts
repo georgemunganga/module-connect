@@ -4,14 +4,14 @@ const prefix = "erp.procurement.master-import.v1:";
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const hash = /^[0-9a-f]{64}$/i;
 const identity = /^[a-zA-Z0-9._-]{1,128}$/;
-export type ImportScope = { tenantId: string; companyId: string; principalId: string; branch: string; kind: MasterImportKind };
+/** Masters are company-owned; branch changes must not hide an unresolved command. */
+export type ImportScope = { tenantId: string; companyId: string; principalId: string; kind: MasterImportKind };
 export type ImportLocator = { batchId: string; previewSha256: string; commandKey: string; expiresAt: string };
 export class ImportJournalError extends Error {}
 function slot(scope: ImportScope) {
   if (!identity.test(scope.tenantId) || !guid.test(scope.companyId) || !guid.test(scope.principalId)
-    || scope.branch.length > 128 || !/^[a-zA-Z0-9._:-]*$/.test(scope.branch)
     || !["vendors", "items"].includes(scope.kind)) throw new ImportJournalError("Choose a valid company before importing.");
-  return prefix + [scope.tenantId, scope.companyId, scope.principalId, scope.branch, scope.kind].join(":");
+  return prefix + [scope.tenantId, scope.companyId, scope.principalId, scope.kind].join(":");
 }
 function valid(value: unknown): value is ImportLocator {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;

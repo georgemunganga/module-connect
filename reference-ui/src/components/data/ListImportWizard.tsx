@@ -2,6 +2,7 @@ import { RecordTable } from "./RecordTable";
 import { useMemo, useState, type ChangeEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, FileUp } from "lucide-react";
 import { Button, Field, Input, Modal, Select, Switch } from "../ui";
+import { ImportMappingTable, ImportStageHeading, ImportWizardTips } from "./ImportWizardPresentation";
 import {
   downloadCsv,
   downloadSpreadsheetXml,
@@ -224,12 +225,6 @@ export function ListImportWizard({
     onClose();
   };
   const title = `Import ${entity === "vendors" ? "Vendors" : "Items"}`;
-  const stages: { key: Stage; label: string }[] = [
-    { key: "configure", label: "Configure" },
-    { key: "map", label: "Map Fields" },
-    { key: "preview", label: "Preview" },
-  ];
-  const stageIndex = stages.findIndex((item) => item.key === stage);
   const makeSample = () => {
     const headers = sampleHeaders(kind);
     downloadCsv(`sample-${kind.replaceAll("_", "-")}.csv`, [headers]);
@@ -317,28 +312,7 @@ export function ListImportWizard({
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="flex items-center justify-center gap-3 border-b border-slate-100 pb-4">
-            {stages.map((item, index) => (
-              <div key={item.key} className="flex items-center gap-2">
-                <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${index <= stageIndex ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-400"}`}
-                >
-                  {index + 1}
-                </span>
-                <span
-                  className={`text-xs ${index === stageIndex ? "font-semibold text-slate-800" : "text-slate-400"}`}
-                >
-                  {item.label}
-                </span>
-                {index < stages.length - 1 && (
-                  <span className="hidden h-px w-7 bg-slate-200 sm:block" />
-                )}
-              </div>
-            ))}
-          </div>
-          <h3 className="text-center text-base font-semibold text-slate-800">
-            {stageTitle(kind)} — {stages[stageIndex]?.label}
-          </h3>
+          <ImportStageHeading stage={stage} title={stageTitle(kind)} />
 
           {stage === "configure" ? (
             <div className="space-y-5">
@@ -459,11 +433,7 @@ export function ListImportWizard({
                 prototype parses CSV and TSV locally; XLS is shown for UI parity
                 but is not parsed.
               </p>
-              <details className="rounded-md border border-slate-200 px-4 py-3 text-xs text-slate-600">
-                <summary className="cursor-pointer font-medium text-slate-700">
-                  Page Tips
-                </summary>
-                <ul className="mt-3 list-disc space-y-1 pl-5">
+              <ImportWizardTips>
                   <li>
                     Use the sample CSV or XLS template to see the expected
                     column names.
@@ -480,8 +450,7 @@ export function ListImportWizard({
                     Saved import settings are stored in this browser and do not
                     sync to ERP.
                   </li>
-                </ul>
-              </details>
+              </ImportWizardTips>
               {error && (
                 <p role="alert" className="text-sm text-red-600">
                   {error}
@@ -499,59 +468,8 @@ export function ListImportWizard({
                   {stageTitle(kind).toLowerCase()} field.
                 </span>
               </div>
-              <div className="overflow-x-auto rounded-md border border-slate-200">
-                <RecordTable variant="compact" className="w-full text-left text-sm">
-                  <thead className="table-head">
-                    <tr>
-                      <th className="table-cell">File column</th>
-                      <th className="table-cell">Sample value</th>
-                      <th className="table-cell">Map to field</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sourceHeaders.map((header) => (
-                      <tr key={header} className="border-t border-slate-100">
-                        <td className="table-cell font-medium">{header}</td>
-                        <td className="table-cell max-w-[220px] truncate text-slate-500">
-                          {sourceRows[0]?.[header] || "—"}
-                        </td>
-                        <td className="table-cell">
-                          <Select
-                            aria-label={`Map ${header}`}
-                            value={mapping[header] ?? ""}
-                            onChange={(event) =>
-                              setMapping((previous) => ({
-                                ...previous,
-                                [header]: event.target.value,
-                              }))
-                            }
-                          >
-                            <option value="">Don't import this column</option>
-                            {fields.map((field) => {
-                              const usedElsewhere = Object.entries(
-                                mapping,
-                              ).some(
-                                ([source, target]) =>
-                                  source !== header && target === field.key,
-                              );
-                              return (
-                                <option
-                                  key={field.key}
-                                  value={field.key}
-                                  disabled={usedElsewhere}
-                                >
-                                  {field.label}
-                                  {field.required ? " *" : ""}
-                                </option>
-                              );
-                            })}
-                          </Select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </RecordTable>
-              </div>
+              <ImportMappingTable headers={sourceHeaders} sample={sourceRows[0] ?? {}} mapping={mapping}
+                fields={fields} onMap={(header, target) => setMapping(previous => ({ ...previous, [header]: target }))} />
               <p className="text-xs text-slate-500">
                 Required fields:{" "}
                 {requiredFields.map((field) => field.label).join(", ") ||

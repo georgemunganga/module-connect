@@ -31,7 +31,8 @@ async function setup(page: Page, kind: Kind, options: { grant?: boolean; availab
       permissions: kind === "vendors" ? ["procurement-access", "procurement-vendor-read", "procurement-vendor-create",
         ...(options.grant ? ["procurement-vendor-import"] : [])] : ["procurement-access", "procurement-item-manage",
         ...(options.grant ? ["procurement-item-import"] : [])],
-      company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" }, branch: { id: branch } });
+      company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" },
+      branch: req.headers()["x-shell-branch-scope"] === "all" ? null : { id: branch } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
       capabilities: Object.fromEntries(capabilityKeys.map(key => [key, ["vendorDraft", "itemDraft"].includes(key)])) });
     if (path === `/api/procurement/v1/${kind}`) return json({ items: [], total: 0, page: 1, pageSize: 25 });
@@ -83,14 +84,15 @@ test("mocked ERP Vendor import keeps the list and confirms only the acknowledged
   await expect(page.getByRole("link", { name: "Add vendor" })).toBeVisible();
   await open(page, "vendors");
   const template = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download ERP CSV template" }).click();
+  await page.getByRole("button", { name: "Download the ERP sample CSV file" }).click();
   expect((await template).suggestedFilename()).toBe("vendors-template.csv");
-  await page.getByLabel("CSV file").setInputFiles({ name: "vendors.csv", mimeType: "text/csv",
+  await page.getByLabel("Choose import file").setInputFiles({ name: "vendors.csv", mimeType: "text/csv",
     buffer: Buffer.from("Legal name,Display name,Country code\nAcme,Acme,ZM\n") });
+  await page.getByRole("button", { name: /Next/ }).click();
   await page.getByRole("button", { name: /Preview on ERP/ }).click();
   await expect(page.getByText("1 need attention")).toBeVisible();
   await expect(page.getByRole("button", { name: "Confirm import" })).toBeDisabled();
-  await page.getByRole("checkbox", { name: /reviewed CSV row 2/ }).check();
+  await page.getByRole("switch", { name: /reviewed CSV row 2/ }).click();
   await page.getByRole("button", { name: "Preview acknowledged rows" }).click();
   await expect(page.getByText("1 to create")).toBeVisible();
   await page.getByRole("button", { name: "Confirm import" }).click();
@@ -123,11 +125,14 @@ test("mocked lost Item commit survives hard reload and recovers with GET, withou
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/procurement/workspace/items");
   await open(page, "items");
-  await page.getByLabel("CSV file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
+  await page.getByLabel("Choose import file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
     buffer: Buffer.from("Code,Name,Kind,Category code,Unit code\nIT-1,Widget,Goods,IT,each\n") });
+  await page.getByRole("button", { name: /Next/ }).click();
   await page.getByRole("button", { name: /Preview on ERP/ }).click();
   await page.getByRole("button", { name: "Confirm import" }).click();
   await expect(page.getByText("Check whether this import was saved before another change.")).toBeVisible();
+  await page.evaluate(id => { localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: id, branchScope: "all" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "erp.shell.state.v1" })); }, company);
   await page.reload();
   await open(page, "items");
   await page.getByRole("button", { name: "Check saved import" }).click();
@@ -139,8 +144,9 @@ test("mocked company change aborts a late preview and cannot reach commit", asyn
   let resume: (() => void) | undefined;
   const calls = await setup(page, "items", { grant: true, holdPreview: next => { resume = next; } });
   await page.goto("/procurement/workspace/items"); await open(page, "items");
-  await page.getByLabel("CSV file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
+  await page.getByLabel("Choose import file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
     buffer: Buffer.from("Code,Name,Kind,Category code,Unit code\nIT-1,Widget,Goods,IT,each\n") });
+  await page.getByRole("button", { name: /Next/ }).click();
   await page.getByRole("button", { name: /Preview on ERP/ }).click();
   await expect.poll(() => calls.previewBodies.length).toBe(1);
   await page.evaluate(() => { localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: "77777777-7777-4777-8777-777777777777" }));

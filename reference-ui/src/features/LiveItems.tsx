@@ -63,7 +63,7 @@ function ManagedItemList() {
       .every(action => readiness?.permissions.includes(action) === true), { search });
   const imported = useLiveMasterImport("items", company,
     { tenantId: readiness?.tenantId ?? "", companyId: company, principalId: readiness?.principalId ?? "",
-      branch: `${selection.branchScope ?? ""}:${selection.branch ?? ""}`, kind: "items" },
+      kind: "items" },
     scopeKey, readiness?.capabilities.itemDraft === true && ["procurement-access", "procurement-item-manage", "procurement-item-import"]
       .every(action => readiness?.permissions.includes(action) === true), () => setRevision(value => value + 1));
   useEffect(() => {

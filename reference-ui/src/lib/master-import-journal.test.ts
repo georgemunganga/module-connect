@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { masterImportJournal, type ImportScope } from "./master-import-journal";
 
 const scope: ImportScope = { tenantId: "test-tenant", companyId: "11111111-1111-4111-8111-111111111111",
-  principalId: "22222222-2222-4222-8222-222222222222", branch: "all:", kind: "vendors" };
+  principalId: "22222222-2222-4222-8222-222222222222", kind: "vendors" };
 const locator = { batchId: "33333333-3333-4333-8333-333333333333", commandKey: "44444444-4444-4444-8444-444444444444",
   previewSha256: "a".repeat(64), expiresAt: "2026-10-27T00:00:00Z" };
 function memory() {
@@ -18,6 +18,13 @@ describe("scoped master import recovery", () => {
     expect(masterImportJournal.read({ ...scope, companyId: "55555555-5555-4555-8555-555555555555" }, storage)).toBeNull();
     expect(storage.getItem(storage.key(0) ?? "")).not.toContain("csvBase64");
     expect(() => masterImportJournal.claim(scope, locator, storage)).toThrow();
+  });
+  it("keeps a company-owned pending import discoverable after an HQ to All branch switch", () => {
+    const storage = memory(); masterImportJournal.claim(scope, locator, storage);
+    // Branch selection is deliberately absent from this company-master journal scope.
+    const afterBranchSwitch: ImportScope = { tenantId: scope.tenantId, companyId: scope.companyId,
+      principalId: scope.principalId, kind: scope.kind };
+    expect(masterImportJournal.read(afterBranchSwitch, storage)).toEqual(locator);
   });
   it("rejects forged or corrupt saved commands and preserves the original key", () => {
     const storage = memory(); masterImportJournal.claim(scope, locator, storage);

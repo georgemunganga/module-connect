@@ -3,7 +3,7 @@ import { getMasterImportSchema, type MasterImportKind, type MasterImportSchema }
 import type { ImportScope } from "./master-import-journal";
 
 export type LiveImport = { kind: MasterImportKind; companyId: string; scope: ImportScope;
-  schema: MasterImportSchema; onCommitted: () => void };
+  scopeKey: string; schema: MasterImportSchema; onCommitted: () => void };
 
 export function useLiveMasterImport(kind: MasterImportKind, companyId: string, scope: ImportScope,
   scopeKey: string, permitted: boolean, onCommitted: () => void) {
@@ -22,6 +22,6 @@ export function useLiveMasterImport(kind: MasterImportKind, companyId: string, s
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [kind, companyId, scopeKey, permitted]);
-  return { liveImport: permitted && schema && !loading && resolvedScope === scopeKey ? { kind, companyId, scope, schema, onCommitted } as LiveImport : undefined,
+  return { liveImport: permitted && schema && !loading && resolvedScope === scopeKey ? { kind, companyId, scope, scopeKey, schema, onCommitted } as LiveImport : undefined,
     unavailableImportReason: reason };
 }

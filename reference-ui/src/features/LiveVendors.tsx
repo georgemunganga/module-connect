@@ -66,7 +66,7 @@ function VendorListRecord() {
     capabilities.vendorDraft === true && ["procurement-access", "procurement-vendor-read", "procurement-vendor-export"]
       .every(action => permissions.includes(action)), { search, status });
   const imported = useLiveMasterImport("vendors", legalEntityId,
-    { tenantId, companyId: legalEntityId, principalId, branch: `${selection.branchScope ?? ""}:${selection.branch ?? ""}`, kind: "vendors" },
+    { tenantId, companyId: legalEntityId, principalId, kind: "vendors" },
     scopeKey, capabilities.vendorDraft === true && ["procurement-access", "procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-import"]
       .every(action => permissions.includes(action)), () => setRevision(value => value + 1));
   useEffect(() => {
