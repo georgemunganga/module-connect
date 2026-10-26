@@ -3,6 +3,8 @@ import { requestApprovalsAvailable } from "./request-approval-availability";
 import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { useErpShell } from "./erpShell";
+import { Button } from "../components/ui";
+import { organisationRecovery } from "./organisation-access";
 import { fetchProcurementReadiness, ProcurementLiveError, type ProcurementReadiness } from "./procurement-live";
 
 const liveMode = import.meta.env.VITE_PROCUREMENT_LIVE_MODE === "1";
@@ -132,7 +134,13 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
 
 /** Keeps the existing shell/header available while a saved label needs selection. */
 export function ProcurementScopeSelectionState() {
-  const { procurementScopeStatus, scopeMessage } = useErpShell();
-  return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">{procurementScopeStatus === "resolving" ? "Checking your branch" : "Choose your branch"}</h1>
-    <p className="mt-3 text-sm text-muted-foreground" role={procurementScopeStatus === "resolving" ? "status" : "alert"}>{scopeMessage}</p></div>;
+  const { procurementScopeStatus, scopeMessage, organisationAccess, retryOrganisationLookup } = useErpShell();
+  const recovery = organisationRecovery(organisationAccess, procurementScopeStatus, scopeMessage);
+  if (!recovery) return null;
+  return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">{recovery.heading}</h1>
+    <p className="mt-3 text-sm text-muted-foreground" role={recovery.resolving ? "status" : "alert"}>{recovery.message}</p>
+    {recovery.retry ? <div className="mt-5 flex flex-wrap items-center gap-4">
+      {recovery.signInHref ? <a href={recovery.signInHref} className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4">Sign in</a> : null}
+      <Button variant="secondary" onClick={retryOrganisationLookup}>Try again</Button>
+    </div> : null}</div>;
 }

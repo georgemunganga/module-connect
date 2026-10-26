@@ -75,7 +75,9 @@ test("a payment-only Core account can switch from default C to authorized compan
 test("Core selector denial never falls back to broad administrator choices", async ({ page }) => {
   const scope = await setup(page, 403);
   await page.goto("/procurement/workspace/payments");
-  await expect(page.getByText("Your ERP account could not open verified organisation choices", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Organisation access unavailable" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toHaveCount(0);
   expect(scope.adminCalls()).toBe(0);
   expect(scope.seen).toEqual([]);
 });
