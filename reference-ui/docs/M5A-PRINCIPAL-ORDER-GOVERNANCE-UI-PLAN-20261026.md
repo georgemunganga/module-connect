@@ -1,6 +1,8 @@
 # M5a principal purchase order UI integration plan
 
-Status: source plan only. No M5a UI action, schema, feature flag, or production workflow is accepted by this document. The starting UI is published main `46782ccdb502d8be34e5abb7e25ff659cd325582`; the inspected M5a backend is draft source and its final wire contract, migration, finite roles, and runtime evidence remain to be bound.
+Status: UI integration plan plus source-only transport and journal. No M5a UI action, schema, feature flag, or production workflow is accepted by this document. The starting UI is published main `46782ccdb502d8be34e5abb7e25ff659cd325582`; backend PR119 remains draft and its final wire contract, migration, finite roles, and runtime evidence remain to be bound.
+
+The focused source increment adds `src/platform/procurement-principal-governance-api.ts` and `reference-ui/src/lib/principal-order-governance-journal.ts`. It covers the seven command envelopes, actor-owned original-key GET recovery, buyer/Finance/reviewer reads, and the newer purpose-only Issue/Ack task reads. It preserves gross decimal(38,8) and line decimal(18,4) strings without JavaScript number conversion. A journal claim binds tenant, company, Core principal, selected branch, order, operation, original body/key, and the original direct-source digest before a POST. There are no M5a buttons or new pages yet. The draft backend now contains the governed and purpose-only read routes described below, but they have not passed a real API cohort or been merged. The reviewer detail still needs an explicit top-level original direct-source digest so a publish-only reviewer can safely construct a Decide command from its authorized view.
 
 ## Keep the existing purchase order experience
 
@@ -9,6 +11,8 @@ Use the imported Purchase Orders list, detail tabs, toolbar, form sections, and 
 The current implementation is in `reference-ui/src/features/LiveOrders.tsx`, `LivePrincipalOrderEditor.tsx`, `LivePrincipalOrderDetail.tsx`, `LiveOrderApprovalQueue.tsx`, `LiveApprovals.tsx`, and `reference-ui/src/app/App.tsx`. The existing M3b transport is `src/platform/procurement-principal-drafts-api.ts`, and its durable Create/Cancel journal is `reference-ui/src/lib/principal-draft-command-journal.ts`. Keep M3b Create/Cancel response bytes and historical recovery compatible.
 
 ## Backend contracts to close before UI actions
+
+The left column records the initial M5a source audit. Backend PR119 now stages the governed buyer, Finance, reviewer, Issue, and acknowledgment read contracts and separate metadata bits; physical/runtime acceptance and final source binding are still pending.
 
 | Gap in inspected M5a source | Required contract |
 | --- | --- |
@@ -29,7 +33,7 @@ The new governance routes in `ProcurementPrincipalOrderGovernanceRoutes.cs` use 
 | Issuer and dispatch confirmer | Existing PO detail action area and history | Issue moves Approved to `IssuePending` and moves the source quantity to Ordered once. The separate `Ack` records a verified manual supplier response (`Accepted` or `Rejected`) against the issued-version ID and configured channel. Internal issue does not send an order; show `Issued`/`Disputed` only after the actual acknowledgment. |
 | Buyer requesting release; independent Finance confirming it | Existing detail action area plus Finance task queue | An unfunded Draft may retain the M3b Cancel action. A **funded Draft still has status Draft** and must instead use `ReleaseRequest` followed by Finance `ReleaseConfirm`; never show the old direct Cancel button based on status alone. Preserve the original source digest and external release evidence; restore source quantity only at confirmed release. |
 
-Add `src/platform/procurement-principal-governance-api.ts` as a typed adapter and a durable M5a command journal beside the existing M3b adapter/journal. Extend `reference-ui/src/lib/procurement-live.ts` and `ProcurementLiveGate.tsx` only for the new read/write capability and deliberate route scope. Keep `reference-ui/src/app/App.tsx` changes to purpose-specific routes under the existing AppShell. Replace the current static detail sentence that says an order has not been submitted or issued with wording derived from its verified state.
+The typed M5a adapter and durable command journal now sit beside the existing M3b adapter/journal without altering them. Once backend source and runtime proofs are accepted, extend `reference-ui/src/lib/procurement-live.ts` and `ProcurementLiveGate.tsx` only for the new read/write capability and deliberate route scope. Keep `reference-ui/src/app/App.tsx` changes to purpose-specific routes under the existing AppShell. Replace the current static detail sentence that says an order has not been submitted or issued with wording derived from its verified state.
 
 ## Original-key recovery and scope
 
