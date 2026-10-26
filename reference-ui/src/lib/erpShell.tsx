@@ -6,6 +6,7 @@ import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../sh
 import { ERP_SHELL_STORAGE_KEY } from "../../../shared/shell-scope";
 import { canonicalScopeId, resolveLegacyBranchSelection } from "./legacy-branch-selection";
 import { configuredDefaultBranch, parseCoreWorkspaceChoices } from "./core-workspace-choices";
+import { fetchShellIdentity, organisationAccessFailure, ShellLookupError, type OrganisationAccess } from "./organisation-access";
 
 type Branding = {
   displayName: string;
@@ -39,6 +40,8 @@ type ErpShellContext = {
   contextAvailable: boolean;
   procurementScopeStatus: "ready" | "resolving" | "selection-required";
   scopeMessage: string;
+  organisationAccess: OrganisationAccess;
+  retryOrganisationLookup: () => void;
   verifiedContext: VerifiedOrganisationContext | null;
   assignedRoles: string[];
   selectEntity: (id: string) => void;
@@ -48,7 +51,6 @@ type ErpShellContext = {
 
 const SHELL_KEY = ERP_SHELL_STORAGE_KEY;
 const SESSION_KEY = "erp.oidc.session";
-class ShellLookupError extends Error { constructor(readonly status: number) { super("Organisation choices unavailable."); } }
 const ShellContext = createContext<ErpShellContext | null>(null);
 function readSelection(): ShellSelection {
   try {
@@ -83,6 +85,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const [contextAvailable, setContextAvailable] = useState(false);
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
   const [lookupFinished, setLookupFinished] = useState(false);
+  const [organisationAccess, setOrganisationAccess] = useState<OrganisationAccess>("checking");
   const [storageFailure, setStorageFailure] = useState<string | null>(null);
   const [lookupDenied, setLookupDenied] = useState(false);
   const [selectorDenied, setSelectorDenied] = useState(false);
@@ -93,7 +96,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
 
   useEffect(()=>observeAuthContext(window,()=>{
     authGeneration.current+=1;
-    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupFinished(false);setLookupDenied(false);setSelectorDenied(false);setVerifiedSelection(null);});
+    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupFinished(false);setOrganisationAccess("checking");setLookupDenied(false);setSelectorDenied(false);setVerifiedSelection(null);});
   }),[]);
 
   useLayoutEffect(() => {
@@ -176,15 +179,9 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     };
     const load = async () => {
       try {
-        const auth = await fetch("/api/hrm/auth/me", { credentials: "include", cache: "no-store",
-          signal: controller.signal });
-        if (!auth.ok) throw new ShellLookupError(auth.status);
-        const body: unknown = await auth.json();
-        if (!body || typeof body !== "object" || (body as { authenticated?: unknown }).authenticated !== true
-          || (body as { user?: { isActive?: unknown } }).user?.isActive !== true)
-          throw new ShellLookupError(403);
-        const user = (body as { user: { id?: unknown; roles?: unknown } }).user;
+        const user = await fetchShellIdentity(controller.signal);
         if (!current()) return;
+        setOrganisationAccess("authenticated");
         setAssignedRoles(Array.isArray(user.roles)
           ? user.roles.filter((role): role is string => typeof role === "string") : []);
 
@@ -230,8 +227,11 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
             && result.reason instanceof ShellLookupError && result.reason.status === 403);
           const onlyForbiddenFailures = results.every(result => result.status === "fulfilled"
             || result.reason instanceof ShellLookupError && result.reason.status === 403);
-          setLookupDenied(coreDenied && onlyForbiddenFailures);
-          return;
+          const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+          const unauthenticated = failures.find(result => result.reason instanceof ShellLookupError && result.reason.status === 401);
+          if (unauthenticated) throw unauthenticated.reason;
+          if (coreDenied && onlyForbiddenFailures) { setLookupDenied(true); return; }
+          throw failures[0]?.reason ?? new ShellLookupError(503);
         }
         const [entityData, branchData, shellData] = results.map(result => result.status === "fulfilled" ? result.value : undefined);
         setLookupDenied(false); setSelectorDenied(false);
@@ -248,8 +248,8 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
           legalEntityId: String(row.legalEntityId ?? ""),
         })).filter((row) => row.id && (!scope.confined || allowed.has(row.id))));
         setContextAvailable(true);
-      } catch {
-        if (current()) { setSelectorDenied(true); setLookupDenied(false); setContextAvailable(false);
+      } catch (error: unknown) {
+        if (current()) { setOrganisationAccess(organisationAccessFailure(error)); setAssignedRoles([]); setSelectorDenied(true); setLookupDenied(false); setContextAvailable(false);
           setEntities([]); setBranches([]); }
       } finally { if (current()) setLookupFinished(true); }
     };
@@ -288,7 +288,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     : failedStorage || selectorDenied || !validSelection ? "selection-required"
     : !canonicalScopeId(selection.branch) && selection.branchScope !== "all" ? "selection-required"
     : resolution.kind === "ready" ? "ready" : resolution.kind === "waiting" || resolution.kind === "canonicalize" ? "resolving" : "selection-required";
-  const scopeMessage = selectorDenied ? "Your ERP account could not open verified organisation choices. Sign in again or contact your administrator."
+  const scopeMessage = selectorDenied ? "Your company and branch choices could not be loaded. Try again."
     : failedStorage ? "Your branch could not be saved in this browser. Allow local storage, then choose your branch again."
     : !validSelection ? "Your saved company or branch is no longer available to this ERP account. Choose an authorised organisation context."
     : procurementScopeStatus === "resolving" ? "Checking the branch saved by your ERP workspace…"
@@ -308,7 +308,12 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     catch { setStorageFailure(selectionKey); }
   };
   const value = useMemo<ErpShellContext>(() => ({
-    authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, verifiedContext, assignedRoles,
+    authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, organisationAccess, retryOrganisationLookup: () => {
+      authGeneration.current += 1; setAuthEpoch(authGeneration.current);
+      setLookupFinished(false); setOrganisationAccess("checking"); setSelectorDenied(false); setLookupDenied(false);
+      setContextAvailable(false); setAssignedRoles([]); setEntities([]); setBranches([]);
+      setVerifiedSelection(null);
+    }, verifiedContext, assignedRoles,
     selectEntity: (id) => {
       const defaultBranch = configuredDefaultBranch(branches, id);
       updateSelection({ ...selection, entityId: id,
@@ -316,7 +321,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     },
     selectBranch: (id, entityId) => updateSelection({ ...selection, entityId, branch: id, branchScope: undefined }),
     selectAllBranches: (entityId) => updateSelection({ ...selection, entityId, branch: "", branchScope: "all" }),
-  }), [authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, verifiedContext, assignedRoles]);
+  }), [authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, organisationAccess, verifiedContext, assignedRoles]);
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }
 
