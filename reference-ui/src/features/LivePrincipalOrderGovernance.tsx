@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ShoppingBag } from "lucide-react";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "../components/ui";
 import { DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
@@ -10,7 +10,8 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { principalDraftJournal, principalDraftScope } from "../lib/principal-draft-command-journal";
 import { principalOrderGovernanceJournal, principalOrderGovernanceScope,
   recoverJournaledGovernanceCommand, sendNewJournaledGovernanceCommand } from "../lib/principal-order-governance-journal";
-import { governedActions, type GovernedDetail, type GovernedTask } from "../lib/principal-order-governance-ui-rules";
+import { canCreateApprovedSourceOrder, governedActions, legacyDraftBlocksGovernance,
+  type GovernedDetail, type GovernedTask } from "../lib/principal-order-governance-ui-rules";
 import { LivePrincipalOrderDetail } from "./LivePrincipalOrderDetail";
 import { encodeGovernanceBody, getGovernedBuyerOrder, getGovernanceOperationDetail,
   getPrincipalFinanceDetail, getPrincipalReview, listGovernedBuyerOrders,
@@ -40,11 +41,14 @@ const taskForOperation = (operation: GovernanceOperation): GovernedTask =>
 type TaskRow = { id: string; number: string; status: string; currency: string; assignmentId?: string };
 export function LiveGovernedOrderList({ task }: { task: GovernedTask }) {
   const context = useLiveReadiness()!, shell = useErpShell();
+  const navigate = useNavigate();
   const [page, setPage] = useState(1), [revision, setRevision] = useState(0);
   const [rows, setRows] = useState<TaskRow[]>([]), [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true), [error, setError] = useState("");
   const canRead = context.capabilities.principalOrderGovernanceRead
     && context.permissions.includes(permission[task]);
+  const canCreate = task === "buyer" && canCreateApprovedSourceOrder(
+    context.capabilities.principalDirectOrderDrafts, context.permissions, context.effectiveBranchId ?? null);
   useEffect(() => {
     if (!canRead) return;
     const controller = new AbortController(); setLoading(true); setError(""); setRows([]);
@@ -76,6 +80,7 @@ export function LiveGovernedOrderList({ task }: { task: GovernedTask }) {
       status: row.status, path: pathFor(row.id, task, row.assignmentId), fields: { currency: row.currency } }))}
     loading={loading} error={error} total={total} page={page} pageSize={25}
     onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
+    action={canCreate ? <Button onClick={() => navigate("/purchase-orders/new?workflow=principal")}>Order from approved request</Button> : undefined}
     emptyTitle="No order tasks in this scope" emptyDescription="Choose a permitted company or branch, or refresh after a new assignment." />
     {shell.selection.branchScope === "all" && <p className="mt-3 text-sm text-muted-foreground">All branches is for scoped reads. Choose one permitted branch before saving an action.</p>}
   </div>;
@@ -256,20 +261,28 @@ function GovernedDetail({ id, task, assignment }: { id: string; task: GovernedTa
     } }
     finally { lock.current = false; if (alive.current) setBusy(false); }
   }
-  const writes = context.capabilities.principalOrderGovernance && branch !== null && !pending && !busy && !lock.current;
+  let olderCommand: ReturnType<typeof principalDraftJournal.read> = null;
+  let legacyJournalError = false;
+  try { olderCommand = principalDraftJournal.read(principalDraftScope(
+    context.tenantId, company, context.principalId)); }
+  catch { legacyJournalError = true; }
+  const olderCreatePending = olderCommand?.operation === "Create";
+  const olderCancelPending = olderCommand?.operation === "Cancel" && olderCommand.orderId === id;
+  const legacyBlocks = legacyDraftBlocksGovernance(olderCommand?.operation ?? null,
+    olderCommand?.orderId ?? null, id, legacyJournalError);
+  const writes = context.capabilities.principalOrderGovernance && branch !== null && !pending
+    && !busy && !lock.current && !legacyBlocks;
   const buyer = task === "buyer" && record && "canSubmit" in record ? record : null;
   const finance = task === "finance" && record && "canRecordFunding" in record ? record : null;
   const reviewer = task === "review" && record && "canApprove" in record ? record : null;
   const available = governedActions(task, record, writes);
   const pendingTask = pending ? taskForOperation(pending.operation) : null;
   const canRecoverHere = pendingTask === task && (pendingTask !== "review" || pending?.assignmentId === assignment);
-  let olderPending = false;
-  if (task === "buyer") try { const old = principalDraftJournal.read(principalDraftScope(context.tenantId, company, context.principalId));
-    olderPending = old?.orderId === id; }
-  catch { olderPending = true; }
   const olderCancel = task === "buyer" && branch && buyer?.status === "Draft" && buyer.funding === null
-    && buyer.canCancelDraft && context.capabilities.principalDirectOrderDrafts && !pending;
-  if (olderPending && !pending && context.capabilities.principalDirectOrderDrafts) return <LivePrincipalOrderDetail />;
+    && buyer.canCancelDraft && context.capabilities.principalDirectOrderDrafts && !pending
+    && !legacyJournalError && !olderCreatePending;
+  if (task === "buyer" && olderCancelPending && !pending && context.capabilities.principalDirectOrderDrafts)
+    return <LivePrincipalOrderDetail />;
   if (olderCancel) return <LivePrincipalOrderDetail />;
   if (!canRead) return <div className="p-5 sm:p-8" role="alert">This order task is unavailable for your account.</div>;
   const back = task === "review" ? "/approvals" : `/purchase-orders?workflow=principal${task === "buyer" ? "" : `&task=${task}`}`;
@@ -282,6 +295,9 @@ function GovernedDetail({ id, task, assignment }: { id: string; task: GovernedTa
     </header>
     <div className="max-w-[1260px] space-y-6 px-5 py-6 sm:px-8">
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {legacyJournalError && <p role="alert">A saved draft command needs support review before another order action.</p>}
+      {olderCreatePending && <p role="alert">Check the original order creation result before starting another action. <Link className="text-primary underline" to="/purchase-orders/new?workflow=principal">Open original draft recovery</Link></p>}
+      {olderCancelPending && task !== "buyer" && <p role="alert">Check the saved draft cancellation before another order action.</p>}
       {notice && <p role="status">{notice}</p>}
       {pending && <Panel title="Check saved action"><div className="space-y-3 p-5">
         <p>The response may have been lost. Keep original command {pending.key}. No action will be sent again automatically.</p>

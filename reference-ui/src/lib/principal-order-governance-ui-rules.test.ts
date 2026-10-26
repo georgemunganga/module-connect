@@ -1,9 +1,24 @@
 import { describe, expect, it } from "vitest";
 import type { FinanceOrderDetail, GovernedBuyerOrder, OrderReviewDetail } from
   "../../../src/platform/procurement-principal-governance-api";
-import { governedActions } from "./principal-order-governance-ui-rules";
+import { canCreateApprovedSourceOrder, governedActions, legacyDraftBlocksGovernance } from "./principal-order-governance-ui-rules";
 
 describe("principal order current-action presentation", () => {
+  it("retains the existing approved-request Create entry only for a selected-branch converter", () => {
+    const branch = "11111111-1111-4111-8111-111111111111";
+    const permissions = ["procurement-po-read", "procurement-po-convert"];
+    expect(canCreateApprovedSourceOrder(true, permissions, branch)).toBe(true);
+    expect(canCreateApprovedSourceOrder(false, permissions, branch)).toBe(false);
+    expect(canCreateApprovedSourceOrder(true, permissions, null)).toBe(false);
+    expect(canCreateApprovedSourceOrder(true, ["procurement-po-read"], branch)).toBe(false);
+  });
+  it("blocks new commands behind an unresolved legacy Create or malformed journal", () => {
+    const order = "11111111-1111-4111-8111-111111111111";
+    expect(legacyDraftBlocksGovernance("Create", null, order, false)).toBe(true);
+    expect(legacyDraftBlocksGovernance("Cancel", order, order, false)).toBe(true);
+    expect(legacyDraftBlocksGovernance("Cancel", "22222222-2222-4222-8222-222222222222", order, false)).toBe(false);
+    expect(legacyDraftBlocksGovernance(null, null, order, true)).toBe(true);
+  });
   it("offers funded Draft release and submit without exposing legacy Cancel", () => {
     const draft = { status: "Draft", funding: { id: "retained" }, canCancelDraft: false,
       canSubmit: true, canRequestRelease: true } as GovernedBuyerOrder;

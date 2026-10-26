@@ -12,6 +12,7 @@ import { InvoiceUnitReviewQueue } from "./InvoiceUnitReviewTasks";
 import { ApprovalOpeningPanel } from "./ApprovalOpeningPanel";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { useErpShell } from "../lib/erpShell";
 import { ApprovalApiError, decideApproval, getApproval, getApprovalHistory, listAssignedApprovals, openApproval,
   type ApprovalAction, type ApprovalCommand, type ApprovalDetail, type ApprovalHistory, type ApprovalQueue } from "../../../src/platform/procurement-approvals-api";
 const message = (error: unknown) => error instanceof Error ? error.message : "The approval action could not be confirmed.";
@@ -25,11 +26,12 @@ function useApprovalContext() {
 }
 export function LiveApprovalQueue() {
   const context = useApprovalContext();
-  const requests = requestApprovalsAvailable(context.capabilities) && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
-  const orders = context.capabilities.orders && context.permissions.includes("procurement-po-approve");
+  const all = useErpShell().selection.branchScope === "all";
+  const requests = !all && requestApprovalsAvailable(context.capabilities) && (context.permissions.includes("procurement-approval-read") || context.permissions.includes("procurement-approval-open"));
+  const orders = !all && context.capabilities.orders && context.permissions.includes("procurement-po-approve");
   const governedOrders = context.capabilities.principalOrderGovernanceRead
     && context.permissions.includes("procurement-po-approve");
-  const units = context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
+  const units = !all && context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
   const available = ([requests && "requests", orders && "orders", governedOrders && "governed", units && "units"].filter(Boolean) as ("requests" | "orders" | "governed" | "units")[]);
   const [type, setType] = useState<"requests" | "orders" | "governed" | "units">(() => available[0] ?? "requests");
   const selected = available.includes(type) ? type : available[0];
