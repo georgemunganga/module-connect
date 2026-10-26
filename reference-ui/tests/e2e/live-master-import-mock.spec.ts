@@ -95,7 +95,7 @@ test("mocked ERP Vendor import keeps the list and confirms only the acknowledged
   await wizard.getByRole("button", { name: "Next", exact: true }).click();
   await expect(wizard.getByRole("table")).toBeVisible();
   await expect(wizard.getByRole("columnheader", { name: "Sample value" })).toBeVisible();
-  await expect(wizard.getByRole("row").filter({ has: wizard.getByRole("cell", { name: "Legal name", exact: true }) })
+  await expect(wizard.getByRole("row").filter({ has: page.getByRole("cell", { name: "Legal name", exact: true }) })
     .getByRole("cell", { name: "Acme", exact: true })).toBeVisible();
   await wizard.screenshot({ path: testInfo.outputPath("vendor-import-map-desktop.png") });
   await wizard.getByRole("button", { name: /Preview on ERP/ }).click();
