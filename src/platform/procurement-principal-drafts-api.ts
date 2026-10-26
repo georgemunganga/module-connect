@@ -66,7 +66,7 @@ function source(value: unknown): value is PrincipalSource {
       && typeof value.categoryCode === "string" && exact.test(String(value.availableQuantity))
       && exact.test(String(value.approvedUnitEstimate)) && typeof value.currencyCode === "string"));
 }
-function summary(value: unknown): value is PrincipalOrderSummary {
+function summary(value: unknown): value is PrincipalOrderSummary & Record<string, unknown> {
   return object(value) && validId(value.id) && typeof value.number === "string"
     && validId(value.supplierId) && validId(value.branchRef)
     && typeof value.currencyCode === "string" && (value.status === "Draft" || value.status === "Cancelled")

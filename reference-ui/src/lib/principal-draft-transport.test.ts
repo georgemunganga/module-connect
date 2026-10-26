@@ -63,7 +63,7 @@ describe("principal approved request order adapter", () => {
     await expect(confirmPrincipalCommand(id(2), command, ack)).rejects.toThrow();
   });
   it("uses the bounded same-permission supplier discovery endpoint", async () => {
-    const fetcher = vi.fn(async () => response({ items: [{ id: id(4), number: "SUP-1", displayName: "Supplier A" }],
+    const fetcher = vi.fn(async (_url: string, _init?: RequestInit) => response({ items: [{ id: id(4), number: "SUP-1", displayName: "Supplier A" }],
       total: 1, page: 1, pageSize: 25 })); vi.stubGlobal("fetch", fetcher);
     expect((await listPrincipalSuppliers(id(2), 1, "Supplier")).items[0].displayName).toBe("Supplier A");
     expect(String(fetcher.mock.calls[0][0])).toContain("/principal-direct-suppliers?");
