@@ -13,7 +13,7 @@ export function ImportStageHeading({ stage, title }: { stage: ImportStage; title
   return <>
     <div className="flex items-center justify-center gap-3 border-b border-slate-100 pb-4">
       {stages.map((item, position) => <div key={item.key} className="flex items-center gap-2">
-        <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${position <= index ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-400"}`}>{position + 1}</span>
+        <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${position <= index ? "bg-primary text-primary-foreground" : "bg-slate-100 text-slate-400"}`}>{position + 1}</span>
         <span className={`text-xs ${position === index ? "font-semibold text-slate-800" : "text-slate-400"}`}>{item.label}</span>
         {position < stages.length - 1 && <span className="hidden h-px w-7 bg-slate-200 sm:block" />}
       </div>)}
