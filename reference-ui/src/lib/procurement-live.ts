@@ -1,4 +1,4 @@
-export type ShellSelection = { entityId?: string; branch?: string };
+export type ShellSelection = { entityId?: string; branch?: string; branchScope?: "all" };
 
 export type ProcurementCapability =
   | "vendorDraft" | "itemDraft" | "requestDraft" | "approvals" | "principalApprovals" | "sourcing"
@@ -52,12 +52,13 @@ export async function fetchProcurementReadiness(
   selection: ShellSelection,
   signal?: AbortSignal,
   fetcher: typeof fetch = fetch,
-  paymentAllBranches = false,
+  _paymentPath = false,
 ): Promise<ProcurementReadiness> {
   const headers = scopeHeaders(selection);
-  // Only the payment workspace requests an explicit company-wide context.
-  // The ordinary omitted-branch contract still resolves the user's default.
-  const contextHeaders = paymentAllBranches && selection.entityId && !selection.branch
+  if (selection.branchScope !== undefined && selection.branchScope !== "all"
+    || selection.branchScope === "all" && (!selection.entityId || selection.branch))
+    throw new ProcurementLiveError("invalid-scope");
+  const contextHeaders = selection.branchScope === "all"
     ? { ...headers, "X-Shell-Branch-Scope": "all" } : headers;
   const common: RequestInit = { credentials: "include", cache: "no-store", signal };
   let auth: Response;
@@ -106,11 +107,11 @@ export async function fetchProcurementReadiness(
       effectiveBranchId = context.branch.id as string;
     }
   }
-  if (paymentAllBranches && selection.entityId && !selection.branch && effectiveBranchId !== null)
+  if (selection.branchScope === "all" && effectiveBranchId !== null)
     throw new ProcurementLiveError("invalid-response");
 
   let metaResponse: Response;
-  try { metaResponse = await fetcher("/api/procurement/v1/meta", { ...common, headers }); }
+  try { metaResponse = await fetcher("/api/procurement/v1/meta", { ...common, headers: contextHeaders }); }
   catch { throw new ProcurementLiveError("unavailable"); }
   if (!metaResponse.ok) throw new ProcurementLiveError(metaResponse.status === 403 ? "access" : "unavailable");
   let meta: unknown;

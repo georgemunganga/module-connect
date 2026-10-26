@@ -2,9 +2,10 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Search, Eye } from "lucide-react";
 import { Badge, Button, EmptyState, Input, Modal, PageHeader, Panel, Select } from "../ui";
-import { ListTools, type ListColumn, type ListFilterField } from "./ListTools";
+import { ListTools, type ExportScope, type ListColumn, type ListFilterField } from "./ListTools";
 import { ActiveFilterChips } from "./ActiveFilterChips";
 import { StandardDataTable } from "./StandardDataTable";
+import type { LiveImport } from "../../lib/useLiveMasterImport";
 
 export type DirectoryRow = { id: string; number: string; title: string; status: string; path: string; fields: Record<string, string> };
 export type DirectoryServerQuery = { search: string; onSearch: (value: string) => void;
@@ -13,12 +14,15 @@ export type DirectoryServerQuery = { search: string; onSearch: (value: string) =
 export type DirectorySortComparators = Record<string, (left: DirectoryRow, right: DirectoryRow) => number>;
 /** Shared imported directory presentation. The adapter owns server scope, paging and all mutations. */
 export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, loading, error, total, page, pageSize,
-  onPage, onRefresh, action, emptyTitle, emptyDescription, tabs = false, serverQuery, sortComparators, contextControls, initialSort }: {
+  onPage, onRefresh, action, emptyTitle, emptyDescription, tabs = false, serverQuery, sortComparators, contextControls, initialSort, exportCsv, liveImport, unavailableImportReason }: {
   title: string; subtitle: string; entity: string; rows: DirectoryRow[]; columns: ListColumn[];
   loading: boolean; error: string; total: number; page: number; pageSize: number;
   onPage: (page: number) => void; onRefresh: () => void; action?: ReactNode;
   emptyTitle: string; emptyDescription: string; tabs?: boolean; serverQuery?: DirectoryServerQuery;
   sortComparators?: DirectorySortComparators; contextControls?: ReactNode; initialSort?: string;
+  exportCsv?: { allowed: boolean; selectedAllowed?: boolean; busy: boolean; error: string; notice: string;
+    onExport: (scope: ExportScope, selectedIds?: readonly string[]) => void };
+  liveImport?: LiveImport; unavailableImportReason?: string;
 }) {
   const [query, setQuery] = useState(""), [serverInput, setServerInput] = useState(serverQuery?.search ?? "");
   const [sort, setSort] = useState(initialSort ?? (serverQuery ? "server" : "newest"));
@@ -58,11 +62,22 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
         viewOptions={serverQuery ? undefined : [`All ${title}`, ...statuses]}
         onViewChange={serverQuery ? undefined : view => applyFilters({ ...filters, status: view === `All ${title}` ? "" : view })}
         showSavedView={!serverQuery}
-        selectedCount={selection.length} onExport={() => setNotice("Export is not connected for this directory.")}
+        selectedCount={selection.length} onExport={exportCsv ? scope => {
+          if (loading || error) return;
+          if (scope === "selected" && (!exportCsv.selectedAllowed || !selection.length)) return;
+          if (scope === "view" && Object.values(filters).some(Boolean)) return;
+          exportCsv.onExport(scope, scope === "selected" ? [...selection] : undefined);
+        } : () => setNotice("Export is not connected for this directory.")}
         onRefresh={() => { setSelected([]); setPreviewId(null); onRefresh(); }} onResetWidths={() => setWidths({})} notify={setNotice}
-        unavailableImportReason="Import is not available yet. Add records individually."
-        unavailableExportReason="Export is not available for this page yet."
-        unavailableAllExportReason="Only the current page is loaded." viewExportLabel="Export Current Page View" />
+        liveImport={liveImport} unavailableImportReason={unavailableImportReason ?? "Import is not available yet. Add records individually."}
+        unavailableExportReason={exportCsv ? !exportCsv.allowed ? "You do not have permission to export these records."
+          : exportCsv.busy ? "Preparing your CSV…" : loading ? "Wait for the list to load."
+            : error ? "Refresh the list before exporting." : undefined : "Export is not available for this page yet."}
+        unavailableAllExportReason={exportCsv ? undefined : "Only the current page is loaded."}
+        unavailableViewExportReason={exportCsv && Object.values(filters).some(Boolean) ? "Clear page-only filters to export search results." : undefined}
+        unavailableSelectedExportReason={exportCsv ? !exportCsv.selectedAllowed ? "Selected export is not available yet."
+          : !selection.length ? "Select records on this page first." : loading || error ? "Wait for the list to load successfully." : undefined : undefined}
+        viewExportLabel={exportCsv ? "Search results (default order)" : "Export Current Page View"} />
       {action}</>} />
     {contextControls}
     {tabs && <nav aria-label="Request views" className="mb-4 flex flex-wrap gap-2 border-b border-border">
@@ -93,12 +108,13 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
       </div>
       <ActiveFilterChips fields={fields} filters={filters} onChange={applyFilters} />
       <div className="px-5 py-3"><p className="text-xs text-muted-foreground">{serverQuery ? "Column filters, sorting and selection apply to the loaded page only." : "Search, filters, sorting and selection apply to the loaded page only."}</p>
-        {notice && <p role="status" className="mt-2 text-sm">{notice}</p>}
+        {(exportCsv?.notice || notice) && <p role="status" className="mt-2 text-sm">{exportCsv?.notice || notice}</p>}
+        {exportCsv?.error && <p role="alert" className="mt-3 text-sm text-red-700">{exportCsv.error}</p>}
         {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
         {loading && <p role="status" className="my-4">Loading {entity}…</p>}
       </div>
       {!loading && !error && <>
-        {selection.length > 0 && <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-5 py-3 text-sm"><span>{selection.length} selected on this page</span><span className="text-muted-foreground">Bulk changes and export are not available yet.</span><Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}
+        {selection.length > 0 && <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-5 py-3 text-sm"><span>{selection.length} selected on this page</span><span className="text-muted-foreground">{exportCsv?.selectedAllowed ? "Export selected records from the export menu. Bulk changes are not available yet." : "Bulk changes and selected export are not available yet."}</span><Button variant="ghost" onClick={() => setSelected([])}>Clear selection</Button></div>}
         {filtered.length ? <StandardDataTable rows={filtered} columns={columns} visibleColumns={visible} columnWidths={widths} clipText={clip}
           selected={selection} onSelectedChange={setSelected} onSort={setSort} onOpen={row => setPreviewId(row.id)} rowLabel={row => `Open ${row.number}`}
           renderCell={(row, column) => column.key === "number" ? <Link to={row.path} className="block text-primary"><span className="font-semibold">{row.number}</span><span className="mt-1 block text-sm">{row.title}</span></Link>

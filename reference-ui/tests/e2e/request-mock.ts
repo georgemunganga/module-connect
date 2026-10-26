@@ -1,6 +1,7 @@
 import { type Page } from "@playwright/test";
 
 export const companyId = "11111111-1111-4111-8111-111111111111";
+export const branchId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 export const workerId = "22222222-2222-4222-8222-222222222222";
 export const requestId = "77777777-7777-4777-8777-777777777777";
 export const lineId = "88888888-8888-4888-8888-888888888888";
@@ -14,24 +15,31 @@ export const capabilities = Object.fromEntries([
 ].map((key) => [key, key === "requestDraft"]));
 type RecordValue = Record<string, unknown> & { id: string; version: number; purpose: string; status: string; lines: Record<string, unknown>[] };
 
-export async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean; oldEditContract?: boolean; missingCatalogExact?: boolean; permissions?: string[]; seedDraft?: boolean; seedPurpose?: string } = {}) {
+export async function mockErp(page: Page, options: { allBranches?: boolean; denyList?: boolean; staleUpdate?: boolean; confirmedBudget?: boolean; matchedPolicy?: boolean; policyReviewer?: boolean; blockedPolicy?: boolean; changedRouteLines?: boolean; oldEditContract?: boolean; missingCatalogExact?: boolean; permissions?: string[]; seedDraft?: boolean; seedPurpose?: string } = {}) {
   let record: RecordValue | null = options.seedDraft ? { id: requestId, number: "PR-001", version: 1, purpose: options.seedPurpose || "Office chairs", status: "Draft", currencyCode: "ZMW", createdAt: "2026-10-18T00:00:00Z", lines: [{ id: lineId, lineNumber: 1, approvalStatus: "Pending", description: "Office chair", unitCode: "each", requestedQuantity: 1, estimatedUnitPrice: 250 }] } : null;
   let policyChecked = false;
   let policyBlocked = Boolean(options.blockedPolicy);
-  await page.addInitScript((entityId) => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), companyId);
+  await page.addInitScript(({ entityId, allBranches }) => localStorage.setItem("erp.shell.state.v1",
+    JSON.stringify({ entityId, ...(allBranches ? { branchScope: "all" } : {}) })),
+    { entityId: companyId, allBranches: options.allBranches === true });
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Requester", email: "requester@example.test", roles: [options.policyReviewer ? "procurement_manager" : "employee"] } });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", isActive: true, displayName: "Requester", email: "requester@example.test", roles: [options.policyReviewer ? "procurement_manager" : "employee"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1,
+      tenantId: "amizo", principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organisationWide: false,
+      companies: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power", currency: "ZMW", isDefault: true }],
+      branches: [{ id: branchId, code: "HQ", name: "Lusaka", legalEntityId: companyId, type: "Headquarters" },
+        ...(options.allBranches ? [{ id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", code: "KIT", name: "Kitwe", legalEntityId: companyId, type: "branch" }] : [])] });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
-    if (path === "/api/hrm/admin/locations") return json({ items: [] });
+    if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branchId, name: "Lusaka", legalEntityId: companyId }] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId: null,
       permissions: options.permissions ?? ["procurement-access", "procurement-request-read", "procurement-request-create", "procurement-request-edit", "procurement-request-submit",
         ...(options.policyReviewer ? ["procurement-policy-evaluate", "procurement-request-return"] : [])],
-      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+      company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" }, branch: options.allBranches ? null : { id: branchId } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     if (path === "/api/procurement/v1/catalog") return json({ items: [{
       entryId: catalogEntryId, itemId: catalogItemId, supplierId: catalogSupplierId,
