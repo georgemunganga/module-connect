@@ -51,7 +51,7 @@ test("resolving access keeps a status message until the session response arrives
   });
   await page.goto("/procurement/workspace/requests");
   await expect(page.getByRole("heading", { name: "Checking your branch" })).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("Checking the branch saved");
+  await expect(page.getByRole("status").filter({ hasText: "Checking the branch saved" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again", exact: true })).toHaveCount(0);
   finish();
   await expect(page.getByRole("heading", { name: "Sign in to Procurement" })).toBeVisible();
