@@ -121,6 +121,17 @@ describe("Procurement system-user readiness", () => {
     expect(result.capabilities.sourcingSourceDrafts).toBe(false);
     expect(result.workerId).toBeNull();
   });
+  it.each([undefined, false, true, "true", 1, null])("requires an explicit internal RFQ publication capability (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { principalSourcingPublication: flag }));
+    expect(result.capabilities.principalSourcingPublication).toBe(flag === true);
+  });
+  it.each([undefined, false, true, "true", 1, null])("keeps historical RFQ reads separate from new review commands (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { principalSourcingPublicationRead: flag, principalSourcingPublication: false }));
+    expect(result.capabilities.principalSourcingPublicationRead).toBe(flag === true);
+    expect(result.capabilities.principalSourcingPublication).toBe(false);
+  });
   it("keeps old API principal approvals disabled without replacing legacy availability", async () => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { approvals: true }));
     expect(result.capabilities.principalApprovals).toBe(false);
