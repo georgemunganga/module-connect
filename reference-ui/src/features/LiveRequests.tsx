@@ -45,15 +45,20 @@ function context() {
 
 function useRequestScopeKey() {
   const readiness = context(); const { selection, authEpoch } = useErpShell(); const { id } = useParams(); const { pathname } = useLocation();
-  return [pathname, authEpoch, readiness.tenantId, readiness.legalEntityId, selection.branch, readiness.effectiveBranchId, readiness.principalId, readiness.permissions.join("|"), id].join(":");
+  return [pathname, authEpoch, readiness.tenantId, readiness.legalEntityId, selection.branch, selection.branchScope, readiness.effectiveBranchId, readiness.principalId, readiness.permissions.join("|"), id].join(":");
 }
 export function LiveRequestList() { return <RequestListRecord key={useRequestScopeKey()} />; }
 function RequestListRecord() {
   const readiness = context();
   const { legalEntityId } = readiness;
+  const { selection, branches } = useErpShell();
+  const allBranches = selection.branchScope === "all";
+  const branchNames = new Map(branches.map(branch => [branch.id.toLowerCase(), branch.name]));
   const canCreate = readiness.permissions.includes("procurement-request-create");
-  const canCheckPolicy = readiness.permissions.includes("procurement-policy-evaluate");
-  const canReturnRequest = readiness.permissions.includes("procurement-request-return");
+  // Policy review is branch-bound. Do not show the server's legacy single-
+  // branch queue as if it reviewed all branches in this browsing context.
+  const canCheckPolicy = !allBranches && readiness.permissions.includes("procurement-policy-evaluate");
+  const canReturnRequest = !allBranches && readiness.permissions.includes("procurement-request-return");
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
   const procurement = useLocation().pathname.includes("procurement-requests");
@@ -124,12 +129,17 @@ function RequestListRecord() {
     <LiveRecordDirectory key={`${procurement}:${offset}`} title={procurement ? "Purchase Requests" : "My Requests"} entity="requests"
       subtitle="Save a request, then send it for policy and budget review." tabs={!procurement}
       columns={[{ key: "date", label: "Created", width: 125 }, { key: "number", label: "Request / Description", width: 260 },
+        ...(allBranches ? [{ key: "branch", label: "Branch", width: 160 }] : []),
         { key: "lines", label: "Lines", width: 80 }, { key: "needed", label: "Needed by", width: 125 }, { key: "status", label: "Status", width: 130 }]}
       rows={(data?.records ?? []).map(record => ({ id: record.id, number: record.number, title: record.purpose, status: record.status,
-        path: `/requests/${record.id}`, fields: { date: record.createdAt?.slice(0, 10) || "", lines: String(record.lineCount), needed: record.neededBy || "" } }))}
+        path: `/requests/${record.id}`, fields: { branch: record.branchRef === null ? "Company-wide"
+          : record.branchRef ? branchNames.get(record.branchRef.toLowerCase()) || "Branch unavailable" : "Branch unavailable", date: record.createdAt?.slice(0, 10) || "", lines: String(record.lineCount), needed: record.neededBy || "" } }))}
       loading={loading} error={error} total={data?.count ?? 0} page={Math.floor(offset / (data?.limit || 50)) + 1} pageSize={data?.limit || 50}
       onPage={page => setOffset((page - 1) * (data?.limit || 50))} onRefresh={() => setRevision(value => value + 1)}
-      action={canCreate ? <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined}
+      contextControls={allBranches ? <p role="status" className="mb-4 text-sm text-muted-foreground">Showing your requests across permitted branches. Choose the branch shown on a request to open or change it.</p> : undefined}
+      action={canCreate ? allBranches
+        ? <Button disabled title="Choose a branch in the top bar to create a request."><Plus size={16} className="mr-2 inline" />New request</Button>
+        : <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined}
       emptyTitle="What do you need to buy?" emptyDescription="Start with a draft request for goods or services." />
     {canCheckPolicy && <Panel title="Buying-rule checks and issues" className="mt-5"><div className="p-5">
       {policyError && <p role="alert" className="mb-3 text-sm text-red-700">{policyError}</p>}

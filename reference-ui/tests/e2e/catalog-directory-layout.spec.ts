@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const company = "11111111-1111-4111-8111-111111111111";
+const branch = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const worker = "22222222-2222-4222-8222-222222222222";
 const vendor = "33333333-3333-4333-8333-333333333333";
 const item = "44444444-4444-4444-8444-444444444444";
@@ -16,16 +17,20 @@ async function catalogFixture(page: Page, kind: "vendors" | "items", failList = 
   await page.route("**/api/**", route => {
     const request = route.request(); const url = new URL(request.url()); const path = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Buyer", roles: ["procurement_buyer"] } });
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", isActive: true, displayName: "Buyer", roles: ["procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
+    if (path === "/api/core/v1/workspace-context") return json({ schemaVersion: 1, tenantId: "amizo",
+      principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organisationWide: false,
+      companies: [{ id: company, code: "AMIZO", registeredName: "Amizo Power", currency: "ZMW", isDefault: true }],
+      branches: [{ id: branch, code: "HQ", name: "Lusaka", legalEntityId: company, type: "Headquarters" }] });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
-    if (path === "/api/hrm/admin/locations") return json({ items: [] });
+    if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branch, name: "Lusaka", legalEntityId: company }] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       tenantId: "amizo", legalEntityId: company, workerId: worker,
       permissions: kind === "vendors" ? ["procurement-access", "procurement-vendor-read", "procurement-vendor-create"]
         : ["procurement-access", "procurement-item-manage"],
-      company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
+      company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" }, branch: { id: branch } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
       capabilities: Object.fromEntries(capabilityKeys.map(key => [key, key === (kind === "vendors" ? "vendorDraft" : "itemDraft")])) });
     if (path === `/api/procurement/v1/${kind}`) {

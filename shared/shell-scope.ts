@@ -8,7 +8,7 @@ type ScopeStorage = Pick<Storage, "getItem">;
 export function procurementScopeHeaders(companyId: string, storage?: ScopeStorage): Record<string, string> {
   if (!guid.test(companyId)) throw new Error("Choose an ERP company first.");
   const headers: Record<string, string> = { "X-Shell-Entity": companyId };
-  let selection: { entityId?: unknown; branch?: unknown } = {};
+  let selection: { entityId?: unknown; branch?: unknown; branchScope?: unknown } = {};
   try {
     const source = storage ?? (typeof localStorage === "undefined" ? undefined : localStorage);
     const parsed: unknown = JSON.parse(source?.getItem(ERP_SHELL_STORAGE_KEY) || "{}");
@@ -17,6 +17,13 @@ export function procurementScopeHeaders(companyId: string, storage?: ScopeStorag
   if (typeof selection.entityId !== "string" || !guid.test(selection.entityId)) return headers;
   if (selection.entityId.toLowerCase() !== companyId.toLowerCase())
     throw new Error("The company changed. Refresh this page before continuing.");
+  if (selection.branchScope !== undefined && selection.branchScope !== "all")
+    throw new Error("Choose a valid ERP branch scope before continuing.");
+  if (selection.branchScope === "all") {
+    if (selection.branch) throw new Error("All branches cannot also select a branch.");
+    headers["X-Shell-Branch-Scope"] = "all";
+    return headers;
+  }
   if (selection.branch) {
     if (typeof selection.branch !== "string" || !guid.test(selection.branch))
       throw new Error("Choose a valid ERP branch before continuing.");

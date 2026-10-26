@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCoreWorkspaceChoices } from "./core-workspace-choices";
+import { configuredDefaultBranch, parseCoreWorkspaceChoices } from "./core-workspace-choices";
 
 const person = "11111111-1111-4111-8111-111111111111";
 const a = "22222222-2222-4222-8222-222222222222";
@@ -33,5 +33,16 @@ describe("Core self-service workspace choices", () => {
       payload.companies[0]] }, person)).toThrow();
     expect(() => parseCoreWorkspaceChoices({ ...payload, companies: payload.companies.map(company =>
       ({ ...company, isDefault: true })) }, person)).toThrow();
+  });
+  it("selects only the unique Core headquarters or sole permitted branch, never a lower GUID", () => {
+    const secondary = "00000000-0000-4000-8000-000000000001";
+    const rows = [{ id: secondary, legalEntityId: a, type: "branch" },
+      { id: branchA, legalEntityId: a, type: "headquarters" },
+      { id: branchC, legalEntityId: c, type: "headquarters" }];
+    expect(configuredDefaultBranch(rows, a)).toBe(branchA);
+    expect(configuredDefaultBranch(rows.filter(row => row.id !== branchA), a)).toBe(secondary);
+    expect(configuredDefaultBranch(rows.map(row => ({ ...row, type: "branch" })), a)).toBeNull();
+    expect(configuredDefaultBranch([...rows, { id: "66666666-6666-4666-8666-666666666666",
+      legalEntityId: a, type: "headquarters" }], a)).toBeNull();
   });
 });
