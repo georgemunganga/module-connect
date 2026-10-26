@@ -47,6 +47,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const creditPath = /^\/vendor-credits(?:\/|$)/.test(location.pathname);
   const invoicePath = /^\/(?:bills|inbox)(?:\/|$)/.test(location.pathname);
   const orderPath = /^\/purchase-orders(?:\/|$)/.test(location.pathname);
+  const principalOrderList = location.pathname === "/purchase-orders"
+    && new URLSearchParams(location.search).get("workflow") === "principal";
   const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
   const budgetPath = /^\/budgets(?:\/|$)/.test(location.pathname);
   const overviewPath = location.pathname === "/" || location.pathname === "/analytics";
@@ -58,7 +60,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const planList = /^\/plans\/?$/.test(location.pathname);
   const contractList = /^\/contracts\/?$/.test(location.pathname);
   const allReadSupported = vendorPath || itemPath || paymentPath
-    || requestList || planList || contractList;
+    || requestList || planList || contractList || principalOrderList;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
     return blockedShell ? blockedShell(chooseBranch) : chooseBranch;
@@ -101,7 +103,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (invoicePath && state.readiness.capabilities.invoiceIntake)
     || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
-    || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders))
+    || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders
+      || state.readiness.capabilities.principalDirectOrderDrafts))
     || (receivingPath && (state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))

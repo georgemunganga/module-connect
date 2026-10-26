@@ -2,7 +2,7 @@ import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
 import { LiveOrderExecutionList, LiveOrderExecutionDetail } from "./LiveOrderExecution";
 import { LiveOrderSourceEditor } from "./LiveOrderSourceEditor";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ShoppingBag, X } from "lucide-react";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "../components/ui";
 import { ActivityTimeline, DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
@@ -15,6 +15,9 @@ import {
   updateOwnOrderDraft, type OrderDetail, type OrderDraftInput, type OrderDraftLine,
   type OrderPage,
 } from "../../../src/platform/procurement-orders-api";
+import { listPrincipalOrders, type PrincipalOrderPage } from "../../../src/platform/procurement-principal-drafts-api";
+import { LivePrincipalOrderEditor } from "./LivePrincipalOrderEditor";
+import { LivePrincipalOrderDetail } from "./LivePrincipalOrderDetail";
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Try again. The order was not confirmed.";
 const money = (amount: number, currency: string) =>
@@ -32,11 +35,51 @@ function useCompany() {
 
 export function LiveOrderList() {
   const context = useCompany(); const { selection, authEpoch } = useErpShell();
+  const [params] = useSearchParams();
   if (selection.entityId && selection.entityId !== context.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
-  return context.capabilities.orders
+  if (params.get("workflow") === "principal")
+    return <PrincipalDraftList key={[authEpoch, context.tenantId, context.legalEntityId,
+      selection.branch ?? "all", context.principalId].join(":")} />;
+  const entry = context.capabilities.principalDirectOrderDrafts
+    && context.permissions.includes("procurement-po-read")
+    ? <div className="px-5 pt-4 sm:px-8"><Link to="/purchase-orders?workflow=principal" className="text-sm text-primary underline">Orders from approved requests</Link></div>
+    : null;
+  return <>{entry}{context.capabilities.orders
     ? <LiveOrderExecutionList key={[context.tenantId, context.legalEntityId, selection.branch, context.principalId].join(":")} />
-    : <LegacyOrderList key={[authEpoch, context.tenantId, context.legalEntityId, selection.branch, context.principalId, context.permissions.join("|")].join(":")} />;
+    : <LegacyOrderList key={[authEpoch, context.tenantId, context.legalEntityId, selection.branch, context.principalId, context.permissions.join("|")].join(":")} />}</>;
+}
+function PrincipalDraftList() {
+  const context = useCompany(), navigate = useNavigate();
+  const [page, setPage] = useState(1), [revision, setRevision] = useState(0);
+  const [data, setData] = useState<PrincipalOrderPage | null>(null);
+  const [loading, setLoading] = useState(true), [error, setError] = useState("");
+  const canRead = context.capabilities.principalDirectOrderDrafts && context.permissions.includes("procurement-po-read");
+  const canCreate = canRead && context.permissions.includes("procurement-po-convert") && context.effectiveBranchId !== null;
+  useEffect(() => {
+    if (!canRead) return;
+    const controller = new AbortController(); setLoading(true); setError(""); setData(null);
+    listPrincipalOrders(context.legalEntityId, page, controller.signal)
+      .then(result => { if (!controller.signal.aborted) setData(result); })
+      .catch(cause => { if (!controller.signal.aborted) setError(errorText(cause)); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [canRead, context.legalEntityId, page, revision]);
+  if (!canRead) return <div className="p-5 sm:p-8" role="alert">Orders from approved requests are unavailable for this account.</div>;
+  return <div className="p-5 sm:p-8"><LiveRecordDirectory key={page} title="Purchase Orders" entity="orders"
+    subtitle="Review internal drafts from approved requests. Submitting, issuing, supplier sending, and Finance posting are unavailable here."
+    columns={[{ key: "date", label: "Created", width: 125 }, { key: "number", label: "Order", width: 230 },
+      { key: "currency", label: "Currency", width: 90 }, { key: "status", label: "Status", width: 110 }]}
+    rows={(data?.items ?? []).map(order => ({ id: order.id, number: order.number, title: order.number,
+      status: order.status, path: `/purchase-orders/${order.id}?workflow=principal`,
+      fields: { date: order.createdAt?.slice(0, 10) || "", currency: order.currencyCode } }))}
+    loading={loading} error={error} total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25}
+    onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
+    action={canCreate ? <Button onClick={() => navigate("/purchase-orders/new?workflow=principal")}>Order from approved request</Button> : undefined}
+    emptyTitle="No orders from approved requests yet"
+    emptyDescription="Select approved request lines to prepare an internal draft." />
+    <Link to="/purchase-orders" className="mt-4 inline-block text-sm text-primary underline">Back to all purchase orders</Link>
+  </div>;
 }
 function LegacyOrderList() {
   const navigate = useNavigate();
@@ -68,8 +111,10 @@ function LegacyOrderList() {
 
 export function LiveOrderEditor() {
   const { id } = useParams(); const readiness = useCompany(); const { selection } = useErpShell();
+  const [params] = useSearchParams();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
+  if (params.get("workflow") === "principal") return <LivePrincipalOrderEditor />;
   if (readiness.capabilities.orders) return <LiveOrderSourceEditor />;
   return <LiveOrderEditorRecord key={[readiness.tenantId, readiness.legalEntityId, selection.branch,
     readiness.principalId, id ?? "new"].join(":")} />;
@@ -230,8 +275,10 @@ function LiveOrderEditorRecord() {
 
 export function LiveOrderDetail() {
   const context = useCompany(); const { selection } = useErpShell();
+  const [params] = useSearchParams();
   if (selection.entityId && selection.entityId !== context.legalEntityId)
     return <p role="status">Checking the selected company…</p>;
+  if (params.get("workflow") === "principal") return <LivePrincipalOrderDetail />;
   return context.capabilities.orders ? <LiveOrderExecutionDetail /> : <LegacyOrderDetail />;
 }
 function LegacyOrderDetail() {

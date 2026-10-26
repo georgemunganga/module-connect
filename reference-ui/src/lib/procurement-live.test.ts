@@ -21,6 +21,12 @@ function fixture(overrides: Record<string, unknown> = {}, flags: Record<string, 
       capabilities: { ...capabilities, ...flags } }));
 }
 describe("Procurement system-user readiness", () => {
+  it.each([undefined, false, true, "true", null])("admits the separate principal order draft only on an exact server true (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { principalDirectOrderDrafts: flag }));
+    expect(result.capabilities.principalDirectOrderDrafts).toBe(flag === true);
+    expect(result.capabilities.orders).toBe(false);
+  });
   it("accepts a permissioned Core user without an employee or assumed administrator role", async () => {
     const fetcher = fixture();
     const result = await fetchProcurementReadiness({ entityId: entity, branch }, undefined, fetcher);
