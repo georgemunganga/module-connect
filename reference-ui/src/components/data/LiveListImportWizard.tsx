@@ -63,6 +63,7 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
   const [preview, setPreview] = useState<MasterImportPreview | null>(null);
   const [acknowledged, setAcknowledged] = useState<number[]>([]);
   const [result, setResult] = useState<MasterImportResult | null>(null);
+  const [terminalExpired, setTerminalExpired] = useState(false);
   const [pending, setPending] = useState<ImportLocator | null>(null);
   const [definiteDenial, setDefiniteDenial] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -84,7 +85,7 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
     const token = ++generation.current;
     active.current = true; lock.current = false; controller.current = null;
     setBusy(false); setPending(null); setFile(null); setHeaders([]); setSample({}); setMapping({});
-    setPreview(null); setResult(null); setAcknowledged([]); setDefiniteDenial(false); setChecking(false);
+    setPreview(null); setResult(null); setTerminalExpired(false); setAcknowledged([]); setDefiniteDenial(false); setChecking(false);
     setDuplicatePolicy("reject"); setError(""); setNotice(""); setStage("configure");
     try { const saved = masterImportJournal.read(scope); if (saved) { setPending(saved); setNotice("Check whether the earlier import was saved before making another change."); } }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Import recovery is unavailable."); }
@@ -98,6 +99,7 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
     if (controller.current === request) { controller.current = null; lock.current = false; if (active.current) setBusy(false); }
   }
   async function chooseFile(next: File) {
+    if (!schema || pending) return;
     const token = generation.current;
     if (next.size < 1 || next.size > maxBytes || !/\.csv$/i.test(next.name)
       || new TextEncoder().encode(next.name).length > 128) { setError("Choose a CSV file up to 5 MB with a short filename."); return; }
@@ -118,7 +120,7 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
     finally { end(request); }
   }
   async function makePreview(rows: number[]) {
-    if (!file || pending) return;
+    if (!schema || !file || pending) return;
     const chosen = Object.values(mapping).filter(Boolean);
     if (new Set(chosen).size !== chosen.length || !schema.fields.filter(field => field.required).every(field => chosen.includes(field.key))) {
       setError("Map each required ERP field once before previewing."); return;
@@ -146,6 +148,8 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
       if (saved.state === "Committed") {
         if (saved.result.batchId !== locator.batchId) throw Error("The saved import reference did not match.");
         masterImportJournal.clear(scope, locator); setPending(null); setResult(saved.result); setStage("done"); config.onCommitted();
+      } else if (saved.state === "Expired") {
+        masterImportJournal.clear(scope, locator); setPending(null); setTerminalExpired(true); setStage("done");
       } else if (saved.previewSha256 === locator.previewSha256) {
         if (definiteDenial) {
           masterImportJournal.clear(scope, locator); setPending(null); setPreview(null); setStage("map"); setDefiniteDenial(false);
@@ -190,6 +194,9 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
       if (saved.state === "Committed") {
         masterImportJournal.clear(scope, pending); setPending(null); setResult(saved.result); setStage("done"); config.onCommitted(); return;
       }
+      if (saved.state === "Expired") {
+        masterImportJournal.clear(scope, pending); setPending(null); setTerminalExpired(true); setStage("done"); return;
+      }
       if (saved.previewSha256 !== pending.previewSha256 || Date.parse(pending.expiresAt) <= Date.now())
         throw Error("The saved preview expired or changed. Contact an administrator before retrying.");
       const written = await commitMasterImport(kind, companyId, {
@@ -203,14 +210,16 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
     } catch (cause) { if (current(token) && !request.signal.aborted) setError(cause instanceof Error ? cause.message : "The saved import could not be checked."); }
     finally { end(request); }
   }
-  const close = () => { controller.current?.abort(); onClose(); };
+  const close = () => { controller.current?.abort(); config.onRecoveryClosed(); onClose(); };
   const title = kind === "vendors" ? "Vendors" : "Items";
   return <Modal title={`Import ${title}`} onClose={close} wide>
     {stage === "done" && !pending ? <div className="space-y-5 text-center">
       <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><Check size={24} /></span>
-      <div><h3 className="text-lg font-semibold text-slate-800">ERP import complete</h3>
-        <p role="status" className="mt-2 text-sm text-slate-500">ERP saved this import. {result?.created ?? 0} created · {result?.skipped ?? 0} skipped.</p>
-        <p className="mt-2 text-xs text-slate-400">The confirmed records are now available in the company catalog.</p></div>
+      <div>{terminalExpired ? <><h3 className="text-lg font-semibold text-slate-800">Saved import expired</h3>
+        <p role="status" className="mt-2 text-sm text-slate-500">Start a new preview when ERP import is available.</p></>
+        : <><h3 className="text-lg font-semibold text-slate-800">ERP import complete</h3>
+          <p role="status" className="mt-2 text-sm text-slate-500">ERP saved this import. {result?.created ?? 0} created · {result?.skipped ?? 0} skipped.</p>
+          <p className="mt-2 text-xs text-slate-400">The confirmed records are now available in the company catalog.</p></>}</div>
       <Button onClick={close}>Done</Button>
     </div> : <div className="space-y-5">
       <ImportStageHeading stage={stage} title={title} />
@@ -220,7 +229,8 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
         <p>Check whether this import was saved before another change.</p>
         <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void checkSaved(pending)}>Check saved import</Button>
           {checking ? <span role="status">Checking…</span> : <Button variant="secondary" disabled={busy} onClick={() => void retrySaved()}>Retry saved command</Button>}</div>
-      </div> : stage === "configure" ? <div className="space-y-5">
+      </div> : !schema ? <p role="status" className="text-sm text-slate-500">{pending ? "Check the saved import before another change." : "ERP import is unavailable for this company."}</p>
+        : stage === "configure" ? <div className="space-y-5">
         <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-blue-200 bg-slate-50 px-5 py-6 text-center hover:bg-blue-50/40"
           onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const next = event.dataTransfer.files[0]; if (next) void chooseFile(next); }}>
           <FileUp className="mb-3 text-blue-500" size={28} />
@@ -282,9 +292,9 @@ export function LiveListImportWizard({ config, onClose }: { config: LiveImport; 
           setStage(stage === "preview" ? "map" : "configure"); if (stage === "preview") setPreview(null);
         }}><ArrowLeft size={14} /> Back</Button>}</div>
         <div className="flex gap-2"><Button variant="secondary" onClick={close}>Cancel</Button>
-          {!pending && stage === "configure" && <Button disabled={!file || busy} onClick={() => setStage("map")}>Next <ArrowRight size={14} /></Button>}
-          {!pending && stage === "map" && <Button disabled={!file || busy} onClick={() => void makePreview([])}>Preview on ERP <ArrowRight size={14} /></Button>}
-          {!pending && stage === "preview" && preview && <Button disabled={busy || preview.willError > 0 || preview.willCreate + preview.willSkip === 0 || Date.parse(preview.expiresAt) <= Date.now()}
+          {!pending && schema && stage === "configure" && <Button disabled={!file || busy} onClick={() => setStage("map")}>Next <ArrowRight size={14} /></Button>}
+          {!pending && schema && stage === "map" && <Button disabled={!file || busy} onClick={() => void makePreview([])}>Preview on ERP <ArrowRight size={14} /></Button>}
+          {!pending && schema && stage === "preview" && preview && <Button disabled={busy || preview.willError > 0 || preview.willCreate + preview.willSkip === 0 || Date.parse(preview.expiresAt) <= Date.now()}
             onClick={() => void commit()}>Confirm import</Button>}</div>
       </div>
     </div>}

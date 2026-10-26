@@ -76,4 +76,20 @@ describe("server master import transport", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ code: "import-unavailable" }, 503)));
     await expect(getMasterImportSchema("items", company)).rejects.toThrow(/unavailable/);
   });
+  it("treats only the persisted exact Expired envelope as terminal, while clock-expired Previewed stays pending", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(json({ state: "Previewed", ...preview, expiresAt: "2020-01-01T00:00:00Z" }))
+      .mockResolvedValueOnce(json({ state: "Expired", batchId }))
+      .mockResolvedValueOnce(json({ state: "Expired", batchId, expiresAt: "2020-01-01T00:00:00Z" }));
+    vi.stubGlobal("fetch", fetch);
+    expect((await recoverMasterImport("vendors", company, batchId)).state).toBe("Previewed");
+    expect(await recoverMasterImport("vendors", company, batchId)).toEqual({ state: "Expired", batchId });
+    await expect(recoverMasterImport("vendors", company, batchId)).rejects.toThrow(/saved import/);
+  });
+  it("reports the server preview quota without claiming or committing a batch", async () => {
+    const fetch = vi.fn().mockResolvedValue(json({ code: "import-staging-full" }, 429));
+    vi.stubGlobal("fetch", fetch);
+    await expect(previewMasterImport("vendors", company, { schemaVersion: 1, fileName: "v.csv", csvBase64: "YQ==",
+      mapping: {}, duplicatePolicy: "reject", acknowledgedSimilarityRows: [] })).rejects.toThrow(/capacity is full/);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });

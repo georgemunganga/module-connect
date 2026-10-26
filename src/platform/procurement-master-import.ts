@@ -11,7 +11,8 @@ export type MasterImportPreview = { batchId: string; previewSha256: string; expi
 export type MasterImportResult = { batchId: string; created: number; skipped: number;
   rows: Array<{ rowNumber: number; disposition: "create" | "skip"; recordId: string | null }> };
 export type MasterImportRecovery = ({ state: "Previewed" } & MasterImportPreview)
-  | { state: "Committed"; batchId: string; result: MasterImportResult };
+  | { state: "Committed"; batchId: string; result: MasterImportResult }
+  | { state: "Expired"; batchId: string };
 
 export class MasterImportError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string) { super(message); }
@@ -102,6 +103,7 @@ async function request(kind: MasterImportKind, companyId: string, path: string,
       : response.status === 403 ? "You no longer have permission to import these records."
       : response.status === 409 ? "This import changed or expired. Check its saved result."
       : response.status === 413 ? "The CSV is too large for the ERP import limit."
+      : response.status === 429 ? "Import capacity is full. Check an earlier saved preview or try again later."
       : response.status === 422 ? "The import has invalid rows. Review the server preview."
       : response.status === 503 ? "ERP import is unavailable for this company."
       : "The ERP import is unavailable. Try again later.");
@@ -172,6 +174,8 @@ export async function recoverMasterImport(kind: MasterImportKind, companyId: str
   if (!object(value) || value.batchId !== batchId)
     throw new MasterImportError(0, "invalid-recovery", "The saved import result could not be verified.");
   if (value.state === "Previewed") return { ...parsePreview(value), state: "Previewed" };
+  if (value.state === "Expired" && Object.keys(value).sort().join("|") === "batchId|state")
+    return { state: "Expired", batchId };
   if (value.state === "Committed") {
     const result = parseResult(value.result);
     if (result.batchId === batchId) return { state: "Committed", batchId, result };

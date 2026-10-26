@@ -12,7 +12,8 @@ const capabilityKeys = ["vendorDraft", "itemDraft", "requestDraft", "approvals",
   "configurationDraft", "contractDraft", "sourcingDraft"];
 type Kind = "vendors" | "items";
 async function setup(page: Page, kind: Kind, options: { grant?: boolean; available?: boolean; lostCommit?: boolean;
-  holdPreview?: (resume: () => void) => void } = {}) {
+  holdPreview?: (resume: () => void) => void; savedState?: "Committed" | "Expired" | "Previewed";
+  unavailableAfterCommit?: boolean; quotaPreview?: boolean } = {}) {
   const previewBodies: Array<Record<string, unknown>> = [];
   const commitBodies: Array<Record<string, unknown>> = [];
   await page.addInitScript(id => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: id })), company);
@@ -36,7 +37,7 @@ async function setup(page: Page, kind: Kind, options: { grant?: boolean; availab
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
       capabilities: Object.fromEntries(capabilityKeys.map(key => [key, ["vendorDraft", "itemDraft"].includes(key)])) });
     if (path === `/api/procurement/v1/${kind}`) return json({ items: [], total: 0, page: 1, pageSize: 25 });
-    if (path === `/api/procurement/v1/${kind}/import/schema`) return options.available === false
+    if (path === `/api/procurement/v1/${kind}/import/schema`) return options.available === false || (options.unavailableAfterCommit && commitBodies.length > 0)
       ? json({ code: "import-unavailable" }, 503)
       : json({ schemaVersion: 1, kind, fields: kind === "vendors"
         ? [{ key: "legalName", label: "Legal name", required: true }, { key: "displayName", label: "Display name", required: true },
@@ -48,6 +49,7 @@ async function setup(page: Page, kind: Kind, options: { grant?: boolean; availab
       headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${kind}-import-template.csv"` }, body: "Code,Name\r\n" });
     if (path === `/api/procurement/v1/${kind}/import/preview`) {
       const body = req.postDataJSON() as Record<string, unknown>; previewBodies.push(body);
+      if (options.quotaPreview) return json({ code: "import-staging-full" }, 429);
       if (options.holdPreview) await new Promise<void>(resolve => options.holdPreview?.(resolve));
       const acknowledged = (body.acknowledgedSimilarityRows as number[]).includes(2);
       return json({ batchId: acknowledged ? finalBatch : firstBatch, previewSha256: acknowledged ? nextDigest : digest, expiresAt: expiry,
@@ -65,6 +67,11 @@ async function setup(page: Page, kind: Kind, options: { grant?: boolean; availab
     if (path === `/api/procurement/v1/${kind}/import/${finalBatch}`) return json({ state: "Committed", batchId: finalBatch,
       result: { batchId: finalBatch, created: 1, skipped: 0,
         rows: [{ rowNumber: 2, disposition: "create", recordId: "66666666-6666-4666-8666-666666666666" }] } });
+    if (path === `/api/procurement/v1/${kind}/import/${firstBatch}` && options.savedState === "Expired")
+      return json({ state: "Expired", batchId: firstBatch });
+    if (path === `/api/procurement/v1/${kind}/import/${firstBatch}` && options.savedState === "Previewed")
+      return json({ state: "Previewed", batchId: firstBatch, previewSha256: digest,
+        expiresAt: "2020-01-01T00:00:00Z", rows: [], willCreate: 0, willSkip: 0, willError: 0 });
     if (path === `/api/procurement/v1/${kind}/import/${firstBatch}`) return kind === "items"
       ? json({ state: "Committed", batchId: firstBatch, result: { batchId: firstBatch, created: 1, skipped: 0,
         rows: [{ rowNumber: 2, disposition: "create", recordId: "66666666-6666-4666-8666-666666666666" }] } })
@@ -131,8 +138,8 @@ test("mocked controlled 503 keeps the original toolbar and starts no browser-loc
   expect(calls.commitBodies).toHaveLength(0);
 });
 
-test("mocked lost Item commit survives hard reload and recovers with GET, without a second POST", async ({ page }, testInfo) => {
-  const calls = await setup(page, "items", { grant: true, lostCommit: true });
+test("mocked late Committed result remains recoverable when new previews are unavailable", async ({ page }, testInfo) => {
+  const calls = await setup(page, "items", { grant: true, lostCommit: true, unavailableAfterCommit: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/procurement/workspace/items");
   await open(page, "items");
@@ -155,6 +162,41 @@ test("mocked lost Item commit survives hard reload and recovers with GET, withou
   await page.getByRole("dialog", { name: "Import Items" }).getByRole("button", { name: "Check saved import" }).click();
   await expect(page.getByRole("dialog", { name: "Import Items" }).getByText("ERP saved this import.")).toBeVisible();
   expect(calls.commitBodies).toHaveLength(1);
+});
+
+test("mocked persisted Expired clears only the saved locator and sends no replacement command", async ({ page }) => {
+  const calls = await setup(page, "items", { grant: true, lostCommit: true, unavailableAfterCommit: true, savedState: "Expired" });
+  await page.goto("/procurement/workspace/items"); await open(page, "items");
+  const wizard = page.getByRole("dialog", { name: "Import Items" });
+  await wizard.getByLabel("Choose import file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
+    buffer: Buffer.from("Code,Name,Kind,Category code,Unit code\nIT-1,Widget,Goods,IT,each\n") });
+  await wizard.getByRole("button", { name: "Next", exact: true }).click();
+  await wizard.getByRole("button", { name: /Preview on ERP/ }).click();
+  await wizard.getByRole("button", { name: "Confirm import" }).click();
+  await expect(wizard.getByText("Check whether this import was saved before another change.")).toBeVisible();
+  await page.reload(); await open(page, "items");
+  const recovered = page.getByRole("dialog", { name: "Import Items" });
+  await recovered.getByRole("button", { name: "Check saved import" }).click();
+  await expect(recovered.getByText("Saved import expired")).toBeVisible();
+  await expect(recovered.getByText("Start a new preview when ERP import is available.")).toBeVisible();
+  expect(calls.commitBodies).toHaveLength(1);
+  const remaining = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("erp.procurement.master-import.v1:")));
+  expect(remaining).toEqual([]);
+});
+
+test("mocked preview quota leaves the import open for correction without claiming a command", async ({ page }) => {
+  const calls = await setup(page, "vendors", { grant: true, quotaPreview: true });
+  await page.goto("/procurement/workspace/vendors"); await open(page, "vendors");
+  const wizard = page.getByRole("dialog", { name: "Import Vendors" });
+  await wizard.getByLabel("Choose import file").setInputFiles({ name: "vendors.csv", mimeType: "text/csv",
+    buffer: Buffer.from("Legal name,Display name,Country code\nAcme,Acme,ZM\n") });
+  await wizard.getByRole("button", { name: "Next", exact: true }).click();
+  await wizard.getByRole("button", { name: /Preview on ERP/ }).click();
+  await expect(wizard.getByRole("alert")).toContainText("Import capacity is full");
+  expect(calls.previewBodies).toHaveLength(1);
+  expect(calls.commitBodies).toHaveLength(0);
+  const remaining = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("erp.procurement.master-import.v1:")));
+  expect(remaining).toEqual([]);
 });
 
 test("mocked company change aborts a late preview and cannot reach commit", async ({ page }) => {
