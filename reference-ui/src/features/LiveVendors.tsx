@@ -9,6 +9,7 @@ import { RecordTable } from "../components/data/RecordTable";
 import { LiveCatalogDirectory } from "../components/data/LiveCatalogDirectory";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { useScopedCsvExport } from "../lib/useScopedCsvExport";
+import { useLiveMasterImport } from "../lib/useLiveMasterImport";
 import {
   addVendorContact, addVendorSite, addVendorQualification, createVendorDraft, getVendorDraft,
   getVendorOpenOrders,
@@ -64,6 +65,10 @@ function VendorListRecord() {
   const csv = useScopedCsvExport("vendors", legalEntityId, scopeKey,
     capabilities.vendorDraft === true && ["procurement-access", "procurement-vendor-read", "procurement-vendor-export"]
       .every(action => permissions.includes(action)), { search, status });
+  const imported = useLiveMasterImport("vendors", legalEntityId,
+    { tenantId, companyId: legalEntityId, principalId, branch: `${selection.branchScope ?? ""}:${selection.branch ?? ""}`, kind: "vendors" },
+    scopeKey, capabilities.vendorDraft === true && ["procurement-access", "procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-import"]
+      .every(action => permissions.includes(action)), () => setRevision(value => value + 1));
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(""); setData(null);
@@ -86,6 +91,7 @@ function VendorListRecord() {
       search={search} onSearch={value => { setPage(1); setSearch(value); }} status={status} statuses={vendorStatuses}
       onStatusChange={value => { setPage(1); setStatus(value); }} onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
       exportCsv={csv}
+      liveImport={imported.liveImport} unavailableImportReason={imported.unavailableImportReason}
       action={canCreate ? <Link to="/vendors/new"><Button><Plus size={16} className="mr-2 inline" />Add vendor</Button></Link> : undefined}
       emptyTitle="Every purchase starts with a vendor"
       emptyDescription="Create and manage your vendors and their contact persons, all in one place." />

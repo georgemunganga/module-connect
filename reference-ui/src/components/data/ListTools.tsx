@@ -16,6 +16,8 @@ import {
   type ImportKind,
   type ImportResult,
 } from "./ListImportWizard";
+import { LiveListImportWizard } from "./LiveListImportWizard";
+import type { LiveImport } from "../../lib/useLiveMasterImport";
 
 export type ListColumn = { key: string; label: string; width?: number };
 export type ListFilterField = {
@@ -47,6 +49,7 @@ export function ListTools({
   showSavedView = true,
   onExport,
   onImport,
+  liveImport,
   unavailableImportReason,
   unavailableAllExportReason,
   unavailableExportReason,
@@ -82,6 +85,7 @@ export function ListTools({
     kind: ImportKind,
     duplicateMode: DuplicateMode,
   ) => ImportResult;
+  liveImport?: LiveImport;
   unavailableImportReason?: string;
   unavailableAllExportReason?: string;
   unavailableExportReason?: string;
@@ -183,7 +187,7 @@ export function ListTools({
                   ))}
                 </div>
               )}
-              {onImport && (
+              {(onImport || liveImport) && (
                 <>
                   <button
                     role="menuitem"
@@ -215,7 +219,7 @@ export function ListTools({
                   )}
                 </>
               )}
-              {!onImport && unavailableImportReason && (
+              {!onImport && !liveImport && unavailableImportReason && (
                 <div className="px-3 py-2 text-slate-500" role="note">
                   <span className="flex items-center gap-2"><Upload size={14} /> Import unavailable</span>
                   <span className="mt-1 block text-xs">{unavailableImportReason}</span>
@@ -354,6 +358,7 @@ export function ListTools({
           notify={notify}
         />
       )}
+      {importOpen && liveImport && <LiveListImportWizard config={liveImport} onClose={() => setImportOpen(false)} />}
       <span className="sr-only" aria-live="polite">
         List tools for {label}
       </span>

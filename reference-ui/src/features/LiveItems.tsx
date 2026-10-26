@@ -10,6 +10,7 @@ import { invoiceDecimal } from "./invoice-values";
 import { ItemApiError, catalogPriceCanEdit, catalogPriceEditDraft, updateCatalogPrice, type CatalogPriceEdit } from "../../../src/platform/procurement-items-api";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { useScopedCsvExport } from "../lib/useScopedCsvExport";
+import { useLiveMasterImport } from "../lib/useLiveMasterImport";
 import {
   activateItem, addCatalogPrice, createItemDraft, deactivateItem, getItemDraft,
   listCatalogPrices, listItemDrafts, publishCatalogPrice, updateItemDraft, withdrawCatalogPrice,
@@ -60,6 +61,11 @@ function ManagedItemList() {
   const csv = useScopedCsvExport("items", company, scopeKey,
     readiness?.capabilities.itemDraft === true && ["procurement-access", "procurement-item-manage", "procurement-item-export"]
       .every(action => readiness?.permissions.includes(action) === true), { search });
+  const imported = useLiveMasterImport("items", company,
+    { tenantId: readiness?.tenantId ?? "", companyId: company, principalId: readiness?.principalId ?? "",
+      branch: `${selection.branchScope ?? ""}:${selection.branch ?? ""}`, kind: "items" },
+    scopeKey, readiness?.capabilities.itemDraft === true && ["procurement-access", "procurement-item-manage", "procurement-item-import"]
+      .every(action => readiness?.permissions.includes(action) === true), () => setRevision(value => value + 1));
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(""); setData(null);
@@ -81,6 +87,7 @@ function ManagedItemList() {
       search={search} onSearch={value => { setPage(1); setSearch(value); }}
       onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
       exportCsv={csv}
+      liveImport={imported.liveImport} unavailableImportReason={imported.unavailableImportReason}
       action={canManage ? <Link to="/items/new"><Button><Plus size={16} className="mr-2 inline" />Add item</Button></Link> : undefined}
       emptyTitle="Add your first item" emptyDescription="Create a draft item before making it available for buying." />
   </div>;

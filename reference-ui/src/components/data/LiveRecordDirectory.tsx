@@ -5,6 +5,7 @@ import { Badge, Button, EmptyState, Input, Modal, PageHeader, Panel, Select } fr
 import { ListTools, type ExportScope, type ListColumn, type ListFilterField } from "./ListTools";
 import { ActiveFilterChips } from "./ActiveFilterChips";
 import { StandardDataTable } from "./StandardDataTable";
+import type { LiveImport } from "../../lib/useLiveMasterImport";
 
 export type DirectoryRow = { id: string; number: string; title: string; status: string; path: string; fields: Record<string, string> };
 export type DirectoryServerQuery = { search: string; onSearch: (value: string) => void;
@@ -13,7 +14,7 @@ export type DirectoryServerQuery = { search: string; onSearch: (value: string) =
 export type DirectorySortComparators = Record<string, (left: DirectoryRow, right: DirectoryRow) => number>;
 /** Shared imported directory presentation. The adapter owns server scope, paging and all mutations. */
 export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, loading, error, total, page, pageSize,
-  onPage, onRefresh, action, emptyTitle, emptyDescription, tabs = false, serverQuery, sortComparators, contextControls, initialSort, exportCsv }: {
+  onPage, onRefresh, action, emptyTitle, emptyDescription, tabs = false, serverQuery, sortComparators, contextControls, initialSort, exportCsv, liveImport, unavailableImportReason }: {
   title: string; subtitle: string; entity: string; rows: DirectoryRow[]; columns: ListColumn[];
   loading: boolean; error: string; total: number; page: number; pageSize: number;
   onPage: (page: number) => void; onRefresh: () => void; action?: ReactNode;
@@ -21,6 +22,7 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
   sortComparators?: DirectorySortComparators; contextControls?: ReactNode; initialSort?: string;
   exportCsv?: { allowed: boolean; selectedAllowed?: boolean; busy: boolean; error: string; notice: string;
     onExport: (scope: ExportScope, selectedIds?: readonly string[]) => void };
+  liveImport?: LiveImport; unavailableImportReason?: string;
 }) {
   const [query, setQuery] = useState(""), [serverInput, setServerInput] = useState(serverQuery?.search ?? "");
   const [sort, setSort] = useState(initialSort ?? (serverQuery ? "server" : "newest"));
@@ -67,7 +69,7 @@ export function LiveRecordDirectory({ title, subtitle, entity, rows, columns, lo
           exportCsv.onExport(scope, scope === "selected" ? [...selection] : undefined);
         } : () => setNotice("Export is not connected for this directory.")}
         onRefresh={() => { setSelected([]); setPreviewId(null); onRefresh(); }} onResetWidths={() => setWidths({})} notify={setNotice}
-        unavailableImportReason="Import is not available yet. Add records individually."
+        liveImport={liveImport} unavailableImportReason={unavailableImportReason ?? "Import is not available yet. Add records individually."}
         unavailableExportReason={exportCsv ? !exportCsv.allowed ? "You do not have permission to export these records."
           : exportCsv.busy ? "Preparing your CSV…" : loading ? "Wait for the list to load."
             : error ? "Refresh the list before exporting." : undefined : "Export is not available for this page yet."}
