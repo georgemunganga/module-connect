@@ -155,3 +155,25 @@ test("mocked company change aborts a late preview and cannot reach commit", asyn
   await expect(page.getByRole("button", { name: "Confirm import" })).toHaveCount(0);
   expect(calls.commitBodies).toHaveLength(0);
 });
+
+test("mocked scope change rejects a late local file read before mapping", async ({ page }) => {
+  const calls = await setup(page, "items", { grant: true });
+  await page.goto("/procurement/workspace/items"); await open(page, "items");
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = function (this: File) {
+      const chosen = this;
+      return new Promise<ArrayBuffer>(resolve => {
+        (window as Window & { releaseImportFile?: () => Promise<void> }).releaseImportFile = async () => resolve(await original.call(chosen));
+      });
+    };
+  });
+  await page.getByLabel("Choose import file").setInputFiles({ name: "items.csv", mimeType: "text/csv",
+    buffer: Buffer.from("Code,Name,Kind,Category code,Unit code\nIT-1,Widget,Goods,IT,each\n") });
+  await expect.poll(() => page.evaluate(() => Boolean((window as Window & { releaseImportFile?: () => Promise<void> }).releaseImportFile))).toBe(true);
+  await page.evaluate(() => { localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: "77777777-7777-4777-8777-777777777777" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "erp.shell.state.v1" })); });
+  await page.evaluate(async () => { await (window as Window & { releaseImportFile?: () => Promise<void> }).releaseImportFile?.(); });
+  await expect(page.getByRole("button", { name: /Preview on ERP/ })).toHaveCount(0);
+  expect(calls.previewBodies).toHaveLength(0); expect(calls.commitBodies).toHaveLength(0);
+});
