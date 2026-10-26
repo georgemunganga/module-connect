@@ -56,7 +56,10 @@ async function setup(page: Page, options: { capability?: boolean; convert?: bool
       return json({ ...ack, commandKey: writes[0].key }, 201);
     }
     if (path.startsWith(`${api}/principal-direct-command-receipts/Create/`)) {
-      expect(path.endsWith(writes[0]?.key)).toBe(true); return saved ? json(ack, 201) : json({ code: "missing" }, 404);
+      expect(path.endsWith(writes[0]?.key)).toBe(true);
+      return saved ? json({ operation: "Create", commandKey: writes[0].key,
+        originalStatusCode: 201, responseJson: JSON.stringify(ack), recordedHistoricalResult: true,
+        canSubmit: false, canIssue: false }) : json({ code: "missing" }, 404);
     }
     if (path === `${api}/${order}/principal-direct-draft`) return json({ id: order, number: "PO-DRAFT-1", supplierId: supplier,
       supplierDisplayName: "Approved supplier", branchRef: branch, branchDisplayName: "Lusaka", currencyCode: "ZMW",

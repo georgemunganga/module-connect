@@ -148,12 +148,16 @@ export async function recoverPrincipalCommand(company: string, command: Principa
   if (!validId(command.key) || command.orderId !== null && !validId(command.orderId)) throw invalid();
   if (command.operation === "Create" && (!command.draft || !command.sources
       || createPrincipalBody(command.draft, command.sources) !== command.body)) throw invalid();
-  // The actor-owned GET replays the retained acknowledgement itself, with its
-  // original status. It does not expose a separate receipt wrapper.
   const { status, body } = await call(company, `/principal-direct-command-receipts/${command.operation}/${command.key}`);
-  if (status !== (command.operation === "Create" ? 201 : 200)
-    || !reply(body, command.operation, command.key, command.orderId)) throw invalid();
-  return body;
+  const originalStatus = command.operation === "Create" ? 201 : 200;
+  if (status !== 200 || !object(body) || body.operation !== command.operation
+    || body.commandKey !== command.key || body.originalStatusCode !== originalStatus
+    || body.recordedHistoricalResult !== true || body.canSubmit !== false
+    || body.canIssue !== false || typeof body.responseJson !== "string") throw invalid();
+  let original: unknown;
+  try { original = JSON.parse(body.responseJson); } catch { throw invalid(); }
+  if (!reply(original, command.operation, command.key, command.orderId)) throw invalid();
+  return original;
 }
 
 const scaled = (value: unknown): bigint | null => {
