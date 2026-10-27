@@ -186,7 +186,7 @@ test("unconfirmed rfqs create preserves entries and blocks repeat submission", a
   await page.getByLabel("What are you buying?", { exact: true }).fill("Unconfirmed quotes");
   await page.getByLabel("Item or service 1", { exact: true }).fill("Chair");
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("save result was not confirmed");
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "save result was not confirmed" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
   await expect(page.getByLabel("What are you buying?", { exact: true })).toHaveValue("Unconfirmed quotes");
   await page.getByRole("link", { name: /^Review saved / }).click();

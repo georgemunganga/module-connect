@@ -120,7 +120,7 @@ test("a delayed directory from the old company cannot populate the new company v
   await expect(page.getByRole("heading", { name: "Alpha Supplier", exact: true })).toBeVisible();
   await setup.directoryRequested;
   await page.evaluate(entityId => {
-    localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId }));
+    localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" }));
     window.dispatchEvent(new StorageEvent("storage", { key: "erp.shell.state.v1" }));
   }, otherCompanyId);
   await expect(page.getByRole("alert")).toContainText("Vendor not found");

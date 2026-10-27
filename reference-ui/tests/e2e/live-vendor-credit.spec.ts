@@ -92,7 +92,9 @@ test("missing capability never mounts browser-local credit mutations", async ({ 
 });
 test("read-only invoice access cannot create a credit", async ({ page }) => {
   const setup = await fixture(page, { readOnly: true }); await page.goto("/procurement/workspace/vendor-credits/new");
-  await expect(page.getByText("Invoice capture and read access are required", { exact: false })).toBeVisible(); expect(setup.writes).toEqual([]);
+  await expect(page.getByRole("alert")).toContainText("You do not have permission to open this Procurement page for the selected company.");
+  await expect(page.getByRole("button", { name: "Save as Draft", exact: true })).toHaveCount(0);
+  expect(setup.writes).toEqual([]);
 });
 
 
