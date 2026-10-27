@@ -1,6 +1,16 @@
 # M5a principal purchase order UI integration plan
 
-Status: UI integration plan plus source-only transport and journal. No M5a UI action, schema, feature flag, or production workflow is accepted by this document. The starting UI is published main `46782ccdb502d8be34e5abb7e25ff659cd325582`; backend PR119 remains draft and its final wire contract, migration, finite roles, and runtime evidence remain to be bound.
+Status: draft UI integration; form-driven private UAT in progress. Published UI main is `46782ccdb502d8be34e5abb7e25ff659cd325582`; UI PR87 and backend PR119 remain draft. No production activation or whole-module completion is claimed.
+
+## Verification checkpoint — 27 October 2026
+
+UI source `9b2defac773376db7be07e60792a2497f0b83fdd` restored the earlier PO tax column and approved-request link. Type checking, 47 focused tests, the live build and real-cookie five-role page reads passed. Buyer list/detail/tabs and Finance/reviewer/issuer/dispatch queues rendered without page errors, API failures or business writes. The owner confirmed unchanged Procurement/Core approval rows and zero active test sessions. This is read-render evidence, not full imported-feature parity or form-driven UAT.
+
+Subsequent source `79a19df28b1d3e95d4ab8798c7f27cd1ff53f9d0` adds currency to exact approval amounts using the existing server field, with malformed/missing currency rejected. Completed purpose-only issue, acknowledgment and release actions return to their work queue after verifying the original command and closed task. Type checking, 51 focused transport/journal/rule tests and the live build passed. The fresh form-driven flow subsequently passed against backend product `2bebdf70b80a9846e0a1ec399a355b32ada40147`: ten original journal-matched UI commands, including an actual dropped Issue response, same-session hard reload and GET-only recovery after exactly one Issue POST. Native owner reconciliation verified ten receipts/audit actions/events, both Core approvals, correct Ordered/Released quantities, thirteen original PO rows and the 211-table schema unchanged, and all five normal-cookie sessions logged out. Owner receipt: `c640cdc6c166ed2d89ef17c10f30fc2a1183633e602771db924844d3436d9117`. PR setup used the API; subsequent PO operations used the actual UI. This is bounded form acceptance, not full Procurement UAT or production deployment.
+
+The private API passed its governed same-row lifecycle and four release scenarios. A further actual UI-preparation test found funded Draft Finance detail returning 409 after a successful capture. Backend source `48cc33019dcfec7afe874e1493743f846125829b` corrected that read and the repeat-capture action, passed 65 focused checks and recovered the same original Funding key by GET without changing business rows. See the ERP M5a implementation record for exact receipts and limits. Manual Finance evidence and supplier observation remain distinct from ledger posting or supplier delivery.
+
+## Initial transport-only plan — historical
 
 The focused source increment adds `src/platform/procurement-principal-governance-api.ts` and `reference-ui/src/lib/principal-order-governance-journal.ts`. It covers the seven command envelopes, actor-owned original-key GET recovery, buyer/Finance/reviewer reads, and the newer purpose-only Issue/Ack task reads. It preserves gross decimal(38,8) and line decimal(18,4) strings without JavaScript number conversion. A journal claim binds tenant, company, Core principal, selected branch, order, operation, original body/key, and the original direct-source digest before a POST. There are no M5a buttons or new pages yet. The draft backend now contains the governed and purpose-only read routes described below, including the top-level original source digest in reviewer detail, but they have not passed a real API cohort or been merged.
 
@@ -46,3 +56,18 @@ Organisation-wide **read** queues may use explicit All only where the server con
 Use the existing list empty states for no assigned review/Finance work and the detail alert style for 403, 404, 409 stale evidence, 422 invalid input, and 503 unavailable schema or policy. Keep the saved command key visible on uncertainty. Show when a published PO policy, a named authority grant, a current manual Finance policy/evidence window, an allowed manual dispatch channel, or independent actor is missing. Supplier dispatch and external Finance remain explicitly manual and unverified until their separate evidence is recorded.
 
 Before merging UI code: add focused transport/validator tests for exact four-decimal money and every receipt operation; mocked desktop/mobile browser tests for each actor-only entry, All-read/branch-write fencing, funded-Draft release, flag-off historical recovery, lost acknowledgment/reload, wrong actor, stale versions, and denied self/cross-branch actions. Then require a fresh isolated PostgreSQL cohort with real Core password cookies, distinct workerless buyer, Finance recorder, named reviewer, issuer, and dispatch confirmer; verify original keys, Core case/assignment/decisions, same PO row and source allocation transitions, receipts/audit/outbox, normal logout, and preservation of original rows. These are future gates, not results claimed here.
+
+
+The interrupted earlier UI attempts remain preserved. In one continuation all
+three remaining commands succeeded, but the harness incorrectly expected eight
+unique keys for three actions. Its failed result was reconciled without repeating
+those writes. The fresh uninterrupted run above corrected the harness timing and
+count checks, retained pending command keys before POST, drained its owned
+requests before cleanup and used the same sessionStorage after Issue reload.
+
+The server subsequently identified four governed queue GETs missing from its
+reviewed All-branches collection allowlist. That narrow backend correction is
+separately tested; detail/receipt recovery and every write still require a
+selected permitted branch. The prior UI form result does not claim acceptance
+of that later server revision. Existing screens and shared ERP components remain
+the UI source; no replacement UI is introduced.
