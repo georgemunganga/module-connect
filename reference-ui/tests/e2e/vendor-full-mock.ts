@@ -8,7 +8,7 @@ type Row=Record<string,unknown>;
 export async function fullVendorMock(page:Page,options:{edit?:boolean;denyEdit?:boolean;stale?:boolean;loseChild?:boolean;qualificationStatus?:string;secondBranch?:boolean}={}) {
   const writes:{method:string;path:string;body:Row}[]=[];
   let saved:Row={id:vendor,number:"VEN-1",legalName:"Full Vendor Ltd",displayName:"Full Vendor",countryCode:"ZM",status:"Draft",isOrderable:false,version:1,defaultCurrencyCode:"ZMW",isLocal:true,contacts:[{id:contact,name:"Jane",isPrimary:false}],sites:[],qualifications:options.qualificationStatus?[{id:qualification,qualificationType:"Reviewed clearance",reviewStatus:options.qualificationStatus}]:[],attributes:[],createdAt:"2026-10-22T00:00:00Z"};
-  await page.addInitScript(id=>localStorage.setItem("erp.shell.state.v1",JSON.stringify({entityId:id})),company);
+  await page.addInitScript(id=>{if(!localStorage.getItem("erp.shell.state.v1"))localStorage.setItem("erp.shell.state.v1",JSON.stringify({entityId:id}));},company);
   await page.route("**/api/**",async route=>{
     const request=route.request(),path=new URL(request.url()).pathname,method=request.method();
     const json=(body:unknown,status=200)=>route.fulfill({status,contentType:"application/json",body:JSON.stringify(body)});

@@ -58,6 +58,7 @@ for (const [path, heading, content] of [
     await page.goto(`/procurement/workspace${path}`);
     const main = page.getByRole("main");
     await expect(main.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    if (path.startsWith("/rfqs/")) await main.getByRole("tab", { name: "Items (1)" }).click();
     await expect(main.getByText(content, { exact: true })).toBeVisible();
     await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Publish|Return for changes)/i })).toHaveCount(0);
     await expect(main.getByRole("link", { name: /^(Add|New |Edit)/i })).toHaveCount(0);
