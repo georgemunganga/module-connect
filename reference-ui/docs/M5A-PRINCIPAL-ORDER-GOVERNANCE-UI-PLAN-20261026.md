@@ -1,0 +1,73 @@
+# M5a principal purchase order UI integration plan
+
+Status: draft UI integration; form-driven private UAT in progress. Published UI main is `46782ccdb502d8be34e5abb7e25ff659cd325582`; UI PR87 and backend PR119 remain draft. No production activation or whole-module completion is claimed.
+
+## Verification checkpoint — 27 October 2026
+
+UI source `9b2defac773376db7be07e60792a2497f0b83fdd` restored the earlier PO tax column and approved-request link. Type checking, 47 focused tests, the live build and real-cookie five-role page reads passed. Buyer list/detail/tabs and Finance/reviewer/issuer/dispatch queues rendered without page errors, API failures or business writes. The owner confirmed unchanged Procurement/Core approval rows and zero active test sessions. This is read-render evidence, not full imported-feature parity or form-driven UAT.
+
+Subsequent source `79a19df28b1d3e95d4ab8798c7f27cd1ff53f9d0` adds currency to exact approval amounts using the existing server field, with malformed/missing currency rejected. Completed purpose-only issue, acknowledgment and release actions return to their work queue after verifying the original command and closed task. Type checking, 51 focused transport/journal/rule tests and the live build passed. The fresh form-driven flow subsequently passed against backend product `2bebdf70b80a9846e0a1ec399a355b32ada40147`: ten original journal-matched UI commands, including an actual dropped Issue response, same-session hard reload and GET-only recovery after exactly one Issue POST. Native owner reconciliation verified ten receipts/audit actions/events, both Core approvals, correct Ordered/Released quantities, thirteen original PO rows and the 211-table schema unchanged, and all five normal-cookie sessions logged out. Owner receipt: `c640cdc6c166ed2d89ef17c10f30fc2a1183633e602771db924844d3436d9117`. PR setup used the API; subsequent PO operations used the actual UI. This is bounded form acceptance, not full Procurement UAT or production deployment.
+
+The private API passed its governed same-row lifecycle and four release scenarios. A further actual UI-preparation test found funded Draft Finance detail returning 409 after a successful capture. Backend source `48cc33019dcfec7afe874e1493743f846125829b` corrected that read and the repeat-capture action, passed 65 focused checks and recovered the same original Funding key by GET without changing business rows. See the ERP M5a implementation record for exact receipts and limits. Manual Finance evidence and supplier observation remain distinct from ledger posting or supplier delivery.
+
+## Initial transport-only plan — historical
+
+The focused source increment adds `src/platform/procurement-principal-governance-api.ts` and `reference-ui/src/lib/principal-order-governance-journal.ts`. It covers the seven command envelopes, actor-owned original-key GET recovery, buyer/Finance/reviewer reads, and the newer purpose-only Issue/Ack task reads. It preserves gross decimal(38,8) and line decimal(18,4) strings without JavaScript number conversion. A journal claim binds tenant, company, Core principal, selected branch, order, operation, original body/key, and the original direct-source digest before a POST. There are no M5a buttons or new pages yet. The draft backend now contains the governed and purpose-only read routes described below, including the top-level original source digest in reviewer detail, but they have not passed a real API cohort or been merged.
+
+## Keep the existing purchase order experience
+
+Use the imported Purchase Orders list, detail tabs, toolbar, form sections, and shared ERP controls. The M3b principal draft entry at `/purchase-orders?workflow=principal`, editor at `/purchase-orders/new?workflow=principal`, and detail at `/purchase-orders/:id?workflow=principal` already create and display the **same** Purchase Order row and its approved request bindings. Extend those views for governed states; do not create a second order entity, duplicate a buying page, or route this schema-2 order through the legacy Finance checker flow.
+
+The current implementation is in `reference-ui/src/features/LiveOrders.tsx`, `LivePrincipalOrderEditor.tsx`, `LivePrincipalOrderDetail.tsx`, `LiveOrderApprovalQueue.tsx`, `LiveApprovals.tsx`, and `reference-ui/src/app/App.tsx`. The existing M3b transport is `src/platform/procurement-principal-drafts-api.ts`, and its durable Create/Cancel journal is `reference-ui/src/lib/principal-draft-command-journal.ts`. Keep M3b Create/Cancel response bytes and historical recovery compatible.
+
+## Backend contracts to close before UI actions
+
+The left column records the initial M5a source audit. Backend PR119 now stages the governed buyer, Finance, reviewer, Issue, and acknowledgment read contracts and separate metadata bits; physical/runtime acceptance and final source binding are still pending.
+
+| Gap in inspected M5a source | Required contract |
+| --- | --- |
+| `ProcurementPrincipalOrderDraftReads.cs` accepts only `Draft`/`Cancelled` list filters, emits `canSubmit:false` and `canIssue:false`, and checks allocation `Released` for every status other than `Draft`. A submitted/approved/issued same-row order retains Reserved or Ordered allocations, so the existing buyer detail can return 409. | Preserve old Draft/Cancelled reads; add or safely extend a **buyer-owned, branch-scoped governed detail** and list for `Draft`, `PendingApproval`, `Approved`, `Returned`, `Rejected`, `IssuePending`, `Issued`, `Disputed`, `ReleasePending`, and `Cancelled`. Validate the allocation appropriate to each actual state and the immutable original source digest. Do not relabel historical M3b receipts. |
+| `ProcurementHostIntegration.cs` advertises `principalDirectOrderDrafts` but no separate M5a physical read/new-work capability. Governed GETs can remain available when the new-work flag is off. | Expose a fail-closed physical **governance read** bit independent of the write flag, plus a write bit only after schema, roles, policy, and options pass. Actor action buttons still require current Core permissions, selected branch, record state, and server-derived eligibility. |
+| Existing principal order detail is buyer-only; the current order approval tab calls the legacy order execution API and requires general `orders`. | Retain purpose-specific M5a reads: `/orders/principal-finance-work` and `/{id}/principal-finance-detail` for `procurement-po-finance-confirm`, and `/orders/principal-assigned-reviews` and `/{id}/principal-review/{assignmentId}` for `procurement-po-approve`. Finance and named reviewers must not need buyer-wide `procurement-po-read` or an employee link. |
+| Current buyer detail does not disclose a safe funding/submit/issue/release action state. | Governed buyer detail should carry the current PO `id`, `number`, `status`, `version`, `currentRevision`, `originalDirectSourceSha256`, supplier/branch labels, original line/request/binding IDs and allocation statuses, plus purpose-safe funding, Core case, issued-version, acknowledgment, and release summaries. Include server-derived `canSubmit`, `canIssue`, and `canRequestRelease`, with explicit `manualExternalEvidenceOnly`, `financeLedgerChanged:false`, and `supplierSendPerformed:false`. Keep external evidence references scoped to the actor allowed to see them. |
+
+The new governance routes in `ProcurementPrincipalOrderGovernanceRoutes.cs` use the existing `/api/procurement/v1/orders` group. Their command receipt GET is actor-owned and returns `{operation, commandKey, originalStatusCode, responseJson, recordedHistoricalResult, historicalOnly, financeReservationChanged:false, supplierSendPerformed:false}`. The inner immutable response has schema 2, the original order ID/source digest/key/evidence ID, and exact status: Funding, Decide, Ack, ReleaseRequest, and ReleaseConfirm return 200; Submit and Issue return 201. Keep this separate from the M3b Create/Cancel receipt envelope.
+
+## Narrow UI work after backend closure
+
+| Actor and entry | Existing presentation to reuse | Governed action and state |
+| --- | --- | --- |
+| Buyer, existing principal order list/detail | `LiveOrders.tsx` directory and `LivePrincipalOrderDetail.tsx` Overview/Related/History tabs | Show current same-row status and original approved lines. Submit only a Draft with current independently attested manual commitment. Issue only an Approved revision after Core approval. Refresh after each original-key receipt and owner read; never assume an HTTP response alone proves the latest state. |
+| Independent Finance recorder | Add a purpose-only queue/detail under Purchase Orders using `PageHeader`, `Panel`, `RecordTable`, `DetailSection`, and existing form controls | Read `/principal-finance-work` and `/{id}/principal-finance-detail`. Record `Funding` with server-provided reservation references, exact gross/currency, manual commitment and external evidence reference, and observed time. Later confirm an actual external release only from `ReleasePending`. No Finance ledger balance, reservation, posting, or payment is invented. |
+| Named Core reviewer | Integrate `/principal-assigned-reviews` into the existing Approvals tab; add assignment detail using existing decision dialog | Link by `orderId` **and** `assignmentId`. Render the server's `canApprove`, `canReturn`, `canReject`, `approvalNeedsReview`, case version, and assignment version. Keep Return/Reject available where approval is blocked by stale evidence. Do not show another actor's task or a future Waiting-stage assignment. |
+| Issuer and dispatch confirmer | Existing PO detail action area and history | Issue moves Approved to `IssuePending` and moves the source quantity to Ordered once. The separate `Ack` records a verified manual supplier response (`Accepted` or `Rejected`) against the issued-version ID and configured channel. Internal issue does not send an order; show `Issued`/`Disputed` only after the actual acknowledgment. |
+| Buyer requesting release; independent Finance confirming it | Existing detail action area plus Finance task queue | An unfunded Draft may retain the M3b Cancel action. A **funded Draft still has status Draft** and must instead use `ReleaseRequest` followed by Finance `ReleaseConfirm`; never show the old direct Cancel button based on status alone. Preserve the original source digest and external release evidence; restore source quantity only at confirmed release. |
+
+The typed M5a adapter and durable command journal now sit beside the existing M3b adapter/journal without altering them. Once backend source and runtime proofs are accepted, extend `reference-ui/src/lib/procurement-live.ts` and `ProcurementLiveGate.tsx` only for the new read/write capability and deliberate route scope. Keep `reference-ui/src/app/App.tsx` changes to purpose-specific routes under the existing AppShell. Replace the current static detail sentence that says an order has not been submitted or issued with wording derived from its verified state.
+
+## Original-key recovery and scope
+
+For **each** Funding, Submit, Decide, Issue, Ack, ReleaseRequest, and ReleaseConfirm action: bind the exact actor, tenant, company, selected branch, order, operation, original request body, and key in durable browser storage **before** the POST. The storage slot must survive a hard reload and must not include the in-memory auth epoch. Keep a pending state after a lost response; never generate another key or replay the POST automatically. GET `/principal-governance-command-receipts/{operation}/{key}` with the same real Core password cookie, validate the outer operation/key/original status and inner schema-2 order/source digest/evidence/response, then read the current actor-authorized record or task. A historical receipt can be older than the current PO version, so it proves the original command result rather than the latest state. A 404 or network failure during recovery leaves the original key visible for investigation.
+
+Organisation-wide **read** queues may use explicit All only where the server confirms that scope. A transaction needs an explicit permitted branch and the backend must reject All writes. Changing tenant, company, branch, principal, or login invalidates in-memory views and prevents a different actor from recovering or submitting the earlier actor's command. Do not infer authority from an employee record, a stored role label, or a selected row alone.
+
+## Empty, denial, and evidence states
+
+Use the existing list empty states for no assigned review/Finance work and the detail alert style for 403, 404, 409 stale evidence, 422 invalid input, and 503 unavailable schema or policy. Keep the saved command key visible on uncertainty. Show when a published PO policy, a named authority grant, a current manual Finance policy/evidence window, an allowed manual dispatch channel, or independent actor is missing. Supplier dispatch and external Finance remain explicitly manual and unverified until their separate evidence is recorded.
+
+Before merging UI code: add focused transport/validator tests for exact four-decimal money and every receipt operation; mocked desktop/mobile browser tests for each actor-only entry, All-read/branch-write fencing, funded-Draft release, flag-off historical recovery, lost acknowledgment/reload, wrong actor, stale versions, and denied self/cross-branch actions. Then require a fresh isolated PostgreSQL cohort with real Core password cookies, distinct workerless buyer, Finance recorder, named reviewer, issuer, and dispatch confirmer; verify original keys, Core case/assignment/decisions, same PO row and source allocation transitions, receipts/audit/outbox, normal logout, and preservation of original rows. These are future gates, not results claimed here.
+
+
+The interrupted earlier UI attempts remain preserved. In one continuation all
+three remaining commands succeeded, but the harness incorrectly expected eight
+unique keys for three actions. Its failed result was reconciled without repeating
+those writes. The fresh uninterrupted run above corrected the harness timing and
+count checks, retained pending command keys before POST, drained its owned
+requests before cleanup and used the same sessionStorage after Issue reload.
+
+The server subsequently identified four governed queue GETs missing from its
+reviewed All-branches collection allowlist. That narrow backend correction is
+separately tested; detail/receipt recovery and every write still require a
+selected permitted branch. The prior UI form result does not claim acceptance
+of that later server revision. Existing screens and shared ERP components remain
+the UI source; no replacement UI is introduced.
