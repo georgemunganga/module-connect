@@ -61,7 +61,7 @@ export function LiveGovernedOrderList({ task }: { task: GovernedTask }) {
       if (controller.signal.aborted) return;
       setTotal(result.total);
       if (task === "review") setRows((result.items as AssignedOrderReview[]).map(item => ({
-        id: item.orderId, number: item.number, status: item.status, currency: item.grossAmountExact,
+        id: item.orderId, number: item.number, status: item.status, currency: `${item.currencyCode} ${item.grossAmountExact}`,
         assignmentId: item.assignmentId })));
       else setRows((result.items as { id: string; number: string; status: string; currencyCode: string }[])
         .map(item => ({ id: item.id, number: item.number, status: item.status,

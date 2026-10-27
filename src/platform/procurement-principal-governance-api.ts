@@ -63,7 +63,7 @@ export type FinanceOrderDetail = { id: string; number: string; status: "Draft" |
     requestedByPrincipalId: string; originalDirectSourceSha256: string } | null };
 export type AssignedOrderReview = { orderId: string; number: string; status: "PendingApproval";
   version: number; branchRef: string; assignmentId: string; assignmentVersion: number;
-  caseId: string; caseVersion: number; openedAt: string; grossAmountExact: string };
+  caseId: string; caseVersion: number; openedAt: string; currencyCode: string; grossAmountExact: string };
 export type AssignedOrderReviewPage = { items: AssignedOrderReview[]; total: number; page: number;
   pageSize: number; assignedToCurrentPrincipal: true; financePostingCreated: false;
   supplierSendPerformed: false };
@@ -354,7 +354,7 @@ export async function listPrincipalAssignedReviews(company: string, page: number
       && text(row.number, 100) && row.status === "PendingApproval"
       && positiveVersion(row.version) && id(row.branchRef) && id(row.assignmentId)
       && positiveVersion(row.assignmentVersion) && id(row.caseId)
-      && positiveVersion(row.caseVersion) && iso(row.openedAt)
+      && positiveVersion(row.caseVersion) && iso(row.openedAt) && currency(row.currencyCode)
       && typeof row.grossAmountExact === "string" && grossMoney.test(row.grossAmountExact)))
     throw invalid();
   return body as unknown as AssignedOrderReviewPage;

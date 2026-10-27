@@ -181,7 +181,7 @@ describe("principal order governance transport", () => {
   it("uses exact named Core assignment rather than buyer detail for decisions", async () => {
     const item = { orderId: id(3), number: "PO-1", status: "PendingApproval", version: 2,
       branchRef: id(5), assignmentId: id(9), assignmentVersion: 1, caseId: id(7),
-      caseVersion: 1, openedAt: "2026-10-26T20:00:00+00:00", grossAmountExact: "10.00000001" };
+      caseVersion: 1, openedAt: "2026-10-26T20:00:00+00:00", currencyCode: "ZMW", grossAmountExact: "10.00000001" };
     const detail = { id: id(3), number: "PO-1", status: "PendingApproval", version: 2,
       originalDirectSourceSha256: sourceDigest,
       currencyCode: "ZMW", grossAmountExact: "10.00000001", lineBaseAmountExact: "10.00000001",
@@ -196,7 +196,10 @@ describe("principal order governance transport", () => {
       pageSize: 25, assignedToCurrentPrincipal: true, financePostingCreated: false,
       supplierSendPerformed: false })).mockResolvedValueOnce(response(detail));
     vi.stubGlobal("fetch", fetcher);
-    expect((await listPrincipalAssignedReviews(id(1), 1)).items[0].assignmentId).toBe(id(9));
+    const assigned = (await listPrincipalAssignedReviews(id(1), 1)).items[0];
+    expect(assigned.assignmentId).toBe(id(9));
+    expect(assigned.currencyCode).toBe("ZMW");
+    expect(assigned.grossAmountExact).toBe("10.00000001");
     expect((await getPrincipalReview(id(1), id(3), id(9))).canReturn).toBe(true);
     vi.stubGlobal("fetch", vi.fn(async () => response({ ...detail,
       originalDirectSourceSha256: "invalid" })));
@@ -207,5 +210,13 @@ describe("principal order governance transport", () => {
     await expect(getPrincipalReview(id(1), id(3), id(9))).rejects.toThrow();
     expect(String(fetcher.mock.calls[0][0])).toContain("/principal-assigned-reviews?");
     expect(String(fetcher.mock.calls[1][0])).toContain(`/${id(3)}/principal-review/${id(9)}`);
+  });
+  it.each([undefined, null, "zmw", "ZMW "])("refuses approval amounts without a valid currency (%s)", async currencyCode => {
+    const item = { orderId: id(3), number: "PO-1", status: "PendingApproval", version: 2,
+      branchRef: id(5), assignmentId: id(9), assignmentVersion: 1, caseId: id(7),
+      caseVersion: 1, openedAt: "2026-10-26T20:00:00Z", currencyCode, grossAmountExact: "10.00000001" };
+    vi.stubGlobal("fetch", vi.fn(async () => response({ items: [item], total: 1, page: 1,
+      pageSize: 25, assignedToCurrentPrincipal: true, financePostingCreated: false, supplierSendPerformed: false })));
+    await expect(listPrincipalAssignedReviews(id(1), 1)).rejects.toThrow();
   });
 });
