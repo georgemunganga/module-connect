@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ShoppingBag } from "lucide-react";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "../components/ui";
 import { DetailSection, DetailTabs, DetailValue } from "../components/data/DetailPrimitives";
@@ -42,6 +42,10 @@ type TaskRow = { id: string; number: string; status: string; currency: string; a
 export function LiveGovernedOrderList({ task }: { task: GovernedTask }) {
   const context = useLiveReadiness()!, shell = useErpShell();
   const navigate = useNavigate();
+  const location = useLocation();
+  const completion = location.state?.orderCompletion;
+  const completionNotice = typeof completion?.number === "string" && typeof completion?.message === "string"
+    ? `${completion.number}: ${completion.message}` : null;
   const [page, setPage] = useState(1), [revision, setRevision] = useState(0);
   const [rows, setRows] = useState<TaskRow[]>([]), [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true), [error, setError] = useState("");
@@ -71,7 +75,8 @@ export function LiveGovernedOrderList({ task }: { task: GovernedTask }) {
     return () => controller.abort();
   }, [canRead, context.legalEntityId, task, page, revision]);
   if (!canRead) return <div className="p-5 sm:p-8" role="alert">This order task is unavailable for your account.</div>;
-  return <div className="p-5 sm:p-8"><LiveRecordDirectory key={`${task}:${page}`} title={labels[task]} entity="orders"
+  return <div className="p-5 sm:p-8">{completionNotice && <p role="status" className="mb-4 text-sm">{completionNotice}</p>}
+    <LiveRecordDirectory key={`${task}:${page}`} title={labels[task]} entity="orders"
     subtitle={task === "buyer" ? "Orders linked to approved purchase requests."
       : "Work available to you in the selected company and branch."}
     columns={[{ key: "number", label: "Order", width: 220 }, { key: "status", label: "Status", width: 150 },
@@ -116,6 +121,7 @@ export function LiveGovernedOrderDetail() {
 }
 function GovernedDetail({ id, task, assignment }: { id: string; task: GovernedTask; assignment: string | null }) {
   const context = useLiveReadiness()!, company = context.legalEntityId;
+  const navigate = useNavigate();
   const canRead = context.capabilities.principalOrderGovernanceRead
     && context.permissions.includes(permission[task]);
   const branch = context.effectiveBranchId && guid.test(context.effectiveBranchId) ? context.effectiveBranchId : null;
@@ -198,8 +204,19 @@ function GovernedDetail({ id, task, assignment }: { id: string; task: GovernedTa
       throw Error("The saved result differs from the original command. Keep its reference.");
     await verifyCurrent(command, receipt);
     principalOrderGovernanceJournal.clear(scope, command);
-    if (alive.current) { setPending(null); setAction(null); setNotice(`${receipt.status} saved. Original command ${command.key} confirmed.`);
-      setRevision(value => value + 1); }
+    if (alive.current) {
+      setPending(null); setAction(null);
+      // These purpose-only detail endpoints deliberately close after completion.
+      // Return to their current work queue instead of reloading a now-missing task.
+      if (task === "issue" || task === "ack" || task === "finance" && command.operation === "ReleaseConfirm") {
+        navigate(`/purchase-orders?workflow=principal&task=${task}`, { replace: true,
+          state: { orderCompletion: { number: receipt.number,
+            message: task === "issue" ? "Internal issue saved." : task === "ack" ? "Supplier response saved." : "Release confirmed." } } });
+        return;
+      }
+      setNotice(`${receipt.status} saved. Original command ${command.key} confirmed.`);
+      setRevision(value => value + 1);
+    }
   }
   async function recover() {
     if (!pending || !canRecoverHere || busy || lock.current) return;
