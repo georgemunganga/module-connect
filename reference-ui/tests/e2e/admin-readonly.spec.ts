@@ -60,7 +60,8 @@ for (const [path, heading, content] of [
     await expect(main.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     if (path.startsWith("/rfqs/")) await main.getByRole("tab", { name: "Items (1)" }).click();
     await expect(main.getByText(content, { exact: true })).toBeVisible();
-    await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Publish|Return for changes)/i })).toHaveCount(0);
+    await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Publish|Return for changes)/i }).and(main.locator("button:enabled"))).toHaveCount(0);
+    if (path.startsWith("/rfqs/")) await expect(main.getByRole("button", { name: "Publish", exact: true })).toBeDisabled();
     await expect(main.getByRole("link", { name: /^(Add|New |Edit)/i })).toHaveCount(0);
     if (path === "/settings/buying-rules") await expect(main.getByRole("button", { name: "Try a sample", exact: true })).toBeVisible();
     expect(writes).toEqual([]);
