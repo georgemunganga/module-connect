@@ -377,7 +377,7 @@ test("live inbox preserves the imported upload layout without creating local fil
   await expect(page.getByRole("heading", { name: "Received bills", exact: true })).toBeVisible();
   await expect(page.getByText("INV-DOC-1", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Choose file", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("File intake is not connected");
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "File intake is not connected" })).toContainText("File intake is not connected");
   expect(mutations).toHaveLength(0);
   expect(await page.evaluate(() => localStorage.getItem("payables.inbox.v1"))).toBeNull();
   await page.getByRole("button", { name: "Open invoice", exact: true }).click();

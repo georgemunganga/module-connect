@@ -9,8 +9,9 @@ async function mock(page: Page, options: Options = {}) {
   const role = options.role ?? "receiver", action = options.action ?? "Record";
   const writes: { path: string; body: string; key: string }[] = [], reads: string[] = [], unexpected: string[] = [];
   let changed = false;
-  const permissions = role === "inspector" ? ["procurement-receipt-inspect"] : role === "owner" ? ["procurement-service-certify"] : role === "reader" ? ["procurement-receipt-view"]
-    : ["procurement-receipt-view", "procurement-receipt-create", "procurement-receipt-edit", "procurement-receipt-record", "procurement-receipt-accept", "procurement-service-certify"];
+  const permissions = ["procurement-access", ...(role === "inspector" ? ["procurement-receipt-inspect"]
+    : role === "owner" ? ["procurement-service-certify"] : role === "reader" ? ["procurement-receipt-view"]
+    : ["procurement-receipt-view", "procurement-receipt-create", "procurement-receipt-edit", "procurement-receipt-record", "procurement-receipt-accept", "procurement-service-certify"])];
   const labels = { orderNumber: "PO-ISSUED", supplierDisplayName: "Retained vendor", description: "Issued delivery line", unitCode: "EA", currencyCode: "ZMW", branchRef: branch, issuedVersionId: issued };
   const capacity = { verified: !options.unknown && !options.legacy, orderRemainingQuantity: options.unknown ? null : "2", physicalRemainingQuantity: null, acceptableQuantity: action === "Accept" && !options.unknown ? "2" : null, blocker: options.unknown ? "ReceivingLegacyAcceptanceReconciliationRequired" : null };
   const candidate = () => [{ action, candidate: !options.unknown && !options.legacy && !changed, blocker: options.unknown ? "ReceivingLegacyAcceptanceReconciliationRequired" : null }];

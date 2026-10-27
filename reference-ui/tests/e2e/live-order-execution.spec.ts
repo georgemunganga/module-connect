@@ -162,7 +162,9 @@ test("a Finance pointer outside retained evidence cannot authorize a release", a
 test("execution capability false preserves legacy draft buying without probing execution APIs", async ({ page }) => {
   const evidence = await mock(page, { enabled: false }); await page.goto(root);
   await expect(page.getByRole("button", { name: "New order draft", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toHaveCount(0); expect(evidence.reads).toEqual([api]);
+  await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toHaveCount(0);
+  expect(evidence.reads.length).toBeGreaterThan(0); expect(evidence.reads.every(path => path === api)).toBe(true);
+  expect(evidence.unexpected).toEqual([]); expect(evidence.writes).toHaveLength(0);
 });
 test("unready order capabilities do not expose demo or live execution records", async ({ page }) => {
   const evidence = await mock(page, { enabled: false, draftEnabled: false }); await page.goto(root);
@@ -186,7 +188,7 @@ test("buyer submit and issue use separate version-pinned keyed commands", async 
   await confirm(page, "Send order for approval", { simple: true });
   await expect(page.getByRole("button", { name: "Authorise sending", exact: true })).toBeVisible();
   await confirm(page, "Authorise sending", { simple: true });
-  await expect(page.getByRole("status")).toContainText("Saved:"); expect(evidence.writes).toHaveLength(2);
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: /^Saved:/ })).toContainText("Saved:"); expect(evidence.writes).toHaveLength(2);
   expect(evidence.writes.map((entry) => entry.path.split("/").at(-1))).toEqual(["submit", "issue"]);
   expect(evidence.writes[0].key).not.toBe(evidence.writes[1].key);
   expect(JSON.parse(evidence.writes[0].body)).toEqual({ expectedOrderVersion: 1 }); expect(JSON.parse(evidence.writes[1].body)).toEqual({ expectedOrderVersion: 2 });
