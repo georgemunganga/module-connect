@@ -130,7 +130,7 @@ test("dispatch operator sees only its worklist and records issued revision via c
 test("stale command refreshes details and removes obsolete action candidates", async ({ page }) => {
   const evidence = await mock(page, { stale: true }); await page.goto(`${root}/${id}`);
   await confirm(page, "Record Finance confirmation", { reference: "STALE-1" });
-  await expect(page.getByRole("status")).toContainText("changed");
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "The order or its buying controls changed" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Record Finance confirmation", exact: true })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0); expect(evidence.writes).toHaveLength(1);
 });
