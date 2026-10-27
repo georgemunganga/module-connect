@@ -72,10 +72,10 @@ export function LiveGovernedOrderList({ task }: { task: GovernedTask }) {
   }, [canRead, context.legalEntityId, task, page, revision]);
   if (!canRead) return <div className="p-5 sm:p-8" role="alert">This order task is unavailable for your account.</div>;
   return <div className="p-5 sm:p-8"><LiveRecordDirectory key={`${task}:${page}`} title={labels[task]} entity="orders"
-    subtitle={task === "buyer" ? "Internal orders from approved requests, including their current governed state."
-      : "Only work within your current Core permission and company scope appears here."}
+    subtitle={task === "buyer" ? "Orders linked to approved purchase requests."
+      : "Work available to you in the selected company and branch."}
     columns={[{ key: "number", label: "Order", width: 220 }, { key: "status", label: "Status", width: 150 },
-      { key: "currency", label: task === "review" ? "Exact gross" : "Currency", width: 130 }]}
+      { key: "currency", label: task === "review" ? "Amount" : "Currency", width: 130 }]}
     rows={rows.map(row => ({ id: row.assignmentId ?? row.id, number: row.number, title: row.number,
       status: row.status, path: pathFor(row.id, task, row.assignmentId), fields: { currency: row.currency } }))}
     loading={loading} error={error} total={total} page={page} pageSize={25}
@@ -318,12 +318,16 @@ function GovernedDetail({ id, task, assignment }: { id: string; task: GovernedTa
             {"currencyCode" in record && <DetailValue label="Currency" value={record.currencyCode} />}
             {"supplierDisplayName" in record && <DetailValue label="Supplier" value={record.supplierDisplayName || "Selected supplier"} />}
             {"branchDisplayName" in record && <DetailValue label="Branch" value={record.branchDisplayName || "Selected branch"} />}
-            {"grossAmountExact" in record && <DetailValue label="Exact gross" value={record.grossAmountExact} />}
+            {"grossAmountExact" in record && <DetailValue label="Total" value={record.grossAmountExact} />}
           </div></DetailSection>
           {"lines" in record && <Panel title="Approved source lines"><div className="overflow-x-auto p-5"><RecordTable>
-            <thead><tr><th>Item or service</th><th>Quantity</th><th>Unit price</th><th>Allocation</th></tr></thead>
+            <thead><tr><th>Item or service</th><th>Quantity</th><th>Unit price</th><th>Tax</th><th>Request</th><th>Allocation</th></tr></thead>
             <tbody>{record.lines.map(line => <tr key={line.id}><td>{line.description}</td><td>{line.quantity} {line.unitCode}</td>
-              <td>{line.unitPrice}</td><td>{"allocationStatus" in line ? line.allocationStatus : "Approved source"}</td></tr>)}</tbody>
+              <td>{line.unitPrice}</td><td>{line.taxAmount}</td>
+              <td>{"purchaseRequestId" in line && context.permissions.includes("procurement-request-read")
+                ? <Link to={`/requests/${line.purchaseRequestId}`} className="text-primary underline">Open approved request</Link>
+                : "Approved request"}</td>
+              <td>{"allocationStatus" in line ? line.allocationStatus : "Approved source"}</td></tr>)}</tbody>
           </RecordTable></div></Panel>}
           <p className="text-sm text-muted-foreground">Funding and supplier response are recorded as manual evidence. This ERP view does not post Finance entries or send orders to suppliers.</p>
           {!branch && <p role="status">All branches permits scoped reads. Choose a permitted branch before saving.</p>}
