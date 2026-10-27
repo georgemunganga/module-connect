@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { currentWorkspaceFixture, fixtureBranch } from "./current-workspace-fixture";
 const company = "11111111-1111-4111-8111-111111111111";
 const principal = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const capabilities = Object.fromEntries(["vendorDraft", "itemDraft", "requestDraft", "approvals", "sourcing", "contracts",
@@ -11,7 +12,9 @@ async function systemUser(page: Page, permissions: string[], options: { admin?: 
     const path = new URL(route.request().url()).pathname, method = route.request().method();
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (method !== "GET") { writes.push(path); return json({ message: "Unexpected write in access test" }, 403); }
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "System user", roles: options.admin ? ["erp_admin"] : ["procurement_buyer"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("test", options.principalId ?? principal,
+      [{ companyId: company, branchId: fixtureBranch }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: options.principalId ?? principal, isActive: true, displayName: "System user", roles: options.admin ? ["erp_admin"] : ["procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });

@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal } from "./current-workspace-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const company = "11111111-1111-4111-8111-111111111111", branch = "12121212-1212-4212-8212-121212121212";
@@ -24,7 +25,8 @@ async function setup(page: Page, role: "maker" | "reviewer", onApi: (route: Rout
       expect(request.headers()["x-shell-entity"]).toBe(company);
       expect(request.headers()["x-shell-location"]).toBe(branch);
     }
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: role, roles: [] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("test", fixturePrincipal, [{ companyId: company, branchId: branch, code: "TEST", name: "Synthetic company" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, displayName: role, roles: [] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });

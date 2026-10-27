@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal, fixtureBranch } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 const company = "11111111-1111-4111-8111-111111111111", actor = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const reviewer = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", unavailable = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -13,7 +14,8 @@ async function fixture(page: Page, options: { edit?: boolean; approve?: boolean;
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), endpoint = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (endpoint === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, roles: [], displayName: "Core system account" } });
+    if (endpoint === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("test", fixturePrincipal, [{ companyId: company, branchId: fixtureBranch, code: "TEST", name: "Synthetic company" }]));
+    if (endpoint === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, roles: [], displayName: "Core system account" } });
     if (endpoint === "/api/hrm/branding") return json({ displayName: "Company" });
     if (endpoint === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "TEST", registeredName: "Company" }] });
     if (endpoint === "/api/hrm/admin/locations") return json({ items: [] });

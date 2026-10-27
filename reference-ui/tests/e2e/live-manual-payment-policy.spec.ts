@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { currentWorkspaceFixture } from './current-workspace-fixture';
 
 const company = '11111111-1111-4111-8111-111111111111';
 const branch = '22222222-2222-4222-8222-222222222222';
@@ -29,7 +30,9 @@ async function fixture(page: Page, failCreate = false, workflowReady = true) {
     const request = route.request(), path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status,
       contentType: 'application/json', body: JSON.stringify(body) });
-    if (path === '/api/hrm/auth/me') return json({ authenticated: true, user: { isActive: true, roles: [] } });
+    if (path === '/api/core/v1/workspace-context') return json(currentWorkspaceFixture('synthetic', actor,
+      [{ companyId: company, branchId: branch, code: 'TEST', name: 'Synthetic company' }]));
+    if (path === '/api/hrm/auth/me') return json({ authenticated: true, user: { id: actor, isActive: true, roles: [] } });
     if (path === '/api/hrm/branding') return json({ displayName: 'Synthetic company' });
     if (path === '/api/hrm/admin/legal-entities') return json({ items: [{ id: company, registeredName: 'Synthetic company' }] });
     if (path === '/api/hrm/admin/locations') return json({ items: [{ id: branch, name: 'Synthetic branch', legalEntityId: company }] });
