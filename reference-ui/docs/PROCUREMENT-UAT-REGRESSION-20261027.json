@@ -1,0 +1,52 @@
+{
+  "status": "UI_REGRESSION_ACCEPTED_WITH_TARGETED_RERUN_NOT_WHOLE_MODULE_UAT",
+  "date": "2026-10-27",
+  "applicationSource": "720b1080b2087f0c8b98a4b0b1bbc3ab88495c00",
+  "finalTestSource": "ba25a24768195f45121c97f48a6799b3c5da117a",
+  "node": "v22.23.3",
+  "typeScript": "PASS",
+  "actorTests": 4,
+  "unitTests": 587,
+  "productionBuild": "PASS",
+  "browserCoverage": {
+    "currentPassingScenarioCount": 444,
+    "singleUninterrupted444Pass": false,
+    "method": "Full444:443pass/1strict-locator failure; entire affected file rerun after one test-only selector correction. Product/test dependencies outside that file are byte-identical.",
+    "fullRunStats": {
+      "startTime": "2026-10-27T16:07:54.815Z",
+      "duration": 1858505.21,
+      "expected": 443,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "fullRunReportSha256": "5bcae8314fd0b857cddb4e56b4e86f951a8f753616e57a445d042a06f847cb80",
+    "affectedFile": "live-order-execution.spec.ts",
+    "affectedFileCases": 20,
+    "focusedRunStats": {
+      "startTime": "2026-10-27T16:39:49.641Z",
+      "duration": 79410.371,
+      "expected": 20,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "focusedRunReportSha256": "1e1602880e9e4b2d1d0b76e56587ea3c38b76c2dbb267dfcc5360b10e80fc88b",
+    "nativePersistenceProvenByMocks": false
+  },
+  "fixedProductIssues": [
+    "Delayed buying-rule validation cannot start a write after navigation.",
+    "Delayed RFQ save cannot navigate back after leaving its editor.",
+    "View-only guidance uses permissions rather than a mandatory employee link."
+  ],
+  "originalLayoutsAndSharedErpControlsPreserved": true,
+  "businessResponsesMocked": true,
+  "realApiPersistenceClaimedByUiTests": false,
+  "productionDeployed": false,
+  "wholeProcurementUatComplete": false,
+  "erpReport": "https://github.com/georgemunganga/erp/pull/124",
+  "issues": [
+    88,
+    90
+  ]
+}
