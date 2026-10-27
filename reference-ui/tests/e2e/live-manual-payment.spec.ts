@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { currentWorkspaceFixture } from "./current-workspace-fixture";
 
 const company = "11111111-1111-4111-8111-111111111111";
 const branch = "22222222-2222-4222-8222-222222222222";
@@ -31,12 +32,14 @@ async function fixture(page: Page, enabled: boolean, options: {
   const writes: { path: string; body: Record<string, unknown>; key: string | undefined }[] = [];
   let status = options.paymentStatus ?? "Draft", version = status === "Approved" ? 3 : 1;
   await page.addInitScript(({ company, branch, allBranches }) => localStorage.setItem("erp.shell.state.v1",
-    JSON.stringify({ entityId: company, ...(allBranches ? {} : { branch }) })),
+    JSON.stringify({ entityId: company, ...(allBranches ? { branchScope: "all" } : { branch }) })),
     { company, branch, allBranches: options.allBranches ?? false });
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, roles: ["procurement_buyer"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("test", options.principalId ?? requester,
+      [{ companyId: company, branchId: branch, code: "TEST", name: "Amizo Power" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: options.principalId ?? requester, isActive: true, roles: ["procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branch, name: "Lusaka", legalEntityId: company }] });

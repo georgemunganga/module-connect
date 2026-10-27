@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 const company = "11111111-1111-4111-8111-111111111111", worker = "22222222-2222-4222-8222-222222222222";
 const requestId = "33333333-3333-4333-8333-333333333333", caseId = "44444444-4444-4444-8444-444444444444";
@@ -31,7 +32,8 @@ async function mockErp(page: Page, options: { acknowledgementStatus?: number; ma
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (url.pathname.startsWith("/api/procurement/v1/") && (req.headers()["x-shell-entity"] !== company || req.headers()["x-shell-location"] !== branch))
       return json({ message: "Company and branch headers are required." }, 403);
-    if (url.pathname === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Manager", roles: options.principalOnly ? [] : ["procurement_manager"] } });
+    if (url.pathname === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("amizo", fixturePrincipal, [{ companyId: company, branchId: branch, code: "AMIZO", name: "Amizo Power" }]));
+    if (url.pathname === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, displayName: "Manager", roles: options.principalOnly ? [] : ["procurement_manager"] } });
     if (url.pathname === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });

@@ -145,7 +145,9 @@ function LegacySourcingEditor() {
     if (id && (version === null || loadedContext !== editorContext)) { setError("This draft is unavailable. Return to the quote request list."); return; }
     const savingContext = editorContext;
     const savingGeneration = editorGeneration.current;
-    const isCurrentSave = () => currentEditorContext.current === savingContext && editorGeneration.current === savingGeneration;
+    const routeHref = window.location.pathname + window.location.search;
+    const isCurrentSave = () => currentEditorContext.current === savingContext && editorGeneration.current === savingGeneration
+      && window.location.pathname + window.location.search === routeHref;
     setSaving(true); setError("");
     if (draft.opensAt && draft.closesAt && new Date(draft.closesAt) <= new Date(draft.opensAt)) {
       setError("Closing time must follow opening time."); setSaving(false); return;

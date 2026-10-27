@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { currentWorkspaceFixture, fixtureBranch, fixturePrincipal } from "./current-workspace-fixture";
 
 const companyId = "11111111-1111-4111-8111-111111111111";
 const otherCompanyId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -29,7 +30,10 @@ async function fixture(page: Page, delayDirectory = false) {
       reads.push({ path, company: selected });
       if (request.method() !== "GET") { writes.push(`${request.method()} ${path}`); return json({ message: "View only" }, 403); }
     }
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "ERP admin", roles: ["erp_admin"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("test", fixturePrincipal,
+      [{ companyId, branchId: fixtureBranch, code: "A", name: "Company A" },
+        { companyId: otherCompanyId, branchId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", code: "B", name: "Company B" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, displayName: "ERP admin", roles: ["erp_admin"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "A", registeredName: "Company A" }, { id: otherCompanyId, code: "B", registeredName: "Company B" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
@@ -116,7 +120,7 @@ test("a delayed directory from the old company cannot populate the new company v
   await expect(page.getByRole("heading", { name: "Alpha Supplier", exact: true })).toBeVisible();
   await setup.directoryRequested;
   await page.evaluate(entityId => {
-    localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId }));
+    localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" }));
     window.dispatchEvent(new StorageEvent("storage", { key: "erp.shell.state.v1" }));
   }, otherCompanyId);
   await expect(page.getByRole("alert")).toContainText("Vendor not found");

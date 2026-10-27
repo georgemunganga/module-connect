@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal, fixtureBranch } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 
 const company = "11111111-1111-4111-8111-111111111111";
@@ -13,7 +14,8 @@ async function fixture(page: Page, options: { coreAdmin?: boolean; configuration
     const request = route.request(), path = new URL(request.url()).pathname;
     if (request.method() !== "GET") writes.push(`${request.method()} ${path}`);
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true,
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("test", fixturePrincipal, [{ companyId: company, branchId: fixtureBranch, code: "TEST", name: "Synthetic company" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true,
       roles: options.coreAdmin ? ["erp_admin"] : ["employee"], displayName: "Settings user" } });
     if (path === "/api/hrm/branding") return json({ displayName: "Test company" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "TEST", registeredName: "Test company" }] });

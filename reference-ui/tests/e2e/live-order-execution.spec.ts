@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 import { expectOrderWorkspaceBounds } from "./order-layout-assert";
 const company = "11111111-1111-4111-8111-111111111111", branch = "22222222-2222-4222-8222-222222222222", worker = "33333333-3333-4333-8333-333333333333";
@@ -27,7 +28,8 @@ async function mock(page: Page, options: { action?: keyof typeof permissions; lo
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path.startsWith("/api/procurement/")) { expect(request.headers()["x-shell-entity"]).toBe(company); expect(request.headers()["x-shell-location"]).toBe(branch); }
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Order operator", roles: ["procurement_manager"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("amizo", fixturePrincipal, [{ companyId: company, branchId: branch, code: "AMIZO", name: "Amizo Power" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, displayName: "Order operator", roles: ["procurement_manager"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
@@ -128,7 +130,7 @@ test("dispatch operator sees only its worklist and records issued revision via c
 test("stale command refreshes details and removes obsolete action candidates", async ({ page }) => {
   const evidence = await mock(page, { stale: true }); await page.goto(`${root}/${id}`);
   await confirm(page, "Record Finance confirmation", { reference: "STALE-1" });
-  await expect(page.getByRole("status")).toContainText("changed");
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "The order or its buying controls changed" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Record Finance confirmation", exact: true })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0); expect(evidence.writes).toHaveLength(1);
 });
@@ -160,7 +162,9 @@ test("a Finance pointer outside retained evidence cannot authorize a release", a
 test("execution capability false preserves legacy draft buying without probing execution APIs", async ({ page }) => {
   const evidence = await mock(page, { enabled: false }); await page.goto(root);
   await expect(page.getByRole("button", { name: "New order draft", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toHaveCount(0); expect(evidence.reads).toEqual([api]);
+  await expect(page.getByRole("tab", { name: "Finance review", exact: true })).toHaveCount(0);
+  expect(evidence.reads.length).toBeGreaterThan(0); expect(evidence.reads.every(path => path === api)).toBe(true);
+  expect(evidence.unexpected).toEqual([]); expect(evidence.writes).toHaveLength(0);
 });
 test("unready order capabilities do not expose demo or live execution records", async ({ page }) => {
   const evidence = await mock(page, { enabled: false, draftEnabled: false }); await page.goto(root);
@@ -184,7 +188,7 @@ test("buyer submit and issue use separate version-pinned keyed commands", async 
   await confirm(page, "Send order for approval", { simple: true });
   await expect(page.getByRole("button", { name: "Authorise sending", exact: true })).toBeVisible();
   await confirm(page, "Authorise sending", { simple: true });
-  await expect(page.getByRole("status")).toContainText("Saved:"); expect(evidence.writes).toHaveLength(2);
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: /^Saved:/ })).toContainText("Saved:"); expect(evidence.writes).toHaveLength(2);
   expect(evidence.writes.map((entry) => entry.path.split("/").at(-1))).toEqual(["submit", "issue"]);
   expect(evidence.writes[0].key).not.toBe(evidence.writes[1].key);
   expect(JSON.parse(evidence.writes[0].body)).toEqual({ expectedOrderVersion: 1 }); expect(JSON.parse(evidence.writes[1].body)).toEqual({ expectedOrderVersion: 2 });

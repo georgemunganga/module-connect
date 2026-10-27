@@ -21,22 +21,24 @@ for (const status of [401, 200]) {
 }
 
 test("retry repeats a failed lookup and recovers without reloading the shell", async ({ page }) => {
-  let authCalls = 0;
+  let authCalls = 0, recover = false;
   await page.route("**/api/**", route => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/hrm/branding") return route.fulfill({ json: { displayName: "Synthetic ERP" } });
     if (path === "/api/hrm/auth/me") {
       authCalls++;
-      return route.fulfill({ status: authCalls === 1 ? 503 : 200, json: { authenticated: false } });
+      return route.fulfill({ status: recover ? 200 : 503, json: { authenticated: false } });
     }
     return route.fulfill({ status: 404, json: {} });
   });
   await page.goto("/procurement/workspace/requests");
   await expect(page.getByRole("heading", { name: "Unable to load your organisation" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toHaveCount(0);
+  const failedReads = authCalls;
+  recover = true;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Sign in to Procurement" })).toBeVisible();
-  expect(authCalls).toBe(2);
+  expect(authCalls).toBeGreaterThan(failedReads);
   await expect(page.getByRole("button", { name: "Organisation context" })).toBeVisible();
 });
 

@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 
 test.setTimeout(90_000);
@@ -40,8 +41,9 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
     if (url.pathname.startsWith("/api/procurement/v1/")
       && (request.headers()["x-shell-entity"] !== companyId || request.headers()["x-shell-location"] !== branchId))
       return json({ message: "The selected branch was not sent." }, 403);
+    if (url.pathname === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("amizo", fixturePrincipal, [{ companyId, branchId, code: "AMIZO", name: "Amizo Power" }]));
     if (url.pathname === "/api/hrm/auth/me") return json({ authenticated: true,
-      user: { isActive: true, displayName: "AP Processor", email: "ap@example.test", roles: ["ap_processor"] } });
+      user: { id: fixturePrincipal, isActive: true, displayName: "AP Processor", email: "ap@example.test", roles: ["ap_processor"] } });
     if (url.pathname === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId,
       code: "AMIZO", registeredName: "Amizo Power" }] });
@@ -375,7 +377,7 @@ test("live inbox preserves the imported upload layout without creating local fil
   await expect(page.getByRole("heading", { name: "Received bills", exact: true })).toBeVisible();
   await expect(page.getByText("INV-DOC-1", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Choose file", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("File intake is not connected");
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "File intake is not connected" })).toContainText("File intake is not connected");
   expect(mutations).toHaveLength(0);
   expect(await page.evaluate(() => localStorage.getItem("payables.inbox.v1"))).toBeNull();
   await page.getByRole("button", { name: "Open invoice", exact: true }).click();

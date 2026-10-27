@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal, fixtureBranch } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 const company="11111111-1111-4111-8111-111111111111", worker="22222222-2222-4222-8222-222222222222";
 const item="33333333-3333-4333-8333-333333333333", priceId="44444444-4444-4444-8444-444444444444", vendor="55555555-5555-4555-8555-555555555555";
@@ -16,7 +17,8 @@ async function fixture(page: Page, mode: "normal"|"legacy"|"stale"|"lost"|"item-
   await page.route("**/api/**",async route=>{
     const request=route.request(),path=new URL(request.url()).pathname;
     const json=(body:unknown,status=200)=>route.fulfill({status,contentType:"application/json",body:JSON.stringify(body)});
-    if(path==="/api/hrm/auth/me")return json({authenticated:true,user:{isActive:true,displayName:"Synthetic buyer",roles:["procurement_buyer"]}});
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("synthetic", fixturePrincipal, [{ companyId: company, branchId: fixtureBranch, code: "TEST", name: "Synthetic company" }]));
+if(path==="/api/hrm/auth/me")return json({authenticated:true,user: { id: fixturePrincipal, isActive: true,displayName:"Synthetic buyer",roles:["procurement_buyer"]}});
     if(path==="/api/hrm/branding")return json({displayName:"Synthetic company"});
     if(path==="/api/hrm/admin/legal-entities")return json({items:[{id:company,code:"TEST",registeredName:"Synthetic company"}]});
     if(path==="/api/hrm/admin/locations")return json({items:[]});

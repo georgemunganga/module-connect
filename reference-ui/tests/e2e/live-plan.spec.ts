@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal, fixtureBranch } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 
 const companyId = "11111111-1111-4111-8111-111111111111";
@@ -20,7 +21,8 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("amizo", fixturePrincipal, [{ companyId, branchId: fixtureBranch, code: "AMIZO", name: "Amizo Power" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, displayName: "Buyer", email: "buyer@example.test", roles: ["procurement_buyer"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
@@ -128,7 +130,7 @@ test("unconfirmed plans create preserves entries and blocks repeat submission", 
   await page.getByLabel("Need 1", { exact: true }).fill("Desk");
   await page.getByLabel("Estimated amount", { exact: true }).fill("100");
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("save result was not confirmed");
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "save result was not confirmed" })).toContainText("save result was not confirmed");
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
   await expect(page.getByLabel("Financial period", { exact: true })).toHaveValue("Unconfirmed FY");
   await page.getByRole("link", { name: /^Review saved / }).click();

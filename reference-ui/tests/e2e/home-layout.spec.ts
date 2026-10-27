@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal, fixtureBranch } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 const company = "11111111-1111-4111-8111-111111111111";
 const id = "22222222-2222-4222-8222-222222222222";
@@ -10,7 +11,8 @@ async function fixture(page: Page, options: { readOnly?: boolean; requestError?:
     const request = route.request(), path = new URL(request.url()).pathname;
     calls.push(path); if (request.method() !== "GET") writes.push(path);
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: !denied, user: denied ? null : { isActive: true, displayName: "Home reviewer", roles: ["erp_admin"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("amizo", fixturePrincipal, [{ companyId: company, branchId: fixtureBranch, code: "AMIZO", name: "Amizo Power" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: !denied, user: denied ? null : { id: fixturePrincipal, isActive: true, displayName: "Home reviewer", roles: ["erp_admin"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power", fontFamily: "Inter" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });

@@ -70,7 +70,7 @@ function PendingLiveWorkflow() {
   const location = useLocation();
   const readiness = useLiveReadiness();
   if (readiness?.adminViewOnly && /\/(?:new|edit)\/?$/.test(location.pathname))
-    return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">View only</h1><p className="mt-3 text-sm text-muted-foreground">You can review Procurement as an ERP administrator. Creating or changing purchasing records requires an active employee account.</p><Link className="mt-5 inline-block text-primary hover:underline" to={location.pathname.replace(/\/(?:new|edit)\/?$/, "") || "/vendors"}>Back to records</Link></div>;
+    return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">View only</h1><p className="mt-3 text-sm text-muted-foreground">Your current access allows viewing. Ask an ERP administrator for the permission needed to create or change this record.</p><Link className="mt-5 inline-block text-primary hover:underline" to={location.pathname.replace(/\/(?:new|edit)\/?$/, "") || "/vendors"}>Back to records</Link></div>;
   const routeName = location.pathname.split("/").filter(Boolean)[0];
   const pageName = routeName === "recurring-bills" ? "Recurring purchases" : routeName?.replaceAll("-", " ") || "Home";
   if (routeName === "batch-payments") return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">Batch payments</h1><p className="mt-3 max-w-xl text-sm text-muted-foreground">Batch payment preparation and bank execution are not available in Procurement. Finance manages payment release.</p></div>;

@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal, fixtureBranch } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 const company = "11111111-1111-4111-8111-111111111111", worker = "22222222-2222-4222-8222-222222222222", billId = "33333333-3333-4333-8333-333333333333", id = "44444444-4444-4444-8444-444444444444";
 async function fixture(page: Page, options: { enabled?: boolean; readOnly?: boolean; stale?: boolean; lostCreate?: boolean; historical?: boolean } = {}) {
@@ -9,7 +10,8 @@ async function fixture(page: Page, options: { enabled?: boolean; readOnly?: bool
   await page.route("**/api/**", async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Credit clerk", roles: ["ap_processor"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("test", fixturePrincipal, [{ companyId: company, branchId: fixtureBranch, code: "TEST", name: "Synthetic company" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, displayName: "Credit clerk", roles: ["ap_processor"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
@@ -90,7 +92,9 @@ test("missing capability never mounts browser-local credit mutations", async ({ 
 });
 test("read-only invoice access cannot create a credit", async ({ page }) => {
   const setup = await fixture(page, { readOnly: true }); await page.goto("/procurement/workspace/vendor-credits/new");
-  await expect(page.getByText("Invoice capture and read access are required", { exact: false })).toBeVisible(); expect(setup.writes).toEqual([]);
+  await expect(page.getByRole("alert")).toContainText("You do not have permission to open this Procurement page for the selected company.");
+  await expect(page.getByRole("button", { name: "Save as Draft", exact: true })).toHaveCount(0);
+  expect(setup.writes).toEqual([]);
 });
 
 

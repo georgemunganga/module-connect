@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal, fixtureBranch } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 
 const companyId = "11111111-1111-4111-8111-111111111111";
@@ -19,13 +20,15 @@ async function mockErp(page: Page, options: { denyList?: boolean; staleUpdate?: 
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "Manager", email: "manager@example.test", roles: ["procurement_manager"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("amizo", fixturePrincipal, [{ companyId, branchId: fixtureBranch, code: "AMIZO", name: "Amizo Power" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, displayName: "Manager", email: "manager@example.test", roles: ["procurement_manager"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId,
-      permissions: options.canApprove ? ["procurement-access", "procurement-configuration-approve"] : [],
+    if (path === "/api/procurement/v1/context") return json({ principalId: fixturePrincipal, tenantId: "amizo", legalEntityId: companyId, workerId,
+      permissions: ["procurement-access", "procurement-configuration-read", "procurement-configuration-edit",
+        ...(options.canApprove ? ["procurement-configuration-approve"] : [])],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });
     for (const kind of ["categories", "methods"] as const) {

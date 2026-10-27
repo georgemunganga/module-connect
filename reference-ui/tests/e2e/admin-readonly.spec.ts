@@ -1,3 +1,4 @@
+import { currentWorkspaceFixture, fixturePrincipal, fixtureBranch } from "./current-workspace-fixture";
 import { expect, test, type Page } from "@playwright/test";
 
 const companyId = "11111111-1111-4111-8111-111111111111";
@@ -19,7 +20,8 @@ async function readonlyErp(page: Page) {
     if (path.startsWith("/api/procurement/") && request.method() !== "GET") {
       writes.push(`${request.method()} ${path}`); return json({ message: "Read only" }, 403);
     }
-    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { isActive: true, displayName: "ERP admin", roles: ["erp_admin"] } });
+    if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("amizo", fixturePrincipal, [{ companyId, branchId: fixtureBranch, code: "AMIZO", name: "Amizo Power" }]));
+    if (path === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, displayName: "ERP admin", roles: ["erp_admin"] } });
     if (path === "/api/hrm/branding") return json({ displayName: "Amizo Power" });
     if (path === "/api/hrm/admin/legal-entities") return json({ items: [{ id: companyId, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (path === "/api/hrm/admin/locations") return json({ items: [] });
@@ -56,8 +58,10 @@ for (const [path, heading, content] of [
     await page.goto(`/procurement/workspace${path}`);
     const main = page.getByRole("main");
     await expect(main.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    if (path.startsWith("/rfqs/")) await main.getByRole("tab", { name: "Items (1)" }).click();
     await expect(main.getByText(content, { exact: true })).toBeVisible();
-    await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Publish|Return for changes)/i })).toHaveCount(0);
+    await expect(main.getByRole("button", { name: /^(Add|New |Edit|Save|Send for review|Withdraw|Cancel draft|Publish|Return for changes)/i }).and(main.locator("button:enabled"))).toHaveCount(0);
+    if (path.startsWith("/rfqs/")) await expect(main.getByRole("button", { name: "Publish", exact: true })).toBeDisabled();
     await expect(main.getByRole("link", { name: /^(Add|New |Edit)/i })).toHaveCount(0);
     if (path === "/settings/buying-rules") await expect(main.getByRole("button", { name: "Try a sample", exact: true })).toBeVisible();
     expect(writes).toEqual([]);

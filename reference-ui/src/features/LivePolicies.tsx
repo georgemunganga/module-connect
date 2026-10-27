@@ -208,13 +208,15 @@ function LivePoliciesRecord() {
     event.preventDefault();
     if (!canEdit || !editing || !isBuyingRulePolicy(key)
       || (editing !== "new" && (!isBuyingRulePolicy(editing.policyKey) || editing.policyKey !== key)) || !canStart()) return;
+    const routeHref = window.location.pathname + window.location.search;
+    const isCurrentRoute = () => window.location.pathname + window.location.search === routeHref;
     busy.current = true;
     setSaving(true); setError(""); setIssues([]);
     let mutationStarted = false;
     try {
       const rulesJson = toRuleJson(key, currency, rows);
       const check = await validatePolicy(companyId, rulesJson);
-      if (!alive.current) return;
+      if (!alive.current || !isCurrentRoute()) return;
       setIssues(check.issues);
       if (!check.isValid) return;
       const draft = { policyKey: key, effectiveFrom: utc(start),
@@ -222,10 +224,10 @@ function LivePoliciesRecord() {
       mutationStarted = true;
       if (editing === "new") await createPolicy(companyId, draft);
       else await updatePolicy(companyId, editing.id, editing.version, draft);
-      if (!alive.current) return;
+      if (!alive.current || !isCurrentRoute()) return;
       setEditing(null); setRefresh((value) => value + 1);
-    } catch (cause) { if (alive.current) mutationStarted ? failWrite(cause) : setError(errorText(cause)); }
-    finally { busy.current = false; if (alive.current) setSaving(false); }
+    } catch (cause) { if (alive.current && isCurrentRoute()) mutationStarted ? failWrite(cause) : setError(errorText(cause)); }
+    finally { busy.current = false; if (alive.current && isCurrentRoute()) setSaving(false); }
   }
 
   async function sendForReview(event: FormEvent) {
