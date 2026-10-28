@@ -6,6 +6,7 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { claimUnitReviewPending, clearUnitReviewPending, readUnitReviewPending, type UnitReviewPending } from "../lib/invoice-unit-review-command";
+import { readManualReviewLink, rememberManualReviewLink } from "../lib/invoice-manual-review-link";
 import { manualDecide, manualDetail, manualOpen, manualReadiness, manualRecover, manualRecoverOpenByInvoice, manualTasks, ManualReviewError,
   type ManualAction, type ManualDetail, type ManualReadiness, type ManualTaskPage } from "../../../src/platform/procurement-invoice-manual-unit-review-api";
 
@@ -20,6 +21,7 @@ export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion }: { in
   const write = read && context.capabilities.invoiceManualUnitReview && selection.branchScope !== "all" && selectedBranch(selection.branch);
   const scope = JSON.stringify([context.tenantId, context.legalEntityId, selection.branch ?? "", context.principalId, invoiceId, "ManualOpen"]);
   const [readiness, setReadiness] = useState<ManualReadiness | null>(null);
+  const [recoveredReviewId, setRecoveredReviewId] = useState(() => readManualReviewLink(scope));
   const [pending, setPending] = useState(() => readUnitReviewPending(scope));
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [reason, setReason] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
@@ -42,7 +44,8 @@ export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion }: { in
     inFlight.current = true; setPending(readUnitReviewPending(scope)); setBusy(true); setError("");
     try {
       const result = await manualOpen(context.legalEntityId, readiness, reason.trim(), marker.key, context.principalId);
-      clearUnitReviewPending(scope, marker); if (alive.current) { setPending(readUnitReviewPending(scope)); setNotice(`Manual unit review started: ${result.reviewState}.`);
+      if (!rememberManualReviewLink(scope, result.reviewId)) throw new Error("The review was saved, but this browser could not retain its record link. Check the original command before another request.");
+      clearUnitReviewPending(scope, marker); if (alive.current) { setPending(readUnitReviewPending(scope)); setRecoveredReviewId(result.reviewId); setNotice(`Manual unit review started: ${result.reviewState}.`);
         setReadiness(await manualReadiness(context.legalEntityId, invoiceId)); }
     } catch (cause) {
       if (cause instanceof ManualReviewError && [400, 422].includes(cause.status)) clearUnitReviewPending(scope, marker);
@@ -54,7 +57,8 @@ export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion }: { in
     inFlight.current = true; setBusy(true); setError("");
     try {
       const result = await manualRecoverOpenByInvoice(context.legalEntityId, invoiceId, marker.key, context.principalId);
-      clearUnitReviewPending(scope, marker); if (alive.current) { setPending(readUnitReviewPending(scope));
+      if (!rememberManualReviewLink(scope, result.reviewId)) throw new Error("The saved review was found, but this browser could not retain its record link. Check the original command again.");
+      clearUnitReviewPending(scope, marker); if (alive.current) { setPending(readUnitReviewPending(scope)); setRecoveredReviewId(result.reviewId);
         setNotice(`Saved manual review found: ${result.reviewState}.`); }
     } catch (cause) { if (alive.current) setError(msg(cause)); }
     finally { inFlight.current = false; if (alive.current) setBusy(false); }
@@ -63,7 +67,8 @@ export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion }: { in
     <p>An independent person checks the entered unit names and original invoice values. This does not approve the bill or send it to Finance.</p>
     {loading && <p role="status">Checking manual unit review availability…</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}{notice && <p role="status">{notice}</p>}
-    {readiness?.existingReviewId && <p>Review <Badge>Recorded</Badge> <Link className="text-primary underline" to={`${base}/${readiness.existingReviewId}`}>Open review details</Link></p>}
+    {(readiness?.existingReviewId ?? recoveredReviewId) && <p>Review <Badge>Recorded</Badge> <Link className="text-primary underline"
+      to={`${base}/${readiness?.existingReviewId ?? recoveredReviewId}`}>Open review details</Link></p>}
     {readiness?.manualUnitLines?.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Invoice line</th><th>Entered unit</th></tr></thead>
       <tbody>{readiness.manualUnitLines.map(line => <tr key={line.invoiceLineId}><td>{line.invoiceLineId}</td><td>{line.unitCode}</td></tr>)}</tbody></RecordTable></div> : null}
     {readiness?.blockers.length ? <ul className="list-disc pl-5">{readiness.blockers.map(code => <li key={code}>{code}</li>)}</ul> : null}
@@ -110,7 +115,12 @@ export function InvoiceManualUnitReviewQueue() {
 
 type Choice = { action: ManualAction; reason: string; attested: boolean; assignmentId: string; assignmentVersion: number };
 export function InvoiceManualUnitReviewDetail() {
-  const context = useLiveReadiness()!, { selection } = useErpShell(), { id: reviewId = "" } = useParams();
+  const context = useLiveReadiness()!, { selection, authEpoch } = useErpShell(), { id: reviewId = "" } = useParams();
+  return <ManualDetailView key={JSON.stringify([authEpoch, context.tenantId, context.legalEntityId, selection.entityId ?? "",
+    selection.branch ?? "", selection.branchScope ?? "", context.principalId, reviewId])} reviewId={reviewId} />;
+}
+function ManualDetailView({ reviewId }: { reviewId: string }) {
+  const context = useLiveReadiness()!, { selection } = useErpShell();
   const read = context.capabilities.invoiceManualUnitReviewRead && context.permissions.some(p =>
     ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(p));
   const write = context.capabilities.invoiceManualUnitReview && selectedBranch(selection.branch) && selection.branchScope !== "all"
