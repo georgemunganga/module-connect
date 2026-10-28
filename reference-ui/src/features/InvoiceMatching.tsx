@@ -80,7 +80,8 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
   }, [company, invoiceId, invoiceVersion, editing, principalWrite, activeLine, selected?.policy, selected?.source.orderId, selected?.source.issuedVersionId, selected?.source.purchaseOrderLineId, acceptancePage, commandBlocked]);
   const update = (change: Partial<LinkDraft>) => setDrafts((all) => all[activeLine] ? { ...all, [activeLine]: { ...all[activeLine], ...change } } : all);
   function choose(source: InvoiceSource) {
-    if (!sources || source.sourceState !== "VerifiedIssued" || source.blocker || !source.method) return;
+    if (!sources || source.sourceState !== "VerifiedIssued" || source.blocker || !source.method
+      || principalWrite && source.sourceSchemaVersion !== 3 || !principalWrite && source.sourceSchemaVersion === 3) return;
     const another = Object.entries(drafts).find(([line]) => line !== activeLine)?.[1];
     if (another && (another.source.orderId !== source.orderId || another.source.issuedVersionId !== source.issuedVersionId || another.policy !== sources.policyVersionId)) {
       setError("All invoice lines must link to the same issued order. Clear the draft links before choosing another order."); return;
@@ -120,7 +121,8 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
     try {
       const links = lines.map((line) => {
         const draft = drafts[line.id];
-        if (!draft || !draft.unit.trim() || (!principalWrite && (!draft.reference.trim()
+        if (!draft || principalWrite && draft.source.sourceSchemaVersion !== 3 || !principalWrite && draft.source.sourceSchemaVersion === 3
+          || !draft.unit.trim() || (!principalWrite && (!draft.reference.trim()
           || !documents.some((document) => document.versionId === draft.document && document.scanState === "Available")))
           || principalWrite && Boolean(draft.reference.trim()) !== Boolean(draft.document)
           || principalWrite && Boolean(draft.document) && !documents.some((document) => document.versionId === draft.document && document.scanState === "Available")
