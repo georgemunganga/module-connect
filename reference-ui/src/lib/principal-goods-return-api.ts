@@ -110,11 +110,13 @@ export function returnCommandPath(command: ReturnCommand): string {
     || command.operation === "Cancel" && (!command.targetId || command.method !== "POST")) throw invalid();
   return command.operation === "Create" ? root : `${root}/${command.targetId}${command.operation === "Cancel" ? "/cancel" : ""}`;
 }
-async function request(company: string, path: string, init: RequestInit = {}): Promise<unknown> {
+async function request(company: string, path: string, init: RequestInit = {}, collection = false): Promise<unknown> {
   if (!guid.test(company)) throw invalid();
   const headers = new Headers(init.headers);
   Object.entries(procurementScopeHeaders(company)).forEach(([key, value]) => headers.set(key, value));
-  if (!headers.has("X-Shell-Location") || headers.has("X-Shell-Branch-Scope")) throw new GoodsReturnError(0, "Choose a permitted branch to open returns.");
+  const selected = guid.test(headers.get("X-Shell-Location") ?? "") && !headers.has("X-Shell-Branch-Scope");
+  const all = headers.get("X-Shell-Branch-Scope") === "all" && !headers.has("X-Shell-Location");
+  if (!selected && !(collection && init.method === undefined && all)) throw new GoodsReturnError(0, "Choose a permitted branch to open returns.");
   if (init.body) headers.set("Content-Type", "application/json");
   let response: Response;
   try { response = await fetch(path, { ...init, headers, cache: "no-store", credentials: "include" }); }
@@ -130,11 +132,11 @@ async function request(company: string, path: string, init: RequestInit = {}): P
 }
 export async function listReturnDrafts(company: string, offset: number, signal?: AbortSignal) {
   if (!integer(offset) || offset > 10000) throw invalid();
-  return readPage(await request(company, `${root}?offset=${offset}`, { signal }), (item) => readReturnDetail(item));
+  return readPage(await request(company, `${root}?offset=${offset}`, { signal }, true), (item) => readReturnDetail(item));
 }
 export async function listEligibleGoods(company: string, offset: number, signal?: AbortSignal) {
   if (!integer(offset) || offset > 10000) throw invalid();
-  return readPage(await request(company, `${root}/eligible-goods?offset=${offset}`, { signal }), readReturnEligible);
+  return readPage(await request(company, `${root}/eligible-goods?offset=${offset}`, { signal }, true), readReturnEligible);
 }
 export async function getReturnDraft(company: string, id: string, signal?: AbortSignal) {
   if (!guid.test(id)) throw invalid();

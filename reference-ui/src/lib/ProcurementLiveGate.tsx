@@ -59,6 +59,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     && state.readiness.permissions.includes("procurement-po-approve");
   const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
   const returnPath = /^\/purchase-receives\/returns(?:\/|$)/.test(location.pathname);
+  const returnCollection = location.pathname === "/purchase-receives/returns"
+    && state.readiness?.capabilities.principalGoodsReturnDraftsRead === true;
   const principalReceivingCollection = location.pathname === "/purchase-receives"
     && state.readiness?.capabilities.principalReceivingRead === true
     && new URLSearchParams(location.search).get("receivingProtocol") !== "legacy";
@@ -72,7 +74,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const planList = /^\/plans\/?$/.test(location.pathname);
   const contractList = /^\/contracts\/?$/.test(location.pathname);
   const allReadSupported = vendorPath || itemPath || paymentPath
-    || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || principalReceivingCollection;
+    || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
     return blockedShell ? blockedShell(chooseBranch) : chooseBranch;

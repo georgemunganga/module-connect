@@ -16,7 +16,7 @@ async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,retu
   const current=()=>({id:draft,status,version,branchId:branch,receiptId:receipt,acceptanceFactId:fact,purchaseOrderId:order,purchaseOrderLineId:line,acceptedFactQuantityExact:"1.0001",quantityExact:quantity,reason,evidenceReference:null,draftOnly:true,stockChanged:false,financeChanged:false,supplierNotified:false});
   const detail=()=>({...current(),allowedActions:status==="Draft"&&!revoked?["Edit","Cancel"]:[],labels});
   const perms=["procurement-access","procurement-return-read",...(denyCreate?[]:["procurement-return-create"]),...(revoked?[]:["procurement-return-edit"]),...(returnOnly?[]:["procurement-receipt-view"])];
-  await page.addInitScript(({company,branch,allBranches})=>localStorage.setItem("erp.shell.state.v1",JSON.stringify(allBranches?{entityId:company,branchScope:"all"}:{entityId:company,branch})),{company,branch,allBranches});
+  await page.addInitScript(({company,branch,allBranches})=>localStorage.getItem("erp.shell.state.v1") || localStorage.setItem("erp.shell.state.v1",JSON.stringify(allBranches?{entityId:company,branchScope:"all"}:{entityId:company,branch})),{company,branch,allBranches});
   await page.route("**/api/**",async route=>{
     const request=route.request(),url=new URL(request.url()),urlPath=url.pathname;
     const json=(value:unknown,statusCode=200)=>route.fulfill({status:statusCode,contentType:"application/json",body:JSON.stringify(value)});
@@ -27,7 +27,7 @@ async function fixture(page:Page,{lost=false,revoked=false,returnOnly=false,retu
     if(urlPath==="/api/hrm/admin/locations")return json({items:[{id:branch,code:"HQ",name:"Main site",legalEntityId:company}]});
     if(urlPath==="/api/hrm/shell/")return json({assignedLocationIds:[branch],confined:true});
     if(urlPath.startsWith(api)){expect(request.headers()["x-shell-entity"]).toBe(company);if(!allBranches)expect(request.headers()["x-shell-location"]).toBe(branch);}
-    if(urlPath===api+"/context")return json({principalId:actor,tenantId:"amizo",legalEntityId:company,workerId:null,permissions:perms,branch:allBranches?null:{id:branch,code:"HQ",name:"Main site"},company:{id:company,code:"AMIZO",name:"Amizo Power",currencyCode:"ZMW"}});
+    if(urlPath===api+"/context")return json({principalId:actor,tenantId:"amizo",legalEntityId:company,workerId:null,permissions:perms,branch:request.headers()["x-shell-location"]?{id:branch,code:"HQ",name:"Main site"}:null,company:{id:company,code:"AMIZO",name:"Amizo Power",currencyCode:"ZMW"}});
     if(urlPath===api+"/meta")return json({tenantId:"amizo",legalEntityId:company,schemaReady:true,capabilities:{...mandatoryCapabilities,...(returnsAbsent?{}:{principalGoodsReturnDraftsRead:true,principalGoodsReturnDrafts:!writeOff}),principalReceiving:!returnOnly}});
     if(request.method()==="GET"){
       reads.push(urlPath);
@@ -106,9 +106,17 @@ test("a receiving-only capability does not open Returns",async({page})=>{
   const state=await fixture(page,{returnsAbsent:true});await page.goto(path);
   await expect(page.getByText(/workflow is being connected to your ERP/)).toBeVisible();expect(state.writes).toHaveLength(0);
 });
-test("Organisation All remains blocked until a branch is selected",async({page})=>{
+test("Company All lists drafts, selects their permitted branch for detail, and blocks new writes until then",async({page})=>{
   const state=await fixture(page,{allBranches:true});await page.goto(path);
-  await expect(page.getByText(/Choose a permitted branch/)).toBeVisible();expect(state.writes).toHaveLength(0);
+  await expect(page.getByRole("button",{name:"View return draft"})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Add return draft"})).toHaveCount(0);
+  await page.goto(path+"/new");
+  await expect(page.getByText(/Choose a permitted branch/)).toBeVisible();
+  await page.goto(path);
+  await page.getByRole("button",{name:"View return draft"}).click();
+  await expect(page.getByText("PO-RETAINED")).toBeVisible();
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem("erp.shell.state.v1")!).branch)).toBe(branch);
+  expect(state.writes).toHaveLength(0);
 });
 test("an empty return list uses the existing ERP empty state and a permitted create action",async({page})=>{
   const state=await fixture(page,{empty:true});await page.goto(path);

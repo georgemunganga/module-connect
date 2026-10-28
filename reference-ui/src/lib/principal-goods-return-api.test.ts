@@ -43,6 +43,17 @@ describe("goods return source and command boundary", () => {
     expect(fetcher.mock.calls[0][0]).toContain("/eligible-goods?offset=0");
     expect((fetcher.mock.calls[0][1] as RequestInit).headers).toBeInstanceOf(Headers);
   });
+  it("permits Company All only for verified collections, never detail, recovery or writes", async () => {
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branchScope: "all" }) });
+    const fetcher = vi.fn(async (_url: string, _init?: RequestInit) => json({ items: [detail], hasMore: false, nextOffset: null }));
+    vi.stubGlobal("fetch", fetcher);
+    expect((await listReturnDrafts(company, 0)).items).toHaveLength(1);
+    expect(((fetcher.mock.calls[0][1] as RequestInit).headers as Headers).get("X-Shell-Branch-Scope")).toBe("all");
+    await expect(getReturnDraft(company, draft)).rejects.toThrow("permitted branch");
+    await expect(recoverReturnCommand(company, command)).rejects.toThrow("permitted branch");
+    await expect(sendReturnCommand(company, command)).rejects.toThrow("permitted branch");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it("blocks a mounted editor after branch change or All selection", () => {
     selectedBranch(); expect(() => assertReturnScope(company, branch)).not.toThrow();
     vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch: id(9) }) });

@@ -5,12 +5,14 @@ import { DetailSection, DetailTabs } from "../components/data/DetailPrimitives";
 import { RecordTable } from "../components/data/RecordTable";
 import { TransactionEditorFrame } from "./TransactionEditor";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { useErpShell } from "../lib/erpShell";
 import { procurementScopeHeaders } from "../../../shared/shell-scope";
 import { assertReturnScope, getReturnDraft, listEligibleGoods, listReturnDrafts, recoverReturnCommand, returnQuantity, returnText, sendReturnCommand,
   GoodsReturnError, type ReturnCommand, type ReturnDetail, type ReturnEligible, type ReturnPage } from "../lib/principal-goods-return-api";
 import { goodsReturnJournal, type ReturnJournalScope } from "../lib/principal-goods-return-journal";
 
 const base = "/purchase-receives/returns";
+const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const text = (error: unknown) => error instanceof Error ? error.message : "Returns are unavailable. Refresh before continuing.";
 function recoveryState(scope: ReturnJournalScope) {
   try { return { command: goodsReturnJournal.read(scope), error: "" }; }
@@ -18,10 +20,12 @@ function recoveryState(scope: ReturnJournalScope) {
 }
 function useReturnContext() {
   const context = useLiveReadiness()!;
-  const branch = procurementScopeHeaders(context.legalEntityId)["X-Shell-Location"] ?? "";
+  const headers = procurementScopeHeaders(context.legalEntityId);
+  const branch = headers["X-Shell-Location"] ?? "";
+  const all = headers["X-Shell-Branch-Scope"] === "all";
   return { context, branch,
-    canRead: context.capabilities.principalGoodsReturnDraftsRead === true && !!branch,
-    canWrite: context.capabilities.principalGoodsReturnDrafts === true && !!branch };
+    canRead: context.capabilities.principalGoodsReturnDraftsRead === true && (guid.test(branch) || all),
+    canWrite: context.capabilities.principalGoodsReturnDrafts === true && guid.test(branch) && !all };
 }
 function SourceLabel({ labels }: { labels: ReturnDetail["labels"] }) {
   return <><strong>{labels.purchaseOrderNumber}</strong> · Line {labels.lineNumber} · {labels.description} · {labels.unitCode}<span className="block text-xs text-muted-foreground">{labels.supplierDisplayName?.trim() || "Supplier on the purchase order"} · Received {new Date(labels.receivedAt).toLocaleString()} · Delivery note {labels.deliveryNoteReference}</span></>;
@@ -34,9 +38,16 @@ export function LiveGoodsReturnList() {
   return <ReturnList key={`${context.tenantId}:${context.legalEntityId}:${context.principalId}:${branch}`} canRead={canRead} canWrite={canWrite} />;
 }
 function ReturnList({ canRead: readReady, canWrite }: { canRead: boolean; canWrite: boolean }) {
-  const context = useLiveReadiness()!, company = context.legalEntityId, navigate = useNavigate();
+  const context = useLiveReadiness()!, company = context.legalEntityId, navigate = useNavigate(), shell = useErpShell();
   const canRead = readReady && context.permissions.includes("procurement-return-read");
   const canCreate = canRead && canWrite && context.permissions.includes("procurement-return-create");
+  const openDraft = (item: ReturnDetail) => {
+    if (!shell.branches.some((branch) => branch.id === item.branchId && branch.legalEntityId === company)) {
+      setError("Choose a permitted branch for this return in the ERP shell before opening it."); return;
+    }
+    shell.selectBranch(item.branchId, company);
+    navigate(`${base}/${item.id}`);
+  };
   const [offset, setOffset] = useState(0), [page, setPage] = useState<ReturnPage<ReturnDetail> | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState(""), [revision, setRevision] = useState(0);
   useEffect(() => {
@@ -51,7 +62,7 @@ function ReturnList({ canRead: readReady, canWrite }: { canRead: boolean; canWri
     <ReturnTabs active="returns" />
     {!canRead ? <p role="alert">Select a permitted branch and obtain current return access to view drafts.</p> : <>
       <div className="mb-4"><Button variant="secondary" onClick={() => setRevision((n) => n + 1)}>Refresh return drafts</Button></div>
-      {error && <p role="alert">{error}</p>}{loading ? <p role="status">Loading return drafts…</p> : page?.items.length ? <Panel><div className="overflow-x-auto"><RecordTable><thead><tr><th>Purchase order</th><th>Goods</th><th>Proposed quantity</th><th>Status</th><th>Action</th></tr></thead><tbody>{page.items.map((item) => <tr key={item.id}><td>{item.labels.purchaseOrderNumber}</td><td>{item.labels.description} · {item.labels.unitCode}</td><td>{item.quantityExact}</td><td><Badge>{item.status}</Badge></td><td><Link className="text-primary hover:underline" to={`${base}/${item.id}`}>View return draft</Link></td></tr>)}</tbody></RecordTable></div></Panel> : !error && <EmptyState title="No return drafts yet" description="Draft returns for accepted goods in this branch will appear here." action={canCreate ? <Button onClick={() => navigate(`${base}/new`)}>Create your first return draft</Button> : undefined} />}
+      {error && <p role="alert">{error}</p>}{loading ? <p role="status">Loading return drafts…</p> : page?.items.length ? <Panel><div className="overflow-x-auto"><RecordTable><thead><tr><th>Purchase order</th><th>Goods</th><th>Proposed quantity</th><th>Status</th><th>Action</th></tr></thead><tbody>{page.items.map((item) => <tr key={item.id}><td>{item.labels.purchaseOrderNumber}</td><td>{item.labels.description} · {item.labels.unitCode}</td><td>{item.quantityExact}</td><td><Badge>{item.status}</Badge></td><td><Button variant="ghost" onClick={() => openDraft(item)} disabled={!shell.branches.some((branch) => branch.id === item.branchId && branch.legalEntityId === company)}>View return draft</Button></td></tr>)}</tbody></RecordTable></div></Panel> : !error && <EmptyState title="No return drafts yet" description="Draft returns for accepted goods in this branch will appear here." action={canCreate ? <Button onClick={() => navigate(`${base}/new`)}>Create your first return draft</Button> : undefined} />}
       <div className="mt-4 flex gap-3"><Button variant="secondary" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</Button><Button variant="secondary" disabled={!page?.hasMore || loading || page?.nextOffset === null} onClick={() => { if (page?.nextOffset != null) setOffset(page.nextOffset); }}>Next</Button></div>
     </>}
   </div>;
@@ -127,6 +138,7 @@ export function LiveGoodsReturnEditor() {
 }
 function ReturnEditor({ id, canRead: readReady, canWrite, branch }: { id?: string; canRead: boolean; canWrite: boolean; branch: string }) {
   const context = useLiveReadiness()!, company = context.legalEntityId, navigate = useNavigate(), [search] = useSearchParams();
+  const shell = useErpShell();
   const linkedFactId = !id ? search.get("acceptanceFactId") : null;
   const canCreate = canWrite && context.permissions.includes("procurement-return-read") && context.permissions.includes("procurement-return-create");
   const canEdit = canWrite && context.permissions.includes("procurement-return-edit");
@@ -148,7 +160,7 @@ function ReturnEditor({ id, canRead: readReady, canWrite, branch }: { id?: strin
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(text(cause)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     else listEligibleGoods(company, offset, controller.signal).then((page) => { if (!controller.signal.aborted) { setEligible(page);
       if (linkedFactId) { const match = page.items.find((item) => item.acceptanceFactId === linkedFactId);
-        if (match) { setSelected(match); setQuantity(match.acceptedFactQuantityExact); } }
+        if (match && match.branchId === branch) { setSelected(match); setQuantity(match.acceptedFactQuantityExact); } }
       if (uncertain?.operation === "Create") { const saved = JSON.parse(uncertain.body) as { acceptanceFactId: string; quantity: string; reason: string; evidenceReference: string | null };
         setSelected(page.items.find((item) => item.acceptanceFactId === saved.acceptanceFactId) ?? null);
         setQuantity(saved.quantity); setReason(saved.reason); setReference(saved.evidenceReference ?? ""); } } })
@@ -167,6 +179,7 @@ function ReturnEditor({ id, canRead: readReady, canWrite, branch }: { id?: strin
   }
   async function save(event: FormEvent) {
     event.preventDefault(); if (!allowed || busyRef.current || uncertain || journalError || id && !detail?.allowedActions.includes("Edit") || !id && !selected) return;
+    if (!id && selected?.branchId !== branch) { setError("Select the accepted goods fact’s permitted branch before saving."); return; }
     try { assertReturnScope(company, branch); } catch (cause) { setError(text(cause)); return; }
     let clean: { quantity: string; reason: string; evidenceReference: string | null };
     try { const textFields = returnText(reason, reference); const limit = id ? detail!.acceptedFactQuantityExact : selected!.acceptedFactQuantityExact;
@@ -192,7 +205,11 @@ function ReturnEditor({ id, canRead: readReady, canWrite, branch }: { id?: strin
       {id && detail && !detail.allowedActions.includes("Edit") && <p role="alert">This draft cannot be edited with your current access or state.</p>}
       {uncertain && <Panel title="Check the saved draft"><div className="space-y-3 p-5"><p>The response was interrupted. Check whether this return was saved before making another change.</p><Button disabled={busy} onClick={recover}>Check saved return</Button></div></Panel>}
       <form id="goods-return-form" onSubmit={save} onChange={() => setDirty(true)} className="space-y-5"><fieldset disabled={busy || !!uncertain || !!journalError || !allowed || !!id && !detail?.allowedActions.includes("Edit")} className="space-y-5">
-        {!id && <Panel title="Received goods"><div className="space-y-3 p-5">{linkedFactId && !selected && <p role="status">Find the accepted fact from the delivery using the pages below. Only a verified eligible fact can be selected.</p>}<div className="overflow-x-auto"><RecordTable><thead><tr><th>Select</th><th>Purchase order and goods</th><th>Accepted quantity</th></tr></thead><tbody>{eligible?.items.map((item) => <tr key={item.acceptanceFactId}><td><Input type="radio" name="accepted-goods" aria-label={`Select ${item.labels.purchaseOrderNumber} line ${item.labels.lineNumber}`} checked={selected?.acceptanceFactId === item.acceptanceFactId} onChange={() => { setSelected(item); setQuantity(item.acceptedFactQuantityExact); setDirty(true); }} /></td><td><SourceLabel labels={item.labels} /></td><td>{item.acceptedFactQuantityExact} {item.labels.unitCode}</td></tr>)}</tbody></RecordTable></div>{!eligible?.items.length && <p>No accepted goods are available in this branch.</p>}<div className="flex gap-3"><Button variant="secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</Button><Button variant="secondary" disabled={!eligible?.hasMore || eligible?.nextOffset === null} onClick={() => { if (eligible?.nextOffset != null) setOffset(eligible.nextOffset); }}>Next</Button></div></div></Panel>}
+        {!id && <Panel title="Received goods"><div className="space-y-3 p-5">{linkedFactId && !selected && <p role="status">Find the accepted fact from the delivery using the pages below. Only a verified eligible fact can be selected.</p>}<div className="overflow-x-auto"><RecordTable><thead><tr><th>Select</th><th>Purchase order and goods</th><th>Accepted quantity</th></tr></thead><tbody>{eligible?.items.map((item) => <tr key={item.acceptanceFactId}><td><Input type="radio" name="accepted-goods" aria-label={`Select ${item.labels.purchaseOrderNumber} line ${item.labels.lineNumber}`} checked={selected?.acceptanceFactId === item.acceptanceFactId} onChange={() => {
+          if (item.branchId !== branch) { if (!shell.branches.some((allowed) => allowed.id === item.branchId && allowed.legalEntityId === company)) { setError("Choose a permitted branch for this accepted fact."); return; }
+            shell.selectBranch(item.branchId, company); navigate(`${base}/new?acceptanceFactId=${item.acceptanceFactId}`); return; }
+          setSelected(item); setQuantity(item.acceptedFactQuantityExact); setDirty(true);
+        }} /></td><td><SourceLabel labels={item.labels} /></td><td>{item.acceptedFactQuantityExact} {item.labels.unitCode}</td></tr>)}</tbody></RecordTable></div>{!eligible?.items.length && <p>No accepted goods are available in this branch.</p>}<div className="flex gap-3"><Button variant="secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</Button><Button variant="secondary" disabled={!eligible?.hasMore || eligible?.nextOffset === null} onClick={() => { if (eligible?.nextOffset != null) setOffset(eligible.nextOffset); }}>Next</Button></div></div></Panel>}
         {id && detail && <Panel title="Received goods"><div className="p-5"><SourceLabel labels={detail.labels} /><p>Accepted quantity: {detail.acceptedFactQuantityExact} {detail.labels.unitCode}</p></div></Panel>}
         <Panel title="Draft proposal"><div className="grid gap-4 p-5 sm:grid-cols-2"><Field label="Proposed quantity"><Input value={quantity} inputMode="decimal" onChange={(event) => setQuantity(event.target.value)} required /></Field><Field label="Evidence reference"><Input value={reference} maxLength={300} onChange={(event) => setReference(event.target.value)} /></Field><Field label="Reason"><Textarea value={reason} maxLength={2000} onChange={(event) => setReason(event.target.value)} required /></Field></div></Panel>
       </fieldset></form>
