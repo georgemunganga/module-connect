@@ -4,9 +4,9 @@ import { lookupReceivingReferences, lookupSelectedReceivingReferences,
   type ReceivingLookupPage } from "../../../src/platform/procurement-policy-api";
 
 /** Purpose-scoped Core names; stored policy keeps the owner IDs, never display text. */
-export function ReceivingReferencePicker({ company, kind, label, selected, onChange, disabled }: {
-  company: string; kind: "people" | "sites"; label: string; selected: string[];
-  onChange: (ids: string[]) => void; disabled?: boolean;
+export function ReceivingReferencePicker({ company, kind, label, selected, onChange, disabled, maxSelected = 100 }: {
+  company: string; kind: "people" | "principals" | "sites"; label: string; selected: string[];
+  onChange: (ids: string[]) => void; disabled?: boolean; maxSelected?: number;
 }) {
   const [search, setSearch] = useState(""), [offset, setOffset] = useState(0);
   const [page, setPage] = useState<ReceivingLookupPage | null>(null), [error, setError] = useState(""), [loading, setLoading] = useState(true);
@@ -35,7 +35,7 @@ export function ReceivingReferencePicker({ company, kind, label, selected, onCha
     return () => { clearTimeout(timer); abort.abort(); };
   }, [company, kind, search, offset]);
   return <div className="min-w-0 space-y-3 sm:col-span-2"><Field label={`Find ${label.toLowerCase()}`}><Input maxLength={100} disabled={disabled} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} /></Field>
-    <Field label={label}><Select value="" disabled={disabled || loading || !!error || selected.length >= 100} onChange={event => {
+    <Field label={label}><Select value="" disabled={disabled || loading || !!error || selected.length >= maxSelected} onChange={event => {
       if (event.target.value && !selected.includes(event.target.value)) onChange([...selected, event.target.value]);
     }}><option value="">{loading ? "Loading names…" : `Add ${label.toLowerCase()}`}</option>
       {page?.items.filter(item => !selected.includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.displayName}{item.code ? ` · ${item.code}` : ""}</option>)}</Select></Field>

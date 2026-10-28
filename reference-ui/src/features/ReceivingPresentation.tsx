@@ -10,7 +10,7 @@ export function ReceivingUnavailableAction({ label, reason }: { label: string; r
 export function ReceivingActivity({ effects, recordedAt }: { effects: ReceivingEffect[]; recordedAt?: string | null }) {
   return <ActivityTimeline items={[
     ...(recordedAt ? [{ id: "physical-recorded", title: "Arrival recorded", date: new Date(recordedAt).toLocaleString() }] : []),
-    ...effects.map((effect) => ({ id: effect.id, title: effect.kind, detail: `${effect.quantity} · ${effect.netAmount} · ${effect.evidenceReference}`, date: new Date(effect.occurredAt).toLocaleString() })),
+    ...effects.map((effect) => ({ id: effect.id, title: effect.kind, detail: `${effect.quantity}${effect.netAmount === null ? "" : ` · ${effect.netAmount}`} · ${effect.evidenceReference}`, date: new Date(effect.occurredAt).toLocaleString() })),
   ]} />;
 }
 export function ReceivingRelated({ orderId, orderNumber, canReadOrder, allowBillAction = true }: { orderId?: string | null; orderNumber?: string; canReadOrder: boolean; allowBillAction?: boolean }) {

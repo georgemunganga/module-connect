@@ -6,6 +6,7 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { claimAuthorityCreateGuard, clearAuthorityCreateGuard, readAuthorityCreateGuard } from "../lib/authority-create-guard";
 import { ReceivingCategoryPicker, ReceivingReferencePicker } from "./ReceivingReferencePicker";
 import { emptyReceivingRow, parseReceivingPolicy, serializeReceivingPolicy, type ReceivingRow } from "../lib/receiving-policy-editor";
+import { emptyPrincipalReceivingRow, parsePrincipalReceivingPolicy, serializePrincipalReceivingPolicy, type PrincipalReceivingRow } from "../lib/principal-receiving-policy-editor";
 import { createPolicy, decidePolicy, getEffectivePolicy, getPolicy, listPolicies, lookupReceivingReferences, submitPolicyReview,
   updatePolicy, validatePolicy, PolicyActionError, type PolicyPage, type PolicyRecord } from "../../../src/platform/procurement-policy-api";
 
@@ -14,6 +15,8 @@ const day = (value: string | null) => value?.slice(0, 10) ?? "";
 const tomorrow = () => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 const explain = (cause: unknown) => cause instanceof Error ? cause.message : "Receiving settings are unavailable.";
 type Pending = { item: PolicyPage["items"][number]; action: "review" | "publish" | "return" };
+type EditorRow = ReceivingRow & PrincipalReceivingRow;
+const emptyEditorRow = (): EditorRow => ({ ...emptyReceivingRow(), ...emptyPrincipalReceivingRow() });
 
 export function LiveReceivingSettings() {
   const readiness = useLiveReadiness(); const { selection } = useErpShell();
@@ -33,24 +36,33 @@ function ReceivingRecord() {
   const marker = `procurement.policy.command.pending.v1:${[readiness.tenantId, company,
     selection.branch ?? "", readiness.principalId, KEY].join(":")}`;
   const [guard, setGuard] = useState(() => readAuthorityCreateGuard(marker));
-  const [schemaReady, setSchemaReady] = useState(false);
+  const [schemaReady, setSchemaReady] = useState({ legacy: false, current: false });
+  const [schema, setSchema] = useState<1 | 2>(2);
+  const readyForEditing = schema === 2 ? schemaReady.current : schemaReady.legacy;
+  const anySchemaReady = schemaReady.current || schemaReady.legacy;
   const [page, setPage] = useState<PolicyPage | null>(null);
   const [loading, setLoading] = useState(true), [working, setWorking] = useState(false);
   const [refresh, setRefresh] = useState(0), [error, setError] = useState("");
   const [editing, setEditing] = useState<PolicyRecord | "new" | null>(null);
   const [viewing, setViewing] = useState<PolicyRecord | null>(null);
   const [pending, setPending] = useState<Pending | null>(null), [reason, setReason] = useState("");
-  const [rows, setRows] = useState<ReceivingRow[]>([emptyReceivingRow()]);
+  const [rows, setRows] = useState<EditorRow[]>([emptyEditorRow()]);
   const [start, setStart] = useState(tomorrow), [end, setEnd] = useState("");
   const busy = useRef(false), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     if (!canRead) return;
-    const controller = new AbortController(); setSchemaReady(false);
+    const controller = new AbortController(); setSchemaReady({ legacy: false, current: false });
     Promise.all([getEffectivePolicy(company, KEY),
-      ...(["people", "sites", "categories"] as const).map(kind => lookupReceivingReferences(company, kind, "", 0, controller.signal))])
-      .then(() => { if (!controller.signal.aborted) setSchemaReady(true); })
-      .catch(() => { if (!controller.signal.aborted) setSchemaReady(false); });
+      ...(["sites", "categories"] as const).map(kind => lookupReceivingReferences(company, kind, "", 0, controller.signal))])
+      .then(async () => {
+        const [legacy, current] = await Promise.allSettled([
+          lookupReceivingReferences(company, "people", "", 0, controller.signal),
+          lookupReceivingReferences(company, "principals", "", 0, controller.signal)]);
+        if (!controller.signal.aborted) setSchemaReady({ legacy: legacy.status === "fulfilled",
+          current: current.status === "fulfilled" || current.reason instanceof PolicyActionError && current.reason.status === 422
+            && current.reason.message === "Narrow the account search before selecting a person." });
+      }).catch(() => { if (!controller.signal.aborted) setSchemaReady({ legacy: false, current: false }); });
     return () => controller.abort();
   }, [company, canRead]);
   useEffect(() => {
@@ -75,26 +87,30 @@ function ReceivingRecord() {
     if (alive.current) { setWorking(false); setGuard(readAuthorityCreateGuard(marker)); if (cause) setError(explain(cause)); }
   };
   async function open(id: string, edit: boolean) {
-    if (busy.current || !canRead || edit && (!canEdit || !schemaReady)) return;
+    if (busy.current || !canRead || edit && (!canEdit || !anySchemaReady)) return;
     busy.current = true; setWorking(true); setError("");
     try {
       const record = await getPolicy(company, id);
       if (!alive.current) return;
       if (record.id !== id || record.policyKey !== KEY) throw new Error("The saved receiving version did not match this record.");
       if (edit) {
-        const parsed = parseReceivingPolicy(record.rulesJson, currency);
-        if (record.state !== "Draft" || !parsed) throw new Error("This receiving version needs a fuller editor. It remains read-only here.");
-        setRows(parsed); setStart(day(record.effectiveFrom)); setEnd(day(record.effectiveTo)); setEditing(record); setViewing(null);
+        const legacy = parseReceivingPolicy(record.rulesJson, currency);
+        const current = parsePrincipalReceivingPolicy(record.rulesJson, currency);
+        if (record.state !== "Draft" || !legacy && !current || legacy && !schemaReady.legacy || current && !schemaReady.current)
+          throw new Error("This receiving version needs a supported configuration and remains read-only here.");
+        setSchema(current ? 2 : 1);
+        setRows((current ?? legacy ?? []).map(row => ({ ...emptyEditorRow(), ...row })));
+        setStart(day(record.effectiveFrom)); setEnd(day(record.effectiveTo)); setEditing(record); setViewing(null);
       } else { setViewing(record); setEditing(null); }
     } catch (cause) { if (alive.current) setError(explain(cause)); }
     finally { busy.current = false; if (alive.current) setWorking(false); }
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!canEdit || !schemaReady || !editing || busy.current || guard !== "clear") return;
+    if (!canEdit || !readyForEditing || !editing || busy.current || guard !== "clear") return;
     let rulesJson: string;
     try {
-      rulesJson = serializeReceivingPolicy(currency, rows);
+      rulesJson = schema === 2 ? serializePrincipalReceivingPolicy(currency, rows) : serializeReceivingPolicy(currency, rows);
       if (!start || end && end <= start) throw new Error("Choose an end date after the start date.");
     } catch (cause) { setError(explain(cause)); return; }
     busy.current = true; setWorking(true); setError("");
@@ -120,7 +136,7 @@ function ReceivingRecord() {
   }
   async function act(event: FormEvent) {
     event.preventDefault();
-    if (!pending || !reason.trim() || guard !== "clear" || !schemaReady
+    if (!pending || !reason.trim() || guard !== "clear" || !anySchemaReady
       || (pending.action === "review" ? !canEdit : !canApprove)) return;
     if (!claim()) return;
     try {
@@ -133,47 +149,50 @@ function ReceivingRecord() {
       settle(); if (alive.current) { setPending(null); setReason(""); setRefresh(value => value + 1); }
     } catch (cause) { settle(cause); }
   }
-  const patch = (index: number, value: Partial<ReceivingRow>) => setRows(current => current.map((row, i) => i === index ? { ...row, ...value } : row));
+  const patch = (index: number, value: Partial<EditorRow>) => setRows(current => current.map((row, i) => i === index ? { ...row, ...value } : row));
   const bool = (value: string): boolean | null => value === "yes" ? true : value === "no" ? false : null;
   const boolValue = (value: boolean | null) => value === null ? "" : value ? "yes" : "no";
   if (!canRead) return <p role="status">Receiving settings are unavailable for this company or account.</p>;
   return <div className="space-y-5">
     <p className="text-sm text-muted-foreground">Choose who may confirm a delivery or service and what evidence is needed. A saved draft does not accept goods or services.</p>
-    {!schemaReady && <p role="status" className="text-sm text-muted-foreground">Receiving configuration is unavailable. Saved versions remain read-only.</p>}
+    {!anySchemaReady && <p role="status" className="text-sm text-muted-foreground">Receiving configuration is unavailable. Saved versions remain read-only.</p>}
     <Panel title="Delivery and service checks"><div className="p-5"><div className="mb-4 flex gap-2"><Button variant="secondary" disabled={working} onClick={() => setRefresh(n => n + 1)}>Refresh saved rules</Button>
-      {canEdit && schemaReady && <Button disabled={working || guard !== "clear"} onClick={() => { setRows([emptyReceivingRow()]); setStart(tomorrow()); setEnd(""); setEditing("new"); setViewing(null); setPending(null); setError(""); }}>Add draft</Button>}</div>
+      {canEdit && anySchemaReady && <Button disabled={working || guard !== "clear"} onClick={() => { setSchema(schemaReady.current ? 2 : 1); setRows([emptyEditorRow()]); setStart(tomorrow()); setEnd(""); setEditing("new"); setViewing(null); setPending(null); setError(""); }}>Add draft</Button>}</div>
       {loading ? <p role="status">Loading receiving rules…</p> : page?.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Actions</th></tr></thead><tbody>
         {page.items.filter(item => item.policyKey === KEY).map(item => <tr key={item.id}><td>{item.policyVersionNumber}</td><td>{day(item.effectiveFrom)}</td><td>{day(item.effectiveTo) || "No end date"}</td><td><Badge>{item.state}</Badge></td><td><div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={working} onClick={() => void open(item.id, false)}>View</Button>
-          {canEdit && schemaReady && item.state === "Draft" && <><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => void open(item.id, true)}>Edit draft</Button><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "review" }); setEditing(null); setReason(""); }}>Send for review</Button></>}
-          {canApprove && schemaReady && item.state === "PendingReview" && <><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "publish" }); setReason(""); }}>Publish</Button><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "return" }); setReason(""); }}>Return</Button></>}</div></td></tr>)}
+          {canEdit && anySchemaReady && item.state === "Draft" && <><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => void open(item.id, true)}>Edit draft</Button><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "review" }); setEditing(null); setReason(""); }}>Send for review</Button></>}
+          {canApprove && anySchemaReady && item.state === "PendingReview" && <><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "publish" }); setReason(""); }}>Publish</Button><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "return" }); setReason(""); }}>Return</Button></>}</div></td></tr>)}
       </tbody></RecordTable></div> : <EmptyState title="No receiving rules yet" description="Create a draft for goods or service acceptance." />}
       {page && page.total > page.items.length && <p className="mt-3 text-sm">Showing {page.items.length} of {page.total} versions.</p>}
     </div></Panel>
     {error && <p role="alert" className="rounded-lg border border-border bg-surface p-3 text-sm text-destructive">{error}</p>}
     {guard !== "clear" && <p role="alert" className="rounded-lg border border-border bg-surface p-4 text-sm">A receiving change has no confirmed result or this browser cannot safely record one. No command will be repeated. Refresh saved rules for read-only inspection and ask an administrator to reconcile it.</p>}
     {viewing && <Panel title={`Saved receiving version ${viewing.policyVersionNumber}`}><div className="space-y-3 p-5"><p className="text-sm">Status: {viewing.state}. Effective from {day(viewing.effectiveFrom)}.</p>
-      {parseReceivingPolicy(viewing.rulesJson, currency)?.map((row, index) => <p key={index} className="text-sm">{row.categoryCode} · {row.purchaseType}: {row.kind}; {row.siteIds.length} selected sites; {row.inspectionRequired ? "inspection required" : "no inspection"}.</p>)
+      {(parseReceivingPolicy(viewing.rulesJson, currency) ?? parsePrincipalReceivingPolicy(viewing.rulesJson, currency))?.map((row, index) => <p key={index} className="text-sm">{row.categoryCode} · {row.purchaseType}: {row.kind}; {row.siteIds.length} selected sites; {row.inspectionRequired ? "inspection required" : "no inspection"}.</p>)
         ?? <p className="text-sm">This saved version uses settings this editor cannot safely change. It remains read-only.</p>}
       <Button variant="secondary" onClick={() => setViewing(null)}>Close</Button></div></Panel>}
-    {canEdit && schemaReady && editing && <form onSubmit={event => void save(event)}><Panel title={editing === "new" ? "New receiving rule draft" : `Edit draft version ${editing.policyVersionNumber}`}><fieldset className="space-y-5 p-5" disabled={working || guard !== "clear"}>
+    {canEdit && editing && <form onSubmit={event => void save(event)}><Panel title={editing === "new" ? "New receiving rule draft" : `Edit draft version ${editing.policyVersionNumber}`}><fieldset className="space-y-5 p-5" disabled={working || guard !== "clear" || !readyForEditing}>
+      {editing === "new" && <Field label="Receiving identity schema"><Select value={schema} onChange={event => { setSchema(Number(event.target.value) as 1 | 2); setRows([emptyEditorRow()]); }}><option value={2} disabled={!schemaReady.current}>Current Core accounts (schema 2)</option><option value={1} disabled={!schemaReady.legacy}>Earlier worker-linked rules (schema 1)</option></Select></Field>}
+      <p className="text-sm text-muted-foreground">{schema === 2 ? "Assign current Core accounts by name. Worker links are optional; this selection does not grant a receiving action." : "Earlier rules select worker-linked people. Existing saved worker rules are not converted to Core identities."}</p>
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Starts on"><Input required type="date" value={start} onChange={event => setStart(event.target.value)} /></Field><Field label="Ends on (optional)"><Input type="date" value={end} onChange={event => setEnd(event.target.value)} /></Field></div>
       {rows.map((row, index) => <div key={index} className="space-y-4 rounded-xl border border-border p-4"><div className="flex justify-between gap-2"><h3 className="font-semibold">Acceptance rule {index + 1}</h3><Button variant="secondary" disabled={rows.length === 1} onClick={() => setRows(current => current.filter((_, i) => i !== index))}>Remove</Button></div>
         <div className="grid gap-4 sm:grid-cols-3"><Field label="Rule code"><Input required maxLength={64} value={row.code} onChange={event => patch(index, { code: event.target.value })} /></Field>
           <ReceivingCategoryPicker company={company} value={row.categoryCode} disabled={working || guard !== "clear"} onChange={categoryCode => patch(index, { categoryCode })} />
           <Field label="Purchase type"><Select required value={row.purchaseType} onChange={event => patch(index, { purchaseType: event.target.value })}><option value="">Choose</option>{["GOODS", "SERVICES", "ASSETS", "SUBSCRIPTIONS"].map(type => <option key={type} value={type}>{type[0] + type.slice(1).toLowerCase()}</option>)}</Select></Field>
-          <Field label="Received as"><Select required value={row.kind} onChange={event => patch(index, { kind: event.target.value as ReceivingRow["kind"], inspectionRequired: null, checklistReference: "", inspectorWorkerIds: [], serviceOwnerWorkerIds: [] })}><option value="">Choose</option><option value="Goods">Goods</option><option value="Service">Service</option></Select></Field>
-          <ReceivingReferencePicker company={company} kind="sites" label="Receiving sites" selected={row.siteIds} disabled={working || guard !== "clear"} onChange={siteIds => patch(index, { siteIds })} /></div>
-        {row.kind && <div className="grid gap-4 sm:grid-cols-3"><Field label="Inspection required"><Select required value={boolValue(row.inspectionRequired)} onChange={event => patch(index, { inspectionRequired: bool(event.target.value), checklistReference: "", inspectorWorkerIds: [] })}><option value="">Choose</option>{row.kind === "Goods" && <option value="yes">Yes</option>}<option value="no">No</option></Select></Field>
-          {row.kind === "Goods" && row.inspectionRequired && <><Field label="Inspection checklist reference"><Input required maxLength={200} value={row.checklistReference} onChange={event => patch(index, { checklistReference: event.target.value })} /></Field><ReceivingReferencePicker company={company} kind="people" label="Inspectors" selected={row.inspectorWorkerIds} disabled={working || guard !== "clear"} onChange={inspectorWorkerIds => patch(index, { inspectorWorkerIds })} /></>}</div>}
-        {row.kind === "Service" && <ReceivingReferencePicker company={company} kind="people" label="Service owners" selected={row.serviceOwnerWorkerIds} disabled={working || guard !== "clear"} onChange={serviceOwnerWorkerIds => patch(index, { serviceOwnerWorkerIds })} />}
+          <Field label="Received as"><Select required value={row.kind} onChange={event => patch(index, { kind: event.target.value as ReceivingRow["kind"], inspectionRequired: null, checklistReference: "", inspectorWorkerIds: [], serviceOwnerWorkerIds: [], inspectorPrincipalIds: [], acceptorPrincipalIds: [], serviceOwnerPrincipalIds: [] })}><option value="">Choose</option><option value="Goods">Goods</option><option value="Service">Service</option></Select></Field>
+          <ReceivingReferencePicker company={company} kind="sites" label="Receiving sites" selected={row.siteIds} maxSelected={schema === 2 ? 64 : 100} disabled={working || guard !== "clear"} onChange={siteIds => patch(index, { siteIds })} /></div>
+        {row.kind && <div className="grid gap-4 sm:grid-cols-3"><Field label="Inspection required"><Select required value={boolValue(row.inspectionRequired)} onChange={event => patch(index, { inspectionRequired: bool(event.target.value), checklistReference: "", inspectorWorkerIds: [], inspectorPrincipalIds: [] })}><option value="">Choose</option>{row.kind === "Goods" && <option value="yes">Yes</option>}<option value="no">No</option></Select></Field>
+          {row.kind === "Goods" && row.inspectionRequired && <><Field label="Inspection checklist reference"><Input required maxLength={200} value={row.checklistReference} onChange={event => patch(index, { checklistReference: event.target.value })} /></Field>{schema === 2 ? <ReceivingReferencePicker company={company} kind="principals" label="Inspectors" selected={row.inspectorPrincipalIds} maxSelected={64} disabled={working || guard !== "clear"} onChange={inspectorPrincipalIds => patch(index, { inspectorPrincipalIds })} /> : <ReceivingReferencePicker company={company} kind="people" label="Inspectors" selected={row.inspectorWorkerIds} disabled={working || guard !== "clear"} onChange={inspectorWorkerIds => patch(index, { inspectorWorkerIds })} />}</>}</div>}
+        {row.kind === "Goods" && schema === 2 && <ReceivingReferencePicker company={company} kind="principals" label="Goods acceptors" selected={row.acceptorPrincipalIds} maxSelected={64} disabled={working || guard !== "clear"} onChange={acceptorPrincipalIds => patch(index, { acceptorPrincipalIds })} />}
+        {row.kind === "Service" && (schema === 2 ? <ReceivingReferencePicker company={company} kind="principals" label="Service owners" selected={row.serviceOwnerPrincipalIds} maxSelected={64} disabled={working || guard !== "clear"} onChange={serviceOwnerPrincipalIds => patch(index, { serviceOwnerPrincipalIds })} /> : <ReceivingReferencePicker company={company} kind="people" label="Service owners" selected={row.serviceOwnerWorkerIds} disabled={working || guard !== "clear"} onChange={serviceOwnerWorkerIds => patch(index, { serviceOwnerWorkerIds })} />)}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{([
           ["allowRequesterCertification", "Requester may confirm"], ["allowBuyerCertification", "Buyer may confirm"],
           ["allowReceiverCertification", "Receiver may confirm"], ["requireIndependentInspector", "Independent inspector required"],
         ] as const).map(([field, label]) => <Field key={field} label={label}><Select required value={boolValue(row[field])} onChange={event => patch(index, { [field]: bool(event.target.value) })}><option value="">Choose</option><option value="yes">Yes</option><option value="no">No</option></Select></Field>)}</div>
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Evidence method"><Select required value={row.evidenceMode} onChange={event => patch(index, { evidenceMode: event.target.value as ReceivingRow["evidenceMode"] })}><option value="">Choose</option><option value="ControlledManualReference">Controlled document reference</option></Select></Field>
           <Field label="Required evidence reference prefix"><Input required maxLength={100} value={row.evidenceReferencePrefix} onChange={event => patch(index, { evidenceReferencePrefix: event.target.value })} /></Field></div>
-      </div>)}<div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={rows.length >= 64} onClick={() => setRows(current => [...current, emptyReceivingRow()])}>Add classification</Button><Button type="submit">Save draft</Button><Button variant="secondary" onClick={() => setEditing(null)}>Close</Button></div>
+      </div>)}<div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={rows.length >= 64} onClick={() => setRows(current => [...current, emptyEditorRow()])}>Add classification</Button><Button type="submit">Save draft</Button><Button variant="secondary" onClick={() => setEditing(null)}>Close</Button></div>
     </fieldset></Panel></form>}
-    {pending && <form onSubmit={event => void act(event)}><Panel title={pending.action === "review" ? "Send for independent review" : pending.action === "publish" ? "Publish receiving rules" : "Return receiving rules"}><fieldset className="space-y-4 p-5" disabled={working || guard !== "clear"}><p className="text-sm">Version {pending.item.policyVersionNumber}. Another authorised person must publish it. ERP checks sites, workers and policy evidence again.</p><Field label="Reason"><Input required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field><div className="flex gap-2"><Button type="submit">Confirm</Button><Button variant="secondary" onClick={() => setPending(null)}>Close</Button></div></fieldset></Panel></form>}
+    {pending && <form onSubmit={event => void act(event)}><Panel title={pending.action === "review" ? "Send for independent review" : pending.action === "publish" ? "Publish receiving rules" : "Return receiving rules"}><fieldset className="space-y-4 p-5" disabled={working || guard !== "clear"}><p className="text-sm">Version {pending.item.policyVersionNumber}. Another authorised person must publish it. ERP checks selected sites, named accounts and policy evidence again.</p><Field label="Reason"><Input required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field><div className="flex gap-2"><Button type="submit">Confirm</Button><Button variant="secondary" onClick={() => setPending(null)}>Close</Button></div></fieldset></Panel></form>}
   </div>;
 }

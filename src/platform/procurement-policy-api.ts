@@ -214,7 +214,7 @@ export async function lookupSelectedSourcingReviewers(companyId: string, princip
   return page;
 }
 
-export type ReceivingLookupKind = "people" | "sites" | "categories";
+export type ReceivingLookupKind = "people" | "principals" | "sites" | "categories";
 export type ReceivingLookupPage = { kind: ReceivingLookupKind; companyId: string;
   items: Array<{ id: string; displayName: string; code: string | null; principalId: string | null }>;
   total: number; offset: number; limit: number; nextOffset: number | null;
@@ -226,7 +226,8 @@ function receivingLookupPage(value: unknown, kind: ReceivingLookupKind, company:
     || value.nextOffset !== null && (!Number.isInteger(value.nextOffset) || Number(value.nextOffset) <= offset)
     || value.items.some(item => !object(item) || !canonicalId(item.id) || typeof item.displayName !== "string"
       || item.code !== null && typeof item.code !== "string"
-      || item.principalId !== null && !canonicalId(item.principalId)))
+      || item.principalId !== null && !canonicalId(item.principalId)
+      || kind === "principals" && (item.principalId !== item.id || item.code !== null)))
     throw new PolicyActionError("Current receiving names are unavailable. Selections have not changed.", 0);
   return value as ReceivingLookupPage;
 }

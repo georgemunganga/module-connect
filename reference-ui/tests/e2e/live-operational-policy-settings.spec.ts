@@ -11,7 +11,7 @@ const capabilities = {
   invoiceValidation: false, financeHandoff: false, supplierPortal: false,
   planningDraft: false, configurationDraft: true, contractDraft: false, sourcingDraft: false,
 };
-type Options = { key: "INVOICE_MATCHING" | "SOURCING" | "RECEIVING"; permissions: string[]; schema?: boolean; lostCreate?: boolean; categoryPages?: boolean };
+type Options = { key: "INVOICE_MATCHING" | "SOURCING" | "RECEIVING"; permissions: string[]; schema?: boolean; workerLookupUnavailable?: boolean; lostCreate?: boolean; categoryPages?: boolean };
 
 async function fixture(page: Page, options: Options) {
   let creates = 0;
@@ -32,13 +32,15 @@ async function fixture(page: Page, options: Options) {
     if (path.startsWith(`${base}/lookups/receiving/`)) {
       if (options.schema === false) return json({ code: "store-unavailable", message: "Current receiving names are unavailable." }, 503);
       const kind = path.split("/").at(-1), offset = Number(url.searchParams.get("offset") ?? "0");
+      if (kind === "people" && options.workerLookupUnavailable) return json({ code: "store-unavailable", message: "Worker directory unavailable." }, 503);
       const firstPage = options.categoryPages && kind === "categories" && offset === 0;
       const laterPage = options.categoryPages && kind === "categories" && offset === 25;
       return json({ kind, companyId: company,
-        items: firstPage ? Array.from({ length: 25 }, (_, index) => ({ id: `${String(index + 1).padStart(8, "0")}-1111-4111-8111-111111111111`,
+        items: kind === "principals" ? [{ id: fixturePrincipal, principalId: fixturePrincipal, displayName: "Current Core account", code: null }]
+          : firstPage ? Array.from({ length: 25 }, (_, index) => ({ id: `${String(index + 1).padStart(8, "0")}-1111-4111-8111-111111111111`,
           displayName: `Category ${index + 1}`, code: `C${index + 1}`, principalId: null }))
           : laterPage ? [{ id: "99999999-9999-4999-8999-999999999999", displayName: "Extra category", code: "EXTRA", principalId: null }] : [],
-        total: options.categoryPages && kind === "categories" ? 26 : 0, offset, limit: 25,
+        total: kind === "principals" ? 1 : options.categoryPages && kind === "categories" ? 26 : 0, offset, limit: 25,
         nextOffset: firstPage ? 25 : null, isAuthority: false, canAcceptDelivery: false });
     }
     if (path === `${base}/lookups/sourcing-reviewers`) return options.schema === false
@@ -120,4 +122,20 @@ test("receiving category picker reaches categories after the first page", async 
   await page.getByRole("combobox", { name: "Purchase category", exact: true }).click();
   await page.getByRole("option", { name: "Extra category · EXTRA", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Purchase category", exact: true })).toHaveText("Extra category · EXTRA");
+});
+
+test("schema 2 receiving settings select named Core accounts without a worker lookup", async ({ page }) => {
+  await fixture(page, { key: "RECEIVING", permissions: ["procurement-configuration-read", "procurement-configuration-edit"], workerLookupUnavailable: true });
+  await page.goto("/procurement/workspace/settings/modules/purchase-receives/preferences");
+  await page.getByRole("button", { name: "Add draft" }).click();
+  await expect(page.getByRole("combobox", { name: "Receiving identity schema" })).toContainText("Current Core accounts (schema 2)");
+  await page.getByRole("combobox", { name: "Receiving identity schema" }).click();
+  await expect(page.getByRole("option", { name: "Earlier worker-linked rules (schema 1)" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.getByRole("combobox", { name: "Received as" }).click();
+  await page.getByRole("option", { name: "Goods", exact: true }).click();
+  await page.getByLabel("Find goods acceptors").fill("Current");
+  await page.getByRole("combobox", { name: "Goods acceptors" }).click();
+  await page.getByRole("option", { name: "Current Core account" }).click();
+  await expect(page.getByText("Current Core account", { exact: true })).toBeVisible();
 });

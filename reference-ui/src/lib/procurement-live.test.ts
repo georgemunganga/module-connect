@@ -34,6 +34,13 @@ describe("Procurement system-user readiness", () => {
     expect(result.capabilities.principalOrderGovernance).toBe(flag === true);
     expect(result.capabilities.principalDirectOrderDrafts).toBe(false);
   });
+  it.each([undefined, false, true, "true", null])("keeps principal receiving reads separate from new writes (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { principalReceivingRead: true, principalReceiving: flag }));
+    expect(result.capabilities.principalReceivingRead).toBe(true);
+    expect(result.capabilities.principalReceiving).toBe(flag === true);
+    expect(result.capabilities.receivingDrafts).toBe(false);
+  });
   it("accepts a permissioned Core user without an employee or assumed administrator role", async () => {
     const fetcher = fixture();
     const result = await fetchProcurementReadiness({ entityId: entity, branch }, undefined, fetcher);
