@@ -1,13 +1,16 @@
 /** Exact owned policy schema; identities are Core principals, never employee IDs. */
 export type UnitReviewStageForm = { code: string; mode: "" | "One" | "All"; principals: string[] };
-export type UnitReviewPolicyForm = { stages: UnitReviewStageForm[] };
-export const emptyUnitReviewPolicy = (): UnitReviewPolicyForm => ({ stages: [] });
+export type UnitReviewPolicyForm = { stages: UnitReviewStageForm[]; evidenceMode?: "ManualAttestation" };
+export const emptyUnitReviewPolicy = (mode: "DocumentReview" | "ManualAttestation" = "DocumentReview"): UnitReviewPolicyForm =>
+  mode === "ManualAttestation" ? { stages: [], evidenceMode: mode } : { stages: [] };
 export const emptyUnitReviewStage = (): UnitReviewStageForm => ({ code: "", mode: "", principals: [] });
 const canonical = (value: unknown): value is string => typeof value === "string"
   && /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/.test(value) && value !== "00000000-0000-0000-0000-000000000000";
 const own = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, expected: string[]) => Object.keys(value).sort().join("|") === [...expected].sort().join("|");
 export function serializeUnitReviewPolicy(form: UnitReviewPolicyForm, complete = false): string {
+  if (form.evidenceMode !== undefined && form.evidenceMode !== "ManualAttestation")
+    throw new Error("This review evidence mode is not supported by this editor.");
   if (!Array.isArray(form.stages) || form.stages.length > 16 || complete && !form.stages.length)
     throw new Error("Choose one to 16 review steps before sending for review.");
   let total = 0; const codes = new Set<string>();
@@ -21,7 +24,9 @@ export function serializeUnitReviewPolicy(form: UnitReviewPolicyForm, complete =
     if (total > 128) throw new Error("Use no more than 128 reviewer assignments across the steps.");
     return { code, mode: row.mode, principals: [...row.principals].sort() };
   });
-  const result = JSON.stringify({ schemaVersion: 1, transactionType: "InvoiceUnitReview", stages });
+  const result = form.evidenceMode === "ManualAttestation"
+    ? JSON.stringify({ schemaVersion: 2, transactionType: "InvoiceUnitReview", evidenceMode: "ManualAttestation", stages })
+    : JSON.stringify({ schemaVersion: 1, transactionType: "InvoiceUnitReview", stages });
   if (new TextEncoder().encode(result).byteLength > 65536) throw new Error("This review definition is too large.");
   return result;
 }
@@ -30,13 +35,14 @@ export function parseUnitReviewPolicy(json: string): UnitReviewPolicyForm | null
   try {
     if (new TextEncoder().encode(json).byteLength > 65536) return null;
     const doc: unknown = JSON.parse(json);
-    if (!own(doc) || !keys(doc, ["schemaVersion", "transactionType", "stages"]) || doc.schemaVersion !== 1
-      || doc.transactionType !== "InvoiceUnitReview" || !Array.isArray(doc.stages)) return null;
-    const form = { stages: doc.stages.map((row: unknown) => {
+    const manual = own(doc) && doc.schemaVersion === 2 && doc.evidenceMode === "ManualAttestation";
+    if (!own(doc) || !keys(doc, manual ? ["schemaVersion", "transactionType", "evidenceMode", "stages"] : ["schemaVersion", "transactionType", "stages"])
+      || !manual && doc.schemaVersion !== 1 || doc.transactionType !== "InvoiceUnitReview" || !Array.isArray(doc.stages)) return null;
+    const form: UnitReviewPolicyForm = { stages: doc.stages.map((row: unknown) => {
       if (!own(row) || !keys(row, ["code", "mode", "principals"]) || typeof row.code !== "string" || row.code !== row.code.trim().toUpperCase())
         throw new Error("Unsupported stage");
       return { code: row.code, mode: row.mode, principals: row.principals } as UnitReviewStageForm;
-    }) };
+    }), ...(manual ? { evidenceMode: "ManualAttestation" as const } : {}) };
     serializeUnitReviewPolicy(form);
     // This closed schema has exactly three root keys and three per-step keys.
     // Count decoded property tokens too: JSON.parse must not hide duplicate saved fields.
@@ -45,7 +51,7 @@ export function parseUnitReviewPolicy(json: string): UnitReviewPolicyForm | null
       const name: string = JSON.parse(`"${match[1]}"`);
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
-    if (["schemaVersion", "transactionType", "stages"].some(name => counts.get(name) !== 1)
+    if (["schemaVersion", "transactionType", "stages", ...(manual ? ["evidenceMode"] : [])].some(name => counts.get(name) !== 1)
       || ["code", "mode", "principals"].some(name => (counts.get(name) ?? 0) !== form.stages.length)) return null;
     return form;
   } catch { return null; }

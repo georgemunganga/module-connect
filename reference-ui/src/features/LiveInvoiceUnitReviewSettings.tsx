@@ -131,11 +131,11 @@ function UnitReviewSettings() {
     } catch (cause) { finish(cause); }
   }
   function patch(index: number, value: Partial<UnitReviewStageForm>) {
-    setForm(current => ({ stages: current.stages.map((stage, i) => i === index ? { ...stage, ...value } : stage) }));
+    setForm(current => ({ ...current, stages: current.stages.map((stage, i) => i === index ? { ...stage, ...value } : stage) }));
   }
   if (!canRead) return <p role="alert">Bill review settings are unavailable for your account.</p>;
   return <div className="space-y-5">
-    <p className="text-sm text-muted-foreground">Choose who checks the units on an original bill document. A draft does not enable reviews, approve bills or allow payment. Publishing needs a different authorized person; the server checks current permissions and independence.</p>
+    <p className="text-sm text-muted-foreground">Choose who checks original bill units. Document checks and manual entry checks have separate review rules. A draft does not approve bills or allow payment. Publishing needs a different authorized person.</p>
     {!schemaReady && <p role="status">Bill review controls are not ready for changes. Saved versions remain read-only.</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <Panel title="Bill review rules"><div className="space-y-4 p-5"><div className="flex flex-wrap gap-2">
@@ -150,20 +150,25 @@ function UnitReviewSettings() {
         </div></td></tr>)}</tbody></RecordTable></div> : page && <EmptyState title="No bill review rules" description="Start with a draft. Choose review steps and named people before sending it for independent review." />}</div></Panel>
     {guard !== "clear" && <p role="alert" className="text-sm">A previous change is unconfirmed or this browser could not record its safety marker. No command will be repeated. Refresh for read-only inspection and ask an administrator to reconcile the saved history.</p>}
     {viewing && <Panel title={`Saved review rules · version ${viewing.policyVersionNumber}`}><div className="space-y-3 p-5"><p>Status: {viewing.state}.</p>
+      {parseUnitReviewPolicy(viewing.rulesJson) && <p>Evidence: {parseUnitReviewPolicy(viewing.rulesJson)?.evidenceMode === "ManualAttestation" ? "Manually entered invoice units" : "Original invoice document"}.</p>}
       {parseUnitReviewPolicy(viewing.rulesJson)?.stages.map((stage, index) => <p key={stage.code}>Step {index + 1}: {stage.code} · {stage.mode === "One" ? "One named reviewer" : "All named reviewers"} · {stage.principals.length} selected.</p>) ?? <p>This saved definition is not supported by this editor and stays read-only.</p>}
       <Button variant="secondary" onClick={() => setViewing(null)}>Close</Button></div></Panel>}
     {canEdit && schemaReady && editing && <form onSubmit={event => void save(event)}><Panel title={editing === "new" ? "New bill review draft" : `Edit review version ${editing.policyVersionNumber}`}><fieldset disabled={working || guard !== "clear"} className="space-y-5 p-5">
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Starts on"><Input type="date" required value={start} onChange={event => setStart(event.target.value)} /></Field><Field label="Ends on (optional)"><Input type="date" value={end} onChange={event => setEnd(event.target.value)} /></Field></div>
+      <Field label="Evidence to check"><Select value={form.evidenceMode === "ManualAttestation" ? "manual" : "document"}
+        disabled={editing !== "new"} onChange={event => setForm(emptyUnitReviewPolicy(event.target.value === "manual" ? "ManualAttestation" : "DocumentReview"))}>
+        <option value="document">Original invoice document</option><option value="manual">Manually entered invoice units</option>
+      </Select></Field>
       {!form.stages.length && <p className="text-sm text-muted-foreground">No review steps selected. This can be saved as an unfinished draft; it cannot be published.</p>}
       {form.stages.map((stage, index) => <section key={index} aria-label={`Review step ${index + 1}`} className="space-y-4 rounded-xl border border-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Review step {index + 1}</h3><div className="flex gap-2">
-          <Button variant="secondary" disabled={index === 0} onClick={() => setForm(current => { const stages = [...current.stages]; [stages[index - 1], stages[index]] = [stages[index], stages[index - 1]]; return { stages }; })}>Move step up</Button>
-          <Button variant="secondary" disabled={index === form.stages.length - 1} onClick={() => setForm(current => { const stages = [...current.stages]; [stages[index], stages[index + 1]] = [stages[index + 1], stages[index]]; return { stages }; })}>Move step down</Button>
-          <Button variant="secondary" onClick={() => setForm(current => ({ stages: current.stages.filter((_, i) => i !== index) }))}>Remove step</Button></div></div>
+          <Button variant="secondary" disabled={index === 0} onClick={() => setForm(current => { const stages = [...current.stages]; [stages[index - 1], stages[index]] = [stages[index], stages[index - 1]]; return { ...current, stages }; })}>Move step up</Button>
+          <Button variant="secondary" disabled={index === form.stages.length - 1} onClick={() => setForm(current => { const stages = [...current.stages]; [stages[index], stages[index + 1]] = [stages[index + 1], stages[index]]; return { ...current, stages }; })}>Move step down</Button>
+          <Button variant="secondary" onClick={() => setForm(current => ({ ...current, stages: current.stages.filter((_, i) => i !== index) }))}>Remove step</Button></div></div>
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Step code"><Input required maxLength={40} value={stage.code} onChange={event => patch(index, { code: event.target.value })} /></Field><Field label="Who must decide?"><Select required value={stage.mode} onChange={event => patch(index, { mode: event.target.value as UnitReviewStageForm["mode"] })}><option value="">Choose</option><option value="One">One of the named reviewers</option><option value="All">All named reviewers</option></Select></Field></div>
         <InvoiceUnitReviewerPicker company={company} selected={stage.principals} onChange={principals => patch(index, { principals })} disabled={working || guard !== "clear"} />
       </section>)}
-      <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={form.stages.length >= 16} onClick={() => setForm(current => ({ stages: [...current.stages, emptyUnitReviewStage()] }))}>Add review step</Button><Button type="submit">Save review draft</Button><Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button></div>
+      <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={form.stages.length >= 16} onClick={() => setForm(current => ({ ...current, stages: [...current.stages, emptyUnitReviewStage()] }))}>Add review step</Button><Button type="submit">Save review draft</Button><Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button></div>
     </fieldset></Panel></form>}
     {pending && <form onSubmit={event => void act(event)}><Panel title={pending.action === "review" ? "Send bill rules for review" : pending.action === "publish" ? "Publish bill review rules" : "Return bill rules for changes"}><fieldset disabled={working || guard !== "clear" || !schemaReady} className="space-y-4 p-5">
       <p className="text-sm">The saved version and current authority are checked again by ERP. Publishing never approves an invoice or enables payment.</p><Field label="Reason for this rule decision"><Input required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field><div className="flex gap-2"><Button type="submit" disabled={!reason.trim()}>Confirm rule decision</Button><Button variant="secondary" onClick={() => setPending(null)}>Cancel</Button></div>

@@ -111,6 +111,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
       || state.readiness.capabilities.principalOrderGovernanceRead
       || state.readiness.capabilities.invoiceOriginalUnitReview && state.readiness.permissions.some((permission) =>
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))))
+    || (approvalPath && state.readiness.capabilities.invoiceManualUnitReviewRead && state.readiness.permissions.some((permission) =>
+      ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission)))
     || (sourcingPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))

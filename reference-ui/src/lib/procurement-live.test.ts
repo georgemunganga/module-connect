@@ -106,8 +106,11 @@ describe("Procurement system-user readiness", () => {
   });
   it.each([undefined, false, true, "true"])("requires explicit optional workflow availability (%s)", async flag => {
     const result = await fetchProcurementReadiness({}, undefined,
-      fixture({}, { invoiceOriginalUnitReview: flag, invoiceComparison: flag, vendorCreditDraft: flag }));
+      fixture({}, { invoiceOriginalUnitReview: flag, invoiceManualUnitReviewRead: flag,
+        invoiceManualUnitReview: flag, invoiceComparison: flag, vendorCreditDraft: flag }));
     expect(result.capabilities.invoiceOriginalUnitReview).toBe(flag === true);
+    expect(result.capabilities.invoiceManualUnitReviewRead).toBe(flag === true);
+    expect(result.capabilities.invoiceManualUnitReview).toBe(flag === true);
     expect(result.capabilities.invoiceComparison).toBe(flag === true);
     expect(result.capabilities.vendorCreditDraft).toBe(flag === true);
   });
