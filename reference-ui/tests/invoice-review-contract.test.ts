@@ -58,4 +58,22 @@ describe("read-only invoice review contract", () => {
     expect(result.original.netAmount).toBe("0.00010001"); expect(JSON.stringify(result)).not.toContain("PRIVATE");
     respond({ ...body, isInvoiceApproval: true }); await expect(getInvoiceMatchingHistory(company, invoice, 3, own)).rejects.toThrow("incomplete");
   });
+  it("uses the stored schema discriminator for principal history and rejects unlabeled schema-3 snapshots", async () => {
+    const original = { netAmount: "1", taxAmount: "0", grossAmount: "1", currencyCode: "ZMW",
+      lines: [{ id: line, lineNumber: 1, description: "Own", quantity: "1", unitPrice: "1", taxAmount: "0" }] };
+    const mapping = { id: other, mappingRevision: 1, verificationState: "Unverified", originalDigestCurrent: true,
+      reviewedAt: "2026-10-28T12:00:00Z", sourceSchemaVersion: 3,
+      snapshot: { schemaVersion: 3, purchaseOrderId: other, issuedVersionId: other, lines: [], private: "PRIVATE-SNAPSHOT" } };
+    const body = { invoiceId: invoice, version: 3, currentMappingVersionId: other, canPostToFinance: false, isInvoiceApproval: false,
+      matchingStateIsRecordedResult: true, original, mappings: [mapping], comparisons: [], exceptions: [] };
+    respond(body);
+    const parsed = await getInvoiceMatchingHistory(company, invoice, 3, own);
+    expect(parsed.mappings[0].sourceSchemaVersion).toBe(3);
+    expect(parsed.currentMappingVersionId).toBe(other);
+    expect(JSON.stringify(parsed)).not.toContain("PRIVATE-SNAPSHOT");
+    respond({ ...body, mappings: [{ ...mapping, sourceSchemaVersion: undefined }] });
+    await expect(getInvoiceMatchingHistory(company, invoice, 3, own)).rejects.toThrow("incomplete");
+    respond({ ...body, mappings: [{ ...mapping, sourceSchemaVersion: 2 }] });
+    await expect(getInvoiceMatchingHistory(company, invoice, 3, own)).rejects.toThrow("incomplete");
+  });
 });
