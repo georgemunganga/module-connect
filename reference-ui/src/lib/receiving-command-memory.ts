@@ -3,7 +3,7 @@ import type { ReceivingCommand, ReceivingOperation } from "../../../src/platform
 const memory = new Map<string, ReceivingCommand>();
 const keyFor = (scope: string) => `erp.procurement.receiving.principal2:${scope}`;
 const principal = (scope: string) => scope.endsWith(":principal2");
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const operations: ReceivingOperation[] = ["ReceivingDraft", "ServiceDraft", "ReceivingRecord", "ReceivingInspect", "ReceivingAccept", "ServiceCertify", "ReceivingCancel", "ServiceCancel"];
 type Stored = { scope: string; command: ReceivingCommand };
 function matchesScope(scope: string, command: ReceivingCommand): boolean {
