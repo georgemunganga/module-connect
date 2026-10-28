@@ -51,14 +51,17 @@ async function request(company: string, invoice: string, path: string, init: Req
   try { response = await fetch(`/api/procurement/v1/invoices/${invoice}/matching${path}`, { ...init, method: init.method ?? "GET", headers, credentials: "include", cache: "no-store" }); }
   catch { throw new InvoiceMatchingError(0, "The response was interrupted. Check the saved result before another change."); }
   let body: unknown; try { body = await response.json(); } catch { if (response.ok) throw invalid(); }
-  if (!response.ok) throw new InvoiceMatchingError(response.status, response.status === 401 ? "Sign in to ERP before continuing."
+  const originalUnitReviewRequired = response.status === 409 && object(body)
+    && body.code === "PrincipalInvoiceOriginalUnitReviewRequired";
+  if (!response.ok) throw new InvoiceMatchingError(response.status, originalUnitReviewRequired
+    ? "Review the invoice units before running this check."
+    : response.status === 401 ? "Sign in to ERP before continuing."
     : response.status === 403 ? "You do not have access to this invoice action."
       : response.status === 404 ? "This invoice source or saved result is not available in your current access."
         : response.status === 409 ? "The invoice, rules or source changed. Refresh and review before continuing."
           : response.status === 422 ? "Check the invoice link details before saving."
             : "Invoice comparison is not available yet. Check the saved result if you submitted a change.",
-    response.status === 409 && object(body) && body.code === "PrincipalInvoiceOriginalUnitReviewRequired"
-      ? "PrincipalInvoiceOriginalUnitReviewRequired" : undefined);
+    originalUnitReviewRequired ? "PrincipalInvoiceOriginalUnitReviewRequired" : undefined);
   return body;
 }
 /** Only an explicitly noncommitting review denial may release a source-3 Compare key. */

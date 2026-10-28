@@ -206,9 +206,15 @@ describe("invoice matching adapter", () => {
     let cause: unknown;
     try { await sendInvoiceMatching(company, command); } catch (error) { cause = error; }
     expect(cause).toBeInstanceOf(InvoiceMatchingError);
+    expect(cause).toMatchObject({ status: 409, code: "PrincipalInvoiceOriginalUnitReviewRequired",
+      message: "Review the invoice units before running this check." });
     expect(canReleaseInvoiceMatchingPending(command, cause)).toBe(true);
     expect(denied).toHaveBeenCalledTimes(1);
-    const unknown = new InvoiceMatchingError(409, "Changed");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "InvoiceMatchingSourceChanged" }), { status: 409 })));
+    let unknown: unknown;
+    try { await sendInvoiceMatching(company, command); } catch (error) { unknown = error; }
+    expect(unknown).toMatchObject({ status: 409, code: undefined,
+      message: "The invoice, rules or source changed. Refresh and review before continuing." });
     expect(canReleaseInvoiceMatchingPending(command, unknown)).toBe(false);
     expect(canReleaseInvoiceMatchingPending(invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key), cause)).toBe(false);
     expect(canReleaseInvoiceMatchingPending(principalInvoiceMappingCommand(invoice, [line], { version: 3,
