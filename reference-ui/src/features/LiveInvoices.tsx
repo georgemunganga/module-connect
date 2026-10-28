@@ -499,7 +499,7 @@ function InvoiceDetailRecord() {
           company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
           comparisonAvailable={capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
         {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
-        {capabilities.invoiceManualUnitReviewRead && <InvoiceManualUnitReviewOwner key={`${invoice.id}:${invoice.version}:manual`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
+        {capabilities.invoiceManualUnitReviewRead && <InvoiceManualUnitReviewOwner key={`${invoice.id}:${invoice.version}:manual`} invoiceId={invoice.id} invoiceVersion={invoice.version} lines={invoice.lines} />}
         {canCancel && <DetailSection title="Cancel invoice"><div className="space-y-3">
           <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
           <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || loading || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>

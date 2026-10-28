@@ -7,6 +7,7 @@ import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { claimUnitReviewPending, clearUnitReviewPending, readUnitReviewPending, type UnitReviewPending } from "../lib/invoice-unit-review-command";
 import { readManualReviewLink, rememberManualReviewLink } from "../lib/invoice-manual-review-link";
+import { manualUnitBlockerText, manualUnitLineLabel, type InvoiceLineLabel } from "../lib/invoice-manual-unit-review-copy";
 import { manualDecide, manualDetail, manualOpen, manualReadiness, manualRecover, manualRecoverOpenByInvoice, manualTasks, ManualReviewError,
   type ManualAction, type ManualDetail, type ManualReadiness, type ManualTaskPage } from "../../../src/platform/procurement-invoice-manual-unit-review-api";
 
@@ -14,7 +15,7 @@ const msg = (cause: unknown) => cause instanceof Error ? cause.message : "Manual
 const selectedBranch = (value: string | undefined) => !!value && /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i.test(value);
 const base = "/approvals/manual-unit-review";
 /** Maker entry inside the existing bill detail; schema-1 document review remains beside it. */
-export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion }: { invoiceId: string; invoiceVersion: number }) {
+export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion, lines }: { invoiceId: string; invoiceVersion: number; lines: readonly InvoiceLineLabel[] }) {
   const context = useLiveReadiness()!, { selection } = useErpShell();
   const read = context.capabilities.invoiceManualUnitReviewRead && context.permissions.includes("procurement-invoice-unit-review-request")
     && context.permissions.includes("procurement-invoice-read");
@@ -70,8 +71,8 @@ export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion }: { in
     {(readiness?.existingReviewId ?? recoveredReviewId) && <p>Review <Badge>Recorded</Badge> <Link className="text-primary underline"
       to={`${base}/${readiness?.existingReviewId ?? recoveredReviewId}`}>Open review details</Link></p>}
     {readiness?.manualUnitLines?.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Invoice line</th><th>Entered unit</th></tr></thead>
-      <tbody>{readiness.manualUnitLines.map(line => <tr key={line.invoiceLineId}><td>{line.invoiceLineId}</td><td>{line.unitCode}</td></tr>)}</tbody></RecordTable></div> : null}
-    {readiness?.blockers.length ? <ul className="list-disc pl-5">{readiness.blockers.map(code => <li key={code}>{code}</li>)}</ul> : null}
+      <tbody>{readiness.manualUnitLines.map(line => <tr key={line.invoiceLineId}><td>{manualUnitLineLabel(lines, line.invoiceLineId)}</td><td>{line.unitCode}</td></tr>)}</tbody></RecordTable></div> : null}
+    {readiness?.blockers.length ? <ul className="list-disc pl-5">{readiness.blockers.map((code, index) => <li key={`${index}:${code}`}>{manualUnitBlockerText(code)}</li>)}</ul> : null}
     {pending.blocked ? <div className="space-y-2"><p role="alert">The previous manual review request has an unconfirmed result. Another request is blocked.</p>
       {pending.pending ? <Button variant="secondary" disabled={busy} onClick={() => void recover()}>Check saved review action</Button>
         : <p>Recovery information is unavailable in this browser. Ask an administrator to inspect saved history.</p>}</div>
@@ -100,8 +101,8 @@ export function InvoiceManualUnitReviewQueue() {
     actions={<Button variant="secondary" onClick={() => setRefresh(x => x + 1)}>Refresh</Button>} />
     <Panel><div className="p-5">{error && <p role="alert" className="text-destructive">{error}</p>}
       {loading ? <p role="status">Loading assigned manual reviews…</p> : data?.items.length ? <div className="overflow-x-auto"><RecordTable>
-        <thead><tr><th>Review</th><th>Invoice</th><th>Started</th><th>Action</th></tr></thead><tbody>{data.items.map(item => <tr key={item.reviewId}>
-          <td>{item.reviewId}</td><td>{item.invoiceId}</td><td>{new Date(item.openedAt).toLocaleString()}</td><td><Button variant="secondary" disabled={!item.branchId} onClick={() => {
+        <thead><tr><th>Invoice</th><th>Started</th><th>Action</th></tr></thead><tbody>{data.items.map(item => <tr key={item.reviewId}>
+          <td>{item.invoiceNumber}</td><td>{new Date(item.openedAt).toLocaleString()}</td><td><Button variant="secondary" disabled={!item.branchId} onClick={() => {
             if (!item.branchId) return;
             shell.selectBranch(item.branchId, context.legalEntityId);
             navigate(`${base}/${item.reviewId}`);
@@ -177,11 +178,11 @@ function ManualDetailView({ reviewId }: { reviewId: string }) {
           <div className="overflow-x-auto"><RecordTable><thead><tr><th>Line</th><th>Description</th><th>Quantity</th><th>Unit price</th><th>Tax</th></tr></thead>
             <tbody>{data.original.lines.map(line => <tr key={line.id}><td>{line.lineNumber}</td><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitPrice}</td><td>{line.taxAmount}</td></tr>)}</tbody></RecordTable></div></>
           : <p>The original invoice changed. This review is read-only until a new review is requested.</p>}
-        {data.blockers.length > 0 && <ul className="list-disc pl-5">{data.blockers.map(code => <li key={code}>{code}</li>)}</ul>}
+        {data.blockers.length > 0 && <ul className="list-disc pl-5">{data.blockers.map((code, index) => <li key={`${index}:${code}`}>{manualUnitBlockerText(code)}</li>)}</ul>}
       </div></Panel>
       <Panel title="Manually entered units" className="mt-5"><div className="space-y-3 p-5 text-sm">
         <p>Maker reason: {data.makerReason}</p><div className="overflow-x-auto"><RecordTable><thead><tr><th>Invoice line</th><th>Entered unit</th></tr></thead>
-          <tbody>{data.manualUnitLines.map(line => <tr key={line.invoiceLineId}><td>{data.original?.lines.find(x => x.id === line.invoiceLineId)?.lineNumber ?? "—"}</td>
+          <tbody>{data.manualUnitLines.map(line => <tr key={line.invoiceLineId}><td>{manualUnitLineLabel(data.original?.lines, line.invoiceLineId)}</td>
             <td>{line.unitCode}</td></tr>)}</tbody></RecordTable></div>
         <p>Confirm only the entered units and invoice values shown here. No document is represented by this review.</p>
       </div></Panel>

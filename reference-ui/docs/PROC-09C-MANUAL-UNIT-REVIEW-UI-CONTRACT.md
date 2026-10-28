@@ -76,7 +76,7 @@ Manual Open requires a nonempty trimmed reason of at most 2000 characters. The e
 
 ## 19. Assigned queue
 
-`GET /api/procurement/v1/manual-invoice-unit-reviews/tasks` is purpose-only for the named review permission. It shows only current pending Core assignments and current mappings.
+`GET /api/procurement/v1/manual-invoice-unit-reviews/tasks` is purpose-only for the named review permission. It shows only current pending Core assignments and current mappings. The list displays the purpose-scoped invoice number, start date, and action; record UUIDs stay in links and typed checks.
 
 ## 20. Review detail
 
@@ -108,7 +108,7 @@ Current mapping, invoice digest, policy, issued order, actor scope, and Core ass
 
 ## 27. Error and empty states
 
-Show separate unavailable, no-assignment, superseded-mapping, disabled-new-work, incomplete-review, and interrupted-command states. Keep saved history readable while new work is off.
+Show separate unavailable, no-assignment, superseded-mapping, disabled-new-work, incomplete-review, and interrupted-command states. Translate known server blockers into actions, with an unknown-code safe fallback. Keep saved history readable while new work is off.
 
 ## 28. Acceptance boundary
 

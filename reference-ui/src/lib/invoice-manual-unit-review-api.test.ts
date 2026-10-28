@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { manualDecide, manualDetail, manualOpen, manualReadiness, manualRecover, manualRecoverOpenByInvoice,
+import { manualDecide, manualDetail, manualOpen, manualReadiness, manualRecover, manualRecoverOpenByInvoice, manualTasks,
   type ManualDetail, type ManualReadiness } from "../../../src/platform/procurement-invoice-manual-unit-review-api";
 
 const company = "11111111-1111-4111-8111-111111111111";
@@ -49,6 +49,16 @@ describe("manual unit review source schema 4", () => {
     await expect(manualDetail(company, review)).resolves.toMatchObject({ attestation: "ManuallyEnteredUnitsConfirmed" });
     reply({ ...detail, evidenceMode: "DocumentReview", actionCandidateMeaning: "CurrentAssignmentOnlyRevalidatedByCommand", isInvoiceApproval: false, canPostToFinance: false });
     await expect(manualDetail(company, review)).rejects.toThrow();
+  });
+  it("requires a purpose-scoped invoice number in assigned work without rendering IDs as labels", async () => {
+    const page = { items: [{ reviewId: review, invoiceId: invoice, invoiceNumber: "BILL-1",
+      mappingVersionId: detail.mappingVersionId, mappingRevision: 1, branchId: company,
+      openedAt: "2026-10-28T00:00:00Z", isInvoiceApproval: false, canPostToFinance: false }],
+    total: 1, page: 1, pageSize: 20, availabilityMeaning: "CurrentMappingAssignmentsOnly", canPostToFinance: false };
+    reply(page);
+    await expect(manualTasks(company, 1)).resolves.toMatchObject({ items: [{ invoiceNumber: "BILL-1" }] });
+    reply({ ...page, items: [{ ...page.items[0], invoiceNumber: "" }] });
+    await expect(manualTasks(company, 1)).rejects.toThrow();
   });
   it("sends one exact manual Open and Decision with the original key", async () => {
     const send = reply(receipt("Open"));

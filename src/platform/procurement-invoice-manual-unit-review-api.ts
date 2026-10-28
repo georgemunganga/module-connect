@@ -6,7 +6,7 @@ export type ManualLine = { invoiceLineId: string; unitCode: string };
 export type ManualReadiness = { invoiceId: string; invoiceVersion: number; mappingRevision: number;
   existingReviewId: string | null; evidenceMode: "ManualAttestation"; sourceSchemaVersion: 4;
   requiresMakerReason: true; manualUnitLines: ManualLine[] | null; canRequestReview: boolean; blockers: string[] };
-export type ManualTaskPage = { items: { reviewId: string; invoiceId: string; mappingVersionId: string; mappingRevision: number;
+export type ManualTaskPage = { items: { reviewId: string; invoiceId: string; invoiceNumber: string; mappingVersionId: string; mappingRevision: number;
   branchId: string | null; openedAt: string }[]; total: number; page: number; pageSize: number };
 export type ManualDetail = { reviewId: string; invoiceId: string; invoiceVersion: number; makerPrincipalId: string;
   identitySchemaVersion: 3; evidenceSchemaVersion: 4 | null; mappingVersionId: string; mappingRevision: number;
@@ -86,7 +86,8 @@ export async function manualTasks(company: string, page: number, signal?: AbortS
   const x = await call(company, `/manual-invoice-unit-reviews/tasks?page=${page}&pageSize=20`, { signal });
   if (!object(x) || !Array.isArray(x.items) || x.items.length > 20 || !nonnegative(x.total) || x.page !== page || x.pageSize !== 20
     || x.availabilityMeaning !== "CurrentMappingAssignmentsOnly" || x.canPostToFinance !== false
-    || !x.items.every(y => object(y) && id(y.reviewId) && id(y.invoiceId) && id(y.mappingVersionId)
+    || !x.items.every(y => object(y) && id(y.reviewId) && id(y.invoiceId) && typeof y.invoiceNumber === "string" && !!y.invoiceNumber.trim()
+      && id(y.mappingVersionId)
       && nonnegative(y.mappingRevision) && (y.branchId === null || id(y.branchId)) && typeof y.openedAt === "string" && common(y))) throw invalid();
   return x as unknown as ManualTaskPage;
 }
