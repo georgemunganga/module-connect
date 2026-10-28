@@ -14,7 +14,8 @@ function goods(): PrincipalReceivingRow {
 }
 describe("principal receiving policy editor", () => {
   it("round trips schema 2 named Core accounts without worker IDs or inferred authority", () => {
-    const row = goods(), json = serializePrincipalReceivingPolicy("ZMW", [{ ...row, inspectorWorkerIds: [inspector] }]);
+    const row = goods(), withLegacyFields = { ...row, inspectorWorkerIds: [inspector] };
+    const json = serializePrincipalReceivingPolicy("ZMW", [withLegacyFields]);
     expect(JSON.parse(json)).toMatchObject({ schemaVersion: 2, transactionType: "Receiving",
       rules: [{ inspectorPrincipalIds: [inspector], acceptorPrincipalIds: [acceptor], serviceOwnerPrincipalIds: [] }] });
     expect(json).not.toContain("WorkerId");
