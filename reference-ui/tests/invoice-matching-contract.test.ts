@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoiceMappingCommand, principalInvoiceMappingCommand, invoiceCompareCommand, invoiceMatchingRecovery, listInvoiceSources, listInvoiceAcceptances,
   listPrincipalInvoiceSources, listPrincipalInvoiceAcceptances, sendInvoiceMatching, recoverInvoiceMatching,
+  canReleaseInvoiceMatchingPending, InvoiceMatchingError,
   type InvoiceMappingInput, type InvoiceSource, type InvoiceMatchingCommand } from "../../src/platform/procurement-invoice-matching-api";
 const company = "11111111-1111-4111-8111-111111111111", invoice = "22222222-2222-4222-8222-222222222222";
 const line = "33333333-3333-4333-8333-333333333333", order = "44444444-4444-4444-8444-444444444444";
@@ -117,11 +118,12 @@ describe("invoice matching adapter", () => {
     vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch }) });
     const principal = { ...page(), canAllocate: false, items: [{ ...source(), tenantId: "amizo", companyId: company, branchId: branch,
       sourceSchemaVersion: 3, issuedLineVersion: 2, authorizedQuantity: "2.0000", quantity: "2.0000",
-      principalReceivingSourceStateId: state, principalSourceVersion: 1, principalSourceSha256: "b".repeat(64),
+      principalReceivingSourceStateId: state, principalSourceVersion: 0, principalSourceSha256: "b".repeat(64),
       canAllocate: false, canPostToFinance: false }] };
     const fetch = respond(principal);
     const selected = (await listPrincipalInvoiceSources("amizo", company, branch, invoice, 3)).items[0];
     expect(selected.principalReceivingSourceStateId).toBe(state);
+    expect(selected.principalSourceVersion).toBe(0);
     expect(fetch.mock.calls[0][0]).toContain("/matching/principal-sources?");
     const facts = { ...principal, orderId: order, issuedVersionId: issued, purchaseOrderLineId: poLine,
       method: "ThreeWay", state: "VerifiedHistorical", blocker: null, availabilityMeaning: "HistoricalPhysicalFactsOnly",
@@ -196,5 +198,22 @@ describe("invoice matching adapter", () => {
     expect((await recoverInvoiceMatching(company, locator)).outcome).toBe("Blocked");
     respond({ ...result, commandSchemaVersion: 1 });
     await expect(sendInvoiceMatching(company, command)).rejects.toThrow("confirm");
+  });
+  it("releases only the noncommitting source-3 original-unit review denial", async () => {
+    const command = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key, 3);
+    const denied = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "PrincipalInvoiceOriginalUnitReviewRequired" }), { status: 409 }));
+    vi.stubGlobal("fetch", denied);
+    let cause: unknown;
+    try { await sendInvoiceMatching(company, command); } catch (error) { cause = error; }
+    expect(cause).toBeInstanceOf(InvoiceMatchingError);
+    expect(canReleaseInvoiceMatchingPending(command, cause)).toBe(true);
+    expect(denied).toHaveBeenCalledTimes(1);
+    const unknown = new InvoiceMatchingError(409, "Changed");
+    expect(canReleaseInvoiceMatchingPending(command, unknown)).toBe(false);
+    expect(canReleaseInvoiceMatchingPending(invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key), cause)).toBe(false);
+    expect(canReleaseInvoiceMatchingPending(principalInvoiceMappingCommand(invoice, [line], { version: 3,
+      purchaseOrderId: order, issuedVersionId: issued, lines: [{ invoiceLineId: line, purchaseOrderLineId: poLine,
+        principalReceivingSourceStateId: null, principalReceivingFactId: null, invoiceUnitCode: "EACH",
+        documentVersionId: "00000000-0000-0000-0000-000000000000", documentLineReference: "" }] }, key), cause)).toBe(false);
   });
 });

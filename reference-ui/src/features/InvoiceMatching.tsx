@@ -8,7 +8,8 @@ import { listInvoiceDocuments, type InvoiceDocument } from "../../../src/platfor
 import type { InvoiceFinanceReadiness } from "../../../src/platform/procurement-invoice-review-api";
 import { invoiceMappingCommand, principalInvoiceMappingCommand, invoiceCompareCommand, invoiceMatchingRecovery,
   listInvoiceSources, listInvoiceAcceptances, listPrincipalInvoiceSources, listPrincipalInvoiceAcceptances, sendInvoiceMatching, recoverInvoiceMatching,
-  InvoiceMatchingError, type InvoiceSource, type InvoiceSourcePage, type InvoiceAcceptance, type InvoiceAcceptancePage, type InvoiceMatchingCommand,
+  canReleaseInvoiceMatchingPending,
+  type InvoiceSource, type InvoiceSourcePage, type InvoiceAcceptance, type InvoiceAcceptancePage, type InvoiceMatchingCommand,
   type InvoiceMatchingReply, type InvoiceMatchingRecovery } from "../../../src/platform/procurement-invoice-matching-api";
 
 type LinkDraft = { source: InvoiceSource; policy: string; acceptance: InvoiceAcceptance | null; unit: string; document: string; reference: string };
@@ -109,7 +110,7 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
     } catch (cause) {
       // Only a definite validation rejection can release a command marker.
       // Scope, conflict and transport failures may leave a server receipt.
-      if (cause instanceof InvoiceMatchingError && [400, 422].includes(cause.status)) clearPendingInvoiceMatching(scopeKey, locator);
+      if (canReleaseInvoiceMatchingPending(command, cause)) clearPendingInvoiceMatching(scopeKey, locator);
       if (alive.current) {
         setPendingState(readPendingInvoiceMatching(scopeKey)); setError(causeText(cause));
         setDrafts({}); setSources(null); setAcceptances(null); setEditing(false);

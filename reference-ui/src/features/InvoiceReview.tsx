@@ -68,7 +68,7 @@ export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currenc
       lines={lines} readiness={readiness}
       currentMappingId={history?.currentMappingVersionId ?? null}
       currentMappingOriginalCurrent={history?.mappings.find((mapping) => mapping.id === history.currentMappingVersionId)?.originalDigestCurrent === true}
-      currentMappingSchema={history?.mappings.find((mapping) => mapping.id === history.currentMappingVersionId)?.sourceSchemaVersion ?? null}
+      currentMappingSchema={history?.mappings.find((mapping) => mapping.id === history.currentMappingVersionId)?.sourceSchemaVersion}
       refresh={refresh} />}
     {!loading && history && <Panel title="Recorded review history"><div className="space-y-5 p-5">
       <p className="text-sm text-muted-foreground">Saved results are history. They are not a current invoice approval or permission to pay.</p>

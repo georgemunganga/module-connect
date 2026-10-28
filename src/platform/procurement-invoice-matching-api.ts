@@ -30,7 +30,9 @@ export type InvoiceMatchingRecovery = { operation: InvoiceMatchingCommand["opera
   sourceSchemaVersion?: 3; principalPins?: PrincipalInvoiceLinePin[] };
 export type InvoiceMatchingReply = { invoiceId: string; key: string; operation: InvoiceMatchingCommand["operation"]; id: string; version: number;
   outcome: "MappingUnverified" | "Blocked" | "Compared"; mappingRevision?: number; issues: { invoiceLineId: string | null; code: string }[] };
-export class InvoiceMatchingError extends Error { constructor(readonly status: number, message: string) { super(message); } }
+export class InvoiceMatchingError extends Error {
+  constructor(readonly status: number, message: string, readonly code?: "PrincipalInvoiceOriginalUnitReviewRequired") { super(message); }
+}
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id = (x: unknown): x is string => typeof x === "string" && guid.test(x) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(x);
 const object = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
@@ -54,8 +56,16 @@ async function request(company: string, invoice: string, path: string, init: Req
       : response.status === 404 ? "This invoice source or saved result is not available in your current access."
         : response.status === 409 ? "The invoice, rules or source changed. Refresh and review before continuing."
           : response.status === 422 ? "Check the invoice link details before saving."
-            : "Invoice comparison is not available yet. Check the saved result if you submitted a change.");
+            : "Invoice comparison is not available yet. Check the saved result if you submitted a change.",
+    response.status === 409 && object(body) && body.code === "PrincipalInvoiceOriginalUnitReviewRequired"
+      ? "PrincipalInvoiceOriginalUnitReviewRequired" : undefined);
   return body;
+}
+/** Only an explicitly noncommitting review denial may release a source-3 Compare key. */
+export function canReleaseInvoiceMatchingPending(command: InvoiceMatchingCommand, cause: unknown): boolean {
+  return cause instanceof InvoiceMatchingError && ([400, 422].includes(cause.status)
+    || command.operation === "InvoiceCompare" && command.sourceSchemaVersion === 3
+      && cause.status === 409 && cause.code === "PrincipalInvoiceOriginalUnitReviewRequired");
 }
 function pageQuery(page: number, q: string) {
   if (!int(page) || page < 1 || page > 100000 || q.length > 120 || /[\x00-\x1f\x7f]/.test(q)) throw invalid();
@@ -130,7 +140,7 @@ export async function listPrincipalInvoiceSources(tenant: string, company: strin
       || row.method === null && row.blocker !== "MatchingCategoryUnavailable"
       || !nullableId(row.principalReceivingSourceStateId)
       || !(row.principalSourceVersion === null && row.principalSourceSha256 === null
-        || id(row.principalReceivingSourceStateId) && int(row.principalSourceVersion) && row.principalSourceVersion > 0 && digest(row.principalSourceSha256))) throw invalid();
+        || id(row.principalReceivingSourceStateId) && int(row.principalSourceVersion) && digest(row.principalSourceSha256))) throw invalid();
     return { orderId: row.orderId, orderNumber: row.orderNumber, issuedVersionId: row.issuedVersionId,
       purchaseOrderLineId: row.purchaseOrderLineId, description: row.description, sourceState: "VerifiedIssued",
       blocker: row.blocker as string | null, unitCode: row.unitCode, quantity: row.authorizedQuantity as string,
