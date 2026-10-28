@@ -24,6 +24,7 @@ import { LivePaymentList, LivePaymentEditor, LivePaymentDetail } from "../featur
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
 import { LiveReceivingList, LiveReceivingDetail } from "../features/LiveReceiving";
 import { LiveReceivingEditor } from "../features/LiveReceivingEditor";
+import { LiveGoodsReturnList, LiveGoodsReturnDetail, LiveGoodsReturnEditor } from "../features/LiveGoodsReturns";
 import { LiveBudgets } from "../features/LiveBudgets";
 import { LiveOverview } from "../features/LiveOverview";
 import { AppShell } from "../components/layout/AppShell";
@@ -101,6 +102,10 @@ export function App() {
             />
             <Route path="/approvals/unit-review/:id" element={isProcurementLiveMode ? <InvoiceUnitReviewDetail /> : <PendingLiveWorkflow />} />
             <Route path="/approvals/:id" element={isProcurementLiveMode ? <LiveApprovalRoute /> : <PendingLiveWorkflow />} />
+          <Route path="/purchase-receives/returns" element={isProcurementLiveMode ? <LiveGoodsReturnList /> : <PendingLiveWorkflow />} />
+          <Route path="/purchase-receives/returns/new" element={isProcurementLiveMode ? <LiveGoodsReturnEditor /> : <PendingLiveWorkflow />} />
+          <Route path="/purchase-receives/returns/:id/edit" element={isProcurementLiveMode ? <LiveGoodsReturnEditor /> : <PendingLiveWorkflow />} />
+          <Route path="/purchase-receives/returns/:id" element={isProcurementLiveMode ? <LiveGoodsReturnDetail /> : <PendingLiveWorkflow />} />
             <Route
               path="/procurement-requests"
               element={isProcurementLiveMode ? <LiveRequestList /> : <RecordList kind="requests" procurement />}

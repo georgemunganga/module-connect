@@ -58,6 +58,9 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     && state.readiness?.capabilities.principalOrderGovernanceRead === true
     && state.readiness.permissions.includes("procurement-po-approve");
   const receivingPath = /^\/purchase-receives(?:\/|$)/.test(location.pathname);
+  const returnPath = /^\/purchase-receives\/returns(?:\/|$)/.test(location.pathname);
+  const returnCollection = location.pathname === "/purchase-receives/returns"
+    && state.readiness?.capabilities.principalGoodsReturnDraftsRead === true;
   const principalReceivingCollection = location.pathname === "/purchase-receives"
     && state.readiness?.capabilities.principalReceivingRead === true
     && new URLSearchParams(location.search).get("receivingProtocol") !== "legacy";
@@ -71,7 +74,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const planList = /^\/plans\/?$/.test(location.pathname);
   const contractList = /^\/contracts\/?$/.test(location.pathname);
   const allReadSupported = vendorPath || itemPath || paymentPath
-    || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || principalReceivingCollection;
+    || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
     return blockedShell ? blockedShell(chooseBranch) : chooseBranch;
@@ -117,7 +120,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders
       || state.readiness.capabilities.principalDirectOrderDrafts || state.readiness.capabilities.principalOrderGovernanceRead))
-    || (receivingPath && (state.readiness.capabilities.principalReceivingRead || state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
+    || (returnPath && state.readiness.capabilities.principalGoodsReturnDraftsRead)
+    || (receivingPath && !returnPath && (state.readiness.capabilities.principalReceivingRead || state.readiness.capabilities.receivingDrafts || state.readiness.capabilities.receivingGoods || state.readiness.capabilities.receivingInspection || state.readiness.capabilities.receivingServices))
     || (budgetPath && state.readiness.capabilities.requestDraft)
     || (configurationSettingsPath && state.readiness.permissions.includes("procurement-access"))))
     return <LiveReadiness.Provider value={state.readiness}>{requestPath || approvalPath
