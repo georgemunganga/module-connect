@@ -36,3 +36,12 @@ Payment upload, batch payments, bank execution and Finance Paid remain unavailab
 and are explained in the existing controls. Manual confirmation records a reviewed
 external payment; Finance accounting/payment integration remains a separate contract.
 Production migrations, configuration, deployment, rollback and UAT are still required.
+
+
+## Pending unknown-outcome journal hardening (30 October 2026)
+
+The later UI change preserves the existing payment pages and separates a failed HTTP request from proof of a rejected command. Lost responses, scope/auth changes, 400/401/403/404, unknown 409/422, 5xx and corrupt success retain the original locator; the UI never automatically retries a mutation or generates a replacement key. Local input validation happens before claiming a key. Only a live first-mutation 422 with the current backend's exact `payment-state-changed` validation shape can create a volatile scope/key/action/id/exact-body witness. That witness keeps the key pending until the user explicitly selects **Review entries**. Caller-constructed errors and GET failures never grant that acknowledgment. No payment body, external reference or credential is added to session storage. A reload loses the volatile witness and keeps the locator for original-key recovery; it is not evidence that nothing committed.
+
+Focused tests and backend/browser acceptance for this hardening must be recorded separately; this source note does not relabel the earlier acceptance as verification of the new change.
+
+**Separate backend follow-up:** current manual-payment read/history/original-key routes and the UI boundary still depend on the same enabled/workflow readiness used for new work. Independent retained-read capability/finite-read profile is required before claiming flags-off payment recovery. This frontend journal change does not alter that backend policy, payment eligibility, Finance ownership, employee requirements, attachments or bank execution. Replaced-source/capacity picker previews remain a separate integration improvement; commands continue to enforce their authoritative source checks.

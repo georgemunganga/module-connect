@@ -195,7 +195,7 @@ describe("manual payment API client", () => {
     expect(journal.state().blocked).toBe(true);
   });
 
-  it("clears a journal only for a definite received rejection of the same command", () => {
+  it("does not clear a pending journal for a constructed HTTP rejection", () => {
     const captured = scope();
     const map = new Map<string, string>();
     const store = { getItem: (k: string) => map.get(k) ?? null,
@@ -203,10 +203,10 @@ describe("manual payment API client", () => {
     const journal = createManualPaymentRecoveryJournal(captured, store, nonce);
     const locator = { action: "Create" as const, key, id: null };
     expect(journal.claim(locator)).toBe(true);
-    expect(journal.reject(locator, new ManualPaymentApiError(0, "Interrupted"))).toBe(false);
+    expect(journal.acknowledgeValidation(locator)).toBe(false);
     expect(journal.state().blocked).toBe(true);
-    expect(journal.reject(locator, new ManualPaymentApiError(422, "Invalid amount"))).toBe(true);
-    expect(journal.state().blocked).toBe(false);
+    expect(journal.canReviewEntries()).toBe(false);
+    expect(journal.state().blocked).toBe(true);
   });
 
   it("rejects imprecise inputs and exposes unavailable execution actions honestly", async () => {
