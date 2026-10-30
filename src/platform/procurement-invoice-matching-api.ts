@@ -31,7 +31,7 @@ export type InvoiceMatchingRecovery = { operation: InvoiceMatchingCommand["opera
 export type InvoiceMatchingReply = { invoiceId: string; key: string; operation: InvoiceMatchingCommand["operation"]; id: string; version: number;
   outcome: "MappingUnverified" | "Blocked" | "Compared"; mappingRevision?: number; issues: { invoiceLineId: string | null; code: string }[] };
 export class InvoiceMatchingError extends Error {
-  constructor(readonly status: number, message: string, readonly code?: "PrincipalInvoiceOriginalUnitReviewRequired") { super(message); }
+  constructor(readonly status: number, message: string, readonly code?: "PrincipalInvoiceOriginalUnitReviewRequired" | "InvoiceCurrencyPolicyConflict") { super(message); }
 }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id = (x: unknown): x is string => typeof x === "string" && guid.test(x) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(x);
@@ -53,15 +53,19 @@ async function request(company: string, invoice: string, path: string, init: Req
   let body: unknown; try { body = await response.json(); } catch { if (response.ok) throw invalid(); }
   const originalUnitReviewRequired = response.status === 409 && object(body)
     && body.code === "PrincipalInvoiceOriginalUnitReviewRequired";
+  const currencyPolicyConflict = response.status === 409 && object(body)
+    && body.code === "InvoiceCurrencyPolicyConflict";
   if (!response.ok) throw new InvoiceMatchingError(response.status, originalUnitReviewRequired
     ? "Review the invoice units before running this check."
+    : currencyPolicyConflict ? "Currency rounding settings differ from the matching rules. Ask an administrator to review them."
     : response.status === 401 ? "Sign in to ERP before continuing."
     : response.status === 403 ? "You do not have access to this invoice action."
       : response.status === 404 ? "This invoice source or saved result is not available in your current access."
         : response.status === 409 ? "The invoice, rules or source changed. Refresh and review before continuing."
           : response.status === 422 ? "Check the invoice link details before saving."
             : "Invoice comparison is not available yet. Check the saved result if you submitted a change.",
-    originalUnitReviewRequired ? "PrincipalInvoiceOriginalUnitReviewRequired" : undefined);
+    originalUnitReviewRequired ? "PrincipalInvoiceOriginalUnitReviewRequired"
+      : currencyPolicyConflict ? "InvoiceCurrencyPolicyConflict" : undefined);
   return body;
 }
 /** Only an explicitly noncommitting review denial may release a source-3 Compare key. */

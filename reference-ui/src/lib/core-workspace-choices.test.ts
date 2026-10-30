@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configuredDefaultBranch, parseCoreWorkspaceChoices } from "./core-workspace-choices";
+import { canOpenCoreModule, configuredDefaultBranch, parseCoreWorkspaceChoices } from "./core-workspace-choices";
 
 const person = "11111111-1111-4111-8111-111111111111";
 const a = "22222222-2222-4222-8222-222222222222";
@@ -44,5 +44,17 @@ describe("Core self-service workspace choices", () => {
     expect(configuredDefaultBranch(rows.map(row => ({ ...row, type: "branch" })), a)).toBeNull();
     expect(configuredDefaultBranch([...rows, { id: "66666666-6666-4666-8666-666666666666",
       legalEntityId: a, type: "headquarters" }], a)).toBeNull();
+  });
+  it("shows Core for the exact currency read action without conferring administrator navigation", () => {
+    const currency = parseCoreWorkspaceChoices({ ...payload,
+      coreActions: ["core-currency-precision-read"] }, person);
+    expect(currency.coreActions).toEqual(["core-currency-precision-read"]);
+    expect(canOpenCoreModule(["procurement_buyer"], currency.coreActions)).toBe(true);
+    expect(canOpenCoreModule(["procurement_buyer"], ["core-currency-precision-configure"])).toBe(false);
+    expect(canOpenCoreModule(["procurement_buyer"], ["core-currency-precision-read-extra"])).toBe(false);
+    expect(canOpenCoreModule(["erp_admin"], [])).toBe(true);
+    expect(canOpenCoreModule(["hr_admin"], [])).toBe(true);
+    expect(canOpenCoreModule(["procurement_buyer"], parseCoreWorkspaceChoices(payload, person).coreActions)).toBe(false);
+    expect(() => parseCoreWorkspaceChoices({ ...payload, coreActions: "core-currency-precision-read" }, person)).toThrow();
   });
 });

@@ -9,7 +9,17 @@ export type InvoiceIntakeInput = {
   supplierId: string; purchaseOrderId?: string | null; invoiceNumber: string;
   invoiceDate: string; dueDate?: string | null; currencyCode: string;
   lines: InvoiceLineInput[];
+  intakeSchemaVersion?: 1 | 2; expectedCurrencyReferenceId?: string;
+  expectedCurrencyRevision?: number; expectedCalculationSha256?: string;
 };
+export type InvoiceAmountLine = { lineNumber: number; quantity: string; unitPrice: string; rawNet: string;
+  net: string; tax: string; gross: string; adjustment: string };
+export type InvoiceAmountCalculation = { schemaVersion: 2; precision: { currencyCode: string;
+  referenceId: string; revision: number; minorUnits: number; rounding: "ToEven" | "AwayFromZero";
+  payloadSha256: string; publishedAtUtc: string; observedAtUtc: string };
+  amounts: { rawNet: string; net: string; tax: string; gross: string; adjustment: string;
+    lines: InvoiceAmountLine[] }; previewSha256?: string; calculationId?: string;
+  calculationSha256?: string; invoiceId?: string };
 export type InvoiceSummary = {
   id: string; supplierId: string; branchRef?: string | null; supplierName?: string | null;
   invoiceNumber: string; invoiceDate: string; currencyCode: string;
@@ -30,7 +40,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
 export class InvoiceIntakeError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
+  constructor(readonly status: number, message: string, readonly code?: string) { super(message); }
 }
 
 async function request(legalEntityId: string, path: string, init: RequestInit = {}, binary = false): Promise<unknown> {
@@ -47,21 +57,55 @@ async function request(legalEntityId: string, path: string, init: RequestInit = 
     throw new InvoiceIntakeError(0, "Invoice intake is unavailable. Your changes were not confirmed.");
   }
   if (!response.ok) {
-    let reason = "";
+    let reason = ""; let code: string | undefined;
     try {
       const body: unknown = await response.json();
-      if (object(body)) reason = String(body.message ?? body.detail ?? body.title ?? "");
+      if (object(body)) { reason = String(body.message ?? body.detail ?? body.title ?? "");
+        if (typeof body.code === "string") code = body.code; }
     } catch { /* Keep a useful fallback for non-JSON errors. */ }
     throw new InvoiceIntakeError(response.status,
       response.status === 401 ? "Sign in to ERP to open invoices."
         : response.status === 403 ? "You do not have invoice access for this company."
           : reason || (response.status === 404 ? "Invoice not found."
             : response.status === 409 ? "This invoice is already recorded. Search the invoice list before trying again."
-              : "The invoice action could not be completed."));
+              : "The invoice action could not be completed."), code);
   }
   if (binary) return response.blob();
   try { return await response.json(); }
   catch { throw new InvoiceIntakeError(0, "The ERP returned an invalid invoice response."); }
+}
+
+const exactAmount = (value: unknown): value is string => typeof value === "string"
+  && /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value);
+function readCalculation(value: unknown, kind: "preview" | "saved", expectedInvoice?: string): InvoiceAmountCalculation {
+  if (!object(value) || value.schemaVersion !== 2 || !object(value.precision) || !object(value.amounts))
+    throw new InvoiceIntakeError(0, "The ERP returned an invalid currency calculation.");
+  const p = value.precision, a = value.amounts;
+  if (!guid.test(String(p.referenceId)) || typeof p.revision !== "number" || !Number.isSafeInteger(p.revision) || p.revision < 1
+    || typeof p.minorUnits !== "number" || !Number.isInteger(p.minorUnits) || p.minorUnits < 0 || p.minorUnits > 4
+    || !["ToEven", "AwayFromZero"].includes(String(p.rounding)) || !/^[A-Z]{3}$/.test(String(p.currencyCode))
+    || !/^[0-9a-f]{64}$/i.test(String(p.payloadSha256))
+    || typeof p.publishedAtUtc !== "string" || typeof p.observedAtUtc !== "string"
+    || ![a.rawNet, a.net, a.tax, a.gross, a.adjustment].every(exactAmount)
+    || !Array.isArray(a.lines) || !a.lines.length || !a.lines.every((line: unknown, index: number) =>
+      object(line) && line.lineNumber === index + 1 && [line.quantity, line.unitPrice, line.rawNet,
+        line.net, line.tax, line.gross, line.adjustment].every(exactAmount))
+    || (kind === "preview" ? !/^[0-9a-f]{64}$/i.test(String(value.previewSha256))
+      : !guid.test(String(value.calculationId)) || value.invoiceId !== expectedInvoice
+        || !/^[0-9a-f]{64}$/i.test(String(value.calculationSha256))))
+    throw new InvoiceIntakeError(0, "The ERP returned an invalid currency calculation.");
+  return value as unknown as InvoiceAmountCalculation;
+}
+export async function previewInvoiceCalculation(company: string, input: InvoiceIntakeInput,
+  signal?: AbortSignal): Promise<InvoiceAmountCalculation> {
+  return readCalculation(await request(company, "/calculation-preview", { method: "POST", body: JSON.stringify(input), signal }), "preview");
+}
+export async function getInvoiceAmountCalculation(company: string, invoiceId: string,
+  signal?: AbortSignal): Promise<InvoiceAmountCalculation | null> {
+  if (!guid.test(invoiceId)) throw new InvoiceIntakeError(0, "Invoice reference is invalid.");
+  try { return readCalculation(await request(company, `/${invoiceId}/amount-calculation`, { signal }), "saved", invoiceId); }
+  catch (cause) { if (cause instanceof InvoiceIntakeError && cause.status === 404 && cause.code === "legacy-invoice-calculation") return null;
+    throw cause; }
 }
 
 export async function listInvoiceIntake(legalEntityId: string, page = 1, signal?: AbortSignal): Promise<InvoicePage> {
@@ -82,11 +126,27 @@ export async function getInvoiceIntake(legalEntityId: string, id: string, signal
   return body as unknown as InvoiceDetail;
 }
 
-export async function captureInvoiceIntake(legalEntityId: string, input: InvoiceIntakeInput): Promise<{ id: string }> {
-  const body = await request(legalEntityId, "", { method: "POST", body: JSON.stringify(input) });
+export type InvoiceCaptureResult = { id: string; status: "Received"; intakeSchemaVersion?: number; calculationId?: string };
+function readCaptureResult(body: unknown, v2: boolean): InvoiceCaptureResult {
   if (!object(body) || !guid.test(String(body.id)) || body.status !== "Received")
     throw new InvoiceIntakeError(0, "The ERP did not confirm this invoice. Check the list before retrying.");
-  return body as { id: string };
+  if (v2 && (body.intakeSchemaVersion !== 2 || !guid.test(String(body.calculationId))
+    || !object(body.amounts) || ![body.amounts.rawNet, body.amounts.net, body.amounts.tax,
+      body.amounts.gross, body.amounts.adjustment].every(exactAmount)))
+    throw new InvoiceIntakeError(0, "The ERP did not confirm the saved currency calculation. Check the invoice list before retrying.");
+  return body as InvoiceCaptureResult;
+}
+export async function captureInvoiceIntake(legalEntityId: string, input: InvoiceIntakeInput,
+  commandKey?: string): Promise<InvoiceCaptureResult> {
+  if (input.intakeSchemaVersion === 2 && (!commandKey || !guid.test(commandKey)))
+    throw new InvoiceIntakeError(0, "Save the original invoice command key before recording this bill.");
+  const body = await request(legalEntityId, "", { method: "POST", body: JSON.stringify(input),
+    headers: commandKey ? { "Idempotency-Key": commandKey } : undefined });
+  return readCaptureResult(body, input.intakeSchemaVersion === 2);
+}
+export async function recoverInvoiceCapture(legalEntityId: string, commandKey: string): Promise<InvoiceCaptureResult> {
+  if (!guid.test(commandKey)) throw new InvoiceIntakeError(0, "Saved invoice command reference is invalid.");
+  return readCaptureResult(await request(legalEntityId, `/capture-commands/${commandKey}`), true);
 }
 
 export function invoiceAllows(invoice: InvoiceDetail, action: "Edit" | "Cancel"): boolean {

@@ -4,6 +4,7 @@ import { ArrowRight, Menu, Search, Settings2, X } from "lucide-react";
 import { ErpSidebarHeader, ErpTopBar } from "@amizopower/erp-ui";
 import { Input, PageHeader } from "../components/ui";
 import { BrandMark, useErpShell } from "../lib/erpShell";
+import { canOpenCoreModule } from "../lib/core-workspace-choices";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { findModule, procurementModuleGroups, procurementModuleSlugs, settingsRoutes } from "../data/settings";
 import { LiveConfiguration } from "./LiveConfiguration";
@@ -32,7 +33,7 @@ function Notice({ title, detail }: { title: string; detail: string }) {
 /** Live Settings retains the imported directory and rail without mounting local preview editors. */
 export function LiveSettingsShell() {
   const readiness = useLiveReadiness();
-  const { branding, assignedRoles, selection } = useErpShell();
+  const { branding, assignedRoles, coreActions, selection } = useErpShell();
   const location = useLocation();
   const [search, setSearch] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -45,7 +46,8 @@ export function LiveSettingsShell() {
     return <p role="status">Checking the selected company…</p>;
 
   const roles = new Set(assignedRoles.map(role => role.toLowerCase()));
-  const canOpenCore = roles.has("erp_admin") || roles.has("hr_admin");
+  const canManageCoreSettings = roles.has("erp_admin") || roles.has("hr_admin");
+  const canOpenCore = canOpenCoreModule(assignedRoles, coreActions);
   const canReadConfiguration = readiness.permissions.includes("procurement-configuration-read")
     && readiness.capabilities.configurationDraft === true;
   const term = search.trim().toLowerCase();
@@ -68,7 +70,7 @@ export function LiveSettingsShell() {
         className="flex items-center justify-between rounded-md px-1 py-2 text-[13px] text-muted-foreground hover:bg-surface-muted hover:text-primary">{link.label}<ArrowRight size={14} /></Link>)}</div>
     </section>)}</div>
     {!visible.length && <p className="mt-5 text-sm text-muted-foreground">No Procurement settings match “{search}”.</p>}
-    {canOpenCore && <a href="/core/workspace/settings" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary">Open ERP Core settings <ArrowRight size={14} /></a>}
+    {canOpenCore && <a href={canManageCoreSettings ? "/core/workspace/settings" : "/core"} className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary">Open ERP Core {canManageCoreSettings ? "settings" : "currencies"} <ArrowRight size={14} /></a>}
     <p className="mt-4 text-xs text-muted-foreground">Finance manages tax, accounting and payments. Other Procurement controls stay visible here and cannot be changed until their live settings are connected.</p>
   </div>;
   else if (path === "/settings/reference-data" || path === "/settings/buying-rules")

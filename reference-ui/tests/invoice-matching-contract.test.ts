@@ -222,4 +222,15 @@ describe("invoice matching adapter", () => {
         principalReceivingSourceStateId: null, principalReceivingFactId: null, invoiceUnitCode: "EACH",
         documentVersionId: "00000000-0000-0000-0000-000000000000", documentLineReference: "" }] }, key), cause)).toBe(false);
   });
+  it("explains a Core currency and matching rule conflict without discarding an uncertain Compare key", async () => {
+    const command = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key, 3);
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "InvoiceCurrencyPolicyConflict" }), { status: 409 }));
+    vi.stubGlobal("fetch", fetch);
+    let cause: unknown;
+    try { await sendInvoiceMatching(company, command); } catch (error) { cause = error; }
+    expect(cause).toMatchObject({ status: 409, code: "InvoiceCurrencyPolicyConflict",
+      message: "Currency rounding settings differ from the matching rules. Ask an administrator to review them." });
+    expect(canReleaseInvoiceMatchingPending(command, cause)).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });

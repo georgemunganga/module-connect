@@ -29,6 +29,7 @@ import { useApp, money } from "../../lib/store";
 import { modules } from "../../data/modules";
 import { Modal, Button } from "../ui";
 import { BrandMark, useErpShell } from "../../lib/erpShell";
+import { canOpenCoreModule } from "../../lib/core-workspace-choices";
 import { ErpSidebarHeader, ErpTopBar } from "@amizopower/erp-ui";
 import { isProcurementLiveMode } from "../../lib/ProcurementLiveGate";
 
@@ -49,10 +50,10 @@ const payables = [
 export function AppShell() {
   const location = useLocation();
   const { records, notify } = useApp();
-  const { branding, entities, branches, selection, contextAvailable, verifiedContext, procurementScopeStatus, assignedRoles, selectEntity, selectBranch, selectAllBranches } = useErpShell();
+  const { branding, entities, branches, selection, contextAvailable, verifiedContext, procurementScopeStatus, assignedRoles, coreActions, selectEntity, selectBranch, selectAllBranches } = useErpShell();
   const roleSet = new Set(assignedRoles.map((role) => role.toLowerCase()));
   const canOpenHrm = ["employee", "manager", "hr_ops", "payroll", "finance_approver", "hr_admin", "investigator", "timesheet_operator"].some((role) => roleSet.has(role));
-  const canOpenCore = roleSet.has("erp_admin") || roleSet.has("hr_admin");
+  const canOpenCore = canOpenCoreModule(assignedRoles, coreActions);
   const [mobile, setMobile] = useState(false),
     [query, setQuery] = useState(""),
     [searchOpen, setSearchOpen] = useState(false),
