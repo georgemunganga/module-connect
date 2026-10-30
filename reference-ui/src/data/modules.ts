@@ -104,6 +104,7 @@ export const canonicalRoutes = [
   { path: "/vendors/:id/:tab", title: "Vendor detail section" },
   { path: "/vendors/:id/edit", title: "Edit Vendor" },
   { path: "/inbox", title: "Payables Inbox" },
+  { path: "/bills/:id/replace", title: "Correct Bill" },
   { path: "/batch-payments", title: "Batch Payments" },
   { path: "/batch-payments/:id", title: "Batch payment detail" },
   { path: "/batch-payments/:id/edit", title: "Edit prepared batch" },

@@ -1,5 +1,5 @@
 import { isDefiniteHttpRejection } from "../lib/http-write-outcome";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MoreHorizontal, Paperclip, Plus, Save, Search, ShoppingBag, Trash2, X } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Textarea } from "../components/ui";
@@ -7,6 +7,10 @@ import { useErpShell } from "../lib/erpShell";
 import { invoiceDecimal, invoicePreview } from "./invoice-values";
 import { invoiceCaptureJournal, type InvoiceCaptureJournalState, type InvoiceCapturePending,
   type InvoiceCaptureScope } from "../lib/invoice-capture-command-journal";
+import { invoiceReplacementJournal, type InvoiceReplacementJournalState, type InvoiceReplacementPending,
+  type InvoiceReplacementScope } from "../lib/invoice-replacement-command-journal";
+import { replacementEditorAvailable, replacementDraftRetainsSource, replacementJournalReadScope } from "../lib/invoice-replacement-editor";
+import { InvoiceBillIdentityFields } from "./InvoiceBillIdentityFields";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
 import { documentNewWorkBlocked, principalNewWorkBlocked, type PrincipalHistoryState } from "../lib/invoice-principal-history-lock";
@@ -24,7 +28,9 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import {
   captureInvoiceIntake, recoverInvoiceCapture, getInvoiceIntake, listInvoiceIntake, updateInvoiceIntake, cancelInvoiceIntake, invoiceAllows, invoiceEditInput, InvoiceIntakeError,
-  previewInvoiceCalculation, getInvoiceAmountCalculation, type InvoiceAmountCalculation,
+  previewInvoiceCalculation, getInvoiceAmountCalculation, invoiceReplacementDraft, createInvoiceReplacement, recoverInvoiceReplacement,
+  getInvoiceReplacementHistory, readInvoiceReplacementInput, isInvoiceReplacementValidationRejection,
+  type InvoiceReplacementHistory, type InvoiceReplacementInput, type InvoiceAmountCalculation,
   type InvoiceDetail, type InvoiceIntakeInput, type InvoiceLineInput, type InvoicePage, type InvoiceSummary,
 } from "../../../src/platform/procurement-invoices-api";
 
@@ -206,33 +212,54 @@ function InvoiceListRecord() {
   </div>;
 }
 
-export function LiveInvoiceEditor() {
+export function LiveInvoiceReplacementRoute() { return <LiveInvoiceEditor mode="replacement" />; }
+
+export function LiveInvoiceEditor({ mode = "standard" }: { mode?: "standard" | "replacement" }) {
   const { id } = useParams();
   const readiness = useCompany();
   const { selection, authEpoch } = useErpShell();
+  const contextKey = JSON.stringify([authEpoch, readiness.tenantId, readiness.legalEntityId, selection.entityId,
+    selection.branchScope, selection.branch, readiness.effectiveBranchId, readiness.principalId, mode, id ?? "new",
+    readiness.permissions, readiness.capabilities.invoiceCurrencyCalculationV2]);
+  const currentContext = useRef(contextKey); currentContext.current = contextKey;
+  const mounted = useRef(true);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
-  return <InvoiceEditorRecord key={`${authEpoch}:${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${id ?? "new"}`} />;
+  return <InvoiceEditorRecord key={contextKey} mode={mode}
+    isContextCurrent={() => mounted.current && currentContext.current === contextKey} />;
 }
-function InvoiceEditorRecord() {
+function InvoiceEditorRecord({ mode, isContextCurrent }: { mode: "standard" | "replacement"; isContextCurrent: () => boolean }) {
   const { id } = useParams();
   const { selection } = useErpShell();
   const alive = useRef(true);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useLayoutEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const current = () => alive.current && isContextCurrent();
   const navigate = useNavigate();
   const { tenantId, principalId, legalEntityId, effectiveBranchId, defaultCurrencyCode, permissions, capabilities } = useCompany();
-  const v2 = !id && capabilities.invoiceCurrencyCalculationV2;
+  const replacement = mode === "replacement";
+  const captureV2 = !replacement && !id && capabilities.invoiceCurrencyCalculationV2;
+  const v2 = replacement || captureV2;
+  const [original, setOriginal] = useState<InvoiceDetail | null>(null);
+  const [loadingInvoice, setLoadingInvoice] = useState(!!id);
   const captureScope: InvoiceCaptureScope = { tenantId, principalId, companyId: legalEntityId,
     branchId: selection.branchScope === "all" ? "" : selection.branch || effectiveBranchId || "" };
-  const [captureState, setCaptureState] = useState<InvoiceCaptureJournalState>(() => v2
+  const replacementWriteScope: InvoiceReplacementScope = { ...captureScope, sourceInvoiceId: id ?? "" };
+  const replacementScope = replacementJournalReadScope(replacementWriteScope, selection.branchScope === "all", original);
+  const [captureState, setCaptureState] = useState<InvoiceCaptureJournalState>(() => captureV2
     ? invoiceCaptureJournal.read(captureScope) : { pending: null, blocked: false });
+  const [replacementState, setReplacementState] = useState<InvoiceReplacementJournalState>(() => replacement
+    ? invoiceReplacementJournal.read(replacementScope) : { pending: null, blocked: false });
   const [recoveringCapture, setRecoveringCapture] = useState(false);
-  useEffect(() => { setCaptureState(v2 ? invoiceCaptureJournal.read(captureScope) : { pending: null, blocked: false }); },
-    [v2, tenantId, principalId, legalEntityId, captureScope.branchId]);
+  const [recoveringReplacement, setRecoveringReplacement] = useState(false);
+  const [validationRejection, setValidationRejection] = useState<unknown>(null);
+  const [reviewRejectionOpen, setReviewRejectionOpen] = useState(false);
+  useEffect(() => { setCaptureState(captureV2 ? invoiceCaptureJournal.read(captureScope) : { pending: null, blocked: false }); },
+    [captureV2, tenantId, principalId, legalEntityId, captureScope.branchId]);
+  useEffect(() => { setReplacementState(replacement ? invoiceReplacementJournal.read(replacementScope) : { pending: null, blocked: false }); },
+    [replacement, tenantId, principalId, legalEntityId, replacementScope.branchId, id]);
   const [input, setInput] = useState<InvoiceIntakeInput>(() => ({ supplierId: "", invoiceNumber: "",
     invoiceDate: new Date().toISOString().slice(0, 10), currencyCode: defaultCurrencyCode, lines: [blankLine()] }));
   const [baseline, setBaseline] = useState(() => JSON.stringify(input));
-  const [original, setOriginal] = useState<InvoiceDetail | null>(null);
-  const [loadingInvoice, setLoadingInvoice] = useState(!!id);
   const [reason, setReason] = useState("");
   const [uncertain, setUncertain] = useState(false);
   const [stale, setStale] = useState(false);
@@ -251,14 +278,15 @@ function InvoiceEditorRecord() {
     const abort = new AbortController();
     setLoadingInvoice(true); setOriginal(null);
     getInvoiceIntake(legalEntityId, id, abort.signal).then(record => {
-      if (abort.signal.aborted) return;
-      const editable = invoiceAllows(record, "Edit") ? invoiceEditInput(record) : null;
+      if (abort.signal.aborted || !current()) return;
+      const editable = replacement ? replacementEditorAvailable(record, captureScope.branchId, permissions, capabilities.invoiceCurrencyCalculationV2)
+        ? invoiceReplacementDraft(record) : null : invoiceAllows(record, "Edit") ? invoiceEditInput(record) : null;
       setOriginal(record);
       if (editable) { setInput(editable); setBaseline(JSON.stringify(editable)); }
-    }).catch(cause => { if (!abort.signal.aborted) setError(errorText(cause)); })
-      .finally(() => { if (!abort.signal.aborted) setLoadingInvoice(false); });
+    }).catch(cause => { if (!abort.signal.aborted && current()) setError(errorText(cause)); })
+      .finally(() => { if (!abort.signal.aborted && current()) setLoadingInvoice(false); });
     return () => abort.abort();
-  }, [legalEntityId, id]);
+  }, [legalEntityId, id, replacement]);
   const [vendorSearch, setVendorSearch] = useState("");
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
   const [loadingVendors, setLoadingVendors] = useState(true);
@@ -268,17 +296,17 @@ function InvoiceEditorRecord() {
   const backTo = id ? `/bills/${id}` : "/bills";
   const leave = () => {
     if (saving) return;
-    if (uncertain) { setReconcileOpen(true); return; }
+    if (uncertain || replacementState.blocked) { setReconcileOpen(true); return; }
     if (dirty) setDiscardOpen(true); else navigate(backTo);
   };
   useEffect(() => {
     const controller = new AbortController();
     setLoadingVendors(true);
     listVendorDrafts(legalEntityId, { search: vendorSearch, pageSize: 25, signal: controller.signal })
-      .then((page) => { if (!controller.signal.aborted) setVendors(page.items.filter((vendor) =>
+      .then((page) => { if (!controller.signal.aborted && current()) setVendors(page.items.filter((vendor) =>
         vendor.status === "Active" || vendor.status === "Suspended" || vendor.status === "Inactive")); })
-      .catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
-      .finally(() => { if (!controller.signal.aborted) setLoadingVendors(false); });
+      .catch((cause: unknown) => { if (!controller.signal.aborted && current()) setError(errorText(cause)); })
+      .finally(() => { if (!controller.signal.aborted && current()) setLoadingVendors(false); });
     return () => controller.abort();
   }, [legalEntityId, vendorSearch]);
   const setLine = (index: number, changes: Partial<InvoiceLineInput>) => setInput((current) => ({
@@ -288,7 +316,8 @@ function InvoiceEditorRecord() {
   if (!v2) try { preview = invoicePreview(input.lines); } catch { /* Field errors are shown on submission. */ }
   const verifiedPreview = v2 && currencyPreview?.inputKey === inputKey ? currencyPreview.value : null;
   async function reviewCalculation() {
-    if (!v2 || saving || uncertain) return;
+    if (!v2 || saving || uncertain || replacement && (!replacementEditorAvailable(original, captureScope.branchId, permissions, capabilities.invoiceCurrencyCalculationV2)
+      || !replacementDraftRetainsSource(original, input) || replacementState.blocked)) return;
     setError("");
     let draft: InvoiceIntakeInput;
     try { draft = exactInvoiceDraft(input); } catch (cause) { setError(errorText(cause)); return; }
@@ -298,17 +327,17 @@ function InvoiceEditorRecord() {
     setPreviewing(true); setCurrencyPreview(null);
     try {
       const value = await previewInvoiceCalculation(legalEntityId, draft, controller.signal);
-      if (!controller.signal.aborted && alive.current && currentInputKey.current === requestedKey
+      if (!controller.signal.aborted && current() && currentInputKey.current === requestedKey
         && value.amounts.lines.length === draft.lines.length && value.precision.currencyCode === draft.currencyCode.trim().toUpperCase())
         setCurrencyPreview({ value, inputKey: requestedKey, draftKey: JSON.stringify(draft) });
-      else if (!controller.signal.aborted && alive.current && currentInputKey.current === requestedKey)
+      else if (!controller.signal.aborted && current() && currentInputKey.current === requestedKey)
         setError("The calculation did not match this invoice. Review the entries and calculate again.");
-    } catch (cause) { if (!controller.signal.aborted && alive.current) setError(errorText(cause)); }
-    finally { if (!controller.signal.aborted && alive.current) setPreviewing(false); }
+    } catch (cause) { if (!controller.signal.aborted && current()) setError(errorText(cause)); }
+    finally { if (!controller.signal.aborted && current()) setPreviewing(false); }
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saving || uncertain || stale || v2 && captureState.blocked || (id && (!original || !invoiceAllows(original, "Edit")))) return;
+    if (replacement || !current() || saving || uncertain || stale || captureV2 && captureState.blocked || (id && (!original || !invoiceAllows(original, "Edit")))) return;
     setError("");
     let draft: InvoiceIntakeInput;
     try {
@@ -324,7 +353,7 @@ function InvoiceEditorRecord() {
       if (id && !reason.trim()) throw new Error("Add a reason for changing this invoice.");
     } catch (cause) { setError(errorText(cause)); return; }
     let originalCommand: InvoiceCapturePending | null = null;
-    if (v2) {
+    if (captureV2) {
       originalCommand = { operation: "CaptureV2", key: crypto.randomUUID(), body: JSON.stringify(draft) };
       if (!invoiceCaptureJournal.claim(captureScope, originalCommand)) {
         setCaptureState(invoiceCaptureJournal.read(captureScope));
@@ -338,14 +367,15 @@ function InvoiceEditorRecord() {
       const result = id && original
         ? await updateInvoiceIntake(legalEntityId, id, original.version, draft, reason)
         : await captureInvoiceIntake(legalEntityId, draft, originalCommand?.key);
+      if (!current()) return;
       if (originalCommand && !invoiceCaptureJournal.clear(captureScope, originalCommand)) {
-        if (alive.current) { setUncertain(true); setError("The saved result was confirmed, but its recovery key could not be cleared. Check the original result before continuing."); }
+        if (current()) { setUncertain(true); setError("The saved result was confirmed, but its recovery key could not be cleared. Check the original result before continuing."); }
         return;
       }
       if (originalCommand) setCaptureState(invoiceCaptureJournal.read(captureScope));
-      if (alive.current) navigate(`/bills/${result.id}`);
+      if (current()) navigate(`/bills/${result.id}`);
     } catch (cause) {
-      if (!alive.current) return;
+      if (!current()) return;
       setError(errorText(cause));
       if (originalCommand && cause instanceof InvoiceIntakeError && (cause.code === "invoice-calculation-changed" || cause.code === "validation-failed")) {
         if (invoiceCaptureJournal.clear(captureScope, originalCommand)) setCaptureState(invoiceCaptureJournal.read(captureScope));
@@ -353,65 +383,139 @@ function InvoiceEditorRecord() {
       }
       else if (cause instanceof InvoiceIntakeError && cause.status === 409) setStale(true);
       if (!(cause instanceof InvoiceIntakeError) || !isDefiniteHttpRejection(cause.status)) setUncertain(true);
-    } finally { if (alive.current) setSaving(false); }
+    } finally { if (current()) setSaving(false); }
   }
   async function checkOriginalCapture() {
     const pending = captureState.pending;
-    if (!v2 || !pending || recoveringCapture || saving) return;
+    if (!captureV2 || !pending || recoveringCapture || saving || !current()) return;
     setRecoveringCapture(true); setError("");
     try {
       const result = await recoverInvoiceCapture(legalEntityId, pending.key);
+      if (!current()) return;
       if (!invoiceCaptureJournal.clear(captureScope, pending)) throw new Error("The saved command changed. Its recovery key remains pending.");
-      if (alive.current) { setCaptureState(invoiceCaptureJournal.read(captureScope)); navigate(`/bills/${result.id}`); }
-    } catch (cause) { if (alive.current) setError(cause instanceof InvoiceIntakeError && cause.status === 404
+      if (current()) { setCaptureState(invoiceCaptureJournal.read(captureScope)); navigate(`/bills/${result.id}`); }
+    } catch (cause) { if (current()) setError(cause instanceof InvoiceIntakeError && cause.status === 404
       ? "No saved result was found for the original command. Its key is retained; check the invoice list or ask an administrator before another save."
       : errorText(cause)); }
-    finally { if (alive.current) setRecoveringCapture(false); }
+    finally { if (current()) setRecoveringCapture(false); }
   }
-  if (!permissions.includes("procurement-invoice-capture")) return <div className="p-5 sm:p-8" role="alert">You do not have access to record invoices for this company.</div>;
+  const canReplace = replacementEditorAvailable(original, captureScope.branchId, permissions, capabilities.invoiceCurrencyCalculationV2);
+  async function saveReplacement(event: FormEvent) {
+    event.preventDefault();
+    if (!replacement || !current() || !canReplace || !original || saving || uncertain || stale || replacementState.blocked) return;
+    setError("");
+    let body: string;
+    try {
+      if (!replacementDraftRetainsSource(original, input)) throw new Error("The original vendor, currency or purchase order changed. Open its saved details again.");
+      const draft = exactInvoiceDraft(input);
+      if (!verifiedPreview?.previewSha256 || currencyPreview?.draftKey !== JSON.stringify(draft))
+        throw new Error("Review the corrected bill's currency calculation before saving.");
+      const correction: InvoiceReplacementInput = { sourceVersion: original.version, reason: reason.trim(),
+        correctedInvoice: { ...draft, purchaseOrderId: original.replacementContext!.purchaseOrderId,
+          intakeSchemaVersion: 2, expectedCurrencyReferenceId: verifiedPreview.precision.referenceId,
+          expectedCurrencyRevision: verifiedPreview.precision.revision, expectedCalculationSha256: verifiedPreview.previewSha256 } };
+      body = JSON.stringify(correction); readInvoiceReplacementInput(body);
+    } catch (cause) { if (current()) setError(errorText(cause)); return; }
+    const pending: InvoiceReplacementPending = { operation: "InvoiceReplaceV2", key: crypto.randomUUID(), body };
+    if (!invoiceReplacementJournal.claim(replacementScope, pending)) {
+      setReplacementState(invoiceReplacementJournal.read(replacementScope));
+      setError("The original correction reference could not be saved. Check any pending result before another change."); return;
+    }
+    setReplacementState(invoiceReplacementJournal.read(replacementScope)); setValidationRejection(null); setSaving(true);
+    try {
+      const result = await createInvoiceReplacement(legalEntityId, original.id, pending.key, pending.body, replacementScope);
+      if (!current()) return;
+      if (!invoiceReplacementJournal.confirm(replacementScope, pending, result))
+        throw new Error("The correction was confirmed, but its saved reference could not be cleared. Check the original result before continuing.");
+      setReplacementState(invoiceReplacementJournal.read(replacementScope)); navigate(`/bills/${result.successorInvoiceId}`);
+    } catch (cause) {
+      const reportedValidation = isInvoiceReplacementValidationRejection(cause, replacementScope, pending.key, pending.body);
+      // A late, exactly bound422 can retain its local report in the ORIGINAL
+      // journal. It never clears a key or updates/navigates another context.
+      if (reportedValidation) invoiceReplacementJournal.noteValidationRejected(replacementScope, pending, cause);
+      if (!current()) return;
+      setError(errorText(cause));
+      if (reportedValidation) {
+        setValidationRejection(cause); setReplacementState(invoiceReplacementJournal.read(replacementScope));
+        setCurrencyPreview(null);
+      } else { setUncertain(true); }
+    } finally { if (current()) setSaving(false); }
+  }
+  async function checkOriginalReplacement() {
+    const pending = replacementState.pending;
+    if (!replacement || !current() || !pending || recoveringReplacement || saving) return;
+    setRecoveringReplacement(true); setError("");
+    try {
+      const result = await recoverInvoiceReplacement(legalEntityId, replacementScope.sourceInvoiceId, pending.key);
+      if (!current()) return;
+      if (!invoiceReplacementJournal.confirm(replacementScope, pending, result))
+        throw new Error("The saved correction reference changed. Its original result still needs review.");
+      setReplacementState(invoiceReplacementJournal.read(replacementScope)); navigate(`/bills/${result.successorInvoiceId}`);
+    } catch (cause) { if (current()) setError(cause instanceof InvoiceIntakeError && cause.status === 404
+      ? "The original result cannot be confirmed with your current access. Its reference is kept. Check your access or ask an administrator before another save."
+      : errorText(cause)); }
+    finally { if (current()) setRecoveringReplacement(false); }
+  }
+  function reviewRejectedReplacement() {
+    const pending = replacementState.pending;
+    if (!replacement || !current() || !canReplace || !pending || saving || recoveringReplacement) return;
+    if (!invoiceReplacementJournal.reviewValidationRejected(replacementScope, pending, undefined, validationRejection)) {
+      setError("The saved validation report changed or could not be cleared. Check the original result before another change."); return;
+    }
+    const reported = readInvoiceReplacementInput(pending.body);
+    const { intakeSchemaVersion: _schema, expectedCurrencyReferenceId: _ref,
+      expectedCurrencyRevision: _revision, expectedCalculationSha256: _sha, ...draft } = reported.correctedInvoice;
+    setInput(draft); setReason(reported.reason); setCurrencyPreview(null); setUncertain(false); setStale(false);
+    setValidationRejection(null); setReviewRejectionOpen(false); setReplacementState(invoiceReplacementJournal.read(replacementScope));
+    setError("Review your entries and calculate the amounts again before submitting a correction.");
+  }
+  const reviewReportedValidation = canReplace && !!replacementState.pending && (replacementState.validationRejected
+    || isInvoiceReplacementValidationRejection(validationRejection, replacementScope, replacementState.pending.key, replacementState.pending.body));
+  if (replacement ? !permissions.includes("procurement-invoice-read") : !permissions.includes("procurement-invoice-capture"))
+    return <div className="p-5 sm:p-8" role="alert">You do not have access to this invoice workflow for the company.</div>;
   return <div className="pb-20">
     <header className="flex items-center justify-between border-b border-border px-5 py-5 sm:px-8">
-      <h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} strokeWidth={1.4} />{id ? "Edit" : "New"} Bill</h1>
+      <h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} strokeWidth={1.4} />{replacement ? "Correct" : id ? "Edit" : "New"} Bill</h1>
       <Button type="button" variant="ghost" aria-label="Close editor" disabled={saving} onClick={leave}><X size={21} /></Button>
     </header>
-    {v2 && captureState.blocked && <div className="mx-5 mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm sm:mx-8" role="status">
+    {captureV2 && captureState.blocked && <div className="mx-5 mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm sm:mx-8" role="status">
       <p>{captureState.pending ? "A previous invoice save needs its original result checked before another change." : "Choose a permitted branch or resolve the saved browser command before recording this bill."}</p>
       {captureState.pending && <Button type="button" variant="secondary" disabled={recoveringCapture || saving} onClick={() => void checkOriginalCapture()}>
         {recoveringCapture ? "Checking…" : "Check original saved result"}</Button>}
       <Link className="ml-3 text-primary underline" to="/bills">Open bill list</Link>
     </div>}
+    {replacement && replacementState.blocked && <div className="mx-5 mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm sm:mx-8" role="status">
+      <p>{replacementState.pending ? "A previous correction needs its original result checked before another change." : "Choose the original bill's permitted branch, or ask for help with the saved correction reference."}</p>
+      {replacementState.pending && <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" disabled={recoveringReplacement || saving} onClick={() => void checkOriginalReplacement()}>
+          {recoveringReplacement ? "Checking…" : "Check original saved result"}</Button>
+        {reviewReportedValidation && <Button type="button" variant="secondary" disabled={recoveringReplacement || saving} onClick={() => setReviewRejectionOpen(true)}>Review entries</Button>}
+      </div>}
+      {replacementState.validationRejected && <p className="mt-2 text-xs text-muted-foreground">This browser remembers a reported validation issue. It is not a fresh confirmation from ERP.</p>}
+      {error && <p role="alert" className="mt-2 text-destructive">{error}</p>}
+      <Link className="mt-3 inline-block text-primary underline" to="/bills">Open bill list</Link>
+    </div>}
+    {reviewRejectionOpen && <Modal title="Review the reported validation issue?" onClose={() => setReviewRejectionOpen(false)}>
+      <p className="text-sm">The original submission reported a validation problem. Your entries stay in this form. Check the original saved result first if you are unsure; reviewing entries does not record or approve a bill.</p>
+      <div className="mt-5 flex gap-2"><Button type="button" variant="secondary" onClick={() => setReviewRejectionOpen(false)}>Keep reference</Button>
+        <Button type="button" disabled={saving || recoveringReplacement} onClick={reviewRejectedReplacement}>Review entries</Button></div>
+    </Modal>}
     {loadingInvoice ? <p className="px-5 py-6 sm:px-8" role="status">Loading invoice…</p>
       : id && !original ? <p className="px-5 py-6 sm:px-8" role="alert">{error || "Invoice not found."}</p>
-        : id && !invoiceAllows(original!, "Edit") ? <div className="px-5 py-6 sm:px-8" role="alert">This invoice cannot be edited. <Link className="text-primary underline" to={backTo}>Open its saved details</Link>.</div>
-          : <form onSubmit={save}>
-      <fieldset disabled={saving || uncertain || stale || v2 && captureState.blocked} className="min-w-0 border-0 p-0">
+        : id && !(replacement ? canReplace : invoiceAllows(original!, "Edit")) ? <div className="px-5 py-6 sm:px-8" role="alert">{replacement ? "A correction is not available for this bill in the selected branch." : "This invoice cannot be edited."} <Link className="text-primary underline" to={backTo}>Open its saved details</Link>.</div>
+          : <form onSubmit={replacement ? saveReplacement : save}>
+      <fieldset disabled={saving || uncertain || stale || captureV2 && captureState.blocked || replacement && replacementState.blocked} className="min-w-0 border-0 p-0">
         <div className="max-w-[1260px] space-y-7 px-5 py-6 sm:px-8">
-          <p className="text-sm text-muted-foreground">Record the supplier invoice as received. Review and matching happen after intake.</p>
+          <p className="text-sm text-muted-foreground">{replacement ? "Record the supplier-issued correction as a new bill. The original bill and its reviews remain unchanged." : "Record the supplier invoice as received. Review and matching happen after intake."}</p>
+          {replacement && original && <p className="text-sm text-muted-foreground">Original bill: <Link className="text-primary underline" to={`/bills/${original.id}`}>{original.invoiceNumber}</Link>. Vendor, currency, purchase order and branch stay linked to this bill. Enter the supplier's new corrected number.</p>}
           {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}
             {id && <Button type="button" variant="secondary" onClick={() => { if (window.confirm("Reload the saved invoice and discard these changes?")) window.location.reload(); }}>Reload saved invoice</Button>}
           </div>}
-          <div className="-mx-5 bg-surface-muted px-5 py-5 sm:-mx-8 sm:px-8">
-            <div className="max-w-xl space-y-3">
-              <Field label="Find vendor"><Input value={vendorSearch} disabled={!!id} onChange={event => setVendorSearch(event.target.value)} placeholder="Search vendor name" /></Field>
-              <Field label="Vendor Name *"><Select aria-label="Vendor" required value={input.supplierId} disabled={loadingVendors || !!id}
-                onChange={event => setInput({ ...input, supplierId: event.target.value })}>
-                <option value="">{loadingVendors ? "Loading vendors…" : "Choose vendor"}</option>
-                {id && original && !vendors.some(vendor => vendor.id === original.supplierId) && <option value={original.supplierId}>{original.supplierName || "Saved vendor"}</option>}
-                {vendors.map(vendor => <option key={vendor.id} value={vendor.id}>{vendor.displayName}{vendor.status !== "Active" ? ` · ${vendor.status}` : ""}</option>)}
-              </Select></Field>
-              {id ? <p className="text-xs text-muted-foreground">The saved supplier cannot be changed on this invoice.</p>
-                : dirty || saving || uncertain ? <p className="text-xs text-muted-foreground">Finish or discard this bill before opening the vendor directory.</p>
-                  : <Link className="block text-sm text-primary hover:underline" to={`/vendors/new?returnTo=${encodeURIComponent("/bills/new")}`}>+ Add a vendor in the shared directory</Link>}
-            </div>
-          </div>
-          <div className="grid max-w-4xl gap-x-8 gap-y-5 sm:grid-cols-2">
-            <Field label="Bill Date *"><Input aria-label="Invoice date" required type="date" value={input.invoiceDate} onChange={event => setInput({ ...input, invoiceDate: event.target.value })} /></Field>
-            <Field label="Bill # *"><Input aria-label="Invoice number" required maxLength={120} value={input.invoiceNumber} onChange={event => setInput({ ...input, invoiceNumber: event.target.value })} /></Field>
-            <Field label="Due Date"><Input aria-label="Due date" type="date" min={input.invoiceDate} value={input.dueDate || ""} onChange={event => setInput({ ...input, dueDate: event.target.value || null })} /></Field>
-            <Field label="Currency *"><Input aria-label="Currency" required maxLength={3} value={input.currencyCode} onChange={event => setInput({ ...input, currencyCode: event.target.value.toUpperCase() })} /></Field>
-            <Field label="Payment Terms"><Select aria-label="Payment Terms" disabled value="unavailable"><option value="unavailable">Not available yet</option></Select></Field>
-          </div>
-          <p className="text-xs text-muted-foreground">Payment terms cannot be saved on bills yet. Use the due date above.</p>
+          <InvoiceBillIdentityFields input={input} onChange={setInput} vendorLocked={!!id} replacement={replacement}
+            original={original} vendorSearch={vendorSearch} onVendorSearch={setVendorSearch} vendors={vendors}
+            loadingVendors={loadingVendors} directoryLocked={dirty || saving || uncertain}
+            purchaseOrderHref={replacement && original?.replacementContext && permissions.includes("procurement-po-read") && capabilities.principalOrderGovernanceRead
+              ? `/purchase-orders/${original.replacementContext.purchaseOrderId}?workflow=principal` : undefined} />
           <section className="rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-4 py-3"><h2 className="text-sm font-medium">Item Table</h2><span className="text-xs text-muted-foreground">Goods and services on this invoice</span></div>
             <div className="relative overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[760px] text-left">
@@ -454,10 +558,10 @@ function InvoiceEditorRecord() {
               <p className="mt-2 text-xs text-muted-foreground">Save the invoice first, then use its Documents panel to attach supplier files. No attachment is silently stored from this form.</p>
             </div>
           </div>
-          {id && <Field label="Reason for change *"><Textarea required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
+          {id && <Field label={replacement ? "Reason for correction *" : "Reason for change *"}><Textarea required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
         </div>
         <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-2 border-y border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-8">
-          <Button type="submit" disabled={saving || uncertain || stale || (v2 && (!verifiedPreview || captureState.blocked))}><Save size={14} />{saving ? "Saving…" : id ? "Save changes" : "Record as received"}</Button>
+          <Button type="submit" disabled={saving || uncertain || stale || (v2 && !verifiedPreview) || captureV2 && captureState.blocked || replacement && (!canReplace || replacementState.blocked)}><Save size={14} />{saving ? "Saving…" : replacement ? "Record corrected bill" : id ? "Save changes" : "Record as received"}</Button>
           <Button type="button" variant="ghost" disabled={saving} onClick={leave}><ArrowLeft size={14} /> Cancel</Button>
         </footer>
       </fieldset>
@@ -483,13 +587,14 @@ export function LiveInvoiceDetail() {
   const { selection, authEpoch } = useErpShell();
   if (selection.entityId && selection.entityId !== readiness.legalEntityId) return <p role="status">Checking the selected company…</p>;
   return <InvoiceDetailRecord key={JSON.stringify([authEpoch, readiness.tenantId, readiness.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
-    readiness.principalId, readiness.permissions, readiness.capabilities, id])} />;
+    readiness.principalId, selection.branchScope, readiness.effectiveBranchId, readiness.permissions, readiness.capabilities, id])} />;
 }
 function InvoiceDetailRecord() {
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const { id } = useParams();
-  const { legalEntityId, capabilities, permissions } = useCompany();
+  const { legalEntityId, capabilities, permissions, effectiveBranchId } = useCompany();
+  const { selection } = useErpShell();
   const [reason, setReason] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -501,6 +606,8 @@ function InvoiceDetailRecord() {
   const [amountCalculation, setAmountCalculation] = useState<InvoiceAmountCalculation | null>(null);
   const [calculationLoading, setCalculationLoading] = useState(false);
   const [calculationError, setCalculationError] = useState("");
+  const [replacementHistory, setReplacementHistory] = useState<InvoiceReplacementHistory | null>(null);
+  const [replacementHistoryError, setReplacementHistoryError] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -540,6 +647,16 @@ function InvoiceDetailRecord() {
       .finally(() => { if (!controller.signal.aborted) setCalculationLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, refresh, capabilities.invoiceCurrencyCalculationRead, permissions.includes("procurement-invoice-read")]);
+  useEffect(() => {
+    setReplacementHistory(null); setReplacementHistoryError("");
+    if (!id || !capabilities.invoiceReplacementRead || !permissions.includes("procurement-invoice-read")) return;
+    const controller = new AbortController();
+    getInvoiceReplacementHistory(legalEntityId, id, controller.signal)
+      .then(result => { if (!controller.signal.aborted) setReplacementHistory(result); })
+      .catch(cause => { if (!controller.signal.aborted && !(cause instanceof InvoiceIntakeError && cause.status === 404))
+        setReplacementHistoryError(errorText(cause)); });
+    return () => controller.abort();
+  }, [id, legalEntityId, refresh, capabilities.invoiceReplacementRead, permissions.includes("procurement-invoice-read")]);
   const refreshSavedInvoice = () => { if (busy || loading) return; setLoading(true); setError(""); setRefresh(value => value + 1); };
   async function cancel() {
     if (!permissions.includes("procurement-invoice-capture") || !invoice || busy || loading || uncertain || stale || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
@@ -563,6 +680,8 @@ function InvoiceDetailRecord() {
   const documentNewWorkLocked = documentNewWorkBlocked(principalHistory,
     capabilities.principalInvoiceComparisonRead || capabilities.principalInvoiceComparison);
   const canEdit = !loading && !busy && !uncertain && !stale && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
+  const canReplace = !loading && !busy && !uncertain && !stale && replacementEditorAvailable(invoice,
+    selection.branchScope === "all" ? "" : selection.branch || effectiveBranchId || "", permissions, capabilities.invoiceCurrencyCalculationV2);
   const canCancel = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel");
   const tabs = [
     { key: "overview", label: "Overview" },
@@ -579,22 +698,28 @@ function InvoiceDetailRecord() {
         <p className="mt-1 text-xs text-muted-foreground">{invoice.supplierName || "Vendor"} · {invoice.currencyCode} · Revision {invoice.version}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        {canReplace && <Link to={`/bills/${invoice.id}/replace`}><Button variant="secondary">Correct bill</Button></Link>}
         {canEdit && <Link to={`/bills/${invoice.id}/edit`}><Button variant="secondary">Edit invoice</Button></Link>}
         {capabilities.manualPaymentWorkflow && permissions.includes("procurement-payment-read")
-          && permissions.includes("procurement-payment-create")
+          && permissions.includes("procurement-payment-create") && replacementHistory?.sourceInvoiceId !== invoice.id
           ? <Link to={`/payments/new?invoiceId=${encodeURIComponent(invoice.id)}`}><Button variant="secondary">Create manual payment request</Button></Link>
           : <><Button variant="secondary" disabled aria-describedby="invoice-payment-unavailable">Record payment</Button>
-            <span id="invoice-payment-unavailable" className="sr-only">Manual payment review is not available yet.</span></>}
+            <span id="invoice-payment-unavailable" className="sr-only">{replacementHistory?.sourceInvoiceId === invoice.id ? "Open the corrected bill to review its next steps." : "Manual payment review is not available yet."}</span></>}
         <div className="relative"><Button variant="secondary" aria-label="More invoice actions" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={16} /> More</Button>
           {menuOpen && <div role="menu" aria-label="Invoice actions" className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-card p-3 text-left text-xs shadow-lg">
             <p className="font-medium">More actions</p>
             <Button role="menuitem" variant="ghost" disabled={loading || busy} onClick={() => { setMenuOpen(false); refreshSavedInvoice(); }}>Refresh invoice</Button>
             <p className="mt-1 text-muted-foreground">{canCancel && !uncertain && !stale ? "Cancel is available in Overview after a reason is entered." : uncertain || stale ? "Refresh the saved bill before another action." : "No cancellation action is allowed for this saved invoice."}</p>
-            <p className="mt-2 text-muted-foreground">Saved bills cannot be deleted. Payment recording is not connected yet.</p>
+            <p className="mt-2 text-muted-foreground">Saved bills cannot be deleted. Payment requests follow their own approval process.</p>
           </div>}
         </div>
       </div>
     </header>
+    {replacementHistory && <div className="border-b border-border px-4 py-3 text-sm sm:px-6" role="status">
+      {replacementHistory.sourceInvoiceId === invoice.id ? <>A corrected bill is recorded: <Link className="text-primary underline" to={`/bills/${replacementHistory.successorInvoiceId}`}>{replacementHistory.successorInvoiceNumber}</Link>. This original bill and its review history remain unchanged.</>
+        : <>This bill corrects <Link className="text-primary underline" to={`/bills/${replacementHistory.sourceInvoiceId}`}>{replacementHistory.sourceInvoiceNumber}</Link>. Its review and payment steps are separate.</>}
+    </div>}
+    {replacementHistoryError && <p role="alert" className="px-4 py-3 text-sm text-destructive sm:px-6">Correction history could not be confirmed: {replacementHistoryError}</p>}
     <DetailTabs tabs={tabs} active={activeTab} onChange={key => { setActiveTab(key); setMenuOpen(false); }} />
     <div className="space-y-4 p-4 sm:p-6">
       {loading && <p role="status" className="text-sm text-muted-foreground">Refreshing invoice…</p>}
@@ -653,7 +778,11 @@ function InvoiceDetailRecord() {
         <DetailValue label="Vendor" value={invoice.supplierName || "Vendor"} />
       </dl><p className="mt-4 text-sm text-muted-foreground">Linked orders, credits and payments are not shown here yet. Open their workspaces to check the latest records.</p></DetailSection>}
       {activeTab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not available for bills yet.</p></DetailSection>}
-      {activeTab === "history" && <DetailSection title="History"><dl className="grid gap-5 sm:grid-cols-2"><DetailValue label="Saved revision" value={invoice.version} /><DetailValue label="Created at" value={invoice.createdAt || "—"} /></dl><p className="mt-4 text-sm text-muted-foreground">A detailed activity log is not available here yet. The saved revision above is confirmed.</p></DetailSection>}
+      {activeTab === "history" && <DetailSection title="History"><dl className="grid gap-5 sm:grid-cols-2"><DetailValue label="Saved revision" value={invoice.version} /><DetailValue label="Created at" value={invoice.createdAt || "—"} /></dl>{replacementHistory && <dl className="mt-5 grid gap-5 sm:grid-cols-2">
+        <DetailValue label="Original bill" value={<Link className="text-primary underline" to={`/bills/${replacementHistory.sourceInvoiceId}`}>{replacementHistory.sourceInvoiceNumber}</Link>} />
+        <DetailValue label="Corrected bill" value={<Link className="text-primary underline" to={`/bills/${replacementHistory.successorInvoiceId}`}>{replacementHistory.successorInvoiceNumber}</Link>} />
+        <DetailValue label="Correction recorded" value={replacementHistory.recordedAtUtc} />
+      </dl>}<p className="mt-4 text-sm text-muted-foreground">The saved revision{replacementHistory ? " and correction links above are" : " above is"} confirmed. Original approval and comparison records remain attached to their own bill.</p></DetailSection>}
     </div>
   </div>;
 }

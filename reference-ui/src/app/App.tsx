@@ -19,7 +19,7 @@ import { LiveContractList, LiveContractEditor, LiveContractDetail } from "../fea
 import { LiveRecurringPurchaseList, LiveRecurringPurchaseEditor, LiveRecurringPurchaseDetail } from "../features/LiveRecurringPurchases";
 import { LivePlanList, LivePlanEditor, LivePlanDetail } from "../features/LivePlans";
 import { LiveVendorCreditList, LiveVendorCreditDetail, LiveVendorCreditEditor } from "../features/LiveVendorCredits";
-import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail } from "../features/LiveInvoices";
+import { LiveInvoiceList, LiveInvoiceEditor, LiveInvoiceDetail, LiveInvoiceReplacementRoute } from "../features/LiveInvoices";
 import { LiveInbox } from "../features/LiveInbox";
 import { LivePaymentList, LivePaymentEditor, LivePaymentDetail } from "../features/LivePayments";
 import { LiveOrderList, LiveOrderEditor, LiveOrderDetail } from "../features/LiveOrders";
@@ -145,6 +145,7 @@ export function App() {
                   </div>}
               />
             ))}
+            {isProcurementLiveMode && <Route path="/bills/:id/replace" element={<LiveInvoiceReplacementRoute />} />}
             {Object.values(modules)
               .filter((module) => module.key !== "rfqs")
               .flatMap((module) => [
