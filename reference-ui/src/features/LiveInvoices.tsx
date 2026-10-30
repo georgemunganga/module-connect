@@ -494,9 +494,9 @@ function InvoiceDetailRecord() {
           </div>
         </div>
         {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
-        {capabilities.invoiceComparison && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
+        {(capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead) && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
           company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
-          comparisonAvailable={capabilities.invoiceComparison} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
+          comparisonAvailable={capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
         {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
         {canCancel && <DetailSection title="Cancel invoice"><div className="space-y-3">
           <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>

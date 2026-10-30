@@ -8,9 +8,9 @@ export type InvoiceFinanceReadiness = { invoiceId: string; invoiceVersion: numbe
     mappingOriginalCurrent: boolean | null; comparisonId: string | null; comparisonInvoiceVersion: number | null; comparisonOriginalCurrent: boolean | null;
     recordedComparison: InvoiceReviewSummary | null; unresolvedExceptionCount: number | null; comparisonCurrentness: "NotRevalidated" };
   blockers: { code: string; message: string }[]; nextSteps: { code: string; message: string }[] };
-export type InvoiceMatchingHistory = { invoiceId: string; version: number; original: { netAmount: string; taxAmount: string; grossAmount: string; currencyCode: string;
+export type InvoiceMatchingHistory = { invoiceId: string; version: number; currentMappingVersionId: string | null; original: { netAmount: string; taxAmount: string; grossAmount: string; currencyCode: string;
   lines: { id: string; lineNumber: number; description: string; quantity: string; unitPrice: string; taxAmount: string }[] };
-  mappings: { id: string; mappingRevision: number; verificationState: string; originalDigestCurrent: boolean; reviewedAt: string }[];
+  mappings: { id: string; mappingRevision: number; verificationState: string; originalDigestCurrent: boolean; reviewedAt: string; sourceSchemaVersion: 3 | null }[];
   comparisons: { id: string; outcome: string; matchedAt: string; invoiceVersion: number; hasHeldCapacityClaim: boolean; comparison: InvoiceReviewSummary }[];
   exceptions: { id: string; invoiceLineId: string | null; type: string; status: string; dueAt: string | null; resolution: string | null }[] };
 export class InvoiceReviewError extends Error { constructor(readonly status: number, message: string) { super(message); } }
@@ -73,6 +73,7 @@ export async function getInvoiceMatchingHistory(company: string, id: string, ver
   const body = await read(company, id, "matching", signal);
   if (!object(body) || body.invoiceId !== id || !integer(body.version) || body.canPostToFinance !== false || body.isInvoiceApproval !== false
     || body.matchingStateIsRecordedResult !== true || !object(body.original) || !Array.isArray(body.original.lines)
+    || body.currentMappingVersionId !== undefined && !optionalId(body.currentMappingVersionId)
     || ![body.original.netAmount, body.original.taxAmount, body.original.grossAmount].every(exact) || !text(body.original.currencyCode)
     || !Array.isArray(body.mappings) || !Array.isArray(body.comparisons) || !Array.isArray(body.exceptions)) throw invalid();
   if (body.version !== version) throw new InvoiceReviewError(409, "The invoice changed. Refresh it to load matching review information.");
@@ -81,8 +82,13 @@ export async function getInvoiceMatchingHistory(company: string, id: string, ver
     return { id: row.id, lineNumber: row.lineNumber, description: row.description, quantity: row.quantity as string, unitPrice: row.unitPrice as string, taxAmount: row.taxAmount as string }; });
   if (originalLines.length !== lineIds.size || new Set(originalLines.map((line) => line.id)).size !== lineIds.size) throw invalid();
   const mappings = body.mappings.map((row) => { if (!object(row) || !text(row.id) || !uuid.test(row.id) || !integer(row.mappingRevision)
-    || !text(row.verificationState) || typeof row.originalDigestCurrent !== "boolean" || !text(row.reviewedAt)) throw invalid();
-    return { id: row.id, mappingRevision: row.mappingRevision, verificationState: row.verificationState, originalDigestCurrent: row.originalDigestCurrent, reviewedAt: row.reviewedAt }; });
+    || !text(row.verificationState) || typeof row.originalDigestCurrent !== "boolean" || !text(row.reviewedAt)
+    || ![undefined, null, 3].includes(row.sourceSchemaVersion as number | null | undefined)
+    || row.sourceSchemaVersion === 3 && (!object(row.snapshot) || row.snapshot.schemaVersion !== 3)
+    || row.sourceSchemaVersion === undefined && object(row.snapshot) && row.snapshot.schemaVersion === 3) throw invalid();
+    return { id: row.id, mappingRevision: row.mappingRevision, verificationState: row.verificationState,
+      originalDigestCurrent: row.originalDigestCurrent, reviewedAt: row.reviewedAt,
+      sourceSchemaVersion: row.sourceSchemaVersion === 3 ? 3 as const : null }; });
   const comparisons = body.comparisons.map((row) => { if (!object(row) || !text(row.id) || !uuid.test(row.id) || !text(row.outcome) || !text(row.matchedAt)
     || !integer(row.invoiceVersion) || typeof row.hasHeldCapacityClaim !== "boolean" || row.recordedHistoricalResult !== true || row.isCurrentApproval !== false || row.canPostToFinance !== false) throw invalid();
     return { id: row.id, outcome: row.outcome, matchedAt: row.matchedAt, invoiceVersion: row.invoiceVersion, hasHeldCapacityClaim: row.hasHeldCapacityClaim, comparison: summary(row.comparison, lineIds) }; });
@@ -90,6 +96,7 @@ export async function getInvoiceMatchingHistory(company: string, id: string, ver
     || row.supplierInvoiceLineId !== null && !lineIds.has(row.supplierInvoiceLineId) || !text(row.type) || !text(row.status)
     || row.dueAt !== null && !text(row.dueAt) || row.resolution !== null && !text(row.resolution)) throw invalid();
     return { id: row.id, invoiceLineId: row.supplierInvoiceLineId, type: row.type, status: row.status, dueAt: row.dueAt, resolution: row.resolution }; });
-  return { invoiceId: id, version: body.version, original: { netAmount: body.original.netAmount as string, taxAmount: body.original.taxAmount as string,
+  return { invoiceId: id, version: body.version, currentMappingVersionId: body.currentMappingVersionId as string | null ?? null,
+    original: { netAmount: body.original.netAmount as string, taxAmount: body.original.taxAmount as string,
     grossAmount: body.original.grossAmount as string, currencyCode: body.original.currencyCode, lines: originalLines }, mappings, comparisons, exceptions };
 }
