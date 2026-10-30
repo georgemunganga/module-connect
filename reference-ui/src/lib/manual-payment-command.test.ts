@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { captureManualPaymentScope, ManualPaymentApiError, recoverManualPaymentCommand,
+import { captureManualPaymentScope, ManualPaymentApiError, recoverManualPaymentCommand, sendManualPaymentCommand,
+  readManualPaymentValidationAcknowledgment, manualPaymentValidationAcknowledgmentMatches,
   type ManualPaymentCommand, type ManualPaymentIdentity } from "../../../src/platform/procurement-manual-payments-api";
 import { createManualPaymentRecoveryJournal } from "./manual-payment-command-journal";
 import { sendManualPaymentOnce } from "./manual-payment-command";
@@ -56,7 +57,7 @@ it("recovers a lost response by the original key GET and clears only its bound p
 
 it("requires explicit review after a live exact first-send validation rejection", async () => {
   const f = fixture(); const original = command();
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: "payment-state-changed", message: "Check values" }, { status: 422 })));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: "payment-state-changed", message: "Enter valid payment details and exact amounts before trying again." }, { status: 422 })));
   await expect(sendManualPaymentOnce(f.scope, f.journal, original)).rejects.toMatchObject({ status: 422 });
   expect(f.journal.state().pending).toEqual(locator);
   expect(f.journal.canReviewEntries()).toBe(true);
@@ -77,10 +78,13 @@ it("a caller-created error or GET422 cannot grant review/clear authority", async
 
 it("binds validation reporting to exact command body and original scope", async () => {
   const f = fixture(); const original = command();
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: "payment-state-changed", message: "Check values" }, { status: 422 })));
-  let error: unknown; try { await sendManualPaymentOnce(f.scope, f.journal, original); } catch (cause) { error = cause; }
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: "payment-state-changed", message: "Enter valid payment details and exact amounts before trying again." }, { status: 422 })));
+  expect(f.journal.claim(locator)).toBe(true);
+  let error: unknown; try { await sendManualPaymentCommand(f.scope, original); } catch (cause) { error = cause; }
   const changed = command(); if (changed.action === "Create") changed.input.amountExact = "11";
   expect(f.journal.reportValidation(locator, error, changed)).toBe(false);
+  expect(f.journal.canReviewEntries()).toBe(false);
+  expect(f.journal.reportValidation(locator, error, original)).toBe(true);
   expect(f.journal.canReviewEntries()).toBe(true);
   f.changeScope();
   expect(f.journal.reportValidation(locator, error, original)).toBe(false);
@@ -115,4 +119,29 @@ it("clears a pending key after a matching initial success without persisting sen
   const f = fixture(); vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(receipt, { status: 201 })));
   expect((await sendManualPaymentOnce(f.scope, f.journal, command())).id).toBe(payment);
   expect(f.map.size).toBe(0);
+});
+
+
+it("same rejection code with a different message does not authorize clearing", async () => {
+  const f = fixture(); vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+    code: "payment-state-changed", message: "Proxy changed the outcome" }, { status: 422 })));
+  await expect(sendManualPaymentOnce(f.scope, f.journal, command())).rejects.toMatchObject({ status: 422 });
+  expect(f.journal.canReviewEntries()).toBe(false);
+  expect(f.journal.acknowledgeValidation(locator)).toBe(false);
+  expect(f.journal.state().pending).toEqual(locator);
+});
+
+it("converts exact-body transport proof once into an opaque body-free acknowledgment", async () => {
+  const f = fixture(); const original = command();
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: "payment-state-changed",
+    message: "Enter valid payment details and exact amounts before trying again." }, { status: 422 })));
+  let error: unknown; try { await sendManualPaymentCommand(f.scope, original); } catch (cause) { error = cause; }
+  const acknowledgment = readManualPaymentValidationAcknowledgment(error, f.scope, original);
+  expect(acknowledgment).not.toBeNull(); expect(Object.keys(acknowledgment!)).toEqual([]);
+  expect(JSON.stringify(acknowledgment)).toBe("{}");
+  expect(manualPaymentValidationAcknowledgmentMatches(acknowledgment!, f.scope, locator)).toBe(true);
+  expect(manualPaymentValidationAcknowledgmentMatches({}, f.scope, locator)).toBe(false);
+  expect(readManualPaymentValidationAcknowledgment(error, f.scope, original)).toBeNull();
+  f.changeScope();
+  expect(manualPaymentValidationAcknowledgmentMatches(acknowledgment!, f.scope, locator)).toBe(false);
 });

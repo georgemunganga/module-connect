@@ -1,5 +1,6 @@
 import { approvalBrowserTabNonce } from "./request-approval-journal";
-import { isManualPaymentValidationRejection, type ManualPaymentCommand, type ManualPaymentAction, type ManualPaymentReceipt,
+import { readManualPaymentValidationAcknowledgment, manualPaymentValidationAcknowledgmentMatches,
+  type ManualPaymentValidationAcknowledgment, type ManualPaymentCommand, type ManualPaymentAction, type ManualPaymentReceipt,
   type ManualPaymentScope } from "../../../src/platform/procurement-manual-payments-api";
 
 /** Browser recovery metadata only. Never store payment amount, reason, external
@@ -8,7 +9,7 @@ export type ManualPaymentRecoveryLocator = { key: string; action: ManualPaymentA
 export type ManualPaymentRecoveryState = { pending: ManualPaymentRecoveryLocator | null; blocked: boolean };
 // Volatile UI acknowledgment state only; not persisted server authority. Reloads
 // retain the pending locator and must recover its original result, never re-POST.
-const reportedValidation = new Map<string, { locator: ManualPaymentRecoveryLocator; error: unknown; command: ManualPaymentCommand }>();
+const reportedValidation = new Map<string, { locator: ManualPaymentRecoveryLocator; acknowledgment: ManualPaymentValidationAcknowledgment }>();
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const prefix = "erp.procurement.manual-payment-command.v1:";
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -74,20 +75,22 @@ export function createManualPaymentRecoveryJournal(scope: ManualPaymentScope,
       if (!valid(locator) || !saved || JSON.stringify(saved) !== JSON.stringify(locator) || !slot
         || command.key !== locator.key || command.action !== locator.action
         || (command.action === "Create" ? null : command.id) !== locator.id
-        || !isManualPaymentValidationRejection(error, scope, command)) return false;
-      reportedValidation.set(slot, { locator: { ...locator }, error, command });
+        ) return false;
+      const acknowledgment = readManualPaymentValidationAcknowledgment(error, scope, command);
+      if (!acknowledgment) return false;
+      reportedValidation.set(slot, { locator: { ...locator }, acknowledgment });
       return true;
     },
     canReviewEntries(): boolean {
       const saved = state().pending; const reported = slot ? reportedValidation.get(slot) : undefined;
       return !!saved && !!reported && JSON.stringify(saved) === JSON.stringify(reported.locator)
-        && isManualPaymentValidationRejection(reported.error, scope, reported.command);
+        && manualPaymentValidationAcknowledgmentMatches(reported.acknowledgment, scope, reported.locator);
     },
     acknowledgeValidation(locator: ManualPaymentRecoveryLocator): boolean {
       const saved = state().pending; const reported = slot ? reportedValidation.get(slot) : undefined;
       if (!valid(locator) || !saved || !reported || !slot
         || JSON.stringify(saved) !== JSON.stringify(locator) || JSON.stringify(reported.locator) !== JSON.stringify(locator)
-        || !isManualPaymentValidationRejection(reported.error, scope, reported.command)) return false;
+        || !manualPaymentValidationAcknowledgmentMatches(reported.acknowledgment, scope, reported.locator)) return false;
       try { store.removeItem(slot); reportedValidation.delete(slot); return store.getItem(slot) === null; }
       catch { return false; }
     },
