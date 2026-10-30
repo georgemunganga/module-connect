@@ -7,6 +7,13 @@ export type PrincipalHistoryState = { locked: boolean; currentMappingSchema: 3 |
 export const principalNewWorkBlocked = (principalFlow: boolean, lock: boolean | null): boolean =>
   principalFlow && lock !== false;
 
+/** A saved source-3 mapping cannot be edited through the legacy mapping flow. */
+export const invoiceMappingNewWorkAllowed = (currentMappingSchema: 3 | null | undefined,
+  principalWrite: boolean, legacyWrite: boolean, lock: boolean | null): boolean =>
+  currentMappingSchema === undefined ? false : currentMappingSchema === 3
+    ? principalWrite && !principalNewWorkBlocked(true, lock)
+    : (principalWrite || legacyWrite) && !principalNewWorkBlocked(principalWrite, lock);
+
 /** Document review also serves legacy mappings; only source 3 inherits this lock. */
 export const documentNewWorkBlocked = (history: PrincipalHistoryState | null, principalEnabled: boolean): boolean =>
   history?.currentMappingSchema === 3 ? history.locked : history === null && principalEnabled;

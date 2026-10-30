@@ -4,7 +4,7 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { useErpShell } from "../lib/erpShell";
 import { readPendingInvoiceMatching, claimPendingInvoiceMatching, clearPendingInvoiceMatching } from "../lib/invoice-matching-command-memory";
-import { principalHistoryCorrection, principalNewWorkBlocked } from "../lib/invoice-principal-history-lock";
+import { invoiceMappingNewWorkAllowed, principalHistoryCorrection, principalNewWorkBlocked } from "../lib/invoice-principal-history-lock";
 import { listInvoiceDocuments, type InvoiceDocument } from "../../../src/platform/procurement-invoices-api";
 import type { InvoiceFinanceReadiness } from "../../../src/platform/procurement-invoice-review-api";
 import { invoiceMappingCommand, principalInvoiceMappingCommand, invoiceCompareCommand, invoiceMatchingRecovery,
@@ -29,7 +29,7 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
   const canSelect = context.permissions.includes("procurement-invoice-read") && context.permissions.includes("procurement-invoice-match")
     && (principalWrite || legacyWrite);
   const canMap = canSelect && context.permissions.includes("procurement-invoice-capture")
-    && !principalNewWorkBlocked(principalWrite, principalNewWorkLocked);
+    && invoiceMappingNewWorkAllowed(currentMappingSchema, principalWrite, legacyWrite, principalNewWorkLocked);
   const canCompare = canSelect && (currentMappingSchema === 3
     ? principalWrite && !principalNewWorkBlocked(true, principalNewWorkLocked)
     : currentMappingSchema === null && legacyWrite);

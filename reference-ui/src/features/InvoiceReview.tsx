@@ -75,7 +75,8 @@ export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currenc
       lines={lines} readiness={readiness}
       currentMappingId={history?.currentMappingVersionId ?? null}
       currentMappingOriginalCurrent={history?.mappings.find((mapping) => mapping.id === history.currentMappingVersionId)?.originalDigestCurrent === true}
-      currentMappingSchema={history?.mappings.find((mapping) => mapping.id === history.currentMappingVersionId)?.sourceSchemaVersion}
+      currentMappingSchema={history === null ? undefined : history.currentMappingVersionId === null ? null
+        : history.mappings.find((mapping) => mapping.id === history.currentMappingVersionId)?.sourceSchemaVersion}
       principalNewWorkLocked={history?.principalNewWorkLocked ?? true}
       refresh={refresh} />}
     {!loading && history && <Panel title="Recorded review history"><div className="space-y-5 p-5">
