@@ -7,14 +7,15 @@ import { ActivityTimeline, DetailSection, DetailValue } from "../components/data
 import { compareExactDecimal } from "../lib/decimal-comparison";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
-import { createManualPaymentRecoveryJournal, type ManualPaymentRecoveryLocator } from "../lib/manual-payment-command-journal";
+import { createManualPaymentRecoveryJournal } from "../lib/manual-payment-command-journal";
+import { sendManualPaymentOnce as sendOnce } from "../lib/manual-payment-command";
 import { RecordDetailFrame } from "./RecordDetail";
 import { TransactionEditorFrame } from "./TransactionEditor";
 import { manualPaymentStatusLabels as statusLabels, manualPaymentVisibleActions } from "./manual-payment-view";
 import {
   captureManualPaymentScope, getManualPayment, listManualPayments, lookupManualPaymentAssignees,
   lookupManualPaymentBranches, lookupManualPaymentInvoices, recoverManualPaymentCommand, recoverManualPaymentCreate,
-  sendManualPaymentCommand, isDefiniteManualPaymentRejection, manualPaymentActionAvailability,
+  ManualPaymentApiError, manualPaymentActionAvailability,
   type ManualPaymentAction, type ManualPaymentAssignee, type ManualPaymentBranch, type ManualPaymentCommand,
   type ManualPaymentDetail, type ManualPaymentIdentity, type ManualPaymentInvoiceChoice,
   type ManualPaymentPage, type ManualPaymentReceipt, type ManualPaymentScope, type ManualPaymentStatus,
@@ -53,25 +54,11 @@ function PaymentBoundary({ children }: { children: ReactNode }) {
     shell.selection.branch ?? "", readiness.principalId, readiness.permissions])}>{children}</div>;
 }
 
-async function sendOnce(scope: ManualPaymentScope,
-  journal: ReturnType<typeof createManualPaymentRecoveryJournal>, command: ManualPaymentCommand) {
-  const locator: ManualPaymentRecoveryLocator = { key: command.key, action: command.action,
-    id: command.action === "Create" ? null : command.id };
-  if (!journal.claim(locator)) throw new Error("Check the saved command before starting another payment action.");
-  try {
-    const receipt = await sendManualPaymentCommand(scope, command);
-    if (!journal.confirm(locator, receipt)) throw new Error("The payment result needs recovery before another action.");
-    return receipt;
-  } catch (cause) {
-    if (isDefiniteManualPaymentRejection(cause)) journal.reject(locator, cause);
-    throw cause;
-  }
-}
-
-function RecoveryNotice({ scope, onRecovered }: { scope: ManualPaymentScope;
-  onRecovered: (receipt: ManualPaymentReceipt) => void }) {
+function RecoveryNotice({ scope, onRecovered, onReviewEntries }: { scope: ManualPaymentScope;
+  onRecovered: (receipt: ManualPaymentReceipt) => void; onReviewEntries?: () => void }) {
   const journal = createManualPaymentRecoveryJournal(scope);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
+  const [, rerender] = useState(0);
   const pending = journal.state();
   if (!pending.blocked) return null;
   const recover = async () => {
@@ -89,7 +76,13 @@ function RecoveryNotice({ scope, onRecovered }: { scope: ManualPaymentScope;
   };
   return <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
     <p className="font-semibold">Check the previous payment command</p>
-    <p className="mt-1">Its response was not confirmed. Check its saved result before another change.</p>
+    <p className="mt-1">{journal.canReviewEntries()
+      ? "ERP reported that these entries failed validation. Review them before starting a new command."
+      : "Its response was not confirmed. Check its saved result before another change."}</p>
+    {journal.canReviewEntries() && pending.pending && <Button type="button" variant="secondary" disabled={busy}
+      className="mt-3" onClick={() => { if (pending.pending && journal.acknowledgeValidation(pending.pending)) {
+        rerender(value => value + 1); onReviewEntries?.();
+      } }}>Review entries</Button>}
     {pending.pending ? <Button type="button" variant="secondary" disabled={busy} className="mt-3" onClick={() => void recover()}>
       {busy ? "Checking…" : "Check saved result"}</Button>
       : <p className="mt-2">The saved recovery key cannot be read in this tab. Ask an administrator to review the payment.</p>}
@@ -130,7 +123,7 @@ function PaymentListRecord() {
       vendor: row.supplierDisplayName, amount: `${row.currencyCode} ${row.amountExact}`,
       currency: row.currencyCode, amountValue: row.amountExact } }));
   return <div className="p-5 sm:p-8">
-    <RecoveryNotice scope={scope} onRecovered={receipt => navigate(`/payments/${receipt.id}`)} />
+    <RecoveryNotice scope={scope} onRecovered={receipt => navigate(`/payments/${receipt.id}`)} onReviewEntries={() => setError("")} />
     <LiveRecordDirectory key={`${key}:${invoiceId ?? ""}`} title="Payments Made" entity="manual payment requests"
       subtitle="Review externally reported payments. Finance remains the source of payment and posting status."
       columns={columns} rows={rows} loading={loading} error={error} total={pageData?.total ?? 0}
@@ -256,7 +249,7 @@ function PaymentEditorRecord() {
       && window.location.pathname + window.location.search === routeHref) navigate(`/payments/${saved.id}`); }
     catch (cause) { if (scope.current() && current.current === editorKey
       && window.location.pathname + window.location.search === routeHref) {
-      setError(errorText(cause)); if (isDefiniteManualPaymentRejection(cause) && cause.status === 409) setStale(true);
+      setError(errorText(cause)); if (cause instanceof ManualPaymentApiError && cause.status === 409) setStale(true);
     } } finally { if (scope.current() && current.current === editorKey
       && window.location.pathname + window.location.search === routeHref) setBusy(false); }
   };
@@ -275,7 +268,7 @@ function PaymentEditorRecord() {
       <Button type="button" variant="secondary" disabled={busy || journal.state().blocked} onClick={close}>Cancel</Button>
       <span className="ml-auto text-xs text-muted-foreground">Submit for review from the saved request. Recording happens after approval.</span>
     </>}>
-    <RecoveryNotice scope={scope} onRecovered={receipt => navigate(`/payments/${receipt.id}`)} />
+    <RecoveryNotice scope={scope} onRecovered={receipt => navigate(`/payments/${receipt.id}`)} onReviewEntries={() => setError("")} />
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {stale && <p role="alert" className="text-sm">The saved draft changed. Your entries remain here. Review the current request before saving again.</p>}
     <div className="-mx-5 bg-muted px-5 py-5 sm:-mx-8 sm:px-8"><div className="max-w-xl space-y-4">
@@ -399,8 +392,8 @@ function PaymentDetailRecord() {
       const fresh = await getManualPayment(scope, request.id);
       if (scope.current() && currentFetch.current === fetchKey) { setDetail(fresh); setAction(null); setReason(""); setPaidOn(""); setMethod(""); setReference(""); setStale(false); setUncertain(false); }
     } catch (cause) { if (scope.current() && currentFetch.current === fetchKey) {
-      setError(errorText(cause)); if (isDefiniteManualPaymentRejection(cause) && cause.status === 409) setStale(true);
-      if (journal.state().blocked || !isDefiniteManualPaymentRejection(cause)) setUncertain(true);
+      setError(errorText(cause)); if (cause instanceof ManualPaymentApiError && cause.status === 409) setStale(true);
+      if (journal.state().blocked) setUncertain(true);
     } } finally { if (scope.current() && currentFetch.current === fetchKey) setBusy(false); }
   };
   const tabs = [{ key: "overview", label: "Overview" }, { key: "items", label: "Bill" },
@@ -416,7 +409,8 @@ function PaymentDetailRecord() {
       </Button>)}
       {available.includes("Cancel") && <Button variant="ghost" disabled={writeBlocked} onClick={() => openAction("Cancel")}>Cancel request</Button>}
     </>}>
-    <RecoveryNotice scope={scope} onRecovered={() => setRevision(value => value + 1)} />
+    <RecoveryNotice scope={scope} onRecovered={() => setRevision(value => value + 1)}
+      onReviewEntries={() => { setError(""); setUncertain(false); }} />
     {error && !action && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {(stale || uncertain) && <Button variant="secondary" disabled={busy} onClick={() => setRevision(value => value + 1)}>Refresh saved request</Button>}
     {tab === "overview" && <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(270px,0.85fr)]">

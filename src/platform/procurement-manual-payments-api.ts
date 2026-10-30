@@ -55,11 +55,40 @@ export type ManualPaymentInvoiceChoices = { items: ManualPaymentInvoiceChoice[];
   nextCursor: string | null; hasMore: boolean; previewOnly: true };
 
 export class ManualPaymentApiError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
+  constructor(readonly status: number, message: string, readonly code?: string, readonly knownValidationShape = false) { super(message); }
 }
-/** Only a known pre-commit rejection permits the UI to offer a new command key. */
-export function isDefiniteManualPaymentRejection(error: unknown): error is ManualPaymentApiError {
-  return error instanceof ManualPaymentApiError && [400, 401, 403, 404, 409, 422].includes(error.status);
+// Live transport witness only. Neither a bare HTTP status nor caller-constructed
+// error is evidence that an exact mutation was rejected before commit.
+const validationRejections = new WeakMap<ManualPaymentApiError, {
+  scope: string; key: string; action: ManualPaymentAction; id: string | null; body: string;
+}>();
+const scopeBinding = (scope: ManualPaymentScope) => JSON.stringify([scope.identity, scope.headers]);
+/** Opaque, volatile acknowledgment. Its private metadata contains no payment body. */
+export type ManualPaymentValidationAcknowledgment = Readonly<object>;
+const validationAcknowledgments = new WeakMap<ManualPaymentValidationAcknowledgment, {
+  scope: string; key: string; action: ManualPaymentAction; id: string | null;
+}>();
+export function readManualPaymentValidationAcknowledgment(error: unknown, scope: ManualPaymentScope,
+  command: ManualPaymentCommand): ManualPaymentValidationAcknowledgment | null {
+  const witness = error instanceof ManualPaymentApiError ? validationRejections.get(error) : undefined;
+  if (!witness || !scope.current()) return null;
+  try {
+    if (witness.scope !== scopeBinding(scope) || witness.key !== command.key || witness.action !== command.action
+      || witness.id !== (command.action === "Create" ? null : command.id)
+      || witness.body !== commandPath(command).body) return null;
+    const token = Object.freeze({});
+    validationAcknowledgments.set(token, { scope: witness.scope, key: witness.key, action: witness.action, id: witness.id });
+    // The module-global journal retains only this minimal token. Release the
+    // exact-body transport witness after its one successful conversion.
+    validationRejections.delete(error as ManualPaymentApiError);
+    return token;
+  } catch { return null; }
+}
+export function manualPaymentValidationAcknowledgmentMatches(token: ManualPaymentValidationAcknowledgment,
+  scope: ManualPaymentScope, locator: { key: string; action: ManualPaymentAction; id: string | null }): boolean {
+  const witness = validationAcknowledgments.get(token);
+  return !!witness && scope.current() && witness.scope === scopeBinding(scope)
+    && witness.key === locator.key && witness.action === locator.action && witness.id === locator.id;
 }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id = (x: unknown): x is string => typeof x === "string" && guid.test(x)
@@ -156,7 +185,12 @@ async function request(scope: ManualPaymentScope, path: string, init: RequestIni
           : response.status === 409 ? "The payment or approval task changed. Refresh and review it."
             : response.status === 422 ? "Check the payment details and exact amounts."
               : response.status === 503 ? "The outcome is uncertain. Check the saved command before trying another action."
-                : "The payment action could not be confirmed.");
+                : "The payment action could not be confirmed.",
+    obj(body) && Object.keys(body).length === 2 && typeof body.code === "string" && typeof body.message === "string"
+      ? body.code : undefined,
+    response.status === 422 && obj(body) && Object.keys(body).length === 2
+      && body.code === "payment-state-changed"
+      && body.message === "Enter valid payment details and exact amounts before trying again.");
   return body;
 }
 
@@ -391,12 +425,27 @@ function commandPath(command: ManualPaymentCommand): { path: string; method: "PO
     body: JSON.stringify(transitionBody(command.action, command.input)) };
 }
 
+/** Validate locally before claiming a recovery key; this performs no HTTP request. */
+export function validateManualPaymentCommand(command: ManualPaymentCommand): void { commandPath(command); }
+
 /** Send once for this user action. The caller retains the key and uses GET recovery if
  * the response is interrupted; this function never retries a mutation automatically. */
 export async function sendManualPaymentCommand(scope: ManualPaymentScope,
   command: ManualPaymentCommand): Promise<ManualPaymentCommandResult> {
   const { path, method, body: payload } = commandPath(command);
-  const response = await request(scope, path, { method, headers: { "Idempotency-Key": command.key }, body: payload });
+  let response: unknown;
+  try { response = await request(scope, path, { method, headers: { "Idempotency-Key": command.key }, body: payload }); }
+  catch (cause) {
+    // Current server uses this exact 422 shape only for rejected draft/recording/reason
+    // validation. A GET, local validation, arbitrary proxy response or unknown conflict
+    // cannot create this witness. Keep it in memory and require explicit user review.
+    if (scope.current() && cause instanceof ManualPaymentApiError && cause.status === 422
+      && cause.code === "payment-state-changed" && cause.knownValidationShape) validationRejections.set(cause, {
+        scope: scopeBinding(scope), key: command.key, action: command.action,
+        id: command.action === "Create" ? null : command.id, body: payload,
+      });
+    throw cause;
+  }
   if (!obj(response) || !id(response.id) || !version(response.version)
     || !validStatus(response.status) || response.status !== statusAfter(command.action)
     || response.action !== command.action || response.commandKey !== command.key

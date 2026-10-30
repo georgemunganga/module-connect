@@ -26,14 +26,23 @@ function detail() { return { request: { ...base, purpose: "Externally reported t
   approvedByPrincipalId: null, recordedByPrincipalId: null, confirmedByPrincipalId: null, closureReason: null },
   transitions: [], coreCases: [], coreDecisions: [] }; }
 
+const unmatchedApi = new WeakMap<Page, string[]>();
+test.afterEach(async ({ page }) => { expect(unmatchedApi.get(page) ?? []).toEqual([]); });
+
 async function fixture(page: Page, enabled: boolean, options: {
   principalId?: string; paymentStatus?: string; permissions?: string[]; allBranches?: boolean;
+  createOutcome?: "lost" | "validation" | "unknown409" | "auth403" | "wrong-message";
 } = {}) {
   const writes: { path: string; body: Record<string, unknown>; key: string | undefined }[] = [];
   let status = options.paymentStatus ?? "Draft", version = status === "Approved" ? 3 : 1;
-  await page.addInitScript(({ company, branch, allBranches }) => localStorage.setItem("erp.shell.state.v1",
-    JSON.stringify({ entityId: company, ...(allBranches ? { branchScope: "all" } : { branch }) })),
-    { company, branch, allBranches: options.allBranches ?? false });
+  const unknown: string[] = []; unmatchedApi.set(page, unknown);
+  const origin = String(test.info().project.use.baseURL);
+  await page.route("**/*", route => new URL(route.request().url()).origin === origin
+    ? route.continue() : route.abort("blockedbyclient"));
+  await page.addInitScript(({ company, branch, allBranches, origin }) => {
+    if (window.location.origin === origin) localStorage.setItem("erp.shell.state.v1",
+      JSON.stringify({ entityId: company, ...(allBranches ? { branchScope: "all" } : { branch }) }));
+  }, { company, branch, allBranches: options.allBranches ?? false, origin });
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -67,8 +76,20 @@ async function fixture(page: Page, enabled: boolean, options: {
     if (path === "/api/procurement/v1/manual-payments" && request.method() === "POST") {
       const body = request.postDataJSON() as Record<string, unknown>;
       writes.push({ path, body, key: request.headers()["idempotency-key"] });
+      if (options.createOutcome === "lost") return route.abort("failed");
+      if (options.createOutcome === "validation" && writes.length === 1) return json({ code: "payment-state-changed",
+        message: "Enter valid payment details and exact amounts before trying again." }, 422);
+      if (options.createOutcome === "wrong-message") return json({ code: "payment-state-changed", message: "Proxy response" }, 422);
+      if (options.createOutcome === "unknown409") return json({ code: "unknown-conflict", message: "Uncertain conflict" }, 409);
+      if (options.createOutcome === "auth403") return json({ code: "payment-access-denied", message: "Access changed" }, 403);
       return json({ id: payment, version: 1, status: "Draft", action: "Create",
         commandKey: request.headers()["idempotency-key"], amountExact: body.amount }, 201);
+    }
+    if (path.startsWith("/api/procurement/v1/manual-payments/commands/") && request.method() === "GET") {
+      const saved = writes[0];
+      if (options.createOutcome === "lost" && saved && path.endsWith(`/${saved.key}`))
+        return json({ id: payment, version: 1, status: "Draft", action: "Create", commandKey: saved.key });
+      return json({ code: "payment-not-found", message: "Unavailable" }, 404);
     }
     if (path === `/api/procurement/v1/manual-payments/${payment}/record` && request.method() === "POST") {
       const body = request.postDataJSON() as Record<string, unknown>;
@@ -88,7 +109,8 @@ async function fixture(page: Page, enabled: boolean, options: {
         externalMethod: status === "PaymentRecorded" ? "External transfer" : null,
         externalReference: status === "PaymentRecorded" ? "BANK-1" : null } });
     }
-    return json({ code: "not-found" }, 404);
+    unknown.push(`${request.method()} ${path}`);
+    return json({ code: "unmatched-api-request" }, 500);
   });
   return writes;
 }
@@ -305,3 +327,59 @@ test("an old draft save response cannot navigate away from a newly opened draft"
   await expect(page).toHaveURL(new RegExp(`/payments/${nextPayment}/edit$`));
   await expect(page.getByRole("heading", { name: "Edit Manual Payment Request" })).toBeVisible();
 });
+
+
+async function preparePaymentDraft(page: Page) {
+  await page.goto(`/procurement/workspace/payments/new?invoiceId=${invoice}`);
+  await expect(page.getByRole("heading", { name: "New Manual Payment Request" })).toBeVisible();
+  await page.getByLabel("Request title").fill("Laptop supplier transfer");
+  await page.getByLabel("Exact amount *").fill("1.0001");
+  for (const [label, name] of [["Approver *", "Approval officer"], ["Recorder *", "Payment recorder"], ["Confirmer *", "Independent confirmer"]]) {
+    await page.getByRole("combobox", { name: label, exact: true }).click();
+    await page.getByRole("option", { name, exact: true }).click();
+  }
+}
+
+test("lost payment acknowledgment recovers original key by GET without another POST", async ({ page }) => {
+  const writes = await fixture(page, true, { createOutcome: "lost" });
+  await preparePaymentDraft(page);
+  await page.getByRole("button", { name: "Save as Draft" }).click();
+  await expect(page.getByRole("button", { name: "Check saved result" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save as Draft" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Review entries" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Check saved result" }).click();
+  await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  await expect(page.getByText("Check the previous payment command", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath("recovered-payment.png") });
+});
+
+test("known validation retains key until explicit Review entries then permits a new save", async ({ page }) => {
+  const writes = await fixture(page, true, { createOutcome: "validation" });
+  await preparePaymentDraft(page);
+  await page.getByRole("button", { name: "Save as Draft" }).click();
+  await expect(page.getByRole("button", { name: "Review entries" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save as Draft" })).toBeDisabled();
+  expect(writes).toHaveLength(1);
+  await page.getByRole("button", { name: "Review entries" }).click();
+  await expect(page.getByLabel("Exact amount *")).toHaveValue("1.0001");
+  await expect(page.getByRole("button", { name: "Save as Draft" })).toBeEnabled();
+  await page.getByRole("button", { name: "Save as Draft" }).click();
+  await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toBeVisible();
+  expect(writes).toHaveLength(2); expect(writes[0].key).not.toBe(writes[1].key);
+  await page.screenshot({ path: test.info().outputPath("reviewed-validation-payment.png") });
+});
+
+for (const createOutcome of ["unknown409", "auth403", "wrong-message"] as const) {
+  test(`${createOutcome} preserves pending key after original-key recovery is unavailable`, async ({ page }) => {
+    const writes = await fixture(page, true, { createOutcome });
+    await preparePaymentDraft(page);
+    await page.getByRole("button", { name: "Save as Draft" }).click();
+    await expect(page.getByRole("button", { name: "Check saved result" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Review entries" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Check saved result" }).click();
+    await expect(page.getByText("The payment or saved command is unavailable in this scope.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save as Draft" })).toBeDisabled();
+    expect(writes).toHaveLength(1);
+  });
+}
