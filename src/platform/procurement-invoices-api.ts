@@ -43,7 +43,7 @@ export class InvoiceIntakeError extends Error {
   constructor(readonly status: number, message: string, readonly code?: string) { super(message); }
 }
 
-async function request(legalEntityId: string, path: string, init: RequestInit = {}, binary = false): Promise<unknown> {
+async function request(legalEntityId: string, path: string, init: RequestInit = {}, binary = false, expectedStatus?: number): Promise<unknown> {
   if (!guid.test(legalEntityId)) throw new InvoiceIntakeError(0, "Choose an ERP company first.");
   const headers = new Headers(init.headers);
   Object.entries(procurementScopeHeaders(legalEntityId)).forEach(([key, value]) => headers.set(key, value));
@@ -70,6 +70,8 @@ async function request(legalEntityId: string, path: string, init: RequestInit = 
             : response.status === 409 ? "This invoice is already recorded. Search the invoice list before trying again."
               : "The invoice action could not be completed."), code);
   }
+  if (expectedStatus !== undefined && response.status !== expectedStatus)
+    throw new InvoiceIntakeError(0, "The ERP did not confirm the original invoice operation. Check its saved result before continuing.");
   if (binary) return response.blob();
   try { return await response.json(); }
   catch { throw new InvoiceIntakeError(0, "The ERP returned an invalid invoice response."); }
@@ -219,4 +221,120 @@ export async function retryInvoiceDocumentScan(company: string, invoiceId: strin
 }
 export async function downloadInvoiceDocument(company: string, invoiceId: string, versionId: string): Promise<Blob> {
   return await request(company, documentPath(invoiceId, versionId) + "/download", {}, true) as Blob;
+}
+
+/** Distinct supplier-issued correction only. This adapter adds no UI authority;
+ * readiness and permitted actions must be supplied by the server before use. */
+export type InvoiceReplacementInput = {
+  sourceVersion: number; reason: string;
+  correctedInvoice: InvoiceIntakeInput & { purchaseOrderId: string; intakeSchemaVersion: 2;
+    expectedCurrencyReferenceId: string; expectedCurrencyRevision: number; expectedCalculationSha256: string };
+};
+export type InvoiceReplacementResult = {
+  schemaVersion: 1; sourceInvoiceId: string; successorInvoiceId: string; linkId: string;
+  calculationId: string; captureReceiptId: string; commandKey: string; invoiceNumber: string;
+  version: 1; status: "Received"; canPostToFinance: false;
+};
+export type InvoiceReplacementHistory = {
+  schemaVersion: 1; linkId: string; sourceInvoiceId: string; successorInvoiceId: string;
+  sourceInvoiceNumber: string; successorInvoiceNumber: string; sourceDisplayState: "SupersededByCorrection";
+  successorStatus: "Received" | "Cancelled"; commandKey: string; recordedAtUtc: string;
+  originalResponseSha256: string; canPostToFinance: false;
+};
+const replacementBodyLimit = 256_000;
+const nonzeroGuid = (value: unknown): value is string => typeof value === "string" && guid.test(value)
+  && value.toLowerCase() !== "00000000-0000-0000-0000-000000000000";
+const sameGuid = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+const onlyKeys = (value: Record<string, unknown>, keys: readonly string[]) => Object.keys(value).every(key => keys.includes(key));
+const exactKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
+  Object.keys(value).length === keys.length && onlyKeys(value, keys);
+const dateOnly = (value: unknown): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+  && value >= "0001-01-01" && Number.isFinite(Date.parse(value + "T00:00:00Z"))
+  && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value;
+const boundedText = (value: unknown, max: number): value is string => typeof value === "string"
+  && value.trim().length > 0 && value.trim().length <= max;
+const exactInputDecimal = (value: unknown, positive = false): boolean =>
+  (typeof value === "string" || typeof value === "number" && Number.isFinite(value))
+  && /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(String(value))
+  && (!positive || /[1-9]/.test(String(value)));
+/** Bounded wire structure, not duplicate approval or supplier/PO business rules.
+ * Whitelisted keys prevent accidentally retaining headers/credentials in recovery. */
+export function readInvoiceReplacementInput(body: string): InvoiceReplacementInput {
+  const invalid = () => new InvoiceIntakeError(422, "Review the corrected invoice, its currency calculation and replacement reason.");
+  if (typeof body !== "string" || body.length > replacementBodyLimit
+    || new TextEncoder().encode(body).length > replacementBodyLimit) throw invalid();
+  let value: unknown; try { value = JSON.parse(body); } catch { throw invalid(); }
+  if (!object(value) || !exactKeys(value, ["sourceVersion", "reason", "correctedInvoice"])
+    || !Number.isSafeInteger(value.sourceVersion) || Number(value.sourceVersion) < 1
+    || !boundedText(value.reason, 1000) || new TextEncoder().encode(value.reason.trim()).length > 1000
+    || !object(value.correctedInvoice)) throw invalid();
+  const draft = value.correctedInvoice;
+  if (!onlyKeys(draft, ["supplierId", "purchaseOrderId", "invoiceNumber", "invoiceDate", "dueDate", "currencyCode", "lines",
+    "intakeSchemaVersion", "expectedCurrencyReferenceId", "expectedCurrencyRevision", "expectedCalculationSha256"])
+    || !nonzeroGuid(draft.supplierId) || !nonzeroGuid(draft.purchaseOrderId)
+    || !boundedText(draft.invoiceNumber, 80) || !dateOnly(draft.invoiceDate)
+    || draft.dueDate != null && (!dateOnly(draft.dueDate) || draft.dueDate < draft.invoiceDate)
+    || typeof draft.currencyCode !== "string" || !/^[A-Za-z]{3}$/.test(draft.currencyCode.trim())
+    || draft.intakeSchemaVersion !== 2 || !nonzeroGuid(draft.expectedCurrencyReferenceId)
+    || !Number.isSafeInteger(draft.expectedCurrencyRevision) || Number(draft.expectedCurrencyRevision) < 1
+    || typeof draft.expectedCalculationSha256 !== "string" || !/^[0-9a-f]{64}$/i.test(draft.expectedCalculationSha256)
+    || !Array.isArray(draft.lines) || draft.lines.length < 1 || draft.lines.length > 200
+    || !draft.lines.every((line: unknown) => object(line)
+      && onlyKeys(line, ["description", "quantity", "unitPrice", "taxAmount", "taxCodeRef", "costCenterRef"])
+      && boundedText(line.description, 500) && exactInputDecimal(line.quantity, true)
+      && exactInputDecimal(line.unitPrice) && exactInputDecimal(line.taxAmount)
+      && (line.taxCodeRef == null || typeof line.taxCodeRef === "string")
+      && (line.costCenterRef == null || typeof line.costCenterRef === "string"))) throw invalid();
+  return value as InvoiceReplacementInput;
+}
+export function readInvoiceReplacementResult(value: unknown, sourceInvoiceId: string, commandKey: string): InvoiceReplacementResult {
+  if (!object(value) || !exactKeys(value, ["schemaVersion", "sourceInvoiceId", "successorInvoiceId", "linkId", "calculationId",
+    "captureReceiptId", "commandKey", "invoiceNumber", "version", "status", "canPostToFinance"])
+    || value.schemaVersion !== 1 || !nonzeroGuid(value.sourceInvoiceId) || !sameGuid(value.sourceInvoiceId, sourceInvoiceId)
+    || !nonzeroGuid(value.successorInvoiceId) || sameGuid(value.successorInvoiceId, sourceInvoiceId)
+    || ![value.linkId, value.calculationId, value.captureReceiptId].every(nonzeroGuid)
+    || !nonzeroGuid(value.commandKey) || !sameGuid(value.commandKey, commandKey)
+    || !boundedText(value.invoiceNumber, 80) || value.version !== 1 || value.status !== "Received" || value.canPostToFinance !== false)
+    throw new InvoiceIntakeError(0, "The ERP did not confirm this replacement. Keep its saved reference and check the original result.");
+  return value as InvoiceReplacementResult;
+}
+/** Send the journal's original bytes once. Never reconstruct a body or retry a
+ * POST automatically after a lost response; recovery uses the original-key GET. */
+export async function createInvoiceReplacement(company: string, sourceInvoiceId: string,
+  commandKey: string, originalBody: string): Promise<InvoiceReplacementResult> {
+  if (!nonzeroGuid(sourceInvoiceId) || !nonzeroGuid(commandKey))
+    throw new InvoiceIntakeError(422, "Keep a valid source invoice and saved replacement reference.");
+  const input = readInvoiceReplacementInput(originalBody);
+  const result = readInvoiceReplacementResult(await request(company, `/${sourceInvoiceId}/replacement`, {
+    method: "POST", body: originalBody, headers: { "Idempotency-Key": commandKey },
+  }, false, 201), sourceInvoiceId, commandKey);
+  if (result.invoiceNumber !== input.correctedInvoice.invoiceNumber.trim())
+    throw new InvoiceIntakeError(0, "The ERP returned a different invoice number. Keep the original replacement reference for review.");
+  return result;
+}
+export async function recoverInvoiceReplacement(company: string, sourceInvoiceId: string,
+  commandKey: string, signal?: AbortSignal): Promise<InvoiceReplacementResult> {
+  if (!nonzeroGuid(sourceInvoiceId) || !nonzeroGuid(commandKey))
+    throw new InvoiceIntakeError(422, "The saved replacement reference is invalid.");
+  // A404 can also mean current scope no longer permits this record. It never
+  // authorizes clearing the journal, generating a new key or another POST.
+  return readInvoiceReplacementResult(await request(company,
+    `/${sourceInvoiceId}/replacement/commands/${commandKey}`, { signal }, false, 201), sourceInvoiceId, commandKey);
+}
+export async function getInvoiceReplacementHistory(company: string, invoiceId: string,
+  signal?: AbortSignal): Promise<InvoiceReplacementHistory> {
+  if (!nonzeroGuid(invoiceId)) throw new InvoiceIntakeError(422, "Invoice reference is invalid.");
+  const value = await request(company, `/${invoiceId}/replacement`, { signal }, false, 200);
+  if (!object(value) || !exactKeys(value, ["schemaVersion", "linkId", "sourceInvoiceId", "successorInvoiceId", "sourceInvoiceNumber",
+    "successorInvoiceNumber", "sourceDisplayState", "successorStatus", "commandKey", "recordedAtUtc", "originalResponseSha256", "canPostToFinance"])
+    || value.schemaVersion !== 1 || ![value.linkId, value.sourceInvoiceId, value.successorInvoiceId, value.commandKey].every(nonzeroGuid)
+    || sameGuid(String(value.sourceInvoiceId), String(value.successorInvoiceId))
+    || ![value.sourceInvoiceId, value.successorInvoiceId].some(id => sameGuid(String(id), invoiceId))
+    || !boundedText(value.sourceInvoiceNumber, 80) || !boundedText(value.successorInvoiceNumber, 80)
+    || value.sourceDisplayState !== "SupersededByCorrection" || !["Received", "Cancelled"].includes(String(value.successorStatus))
+    || typeof value.recordedAtUtc !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$/.test(value.recordedAtUtc)
+    || !dateOnly(value.recordedAtUtc.slice(0, 10)) || !Number.isFinite(Date.parse(value.recordedAtUtc)) || typeof value.originalResponseSha256 !== "string"
+    || !/^[0-9a-f]{64}$/i.test(value.originalResponseSha256) || value.canPostToFinance !== false)
+    throw new InvoiceIntakeError(0, "The ERP returned replacement history that could not be verified. Refresh the original invoice.");
+  return value as InvoiceReplacementHistory;
 }
