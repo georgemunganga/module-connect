@@ -1,5 +1,6 @@
 import { RequestApprovalJournalBoundary } from "./RequestApprovalJournal";
 import { requestApprovalsAvailable } from "./request-approval-availability";
+import { manualUnitQueueAllRead } from "./manual-unit-review-access";
 import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { useErpShell } from "./erpShell";
@@ -73,8 +74,10 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const requestList = /^\/(?:requests|procurement-requests)\/?$/.test(location.pathname);
   const planList = /^\/plans\/?$/.test(location.pathname);
   const contractList = /^\/contracts\/?$/.test(location.pathname);
+  const manualApprovalList = manualUnitQueueAllRead(location.pathname,
+    state.readiness?.capabilities.invoiceManualUnitReviewRead === true, state.readiness?.permissions ?? []);
   const allReadSupported = vendorPath || itemPath || paymentPath
-    || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || principalReceivingCollection || returnCollection;
+    || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || manualApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
     return blockedShell ? blockedShell(chooseBranch) : chooseBranch;
@@ -111,6 +114,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
       || state.readiness.capabilities.principalOrderGovernanceRead
       || state.readiness.capabilities.invoiceOriginalUnitReview && state.readiness.permissions.some((permission) =>
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))))
+    || (approvalPath && state.readiness.capabilities.invoiceManualUnitReviewRead && state.readiness.permissions.some((permission) =>
+      ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission)))
     || (sourcingPath && (state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
