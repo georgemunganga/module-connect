@@ -43,7 +43,9 @@ async function call(company: string, path: string, init: RequestInit = {}): Prom
   if (!response.ok) {
     let code = "ManualUnitReviewUnavailable";
     try { const body: unknown = await response.json(); if (object(body) && typeof body.code === "string") code = body.code; } catch { /* retain status */ }
-    throw new ManualReviewError(response.status, code, response.status === 401 ? "Sign in to ERP to check invoice units."
+    throw new ManualReviewError(response.status, code, code === "PrincipalInvoiceRecordedComparisonRequiresCorrection"
+      ? "This invoice has a recorded comparison that needs correction. Review its saved history before another review."
+      : response.status === 401 ? "Sign in to ERP to check invoice units."
       : response.status === 403 ? "This manual unit review is outside your current access."
         : response.status === 404 ? "This manual review or saved command is not available in your current access."
           : response.status === 409 ? "The invoice, assignment, or evidence changed. Refresh before continuing."

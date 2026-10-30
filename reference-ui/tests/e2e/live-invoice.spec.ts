@@ -14,7 +14,7 @@ const capabilities = Object.fromEntries([
   "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft",
 ].map((key) => [key, key === "vendorDraft" || key === "invoiceIntake"]));
 
-async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number; crud?: boolean; staleUpdate?: boolean; loseUpdate?: boolean } = {}) {
+async function mockErp(page: Page, canCapture = true, options: { documents?: boolean; seed?: boolean; loseUploadResponse?: boolean; failedScan?: boolean; fileLimit?: number; crud?: boolean; staleUpdate?: boolean; loseUpdate?: boolean; currencyV2?: boolean; loseCaptureResponse?: boolean } = {}) {
   let invoice: Record<string, unknown> | null = options.seed ? {
     id: invoiceId, supplierId: vendorId, supplierName: "Office Supplier", invoiceNumber: "INV-DOC-1",
     invoiceDate: "2026-10-20", currencyCode: "ZMW", status: "Received", intakeChannel: "Manual",
@@ -29,6 +29,15 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
       exactAmounts: { quantity: String(line.quantity), unitPrice: String(line.unitPrice), taxAmount: String(line.taxAmount) } })) } : invoice;
   const documents: Record<string, unknown>[] = [];
   const uploadKeys = new Map<string, Record<string, unknown>>();
+  const captureReceipts = new Map<string, Record<string, unknown>>();
+  let capturePosts = 0, captureReads = 0;
+  const precision = { currencyCode: "ZMW", referenceId: "66666666-6666-4666-8666-666666666666", revision: 2,
+    minorUnits: 4, rounding: "ToEven", payloadSha256: "a".repeat(64),
+    publishedAtUtc: "2026-10-30T00:00:00Z", observedAtUtc: "2026-10-30T01:00:00Z" };
+  const amountLines = [{ lineNumber: 1, quantity: "1.00010000", unitPrice: "5.12340000", rawNet: "5.12391234",
+    net: "5.12390000", tax: "0.00000000", gross: "5.12390000", adjustment: "-0.00001234" }];
+  const amounts = { rawNet: "5.12391234", net: "5.12390000", tax: "0.00000000", gross: "5.12390000",
+    adjustment: "-0.00001234", lines: amountLines };
   let lostResponse = false;
   await page.addInitScript(({ entityId, branch }) => {
     localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch }));
@@ -56,15 +65,46 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
         : ["procurement-access", "procurement-invoice-read"],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo",
-      legalEntityId: companyId, schemaReady: true, capabilities: { ...capabilities, invoiceDocuments: options.documents === true } });
+      legalEntityId: companyId, schemaReady: true, capabilities: { ...capabilities, invoiceDocuments: options.documents === true,
+        invoiceCurrencyCalculationRead: options.currencyV2 === true, invoiceCurrencyCalculationV2: options.currencyV2 === true } });
     if (url.pathname === "/api/procurement/v1/vendors") return json({ items: [{ id: vendorId,
       number: "VEN-001", displayName: "Office Supplier", legalName: "Office Supplier Ltd",
       countryCode: "ZM", status: "Active", isOrderable: true, version: 1,
       createdAt: "2026-10-20T00:00:00Z" }], total: 1, page: 1, pageSize: 25 });
+    if (url.pathname === "/api/procurement/v1/invoices/calculation-preview" && options.currencyV2) {
+      const body = request.postDataJSON();
+      if (body.invoiceNumber !== "INV-V2-1" || body.lines[0].unitPrice !== "5.1234")
+        return json({ code: "validation-failed", message: "Review current invoice entries." }, 422);
+      return json({ schemaVersion: 2, precision, amounts, previewSha256: "b".repeat(64) });
+    }
+    if (url.pathname.startsWith("/api/procurement/v1/invoices/capture-commands/") && options.currencyV2) {
+      captureReads += 1;
+      return json(captureReceipts.get(url.pathname.split("/").at(-1)!) ?? { code: "not-found" },
+        captureReceipts.has(url.pathname.split("/").at(-1)!) ? 201 : 404);
+    }
+    if (url.pathname === `/api/procurement/v1/invoices/${invoiceId}/amount-calculation` && options.currencyV2)
+      return json({ schemaVersion: 2, invoiceId, calculationId: precision.referenceId, precision,
+        calculationSha256: "c".repeat(64), amounts });
     if (url.pathname === "/api/procurement/v1/invoices") {
       if (request.method() === "GET") return json({ items: invoice ? [invoice] : [],
         total: invoice ? 1 : 0, page: 1, pageSize: 25 });
       const input = request.postDataJSON();
+      if (options.currencyV2) {
+        capturePosts += 1;
+        const key = request.headers()["idempotency-key"];
+        if (!key || input.intakeSchemaVersion !== 2 || input.expectedCurrencyReferenceId !== precision.referenceId
+          || input.expectedCurrencyRevision !== 2 || input.expectedCalculationSha256 !== "b".repeat(64))
+          return json({ code: "validation-failed", message: "Missing reviewed currency calculation." }, 422);
+        invoice = { ...input, id: invoiceId, branchRef: branchId, supplierName: "Office Supplier", status: "Received",
+          intakeChannel: "Manual", netAmount: amounts.net, taxAmount: amounts.tax, grossAmount: amounts.gross,
+          version: 1, createdAt: "2026-10-30T01:00:00Z",
+          lines: input.lines.map((line: object, at: number) => ({ ...line, id: `${at + 1}`, lineNumber: at + 1 })) };
+        const saved = { id: invoiceId, invoiceNumber: input.invoiceNumber, status: "Received", intakeSchemaVersion: 2,
+          calculationId: precision.referenceId, grossAmount: amounts.gross, amounts };
+        captureReceipts.set(key, saved);
+        if (options.loseCaptureResponse && capturePosts === 1) return route.abort("failed");
+        return json(saved, 201);
+      }
       if (invoice && String(invoice.invoiceNumber).toUpperCase() === String(input.invoiceNumber).trim().toUpperCase())
         return json({ code: "duplicate-invoice", message: "This vendor invoice number is already recorded in this currency." }, 409);
       const netAmount = input.lines.reduce((sum: number, line: { quantity: number; unitPrice: number }) =>
@@ -126,8 +166,28 @@ async function mockErp(page: Page, canCapture = true, options: { documents?: boo
     }
     return json({ title: `Unexpected route: ${url.pathname}` }, 404);
   });
-  return { mutations };
+  return { mutations, captureCounts: () => ({ posts: capturePosts, reads: captureReads }) };
 }
+
+test("v2 invoice keeps the original Create key after a lost response and recovers by GET", async ({ page }) => {
+  const fixture = await mockErp(page, true, { currencyV2: true, loseCaptureResponse: true });
+  await page.goto("/procurement/workspace/bills/new");
+  await page.getByRole("combobox", { name: "Vendor" }).click();
+  await page.getByRole("option", { name: "Office Supplier" }).click();
+  await page.getByLabel("Invoice number").fill("INV-V2-1");
+  await page.getByLabel("Description 1").fill("Reviewed service");
+  await page.getByLabel("Quantity").fill("1.0001");
+  await page.getByLabel("Unit price").fill("5.1234");
+  await page.getByRole("button", { name: "Review currency calculation" }).click();
+  await expect(page.getByText("ZMW 5.12390000").first()).toBeVisible();
+  await page.getByRole("button", { name: "Record as received" }).click();
+  await expect(page.getByRole("button", { name: "Check original saved result" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Check original saved result" })).toBeVisible();
+  await page.getByRole("button", { name: "Check original saved result" }).click();
+  await expect(page.getByRole("heading", { name: "Invoice INV-V2-1" })).toBeVisible();
+  expect(fixture.captureCounts()).toEqual({ posts: 1, reads: 1 });
+});
 
 test("AP records a supplier invoice as received and sees no payment action", async ({ page }) => {
   await mockErp(page);

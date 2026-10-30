@@ -44,6 +44,7 @@ type ErpShellContext = {
   retryOrganisationLookup: () => void;
   verifiedContext: VerifiedOrganisationContext | null;
   assignedRoles: string[];
+  coreActions: string[];
   selectEntity: (id: string) => void;
   selectBranch: (id: string, entityId: string) => void;
   selectAllBranches: (entityId: string) => void;
@@ -84,6 +85,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const [selection, setSelection] = useState<ShellSelection>(readSelection);
   const [contextAvailable, setContextAvailable] = useState(false);
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
+  const [coreActions, setCoreActions] = useState<string[]>([]);
   const [lookupFinished, setLookupFinished] = useState(false);
   const [organisationAccess, setOrganisationAccess] = useState<OrganisationAccess>("checking");
   const [storageFailure, setStorageFailure] = useState<string | null>(null);
@@ -96,7 +98,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
 
   useEffect(()=>observeAuthContext(window,()=>{
     authGeneration.current+=1;
-    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupFinished(false);setOrganisationAccess("checking");setLookupDenied(false);setSelectorDenied(false);setVerifiedSelection(null);});
+    flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setCoreActions([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupFinished(false);setOrganisationAccess("checking");setLookupDenied(false);setSelectorDenied(false);setVerifiedSelection(null);});
   }),[]);
 
   useLayoutEffect(() => {
@@ -194,6 +196,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
         if (core.ok) {
           const choices = parseCoreWorkspaceChoices(await core.json(), String(user.id ?? ""));
           if (!current()) return;
+          setCoreActions(choices.coreActions);
           setEntities(choices.companies.map(company => ({ id: company.id,
             name: company.registeredName, code: company.code })));
           setBranches(choices.branches.map(branch => ({ id: branch.id,
@@ -215,6 +218,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (core.status !== 404) throw new ShellLookupError(core.status);
+        setCoreActions([]);
         // Older Core hosts retain the existing administrator/context selector.
         const results = await Promise.allSettled([
           request("/api/hrm/admin/legal-entities"),
@@ -311,9 +315,9 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, organisationAccess, retryOrganisationLookup: () => {
       authGeneration.current += 1; setAuthEpoch(authGeneration.current);
       setLookupFinished(false); setOrganisationAccess("checking"); setSelectorDenied(false); setLookupDenied(false);
-      setContextAvailable(false); setAssignedRoles([]); setEntities([]); setBranches([]);
+      setContextAvailable(false); setAssignedRoles([]); setCoreActions([]); setEntities([]); setBranches([]);
       setVerifiedSelection(null);
-    }, verifiedContext, assignedRoles,
+    }, verifiedContext, assignedRoles, coreActions,
     selectEntity: (id) => {
       const defaultBranch = configuredDefaultBranch(branches, id);
       updateSelection({ ...selection, entityId: id,
@@ -321,7 +325,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
     },
     selectBranch: (id, entityId) => updateSelection({ ...selection, entityId, branch: id, branchScope: undefined }),
     selectAllBranches: (entityId) => updateSelection({ ...selection, entityId, branch: "", branchScope: "all" }),
-  }), [authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, organisationAccess, verifiedContext, assignedRoles]);
+  }), [authEpoch,branding, entities, branches, selection, contextAvailable, procurementScopeStatus, scopeMessage, organisationAccess, verifiedContext, assignedRoles, coreActions]);
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }
 

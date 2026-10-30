@@ -140,6 +140,27 @@ describe("invoice matching adapter", () => {
     vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branchScope: "all" }) });
     await expect(listPrincipalInvoiceSources("amizo", company, branch, invoice, 3)).rejects.toThrow("confirm");
   });
+  it("keeps an incompatible receipt type blocked without losing compatible source rows", async () => {
+    const branch = "cccccccc-cccc-4ccc-8ccc-cccccccccccc", state = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch }) });
+    const goods = { ...source(), tenantId: "amizo", companyId: company, branchId: branch,
+      sourceSchemaVersion: 3, issuedLineVersion: 2, authorizedQuantity: "1", quantity: "1",
+      principalReceivingSourceStateId: state, principalSourceVersion: 1, principalSourceSha256: "b".repeat(64),
+      canAllocate: false, canPostToFinance: false };
+    const blocked = { ...goods, orderId: doc, orderNumber: "PO-SERVICE", purchaseOrderLineId: receipt,
+      description: "Service needs a compatible matching rule", blocker: "InvoiceMatchingAcceptanceKindChanged" };
+    const mixed = { ...page(), canAllocate: false, items: [goods, blocked], total: 2 };
+    respond(mixed);
+    const result = await listPrincipalInvoiceSources("amizo", company, branch, invoice, 3);
+    expect(result.total).toBe(2);
+    expect(result.items[0].blocker).toBeNull();
+    expect(result.items[1].blocker).toBe("InvoiceMatchingAcceptanceKindChanged");
+    respond({ ...mixed, items: [{ ...blocked, principalReceivingSourceStateId: null,
+      principalSourceVersion: null, principalSourceSha256: null }] });
+    await expect(listPrincipalInvoiceSources("amizo", company, branch, invoice, 3)).rejects.toThrow("confirm");
+    respond({ ...mixed, items: [{ ...blocked, blocker: "IgnorePolicyAndChoose" }] });
+    await expect(listPrincipalInvoiceSources("amizo", company, branch, invoice, 3)).rejects.toThrow("confirm");
+  });
   it("sends one source-3 PUT and recovers only the original keyed fact mapping", async () => {
     const state = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" }) });
@@ -221,5 +242,39 @@ describe("invoice matching adapter", () => {
       purchaseOrderId: order, issuedVersionId: issued, lines: [{ invoiceLineId: line, purchaseOrderLineId: poLine,
         principalReceivingSourceStateId: null, principalReceivingFactId: null, invoiceUnitCode: "EACH",
         documentVersionId: "00000000-0000-0000-0000-000000000000", documentLineReference: "" }] }, key), cause)).toBe(false);
+  });
+  it("explains a Core currency and matching rule conflict without discarding an uncertain Compare key", async () => {
+    const command = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key, 3);
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "InvoiceCurrencyPolicyConflict" }), { status: 409 }));
+    vi.stubGlobal("fetch", fetch);
+    let cause: unknown;
+    try { await sendInvoiceMatching(company, command); } catch (error) { cause = error; }
+    expect(cause).toMatchObject({ status: 409, code: "InvoiceCurrencyPolicyConflict",
+      message: "Currency rounding settings differ from the matching rules. Ask an administrator to review them." });
+    expect(canReleaseInvoiceMatchingPending(command, cause)).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("releases only the exact noncommitting principal history-lock denial for new mapping or comparison", async () => {
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch: "77777777-7777-4777-8777-777777777777" }) });
+    const compare = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key, 3);
+    const principalMap = principalInvoiceMappingCommand(invoice, [line], { version: 3,
+      purchaseOrderId: order, issuedVersionId: issued, lines: [{ invoiceLineId: line, purchaseOrderLineId: poLine,
+        principalReceivingSourceStateId: null, principalReceivingFactId: null, invoiceUnitCode: "EACH",
+        documentVersionId: "00000000-0000-0000-0000-000000000000", documentLineReference: "" }] }, key);
+    const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response(
+      JSON.stringify({ code: "PrincipalInvoiceRecordedComparisonRequiresCorrection" }), { status: 409 })));
+    vi.stubGlobal("fetch", fetch);
+    for (const command of [compare, principalMap]) {
+      let cause: unknown;
+      try { await sendInvoiceMatching(company, command); } catch (error) { cause = error; }
+      expect(cause).toMatchObject({ status: 409, code: "PrincipalInvoiceRecordedComparisonRequiresCorrection" });
+      expect((cause as Error).message).toContain("recorded comparison that needs correction");
+      expect(canReleaseInvoiceMatchingPending(command, cause)).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const legacy = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key);
+    expect(canReleaseInvoiceMatchingPending(legacy,
+      new InvoiceMatchingError(409, "Recorded comparison", "PrincipalInvoiceRecordedComparisonRequiresCorrection"))).toBe(false);
+    expect(canReleaseInvoiceMatchingPending(compare, new InvoiceMatchingError(409, "Unknown conflict"))).toBe(false);
   });
 });

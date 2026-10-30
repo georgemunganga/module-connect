@@ -5,10 +5,14 @@ import { ArrowLeft, MoreHorizontal, Paperclip, Plus, Save, Search, ShoppingBag, 
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, Textarea } from "../components/ui";
 import { useErpShell } from "../lib/erpShell";
 import { invoiceDecimal, invoicePreview } from "./invoice-values";
+import { invoiceCaptureJournal, type InvoiceCaptureJournalState, type InvoiceCapturePending,
+  type InvoiceCaptureScope } from "../lib/invoice-capture-command-journal";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
+import { documentNewWorkBlocked, principalNewWorkBlocked, type PrincipalHistoryState } from "../lib/invoice-principal-history-lock";
 import { InvoiceUnitReviewOwner } from "./InvoiceUnitReviewOwner";
 import { InvoiceManualUnitReviewOwner } from "./InvoiceManualUnitReview";
+import { getInvoiceMatchingHistory } from "../../../src/platform/procurement-invoice-review-api";
 import { StandardDataTable } from "../components/data/StandardDataTable";
 import { RecordTable } from "../components/data/RecordTable";
 import { ListTools, type ExportScope, type ListColumn, type ListFilterField } from "../components/data/ListTools";
@@ -19,7 +23,8 @@ import { invoicePageRows, type InvoiceSort, type InvoiceListFilters } from "./in
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { listVendorDrafts, type VendorSummary } from "../../../src/platform/procurement-vendors-api";
 import {
-  captureInvoiceIntake, getInvoiceIntake, listInvoiceIntake, updateInvoiceIntake, cancelInvoiceIntake, invoiceAllows, invoiceEditInput, InvoiceIntakeError,
+  captureInvoiceIntake, recoverInvoiceCapture, getInvoiceIntake, listInvoiceIntake, updateInvoiceIntake, cancelInvoiceIntake, invoiceAllows, invoiceEditInput, InvoiceIntakeError,
+  previewInvoiceCalculation, getInvoiceAmountCalculation, type InvoiceAmountCalculation,
   type InvoiceDetail, type InvoiceIntakeInput, type InvoiceLineInput, type InvoicePage, type InvoiceSummary,
 } from "../../../src/platform/procurement-invoices-api";
 
@@ -29,6 +34,11 @@ const money = (amount: number | string, currency: string) => {
   return `${currency} ${whole}.${fraction.padEnd(2, "0")}`;
 };
 const blankLine = (): InvoiceLineInput => ({ description: "", quantity: "1", unitPrice: "0", taxAmount: "0" });
+const exactMoney = (amount: string, currency: string) => `${currency} ${amount}`;
+function exactInvoiceDraft(input: InvoiceIntakeInput): InvoiceIntakeInput {
+  return { ...input, lines: input.lines.map(line => ({ ...line, quantity: invoiceDecimal(line.quantity, true),
+    unitPrice: invoiceDecimal(line.unitPrice), taxAmount: invoiceDecimal(line.taxAmount) })) };
+}
 
 function useCompany() {
   const readiness = useLiveReadiness();
@@ -205,10 +215,19 @@ export function LiveInvoiceEditor() {
 }
 function InvoiceEditorRecord() {
   const { id } = useParams();
+  const { selection } = useErpShell();
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const navigate = useNavigate();
-  const { legalEntityId, defaultCurrencyCode, permissions } = useCompany();
+  const { tenantId, principalId, legalEntityId, effectiveBranchId, defaultCurrencyCode, permissions, capabilities } = useCompany();
+  const v2 = !id && capabilities.invoiceCurrencyCalculationV2;
+  const captureScope: InvoiceCaptureScope = { tenantId, principalId, companyId: legalEntityId,
+    branchId: selection.branchScope === "all" ? "" : selection.branch || effectiveBranchId || "" };
+  const [captureState, setCaptureState] = useState<InvoiceCaptureJournalState>(() => v2
+    ? invoiceCaptureJournal.read(captureScope) : { pending: null, blocked: false });
+  const [recoveringCapture, setRecoveringCapture] = useState(false);
+  useEffect(() => { setCaptureState(v2 ? invoiceCaptureJournal.read(captureScope) : { pending: null, blocked: false }); },
+    [v2, tenantId, principalId, legalEntityId, captureScope.branchId]);
   const [input, setInput] = useState<InvoiceIntakeInput>(() => ({ supplierId: "", invoiceNumber: "",
     invoiceDate: new Date().toISOString().slice(0, 10), currencyCode: defaultCurrencyCode, lines: [blankLine()] }));
   const [baseline, setBaseline] = useState(() => JSON.stringify(input));
@@ -219,6 +238,14 @@ function InvoiceEditorRecord() {
   const [stale, setStale] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [currencyPreview, setCurrencyPreview] = useState<{ value: InvoiceAmountCalculation; inputKey: string; draftKey: string } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const previewController = useRef<AbortController | null>(null);
+  const inputKey = JSON.stringify(input);
+  const currentInputKey = useRef(inputKey);
+  currentInputKey.current = inputKey;
+  useEffect(() => { setCurrencyPreview(null); setPreviewing(false);
+    return () => { previewController.current?.abort(); previewController.current = null; }; }, [inputKey]);
   useEffect(() => {
     if (!id) return;
     const abort = new AbortController();
@@ -258,29 +285,88 @@ function InvoiceEditorRecord() {
     ...current, lines: current.lines.map((line, at) => at === index ? { ...line, ...changes } : line),
   }));
   let preview: ReturnType<typeof invoicePreview> | null = null;
-  try { preview = invoicePreview(input.lines); } catch { /* Field errors are shown on submission. */ }
+  if (!v2) try { preview = invoicePreview(input.lines); } catch { /* Field errors are shown on submission. */ }
+  const verifiedPreview = v2 && currencyPreview?.inputKey === inputKey ? currencyPreview.value : null;
+  async function reviewCalculation() {
+    if (!v2 || saving || uncertain) return;
+    setError("");
+    let draft: InvoiceIntakeInput;
+    try { draft = exactInvoiceDraft(input); } catch (cause) { setError(errorText(cause)); return; }
+    previewController.current?.abort();
+    const controller = new AbortController(); previewController.current = controller;
+    const requestedKey = inputKey;
+    setPreviewing(true); setCurrencyPreview(null);
+    try {
+      const value = await previewInvoiceCalculation(legalEntityId, draft, controller.signal);
+      if (!controller.signal.aborted && alive.current && currentInputKey.current === requestedKey
+        && value.amounts.lines.length === draft.lines.length && value.precision.currencyCode === draft.currencyCode.trim().toUpperCase())
+        setCurrencyPreview({ value, inputKey: requestedKey, draftKey: JSON.stringify(draft) });
+      else if (!controller.signal.aborted && alive.current && currentInputKey.current === requestedKey)
+        setError("The calculation did not match this invoice. Review the entries and calculate again.");
+    } catch (cause) { if (!controller.signal.aborted && alive.current) setError(errorText(cause)); }
+    finally { if (!controller.signal.aborted && alive.current) setPreviewing(false); }
+  }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saving || uncertain || stale || (id && (!original || !invoiceAllows(original, "Edit")))) return;
+    if (saving || uncertain || stale || v2 && captureState.blocked || (id && (!original || !invoiceAllows(original, "Edit")))) return;
     setError("");
     let draft: InvoiceIntakeInput;
     try {
-      draft = { ...input, lines: input.lines.map(line => ({ ...line, quantity: invoiceDecimal(line.quantity, true),
-        unitPrice: invoiceDecimal(line.unitPrice), taxAmount: invoiceDecimal(line.taxAmount) })) };
+      draft = exactInvoiceDraft(input);
+      if (v2) {
+        if (!verifiedPreview || currencyPreview?.draftKey !== JSON.stringify(draft) || !verifiedPreview.previewSha256)
+          throw new Error("Review the current currency calculation before recording this bill.");
+        draft = { ...draft, intakeSchemaVersion: 2,
+          expectedCurrencyReferenceId: verifiedPreview.precision.referenceId,
+          expectedCurrencyRevision: verifiedPreview.precision.revision,
+          expectedCalculationSha256: verifiedPreview.previewSha256 };
+      }
       if (id && !reason.trim()) throw new Error("Add a reason for changing this invoice.");
     } catch (cause) { setError(errorText(cause)); return; }
+    let originalCommand: InvoiceCapturePending | null = null;
+    if (v2) {
+      originalCommand = { operation: "CaptureV2", key: crypto.randomUUID(), body: JSON.stringify(draft) };
+      if (!invoiceCaptureJournal.claim(captureScope, originalCommand)) {
+        setCaptureState(invoiceCaptureJournal.read(captureScope));
+        setError("The original invoice command could not be saved in this browser. Check any pending result before recording another bill.");
+        return;
+      }
+      setCaptureState(invoiceCaptureJournal.read(captureScope));
+    }
     setSaving(true);
     try {
       const result = id && original
         ? await updateInvoiceIntake(legalEntityId, id, original.version, draft, reason)
-        : await captureInvoiceIntake(legalEntityId, draft);
+        : await captureInvoiceIntake(legalEntityId, draft, originalCommand?.key);
+      if (originalCommand && !invoiceCaptureJournal.clear(captureScope, originalCommand)) {
+        if (alive.current) { setUncertain(true); setError("The saved result was confirmed, but its recovery key could not be cleared. Check the original result before continuing."); }
+        return;
+      }
+      if (originalCommand) setCaptureState(invoiceCaptureJournal.read(captureScope));
       if (alive.current) navigate(`/bills/${result.id}`);
     } catch (cause) {
       if (!alive.current) return;
       setError(errorText(cause));
-      if (cause instanceof InvoiceIntakeError && cause.status === 409) setStale(true);
+      if (originalCommand && cause instanceof InvoiceIntakeError && (cause.code === "invoice-calculation-changed" || cause.code === "validation-failed")) {
+        if (invoiceCaptureJournal.clear(captureScope, originalCommand)) setCaptureState(invoiceCaptureJournal.read(captureScope));
+        setCurrencyPreview(null);
+      }
+      else if (cause instanceof InvoiceIntakeError && cause.status === 409) setStale(true);
       if (!(cause instanceof InvoiceIntakeError) || !isDefiniteHttpRejection(cause.status)) setUncertain(true);
     } finally { if (alive.current) setSaving(false); }
+  }
+  async function checkOriginalCapture() {
+    const pending = captureState.pending;
+    if (!v2 || !pending || recoveringCapture || saving) return;
+    setRecoveringCapture(true); setError("");
+    try {
+      const result = await recoverInvoiceCapture(legalEntityId, pending.key);
+      if (!invoiceCaptureJournal.clear(captureScope, pending)) throw new Error("The saved command changed. Its recovery key remains pending.");
+      if (alive.current) { setCaptureState(invoiceCaptureJournal.read(captureScope)); navigate(`/bills/${result.id}`); }
+    } catch (cause) { if (alive.current) setError(cause instanceof InvoiceIntakeError && cause.status === 404
+      ? "No saved result was found for the original command. Its key is retained; check the invoice list or ask an administrator before another save."
+      : errorText(cause)); }
+    finally { if (alive.current) setRecoveringCapture(false); }
   }
   if (!permissions.includes("procurement-invoice-capture")) return <div className="p-5 sm:p-8" role="alert">You do not have access to record invoices for this company.</div>;
   return <div className="pb-20">
@@ -288,11 +374,17 @@ function InvoiceEditorRecord() {
       <h1 className="flex items-center gap-2 text-2xl font-semibold"><ShoppingBag size={23} strokeWidth={1.4} />{id ? "Edit" : "New"} Bill</h1>
       <Button type="button" variant="ghost" aria-label="Close editor" disabled={saving} onClick={leave}><X size={21} /></Button>
     </header>
+    {v2 && captureState.blocked && <div className="mx-5 mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm sm:mx-8" role="status">
+      <p>{captureState.pending ? "A previous invoice save needs its original result checked before another change." : "Choose a permitted branch or resolve the saved browser command before recording this bill."}</p>
+      {captureState.pending && <Button type="button" variant="secondary" disabled={recoveringCapture || saving} onClick={() => void checkOriginalCapture()}>
+        {recoveringCapture ? "Checking…" : "Check original saved result"}</Button>}
+      <Link className="ml-3 text-primary underline" to="/bills">Open bill list</Link>
+    </div>}
     {loadingInvoice ? <p className="px-5 py-6 sm:px-8" role="status">Loading invoice…</p>
       : id && !original ? <p className="px-5 py-6 sm:px-8" role="alert">{error || "Invoice not found."}</p>
         : id && !invoiceAllows(original!, "Edit") ? <div className="px-5 py-6 sm:px-8" role="alert">This invoice cannot be edited. <Link className="text-primary underline" to={backTo}>Open its saved details</Link>.</div>
           : <form onSubmit={save}>
-      <fieldset disabled={saving || uncertain || stale} className="min-w-0 border-0 p-0">
+      <fieldset disabled={saving || uncertain || stale || v2 && captureState.blocked} className="min-w-0 border-0 p-0">
         <div className="max-w-[1260px] space-y-7 px-5 py-6 sm:px-8">
           <p className="text-sm text-muted-foreground">Record the supplier invoice as received. Review and matching happen after intake.</p>
           {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}
@@ -325,7 +417,9 @@ function InvoiceEditorRecord() {
             <div className="relative overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[760px] text-left">
               <thead className="table-head"><tr><th>Item Details</th><th>Quantity</th><th>Rate</th><th>Tax amount</th><th>Amount</th><th scope="col" aria-label="Actions" /></tr></thead>
               <tbody>{input.lines.map((line, index) => {
-                let lineTotal = "—"; try { lineTotal = money(invoicePreview([line]).total, input.currencyCode); } catch { /* Wait for valid input. */ }
+                let lineTotal = "—";
+                if (v2) { const amount = verifiedPreview?.amounts.lines[index]?.gross; if (amount) lineTotal = exactMoney(amount, verifiedPreview!.precision.currencyCode); }
+                else try { lineTotal = money(invoicePreview([line]).total, input.currencyCode); } catch { /* Wait for valid input. */ }
                 return <tr key={index}>
                   <td className="min-w-56 p-3"><Input required aria-label={`Description ${index + 1}`} maxLength={500} value={line.description}
                     onChange={event => setLine(index, { description: event.target.value })} /></td>
@@ -345,10 +439,13 @@ function InvoiceEditorRecord() {
               onClick={() => setInput({ ...input, lines: [...input.lines, blankLine()] })}><Plus size={14} /> Add new row</Button></div>
           </section>
           <div className="ml-auto max-w-md space-y-3 rounded-xl bg-surface-muted p-5 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Sub Total</span><span>{preview ? money(preview.net, input.currencyCode) : "—"}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{preview ? money(preview.tax, input.currencyCode) : "—"}</span></div>
-            <div className="flex justify-between border-t border-border pt-3 text-base font-semibold"><span>Total ({input.currencyCode})</span><span>{preview ? money(preview.total, input.currencyCode) : "—"}</span></div>
-            {!preview && <p className="text-xs text-muted-foreground">Complete valid quantities and amounts to preview totals.</p>}
+            {v2 && <><Button type="button" variant="secondary" disabled={previewing || saving} onClick={() => void reviewCalculation()}>{previewing ? "Calculating…" : "Review currency calculation"}</Button>
+              {verifiedPreview && <p className="text-xs text-muted-foreground">{verifiedPreview.precision.currencyCode} · {verifiedPreview.precision.minorUnits} decimal places · {verifiedPreview.precision.rounding === "ToEven" ? "Round to even" : "Round away from zero"} · Core revision {verifiedPreview.precision.revision}</p>}</>}
+            <div className="flex justify-between"><span className="text-muted-foreground">Sub Total</span><span>{v2 ? verifiedPreview ? exactMoney(verifiedPreview.amounts.net, verifiedPreview.precision.currencyCode) : "—" : preview ? money(preview.net, input.currencyCode) : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{v2 ? verifiedPreview ? exactMoney(verifiedPreview.amounts.tax, verifiedPreview.precision.currencyCode) : "—" : preview ? money(preview.tax, input.currencyCode) : "—"}</span></div>
+            {verifiedPreview && <div className="flex justify-between"><span className="text-muted-foreground">Rounding adjustment</span><span>{exactMoney(verifiedPreview.amounts.adjustment, verifiedPreview.precision.currencyCode)}</span></div>}
+            <div className="flex justify-between border-t border-border pt-3 text-base font-semibold"><span>Total ({input.currencyCode})</span><span>{v2 ? verifiedPreview ? exactMoney(verifiedPreview.amounts.gross, verifiedPreview.precision.currencyCode) : "—" : preview ? money(preview.total, input.currencyCode) : "—"}</span></div>
+            {!preview && !verifiedPreview && <p className="text-xs text-muted-foreground">{v2 ? "Review the currency calculation after entering the invoice amounts." : "Complete valid quantities and amounts to preview totals."}</p>}
           </div>
           <div className="grid gap-6 border-t border-border pt-6 sm:grid-cols-2">
             <Field label="Notes"><Textarea disabled value="" placeholder="Notes are not available on bills yet." /></Field>
@@ -360,7 +457,7 @@ function InvoiceEditorRecord() {
           {id && <Field label="Reason for change *"><Textarea required maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
         </div>
         <footer className="sticky bottom-8 z-10 flex flex-wrap items-center gap-2 border-y border-border bg-card/95 px-5 py-4 backdrop-blur sm:px-8">
-          <Button type="submit" disabled={saving || uncertain || stale}><Save size={14} />{saving ? "Saving…" : id ? "Save changes" : "Record as received"}</Button>
+          <Button type="submit" disabled={saving || uncertain || stale || (v2 && (!verifiedPreview || captureState.blocked))}><Save size={14} />{saving ? "Saving…" : id ? "Save changes" : "Record as received"}</Button>
           <Button type="button" variant="ghost" disabled={saving} onClick={leave}><ArrowLeft size={14} /> Cancel</Button>
         </footer>
       </fieldset>
@@ -400,6 +497,10 @@ function InvoiceDetailRecord() {
   const [uncertain, setUncertain] = useState(false);
   const [stale, setStale] = useState(false);
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
+  const [principalHistory, setPrincipalHistory] = useState<PrincipalHistoryState | null>(null);
+  const [amountCalculation, setAmountCalculation] = useState<InvoiceAmountCalculation | null>(null);
+  const [calculationLoading, setCalculationLoading] = useState(false);
+  const [calculationError, setCalculationError] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -409,11 +510,36 @@ function InvoiceDetailRecord() {
     const controller = new AbortController();
     setLoading(true); setError("");
     getInvoiceIntake(legalEntityId, id, controller.signal)
-      .then((result) => { if (!controller.signal.aborted) { setInvoice(result); setUncertain(false); setStale(false); setReason(""); } })
+      .then((result) => { if (!controller.signal.aborted) { setInvoice(result); setPrincipalHistory(null); setUncertain(false); setStale(false); setReason(""); } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) { setError(errorText(cause)); setStale(true); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, refresh]);
+  const comparisonReadAvailable = (capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead || capabilities.principalInvoiceComparison)
+    && permissions.includes("procurement-invoice-read");
+  const invoiceLineKey = invoice?.lines.map(line => line.id).join(":") ?? "";
+  useEffect(() => {
+    if (!invoice || comparisonReadAvailable || !permissions.includes("procurement-invoice-read")
+      || !(capabilities.invoiceManualUnitReviewRead || capabilities.invoiceOriginalUnitReview)) return;
+    const abort = new AbortController(); setPrincipalHistory(null);
+    getInvoiceMatchingHistory(legalEntityId, invoice.id, invoice.version, new Set(invoice.lines.map(line => line.id)), abort.signal)
+      .then(history => { if (!abort.signal.aborted) setPrincipalHistory({ locked: history.principalNewWorkLocked,
+        currentMappingSchema: history.mappings.find(mapping => mapping.id === history.currentMappingVersionId)?.sourceSchemaVersion ?? null }); })
+      .catch(() => { if (!abort.signal.aborted) setPrincipalHistory(null); });
+    return () => abort.abort();
+  }, [legalEntityId, invoice?.id, invoice?.version, invoiceLineKey, comparisonReadAvailable,
+    permissions.includes("procurement-invoice-read"), capabilities.invoiceManualUnitReviewRead, capabilities.invoiceOriginalUnitReview, refresh]);
+  useEffect(() => {
+    setAmountCalculation(null); setCalculationError("");
+    if (!id || !capabilities.invoiceCurrencyCalculationRead || !permissions.includes("procurement-invoice-read")) return;
+    const controller = new AbortController();
+    setCalculationLoading(true);
+    getInvoiceAmountCalculation(legalEntityId, id, controller.signal)
+      .then(result => { if (!controller.signal.aborted) setAmountCalculation(result); })
+      .catch(cause => { if (!controller.signal.aborted) setCalculationError(errorText(cause)); })
+      .finally(() => { if (!controller.signal.aborted) setCalculationLoading(false); });
+    return () => controller.abort();
+  }, [id, legalEntityId, refresh, capabilities.invoiceCurrencyCalculationRead, permissions.includes("procurement-invoice-read")]);
   const refreshSavedInvoice = () => { if (busy || loading) return; setLoading(true); setError(""); setRefresh(value => value + 1); };
   async function cancel() {
     if (!permissions.includes("procurement-invoice-capture") || !invoice || busy || loading || uncertain || stale || !invoiceAllows(invoice, "Cancel") || !reason.trim()) return;
@@ -433,6 +559,9 @@ function InvoiceDetailRecord() {
   }
   if (loading && !invoice) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."} <Button variant="secondary" onClick={refreshSavedInvoice}>Try loading again</Button></div>;
+  const manualNewWorkLocked = principalNewWorkBlocked(capabilities.invoiceManualUnitReviewRead, principalHistory?.locked ?? null);
+  const documentNewWorkLocked = documentNewWorkBlocked(principalHistory,
+    capabilities.principalInvoiceComparisonRead || capabilities.principalInvoiceComparison);
   const canEdit = !loading && !busy && !uncertain && !stale && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
   const canCancel = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel");
   const tabs = [
@@ -487,19 +616,24 @@ function InvoiceDetailRecord() {
           </DetailSection>
           <div className="space-y-4">
             <DetailSection title="Amounts"><dl className="grid gap-4 sm:grid-cols-2">
-              <DetailValue label="Net" value={money(invoice.exactAmounts?.netAmount ?? invoice.netAmount, invoice.currencyCode)} />
-              <DetailValue label="Tax" value={money(invoice.exactAmounts?.taxAmount ?? invoice.taxAmount, invoice.currencyCode)} />
-              <DetailValue label="Total" value={<strong>{money(invoice.exactAmounts?.grossAmount ?? invoice.grossAmount, invoice.currencyCode)}</strong>} />
-            </dl></DetailSection>
+              <DetailValue label="Net" value={amountCalculation ? exactMoney(amountCalculation.amounts.net, amountCalculation.precision.currencyCode) : money(invoice.exactAmounts?.netAmount ?? invoice.netAmount, invoice.currencyCode)} />
+              <DetailValue label="Tax" value={amountCalculation ? exactMoney(amountCalculation.amounts.tax, amountCalculation.precision.currencyCode) : money(invoice.exactAmounts?.taxAmount ?? invoice.taxAmount, invoice.currencyCode)} />
+              <DetailValue label="Total" value={<strong>{amountCalculation ? exactMoney(amountCalculation.amounts.gross, amountCalculation.precision.currencyCode) : money(invoice.exactAmounts?.grossAmount ?? invoice.grossAmount, invoice.currencyCode)}</strong>} />
+              {amountCalculation && <><DetailValue label="Raw net" value={exactMoney(amountCalculation.amounts.rawNet, amountCalculation.precision.currencyCode)} />
+                <DetailValue label="Rounding adjustment" value={exactMoney(amountCalculation.amounts.adjustment, amountCalculation.precision.currencyCode)} /></>}
+            </dl>{amountCalculation && <p className="mt-3 text-xs text-muted-foreground">Core currency revision {amountCalculation.precision.revision} · {amountCalculation.precision.minorUnits} decimal places · {amountCalculation.precision.rounding === "ToEven" ? "Round to even" : "Round away from zero"}</p>}
+              {calculationLoading && <p role="status" className="mt-3 text-xs">Loading saved currency calculation…</p>}
+              {calculationError && <p role="alert" className="mt-3 text-xs text-destructive">{calculationError}</p>}</DetailSection>
             <DetailSection title="Workflow context"><p className="text-sm">{invoice.nextStep}</p><p className="mt-3 text-xs text-muted-foreground">Procurement validates this invoice. Finance owns posting and payment.</p></DetailSection>
           </div>
         </div>
         {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
-        {(capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead) && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
+        {comparisonReadAvailable && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}:${refresh}`}
           company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
-          comparisonAvailable={capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
-        {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
-        {capabilities.invoiceManualUnitReviewRead && <InvoiceManualUnitReviewOwner key={`${invoice.id}:${invoice.version}:manual`} invoiceId={invoice.id} invoiceVersion={invoice.version} lines={invoice.lines} />}
+          comparisonAvailable={comparisonReadAvailable}
+          onPrincipalHistory={setPrincipalHistory} refresh={(message) => { setNotice(message ?? ""); setPrincipalHistory(null); setRefresh(value => value + 1); }} />}
+        {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} principalNewWorkLocked={documentNewWorkLocked} />}
+        {capabilities.invoiceManualUnitReviewRead && <InvoiceManualUnitReviewOwner key={`${invoice.id}:${invoice.version}:manual`} invoiceId={invoice.id} invoiceVersion={invoice.version} lines={invoice.lines} principalNewWorkLocked={manualNewWorkLocked} />}
         {canCancel && <DetailSection title="Cancel invoice"><div className="space-y-3">
           <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
           <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || loading || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>
@@ -507,10 +641,12 @@ function InvoiceDetailRecord() {
         </div></DetailSection>}
       </div>
       {activeTab === "items" && <DetailSection title="Items / Line Details"><div className="overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[700px] text-left text-sm">
-        <thead className="table-head"><tr><th className="table-cell">Line</th><th className="table-cell">Description</th><th className="table-cell">Quantity</th><th className="table-cell">Unit price</th><th className="table-cell">Tax</th></tr></thead>
-        <tbody>{invoice.lines.map(line => <tr key={line.id} className="border-b border-border"><td className="table-cell">{line.lineNumber}</td><td className="table-cell font-medium">{line.description}</td>
-          <td className="table-cell">{line.exactAmounts?.quantity ?? line.quantity}</td><td className="table-cell">{money(line.exactAmounts?.unitPrice ?? line.unitPrice, invoice.currencyCode)}</td>
-          <td className="table-cell">{money(line.exactAmounts?.taxAmount ?? line.taxAmount, invoice.currencyCode)}</td></tr>)}</tbody>
+        <thead className="table-head"><tr><th className="table-cell">Line</th><th className="table-cell">Description</th><th className="table-cell">Quantity</th><th className="table-cell">Unit price</th><th className="table-cell">Tax</th>{amountCalculation && <><th className="table-cell">Raw net</th><th className="table-cell">Rounded net</th><th className="table-cell">Adjustment</th></>}</tr></thead>
+        <tbody>{invoice.lines.map(line => { const calculated = amountCalculation?.amounts.lines.find(item => item.lineNumber === line.lineNumber);
+          return <tr key={line.id} className="border-b border-border"><td className="table-cell">{line.lineNumber}</td><td className="table-cell font-medium">{line.description}</td>
+          <td className="table-cell">{calculated?.quantity ?? line.exactAmounts?.quantity ?? line.quantity}</td><td className="table-cell">{calculated ? exactMoney(calculated.unitPrice, invoice.currencyCode) : money(line.exactAmounts?.unitPrice ?? line.unitPrice, invoice.currencyCode)}</td>
+          <td className="table-cell">{calculated ? exactMoney(calculated.tax, invoice.currencyCode) : money(line.exactAmounts?.taxAmount ?? line.taxAmount, invoice.currencyCode)}</td>
+          {amountCalculation && <><td className="table-cell">{calculated ? exactMoney(calculated.rawNet, invoice.currencyCode) : "—"}</td><td className="table-cell">{calculated ? exactMoney(calculated.net, invoice.currencyCode) : "—"}</td><td className="table-cell">{calculated ? exactMoney(calculated.adjustment, invoice.currencyCode) : "—"}</td></>}</tr>; })}</tbody>
       </RecordTable></div><div className="ml-auto mt-4 max-w-xs space-y-2 text-sm"><div className="flex justify-between"><span className="text-muted-foreground">Net</span><span>{money(invoice.exactAmounts?.netAmount ?? invoice.netAmount, invoice.currencyCode)}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{money(invoice.exactAmounts?.taxAmount ?? invoice.taxAmount, invoice.currencyCode)}</span></div><div className="flex justify-between border-t border-border pt-2 font-semibold"><span>Total</span><span>{money(invoice.exactAmounts?.grossAmount ?? invoice.grossAmount, invoice.currencyCode)}</span></div></div></DetailSection>}
       {activeTab === "related" && <DetailSection title="Related Records"><dl className="grid gap-5 sm:grid-cols-2">
         <DetailValue label="Purchase order reference" value={invoice.purchaseOrderId || "Not linked"} />

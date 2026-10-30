@@ -29,6 +29,16 @@ const receipt = (operation: "Open" | "Decision") => ({ schemaVersion: 1, invoice
   completedAt: "2026-10-22T00:00:00Z", recordedHistoricalResult: true, ...flags });
 afterEach(() => vi.unstubAllGlobals());
 describe("original invoice unit review purpose API", () => {
+  it("explains the exact recorded-comparison denial without treating unknown conflicts as it", async () => {
+    mock({ code: "PrincipalInvoiceRecordedComparisonRequiresCorrection" }, 409);
+    await expect(openUnitReview(company, invoice, 4, 1, null, key)).rejects.toMatchObject({
+      status: 409, code: "PrincipalInvoiceRecordedComparisonRequiresCorrection",
+      message: expect.stringContaining("recorded comparison that needs correction") });
+    mock({ code: "AnotherConflict" }, 409);
+    await expect(openUnitReview(company, invoice, 4, 1, null, key)).rejects.toMatchObject({
+      status: 409, code: "AnotherConflict",
+      message: expect.not.stringContaining("recorded comparison that needs correction") });
+  });
   it("requires actual readiness and keeps unavailable distinct from empty", async () => {
     const ready = { invoiceId: invoice, invoiceVersion: 4, mappingRevision: 1, existingReviewId: null,
       canRequestReview: true, blockers: [], isUnitVerification: false, ...flags };

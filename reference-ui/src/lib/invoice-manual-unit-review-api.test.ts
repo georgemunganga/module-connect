@@ -36,6 +36,13 @@ const reply = (body: unknown, status = 200) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("manual unit review source schema 4", () => {
+  it("explains the exact recorded-comparison denial while retaining its typed code", async () => {
+    const denied = reply({ code: "PrincipalInvoiceRecordedComparisonRequiresCorrection" }, 409);
+    await expect(manualOpen(company, readiness, "Check entered units", key, maker)).rejects.toMatchObject({
+      status: 409, code: "PrincipalInvoiceRecordedComparisonRequiresCorrection",
+      message: expect.stringContaining("recorded comparison that needs correction") });
+    expect(denied).toHaveBeenCalledTimes(1);
+  });
   it("accepts manual readiness and rejects document evidence and fake placeholders", async () => {
     reply({ ...readiness, isUnitVerification: false, isInvoiceApproval: false, canPostToFinance: false });
     await expect(manualReadiness(company, invoice)).resolves.toMatchObject({ sourceSchemaVersion: 4, requiresMakerReason: true });

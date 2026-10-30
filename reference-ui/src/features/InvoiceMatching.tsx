@@ -4,6 +4,7 @@ import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { useErpShell } from "../lib/erpShell";
 import { readPendingInvoiceMatching, claimPendingInvoiceMatching, clearPendingInvoiceMatching } from "../lib/invoice-matching-command-memory";
+import { invoiceMappingNewWorkAllowed, principalHistoryCorrection, principalNewWorkBlocked } from "../lib/invoice-principal-history-lock";
 import { listInvoiceDocuments, type InvoiceDocument } from "../../../src/platform/procurement-invoices-api";
 import type { InvoiceFinanceReadiness } from "../../../src/platform/procurement-invoice-review-api";
 import { invoiceMappingCommand, principalInvoiceMappingCommand, invoiceCompareCommand, invoiceMatchingRecovery,
@@ -17,18 +18,21 @@ const causeText = (cause: unknown) => cause instanceof Error ? cause.message : "
 const emptyId = "00000000-0000-0000-0000-000000000000";
 const outcomeText = (result: InvoiceMatchingReply) => result.outcome === "MappingUnverified" ? "Line links saved. Original units and documents still need verified review."
   : result.outcome === "Blocked" ? "Comparison recorded. Review the saved issues before continuing." : "Comparison recorded. Invoice approval and Finance posting are separate.";
-export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readiness, currentMappingId, currentMappingOriginalCurrent, currentMappingSchema, refresh }: {
+export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readiness, currentMappingId, currentMappingOriginalCurrent, currentMappingSchema, principalNewWorkLocked, refresh }: {
   invoiceId: string; invoiceVersion: number; lines: { id: string; lineNumber: number; description: string }[];
   readiness: InvoiceFinanceReadiness | null; currentMappingId: string | null; currentMappingOriginalCurrent: boolean;
-  currentMappingSchema: 3 | null | undefined; refresh: (message?: string) => void;
+  currentMappingSchema: 3 | null | undefined; principalNewWorkLocked: boolean; refresh: (message?: string) => void;
 }) {
   const context = useLiveReadiness()!, { selection } = useErpShell(), company = context.legalEntityId;
   const principalWrite = context.capabilities.principalInvoiceComparison === true;
   const legacyWrite = context.capabilities.invoiceComparison === true;
   const canSelect = context.permissions.includes("procurement-invoice-read") && context.permissions.includes("procurement-invoice-match")
     && (principalWrite || legacyWrite);
-  const canMap = canSelect && context.permissions.includes("procurement-invoice-capture");
-  const canCompare = canSelect && (currentMappingSchema === 3 ? principalWrite : currentMappingSchema === null && legacyWrite);
+  const canMap = canSelect && context.permissions.includes("procurement-invoice-capture")
+    && invoiceMappingNewWorkAllowed(currentMappingSchema, principalWrite, legacyWrite, principalNewWorkLocked);
+  const canCompare = canSelect && (currentMappingSchema === 3
+    ? principalWrite && !principalNewWorkBlocked(true, principalNewWorkLocked)
+    : currentMappingSchema === null && legacyWrite);
   const scopeKey = JSON.stringify([context.tenantId, company, selection.entityId, selection.branch, context.principalId, invoiceId]);
   const [pendingState, setPendingState] = useState(() => readPendingInvoiceMatching(scopeKey));
   const uncertain = pendingState.command;
@@ -91,7 +95,8 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
     setDrafts((all) => ({ ...all, [activeLine]: { source, policy: sources.policyVersionId, acceptance: null, unit: "", document: "", reference: "" } }));
   }
   async function execute(command: InvoiceMatchingCommand) {
-    if (operationInFlight.current || busy || commandBlocked) return;
+    if (operationInFlight.current || busy || commandBlocked
+      || principalNewWorkBlocked(command.sourceSchemaVersion === 3, principalNewWorkLocked)) return;
     operationInFlight.current = true;
     let locator: InvoiceMatchingRecovery;
     try { locator = invoiceMatchingRecovery(command); }
@@ -172,6 +177,7 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
   if (!canSelect && !context.permissions.includes("procurement-invoice-capture") && !commandBlocked) return null;
   return <Panel title="Invoice line links and checks"><div className="space-y-4 p-5">
     <p className="text-sm text-muted-foreground">Link the original lines to their order and receipt evidence. Saving links does not verify units, approve the invoice or send it to Finance.</p>
+    {principalWrite && principalNewWorkLocked && <p role="status" className="text-sm">{principalHistoryCorrection}</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {commandBlocked ? <div className="space-y-3"><p>The previous response was interrupted. Check its saved result before another change.</p>
       {uncertain ? <Button variant="secondary" disabled={busy} onClick={recover}>Check saved invoice action</Button>
@@ -186,7 +192,7 @@ export function InvoiceMatchingPanel({ invoiceId, invoiceVersion, lines, readine
         {sourceLoading ? <p role="status">Loading matching sources…</p> : sources && <>
           {sources.items.length ? <div className="overflow-x-auto"><RecordTable><thead><tr><th>Order</th><th>Item or service</th><th>Ordered quantity</th><th>Unit price</th><th>Action</th></tr></thead><tbody>{sources.items.map((source) =>
             <tr key={`${source.issuedVersionId}:${source.purchaseOrderLineId}`}><td>{source.orderNumber}</td><td>{source.description}</td><td>{source.quantity ?? "Unavailable"} {source.unitCode}</td><td>{source.unitPrice ?? "Unavailable"}</td><td>
-              {source.sourceState === "VerifiedIssued" && !source.blocker && source.method ? <Button type="button" variant="secondary" disabled={busy} onClick={() => choose(source)}>Choose source</Button> : <span>Source needs review</span>}</td></tr>)}</tbody></RecordTable></div> : <p>No compatible issued order lines found.</p>}
+              {source.sourceState === "VerifiedIssued" && !source.blocker && source.method ? <Button type="button" variant="secondary" disabled={busy} onClick={() => choose(source)}>Choose source</Button> : <span>{source.blocker === "InvoiceMatchingAcceptanceKindChanged" ? "Receipt type does not match" : "Source needs review"}</span>}</td></tr>)}</tbody></RecordTable></div> : <p>No compatible issued order lines found.</p>}
           <div className="flex items-center gap-3"><Button type="button" variant="secondary" disabled={busy || sources.page <= 1} onClick={() => setSourcePage((p) => p - 1)}>Previous sources</Button><span>Page {sources.page}</span>
             <Button type="button" variant="secondary" disabled={busy || sources.page * sources.pageSize >= sources.total} onClick={() => setSourcePage((p) => p + 1)}>Next sources</Button></div>
         </>}

@@ -8,6 +8,7 @@ import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import { claimUnitReviewPending, clearUnitReviewPending, readUnitReviewPending, type UnitReviewPending } from "../lib/invoice-unit-review-command";
 import { readManualReviewLink, rememberManualReviewLink } from "../lib/invoice-manual-review-link";
 import { manualUnitBlockerText, manualUnitLineLabel, type InvoiceLineLabel } from "../lib/invoice-manual-unit-review-copy";
+import { principalHistoryCorrection } from "../lib/invoice-principal-history-lock";
 import { manualDecide, manualDetail, manualOpen, manualReadiness, manualRecover, manualRecoverOpenByInvoice, manualTasks, ManualReviewError,
   type ManualAction, type ManualDetail, type ManualReadiness, type ManualTaskPage } from "../../../src/platform/procurement-invoice-manual-unit-review-api";
 
@@ -15,11 +16,12 @@ const msg = (cause: unknown) => cause instanceof Error ? cause.message : "Manual
 const selectedBranch = (value: string | undefined) => !!value && /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i.test(value);
 const base = "/approvals/manual-unit-review";
 /** Maker entry inside the existing bill detail; schema-1 document review remains beside it. */
-export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion, lines }: { invoiceId: string; invoiceVersion: number; lines: readonly InvoiceLineLabel[] }) {
+export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion, lines, principalNewWorkLocked }: { invoiceId: string; invoiceVersion: number; lines: readonly InvoiceLineLabel[]; principalNewWorkLocked: boolean }) {
   const context = useLiveReadiness()!, { selection } = useErpShell();
   const read = context.capabilities.invoiceManualUnitReviewRead && context.permissions.includes("procurement-invoice-unit-review-request")
     && context.permissions.includes("procurement-invoice-read");
-  const write = read && context.capabilities.invoiceManualUnitReview && selection.branchScope !== "all" && selectedBranch(selection.branch);
+  const write = read && !principalNewWorkLocked && context.capabilities.invoiceManualUnitReview
+    && selection.branchScope !== "all" && selectedBranch(selection.branch);
   const scope = JSON.stringify([context.tenantId, context.legalEntityId, selection.branch ?? "", context.principalId, invoiceId, "ManualOpen"]);
   const [readiness, setReadiness] = useState<ManualReadiness | null>(null);
   const [recoveredReviewId, setRecoveredReviewId] = useState(() => readManualReviewLink(scope));
@@ -49,7 +51,8 @@ export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion, lines 
       clearUnitReviewPending(scope, marker); if (alive.current) { setPending(readUnitReviewPending(scope)); setRecoveredReviewId(result.reviewId); setNotice(`Manual unit review started: ${result.reviewState}.`);
         setReadiness(await manualReadiness(context.legalEntityId, invoiceId)); }
     } catch (cause) {
-      if (cause instanceof ManualReviewError && [400, 422].includes(cause.status)) clearUnitReviewPending(scope, marker);
+      if (cause instanceof ManualReviewError && ([400, 422].includes(cause.status)
+        || cause.status === 409 && cause.code === "PrincipalInvoiceRecordedComparisonRequiresCorrection")) clearUnitReviewPending(scope, marker);
       if (alive.current) { setPending(readUnitReviewPending(scope)); setError(msg(cause)); }
     } finally { inFlight.current = false; if (alive.current) setBusy(false); }
   }
@@ -67,6 +70,7 @@ export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion, lines 
   return <Panel title="Check manually entered invoice units" className="mt-5"><div className="space-y-3 p-5 text-sm">
     <p>An independent person checks the entered unit names and original invoice values. This does not approve the bill or send it to Finance.</p>
     {loading && <p role="status">Checking manual unit review availability…</p>}
+    {principalNewWorkLocked && <p role="status">{principalHistoryCorrection}</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}{notice && <p role="status">{notice}</p>}
     {(readiness?.existingReviewId ?? recoveredReviewId) && <p>Review <Badge>Recorded</Badge> <Link className="text-primary underline"
       to={`${base}/${readiness?.existingReviewId ?? recoveredReviewId}`}>Open review details</Link></p>}
@@ -79,7 +83,7 @@ export function InvoiceManualUnitReviewOwner({ invoiceId, invoiceVersion, lines 
       : write && readiness?.canRequestReview && readiness.invoiceVersion === invoiceVersion ? <>
         <Field label="Why do these entered units need review?"><Textarea required maxLength={2000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></Field>
         <Button disabled={busy || !reason.trim()} onClick={() => void open()}>Request manual unit review</Button></>
-        : !write && <p>Saved manual reviews remain available. Choose a permitted branch and enable new work to request another review.</p>}
+        : !write && !principalNewWorkLocked && <p>Saved manual reviews remain available. Choose a permitted branch and enable new work to request another review.</p>}
   </div></Panel>;
 }
 

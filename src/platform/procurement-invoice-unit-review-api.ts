@@ -22,7 +22,7 @@ export type PinnedReviewDocument = { documentId: string; versionId: string; vers
 export type UnitReviewReceipt = UnitReviewIdentityMetadata & { schemaVersion: 1; invoiceId: string; reviewId: string; coreCaseId: string; commandKey: string;
   operation: "Open" | "Decision"; invoiceVersion: number; caseVersion: number; caseState: UnitReviewDetail["caseState"];
   reviewState: UnitReviewDetail["reviewState"]; decisionId: string | null; outcomeId: string | null; completedAt: string };
-export class UnitReviewError extends Error { constructor(readonly status: number, message: string) { super(message); } }
+export class UnitReviewError extends Error { constructor(readonly status: number, message: string, readonly code?: string) { super(message); } }
 const guid = /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i;
 const id = (v: unknown): v is string => typeof v === "string" && guid.test(v) && v !== "00000000-0000-0000-0000-000000000000";
 const obj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -38,12 +38,18 @@ async function call(company: string, path: string, init: RequestInit = {}, downl
   let response: Response;
   try { response = await fetch(`/api/procurement/v1${path}`, { ...init, method: init.method ?? "GET", headers, credentials: "include", cache: "no-store" }); }
   catch { throw new UnitReviewError(0, "The response was interrupted. Check the saved review before another action."); }
-  if (!response.ok) throw new UnitReviewError(response.status, response.status === 401 ? "Sign in to ERP before reviewing invoice units."
+  let code: string | undefined;
+  if (!response.ok) {
+    try { const body: unknown = await response.json(); if (obj(body) && typeof body.code === "string") code = body.code; } catch { /* status remains authoritative */ }
+    throw new UnitReviewError(response.status, code === "PrincipalInvoiceRecordedComparisonRequiresCorrection"
+      ? "This invoice has a recorded comparison that needs correction. Review its saved history before another review."
+      : response.status === 401 ? "Sign in to ERP before reviewing invoice units."
     : response.status === 403 ? "You do not have access to this original invoice review."
       : response.status === 404 ? "This review or its saved command is not available in your current access."
         : response.status === 409 ? "The invoice, assignment or original evidence changed. Refresh before continuing."
           : response.status === 422 ? "Check the review details and reason before saving."
-            : "Original invoice review is unavailable. Check its saved history before another action.");
+            : "Original invoice review is unavailable. Check its saved history before another action.", code);
+  }
   if (download) return response.blob();
   try { return await response.json(); } catch { throw invalid(); }
 }
