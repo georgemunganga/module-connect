@@ -143,8 +143,10 @@ export async function listPrincipalInvoiceSources(tenant: string, company: strin
       || row.authorizedQuantity !== row.quantity || !text(row.categoryCode)
       || !["TwoWay", "ThreeWay", null].includes(row.method as string | null)
       || !["Goods", "Service", null].includes(row.acceptanceKind as string | null)
-      || ![null, "MatchingCategoryUnavailable"].includes(row.blocker as string | null)
+      || ![null, "MatchingCategoryUnavailable", "InvoiceMatchingAcceptanceKindChanged"].includes(row.blocker as string | null)
       || row.method === null && row.blocker !== "MatchingCategoryUnavailable"
+      || row.blocker === "InvoiceMatchingAcceptanceKindChanged"
+        && (row.method === null || row.acceptanceKind === null || !id(row.principalReceivingSourceStateId))
       || !nullableId(row.principalReceivingSourceStateId)
       || !(row.principalSourceVersion === null && row.principalSourceSha256 === null
         || id(row.principalReceivingSourceStateId) && int(row.principalSourceVersion) && digest(row.principalSourceSha256))) throw invalid();

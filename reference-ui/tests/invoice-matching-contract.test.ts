@@ -140,6 +140,27 @@ describe("invoice matching adapter", () => {
     vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branchScope: "all" }) });
     await expect(listPrincipalInvoiceSources("amizo", company, branch, invoice, 3)).rejects.toThrow("confirm");
   });
+  it("keeps an incompatible receipt type blocked without losing compatible source rows", async () => {
+    const branch = "cccccccc-cccc-4ccc-8ccc-cccccccccccc", state = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch }) });
+    const goods = { ...source(), tenantId: "amizo", companyId: company, branchId: branch,
+      sourceSchemaVersion: 3, issuedLineVersion: 2, authorizedQuantity: "1", quantity: "1",
+      principalReceivingSourceStateId: state, principalSourceVersion: 1, principalSourceSha256: "b".repeat(64),
+      canAllocate: false, canPostToFinance: false };
+    const blocked = { ...goods, orderId: doc, orderNumber: "PO-SERVICE", purchaseOrderLineId: receipt,
+      description: "Service needs a compatible matching rule", blocker: "InvoiceMatchingAcceptanceKindChanged" };
+    const mixed = { ...page(), canAllocate: false, items: [goods, blocked], total: 2 };
+    respond(mixed);
+    const result = await listPrincipalInvoiceSources("amizo", company, branch, invoice, 3);
+    expect(result.total).toBe(2);
+    expect(result.items[0].blocker).toBeNull();
+    expect(result.items[1].blocker).toBe("InvoiceMatchingAcceptanceKindChanged");
+    respond({ ...mixed, items: [{ ...blocked, principalReceivingSourceStateId: null,
+      principalSourceVersion: null, principalSourceSha256: null }] });
+    await expect(listPrincipalInvoiceSources("amizo", company, branch, invoice, 3)).rejects.toThrow("confirm");
+    respond({ ...mixed, items: [{ ...blocked, blocker: "IgnorePolicyAndChoose" }] });
+    await expect(listPrincipalInvoiceSources("amizo", company, branch, invoice, 3)).rejects.toThrow("confirm");
+  });
   it("sends one source-3 PUT and recovers only the original keyed fact mapping", async () => {
     const state = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" }) });
