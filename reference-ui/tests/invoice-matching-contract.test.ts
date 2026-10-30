@@ -254,4 +254,27 @@ describe("invoice matching adapter", () => {
     expect(canReleaseInvoiceMatchingPending(command, cause)).toBe(false);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it("releases only the exact noncommitting principal history-lock denial for new mapping or comparison", async () => {
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branch: "77777777-7777-4777-8777-777777777777" }) });
+    const compare = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key, 3);
+    const principalMap = principalInvoiceMappingCommand(invoice, [line], { version: 3,
+      purchaseOrderId: order, issuedVersionId: issued, lines: [{ invoiceLineId: line, purchaseOrderLineId: poLine,
+        principalReceivingSourceStateId: null, principalReceivingFactId: null, invoiceUnitCode: "EACH",
+        documentVersionId: "00000000-0000-0000-0000-000000000000", documentLineReference: "" }] }, key);
+    const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response(
+      JSON.stringify({ code: "PrincipalInvoiceRecordedComparisonRequiresCorrection" }), { status: 409 })));
+    vi.stubGlobal("fetch", fetch);
+    for (const command of [compare, principalMap]) {
+      let cause: unknown;
+      try { await sendInvoiceMatching(company, command); } catch (error) { cause = error; }
+      expect(cause).toMatchObject({ status: 409, code: "PrincipalInvoiceRecordedComparisonRequiresCorrection" });
+      expect((cause as Error).message).toContain("recorded comparison that needs correction");
+      expect(canReleaseInvoiceMatchingPending(command, cause)).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const legacy = invoiceCompareCommand(invoice, [line], { version: 3, mappingVersionId: mapping, reason: null }, key);
+    expect(canReleaseInvoiceMatchingPending(legacy,
+      new InvoiceMatchingError(409, "Recorded comparison", "PrincipalInvoiceRecordedComparisonRequiresCorrection"))).toBe(false);
+    expect(canReleaseInvoiceMatchingPending(compare, new InvoiceMatchingError(409, "Unknown conflict"))).toBe(false);
+  });
 });

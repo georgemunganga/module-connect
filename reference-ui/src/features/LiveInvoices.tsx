@@ -9,8 +9,10 @@ import { invoiceCaptureJournal, type InvoiceCaptureJournalState, type InvoiceCap
   type InvoiceCaptureScope } from "../lib/invoice-capture-command-journal";
 import { InvoiceDocumentPanel } from "./InvoiceDocuments";
 import { InvoiceReviewPanel } from "./InvoiceReview";
+import { documentNewWorkBlocked, principalNewWorkBlocked, type PrincipalHistoryState } from "../lib/invoice-principal-history-lock";
 import { InvoiceUnitReviewOwner } from "./InvoiceUnitReviewOwner";
 import { InvoiceManualUnitReviewOwner } from "./InvoiceManualUnitReview";
+import { getInvoiceMatchingHistory } from "../../../src/platform/procurement-invoice-review-api";
 import { StandardDataTable } from "../components/data/StandardDataTable";
 import { RecordTable } from "../components/data/RecordTable";
 import { ListTools, type ExportScope, type ListColumn, type ListFilterField } from "../components/data/ListTools";
@@ -495,6 +497,7 @@ function InvoiceDetailRecord() {
   const [uncertain, setUncertain] = useState(false);
   const [stale, setStale] = useState(false);
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
+  const [principalHistory, setPrincipalHistory] = useState<PrincipalHistoryState | null>(null);
   const [amountCalculation, setAmountCalculation] = useState<InvoiceAmountCalculation | null>(null);
   const [calculationLoading, setCalculationLoading] = useState(false);
   const [calculationError, setCalculationError] = useState("");
@@ -507,11 +510,25 @@ function InvoiceDetailRecord() {
     const controller = new AbortController();
     setLoading(true); setError("");
     getInvoiceIntake(legalEntityId, id, controller.signal)
-      .then((result) => { if (!controller.signal.aborted) { setInvoice(result); setUncertain(false); setStale(false); setReason(""); } })
+      .then((result) => { if (!controller.signal.aborted) { setInvoice(result); setPrincipalHistory(null); setUncertain(false); setStale(false); setReason(""); } })
       .catch((cause: unknown) => { if (!controller.signal.aborted) { setError(errorText(cause)); setStale(true); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, legalEntityId, refresh]);
+  const comparisonReadAvailable = (capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead || capabilities.principalInvoiceComparison)
+    && permissions.includes("procurement-invoice-read");
+  const invoiceLineKey = invoice?.lines.map(line => line.id).join(":") ?? "";
+  useEffect(() => {
+    if (!invoice || comparisonReadAvailable || !permissions.includes("procurement-invoice-read")
+      || !(capabilities.invoiceManualUnitReviewRead || capabilities.invoiceOriginalUnitReview)) return;
+    const abort = new AbortController(); setPrincipalHistory(null);
+    getInvoiceMatchingHistory(legalEntityId, invoice.id, invoice.version, new Set(invoice.lines.map(line => line.id)), abort.signal)
+      .then(history => { if (!abort.signal.aborted) setPrincipalHistory({ locked: history.principalNewWorkLocked,
+        currentMappingSchema: history.mappings.find(mapping => mapping.id === history.currentMappingVersionId)?.sourceSchemaVersion ?? null }); })
+      .catch(() => { if (!abort.signal.aborted) setPrincipalHistory(null); });
+    return () => abort.abort();
+  }, [legalEntityId, invoice?.id, invoice?.version, invoiceLineKey, comparisonReadAvailable,
+    permissions.includes("procurement-invoice-read"), capabilities.invoiceManualUnitReviewRead, capabilities.invoiceOriginalUnitReview, refresh]);
   useEffect(() => {
     setAmountCalculation(null); setCalculationError("");
     if (!id || !capabilities.invoiceCurrencyCalculationRead || !permissions.includes("procurement-invoice-read")) return;
@@ -542,6 +559,9 @@ function InvoiceDetailRecord() {
   }
   if (loading && !invoice) return <div className="p-5 sm:p-8" role="status">Loading invoice…</div>;
   if (!invoice) return <div className="p-5 sm:p-8" role="alert">{error || "Invoice not found."} <Button variant="secondary" onClick={refreshSavedInvoice}>Try loading again</Button></div>;
+  const manualNewWorkLocked = principalNewWorkBlocked(capabilities.invoiceManualUnitReviewRead, principalHistory?.locked ?? null);
+  const documentNewWorkLocked = documentNewWorkBlocked(principalHistory,
+    capabilities.principalInvoiceComparisonRead || capabilities.principalInvoiceComparison);
   const canEdit = !loading && !busy && !uncertain && !stale && permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Edit");
   const canCancel = permissions.includes("procurement-invoice-capture") && invoiceAllows(invoice, "Cancel");
   const tabs = [
@@ -608,11 +628,12 @@ function InvoiceDetailRecord() {
           </div>
         </div>
         {capabilities.invoiceDocuments && <InvoiceDocumentPanel key={`${legalEntityId}:${invoice.id}`} invoiceId={invoice.id} canUpload={invoice.status === "Received" && permissions.includes("procurement-invoice-capture")} />}
-        {(capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead) && permissions.includes("procurement-invoice-read") && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}`}
+        {comparisonReadAvailable && <InvoiceReviewPanel key={`${invoice.id}:${invoice.version}:${refresh}`}
           company={legalEntityId} invoiceId={invoice.id} invoiceVersion={invoice.version} currency={invoice.currencyCode} lines={invoice.lines}
-          comparisonAvailable={capabilities.invoiceComparison || capabilities.principalInvoiceComparisonRead} refresh={(message) => { setNotice(message ?? ""); setRefresh(value => value + 1); }} />}
-        {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} />}
-        {capabilities.invoiceManualUnitReviewRead && <InvoiceManualUnitReviewOwner key={`${invoice.id}:${invoice.version}:manual`} invoiceId={invoice.id} invoiceVersion={invoice.version} lines={invoice.lines} />}
+          comparisonAvailable={comparisonReadAvailable}
+          onPrincipalHistory={setPrincipalHistory} refresh={(message) => { setNotice(message ?? ""); setPrincipalHistory(null); setRefresh(value => value + 1); }} />}
+        {capabilities.invoiceOriginalUnitReview && <InvoiceUnitReviewOwner key={`${invoice.id}:${invoice.version}`} invoiceId={invoice.id} invoiceVersion={invoice.version} principalNewWorkLocked={documentNewWorkLocked} />}
+        {capabilities.invoiceManualUnitReviewRead && <InvoiceManualUnitReviewOwner key={`${invoice.id}:${invoice.version}:manual`} invoiceId={invoice.id} invoiceVersion={invoice.version} lines={invoice.lines} principalNewWorkLocked={manualNewWorkLocked} />}
         {canCancel && <DetailSection title="Cancel invoice"><div className="space-y-3">
           <p className="text-sm text-muted-foreground">Keep this invoice and its history, and stop further processing.</p>
           <Field label="Cancellation reason"><Textarea required maxLength={1000} disabled={busy || loading || uncertain || stale} value={reason} onChange={event => setReason(event.target.value)} /></Field>

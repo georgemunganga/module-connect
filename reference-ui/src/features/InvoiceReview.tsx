@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Badge, Button, Panel } from "../components/ui";
 import { InvoiceMatchingPanel } from "./InvoiceMatching";
 import { RecordTable } from "../components/data/RecordTable";
+import type { PrincipalHistoryState } from "../lib/invoice-principal-history-lock";
 import { getInvoiceFinanceReadiness, getInvoiceMatchingHistory, InvoiceReviewError,
   type InvoiceFinanceReadiness, type InvoiceMatchingHistory, type InvoiceReviewSummary } from "../../../src/platform/procurement-invoice-review-api";
 
@@ -20,16 +21,17 @@ function Summary({ value, currency, lineLabel }: { value: InvoiceReviewSummary; 
         <td>{line.quantity}</td><td>{currency} {line.netAmount}</td><td>{currency} {line.taxAmount}</td><td>{currency} {line.expectedUnitPrice}</td></tr>)}</tbody></RecordTable></div>}
   </div>;
 }
-export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currency, lines, comparisonAvailable, refresh }: {
+export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currency, lines, comparisonAvailable, refresh, onPrincipalHistory }: {
   company: string; invoiceId: string; invoiceVersion: number; currency: string;
   lines: { id: string; lineNumber: number; description: string }[]; comparisonAvailable: boolean; refresh: (message?: string) => void;
+  onPrincipalHistory: (state: PrincipalHistoryState | null) => void;
 }) {
   const [readiness, setReadiness] = useState<InvoiceFinanceReadiness | null>(null);
   const [history, setHistory] = useState<InvoiceMatchingHistory | null>(null);
   const [errors, setErrors] = useState<string[]>([]), [loading, setLoading] = useState(true);
   const lineKey = lines.map((line) => line.id).join(":");
   useEffect(() => {
-    const controller = new AbortController(); setReadiness(null); setHistory(null); setErrors([]); setLoading(true);
+    const controller = new AbortController(); setReadiness(null); setHistory(null); setErrors([]); setLoading(true); onPrincipalHistory(null);
     const ownLines = new Set(lines.map((line) => line.id));
     const tasks = [getInvoiceFinanceReadiness(company, invoiceId, invoiceVersion, ownLines, controller.signal),
       comparisonAvailable ? getInvoiceMatchingHistory(company, invoiceId, invoiceVersion, ownLines, controller.signal) : Promise.resolve(null)];
@@ -37,16 +39,21 @@ export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currenc
       if (controller.signal.aborted) return;
       const failures = [ready, compared].filter((result): result is PromiseRejectedResult => result.status === "rejected");
       if (failures.some((failure) => failure.reason instanceof InvoiceReviewError && [401, 403, 404, 409].includes(failure.reason.status))) {
-        setReadiness(null); setHistory(null); setErrors([...new Set(failures.map((failure) => errorText(failure.reason)))]);
+        setReadiness(null); setHistory(null); onPrincipalHistory(null); setErrors([...new Set(failures.map((failure) => errorText(failure.reason)))]);
       } else {
         if (ready.status === "fulfilled") setReadiness(ready.value as InvoiceFinanceReadiness);
-        if (compared.status === "fulfilled") setHistory(compared.value as InvoiceMatchingHistory | null);
+        if (compared.status === "fulfilled") {
+          const nextHistory = compared.value as InvoiceMatchingHistory | null;
+          setHistory(nextHistory);
+          onPrincipalHistory(nextHistory ? { locked: nextHistory.principalNewWorkLocked,
+            currentMappingSchema: nextHistory.mappings.find(mapping => mapping.id === nextHistory.currentMappingVersionId)?.sourceSchemaVersion ?? null } : null);
+        }
         setErrors(failures.map((failure) => errorText(failure.reason)));
       }
       setLoading(false);
     });
     return () => controller.abort();
-  }, [company, invoiceId, invoiceVersion, comparisonAvailable, lineKey]);
+  }, [company, invoiceId, invoiceVersion, comparisonAvailable, lineKey, onPrincipalHistory]);
   const lineLabel = (id: string | null) => id ? `Line ${lines.find((line) => line.id === id)?.lineNumber ?? "—"}` : "Invoice";
   return <section className="mt-5 space-y-5" aria-label="Invoice review and Finance">
     <Panel title="Review and Finance" action={<Button variant="secondary" onClick={() => refresh()} disabled={loading}>Refresh invoice</Button>}>
@@ -69,6 +76,7 @@ export function InvoiceReviewPanel({ company, invoiceId, invoiceVersion, currenc
       currentMappingId={history?.currentMappingVersionId ?? null}
       currentMappingOriginalCurrent={history?.mappings.find((mapping) => mapping.id === history.currentMappingVersionId)?.originalDigestCurrent === true}
       currentMappingSchema={history?.mappings.find((mapping) => mapping.id === history.currentMappingVersionId)?.sourceSchemaVersion}
+      principalNewWorkLocked={history?.principalNewWorkLocked ?? true}
       refresh={refresh} />}
     {!loading && history && <Panel title="Recorded review history"><div className="space-y-5 p-5">
       <p className="text-sm text-muted-foreground">Saved results are history. They are not a current invoice approval or permission to pay.</p>

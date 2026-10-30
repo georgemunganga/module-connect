@@ -1,4 +1,5 @@
 import { procurementScopeHeaders } from "../../shared/shell-scope";
+import { principalHistoryLock } from "../../reference-ui/src/lib/invoice-principal-history-lock";
 
 /** Read-only invoice evidence. No approval, comparison execution, handoff or payment command. */
 export type InvoiceReviewLine = { invoiceLineId: string; method: "TwoWay" | "ThreeWay"; quantity: string; netAmount: string; taxAmount: string; expectedUnitPrice: string };
@@ -8,7 +9,7 @@ export type InvoiceFinanceReadiness = { invoiceId: string; invoiceVersion: numbe
     mappingOriginalCurrent: boolean | null; comparisonId: string | null; comparisonInvoiceVersion: number | null; comparisonOriginalCurrent: boolean | null;
     recordedComparison: InvoiceReviewSummary | null; unresolvedExceptionCount: number | null; comparisonCurrentness: "NotRevalidated" };
   blockers: { code: string; message: string }[]; nextSteps: { code: string; message: string }[] };
-export type InvoiceMatchingHistory = { invoiceId: string; version: number; currentMappingVersionId: string | null; original: { netAmount: string; taxAmount: string; grossAmount: string; currencyCode: string;
+export type InvoiceMatchingHistory = { invoiceId: string; version: number; currentMappingVersionId: string | null; principalNewWorkLocked: boolean; original: { netAmount: string; taxAmount: string; grossAmount: string; currencyCode: string;
   lines: { id: string; lineNumber: number; description: string; quantity: string; unitPrice: string; taxAmount: string }[] };
   mappings: { id: string; mappingRevision: number; verificationState: string; originalDigestCurrent: boolean; reviewedAt: string; sourceSchemaVersion: 3 | null }[];
   comparisons: { id: string; outcome: string; matchedAt: string; invoiceVersion: number; hasHeldCapacityClaim: boolean; comparison: InvoiceReviewSummary }[];
@@ -97,6 +98,7 @@ export async function getInvoiceMatchingHistory(company: string, id: string, ver
     || row.dueAt !== null && !text(row.dueAt) || row.resolution !== null && !text(row.resolution)) throw invalid();
     return { id: row.id, invoiceLineId: row.supplierInvoiceLineId, type: row.type, status: row.status, dueAt: row.dueAt, resolution: row.resolution }; });
   return { invoiceId: id, version: body.version, currentMappingVersionId: body.currentMappingVersionId as string | null ?? null,
+    principalNewWorkLocked: principalHistoryLock(body.principalNewWorkLocked),
     original: { netAmount: body.original.netAmount as string, taxAmount: body.original.taxAmount as string,
     grossAmount: body.original.grossAmount as string, currencyCode: body.original.currencyCode, lines: originalLines }, mappings, comparisons, exceptions };
 }
