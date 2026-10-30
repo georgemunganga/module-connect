@@ -513,7 +513,9 @@ function InvoiceEditorRecord({ mode, isContextCurrent }: { mode: "standard" | "r
           </div>}
           <InvoiceBillIdentityFields input={input} onChange={setInput} vendorLocked={!!id} replacement={replacement}
             original={original} vendorSearch={vendorSearch} onVendorSearch={setVendorSearch} vendors={vendors}
-            loadingVendors={loadingVendors} directoryLocked={dirty || saving || uncertain} />
+            loadingVendors={loadingVendors} directoryLocked={dirty || saving || uncertain}
+            purchaseOrderHref={replacement && original?.replacementContext && permissions.includes("procurement-po-read") && capabilities.principalOrderGovernanceRead
+              ? `/purchase-orders/${original.replacementContext.purchaseOrderId}?workflow=principal` : undefined} />
           <section className="rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-4 py-3"><h2 className="text-sm font-medium">Item Table</h2><span className="text-xs text-muted-foreground">Goods and services on this invoice</span></div>
             <div className="relative overflow-x-auto"><RecordTable variant="compact" className="w-full min-w-[760px] text-left">

@@ -236,7 +236,7 @@ const sourceInvoice: InvoiceDetail = { id: source, supplierId: input.correctedIn
   currencyCode: "ZMW", grossAmount: "5.1234", netAmount: "5.1234", taxAmount: "0", status: "Received",
   intakeChannel: "Manual", version: 4, createdAt: "2026-10-30T00:00:00Z", nextStep: "Review original comparison",
   allowedActions: ["Replace"], replacementContext: { sourceInvoiceId: source, sourceVersion: 4,
-    purchaseOrderId: input.correctedInvoice.purchaseOrderId },
+    purchaseOrderId: input.correctedInvoice.purchaseOrderId, purchaseOrderNumber: "PO-2026-014" },
   lines: [{ id: result.linkId, lineNumber: 1, ...input.correctedInvoice.lines[0],
     exactAmounts: { quantity: "1", unitPrice: "5.1234", taxAmount: "0" } }] };
 describe("server-authorized correction context and exact original fields", () => {
@@ -254,6 +254,10 @@ describe("server-authorized correction context and exact original fields", () =>
     { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, sourceVersion: 3 } },
     { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, sourceInvoiceId: successor } },
     { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, purchaseOrderId: zero } },
+    { ...sourceInvoice, replacementContext: { sourceInvoiceId: source, sourceVersion: 4, purchaseOrderId: input.correctedInvoice.purchaseOrderId } },
+    { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, purchaseOrderNumber: "" } },
+    { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, purchaseOrderNumber: " PO-2026-014 " } },
+    { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, purchaseOrderNumber: "PO-" + "1".repeat(80) } },
     { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, approved: true } },
     { ...sourceInvoice, purchaseOrderId: successor },
   ])("does not infer correction permission from an incomplete or changed record: %j", value => {

@@ -21,11 +21,12 @@ const draft: InvoiceIntakeInput = { supplierId: "55555555-5555-4555-8555-5555555
   purchaseOrderId: "66666666-6666-4666-8666-666666666666",
   lines: [{ description: "Original supplies", quantity: "1", unitPrice: "5.1234", taxAmount: "0" }] };
 const original = { id: context.invoice, supplierId: draft.supplierId, supplierName: "Saved vendor",
-  invoiceNumber: "ORIGINAL-01" } as InvoiceDetail;
-const renderFields = (replacement: boolean, vendorLocked = true) => renderToStaticMarkup(createElement(MemoryRouter, {},
+  invoiceNumber: "ORIGINAL-01", replacementContext: { sourceInvoiceId: context.invoice, sourceVersion: 4,
+    purchaseOrderId: draft.purchaseOrderId, purchaseOrderNumber: "PO-2026-014" } } as InvoiceDetail;
+const renderFields = (replacement: boolean, vendorLocked = true, purchaseOrderHref?: string) => renderToStaticMarkup(createElement(MemoryRouter, {},
   createElement(InvoiceBillIdentityFields, { input: draft, onChange: () => undefined, vendorLocked, replacement,
     original: vendorLocked ? original : null, vendorSearch: "", onVendorSearch: () => undefined,
-    vendors: [], loadingVendors: false, directoryLocked: false })));
+    vendors: [], loadingVendors: false, directoryLocked: false, purchaseOrderHref })));
 const inputTag = (html: string, label: string) => html.match(new RegExp(`<input[^>]*aria-label="${label}"[^>]*>`, "i"))?.[0] ?? "";
 afterEach(() => vi.unstubAllGlobals());
 describe("shared Bill identity fields in correction mode", () => {
@@ -38,13 +39,21 @@ describe("shared Bill identity fields in correction mode", () => {
     const number = inputTag(html, "Invoice number");
     expect(number).toContain('value=""'); expect(number).toMatch(/maxlength="80"/i);
     expect(number).not.toContain("ORIGINAL-01"); expect(number).not.toMatch(/readonly/i);
-    expect(inputTag(html, "Original purchase order")).toContain(draft.purchaseOrderId);
+    expect(inputTag(html, "Original purchase order")).toContain("PO-2026-014");
+    expect(inputTag(html, "Original purchase order")).not.toContain(draft.purchaseOrderId);
     expect(inputTag(html, "Original purchase order")).toMatch(/readonly/i);
     // Shared Radix Select populates its selected label during hydration; SSR
     // verifies the semantic disabled trigger, not portal-derived display text.
     const vendor = html.match(/<(?:button|select)[^>]*aria-label="Vendor"[^>]*>/i)?.[0] ?? "";
     expect(vendor).not.toBe(""); expect(vendor).toMatch(/disabled/i);
     expect(html).not.toContain("+ Add a vendor");
+  });
+  it("offers a purchase-order link only when the host supplied its permitted internal route", () => {
+    expect(renderFields(true)).not.toContain("View original purchase order");
+    const href = `/purchase-orders/${draft.purchaseOrderId}?workflow=principal`;
+    const html = renderFields(true, true, href);
+    expect(html).toContain(`href="${href}"`); expect(html).toContain("View original purchase order");
+    expect(inputTag(html, "Original purchase order")).toContain("PO-2026-014");
   });
   it("preserves editable currency and vendor-directory navigation on an ordinary new bill", () => {
     const html = renderFields(false, false);

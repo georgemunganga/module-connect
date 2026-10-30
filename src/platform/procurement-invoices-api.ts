@@ -30,7 +30,7 @@ export type InvoiceDetail = InvoiceSummary & {
   purchaseOrderId?: string | null; dueDate?: string | null;
   netAmount: number | string; taxAmount: number | string; nextStep: string;
   intakeCrudVersion?: number; allowedActions?: string[];
-  replacementContext?: { sourceInvoiceId: string; sourceVersion: number; purchaseOrderId: string };
+  replacementContext?: { sourceInvoiceId: string; sourceVersion: number; purchaseOrderId: string; purchaseOrderNumber: string };
   exactAmounts?: { netAmount: string; taxAmount: string; grossAmount: string };
   lines: (InvoiceLineInput & { id: string; lineNumber: number; exactAmounts?: { quantity: string; unitPrice: string; taxAmount: string } })[];
 };
@@ -181,10 +181,11 @@ export function invoiceAllowsReplacement(invoice: InvoiceDetail): boolean {
   const context = invoice.replacementContext;
   return invoice.status === "Received" && Number.isSafeInteger(invoice.version) && invoice.version > 0
     && Array.isArray(invoice.allowedActions) && invoice.allowedActions.includes("Replace") && invoiceExactLinesAvailable(invoice)
-    && object(context) && exactKeys(context, ["sourceInvoiceId", "sourceVersion", "purchaseOrderId"])
+    && object(context) && exactKeys(context, ["sourceInvoiceId", "sourceVersion", "purchaseOrderId", "purchaseOrderNumber"])
     && nonzeroGuid(invoice.id) && nonzeroGuid(invoice.branchRef) && nonzeroGuid(invoice.supplierId)
     && context.sourceInvoiceId === invoice.id && context.sourceVersion === invoice.version
-    && nonzeroGuid(context.purchaseOrderId)
+    && nonzeroGuid(context.purchaseOrderId) && boundedText(context.purchaseOrderNumber, 80)
+    && context.purchaseOrderNumber === context.purchaseOrderNumber.trim()
     && (!invoice.purchaseOrderId || sameGuid(invoice.purchaseOrderId, context.purchaseOrderId));
 }
 export function invoiceReplacementDraft(invoice: InvoiceDetail): InvoiceIntakeInput {

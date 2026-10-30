@@ -31,7 +31,7 @@ const sourceRecord = { id: source, branchRef: branch, supplierId: vendor, suppli
   createdAt: "2026-10-30T00:00:00Z", nextStep: "Review the original comparison", intakeCrudVersion: 1,
   lines: [{ id: line, lineNumber: 1, description: "Supplies", quantity: "1", unitPrice: "5.1234", taxAmount: "0",
     exactAmounts: { quantity: "1", unitPrice: "5.1234", taxAmount: "0" } }] };
-async function fixture(page: Page, options: { loseFirst?: boolean; rejectFirst?: boolean; denyCorrection?: boolean; delayFirst?: boolean; delayFirstValidation?: boolean } = {}) {
+async function fixture(page: Page, options: { loseFirst?: boolean; rejectFirst?: boolean; denyCorrection?: boolean; delayFirst?: boolean; delayFirstValidation?: boolean; readOrder?: boolean } = {}) {
   const state = { writesEnabled: true, replaced: false, posts: [] as Array<{ key: string; body: Record<string, any>; raw: string }>,
     reads: [] as Array<{ key: string; all: boolean; branch?: string }>, previews: 0, unexpected: [] as string[],
     blockedExternal: [] as string[], releasePost: (() => {}) as () => void };
@@ -69,13 +69,13 @@ async function fixture(page: Page, options: { loseFirst?: boolean; rejectFirst?:
       return json({ message: "Company scope was not sent" }, 403);
     if (path === "/api/procurement/v1/context" && method === "GET") return json({ tenantId: "test", legalEntityId: company,
       principalId: fixturePrincipal, workerId: null, branch: all ? null : { id: location || branch },
-      permissions: ["procurement-access", "procurement-invoice-read", "procurement-invoice-capture", "procurement-vendor-read"],
+      permissions: ["procurement-access", "procurement-invoice-read", "procurement-invoice-capture", "procurement-vendor-read", ...(options.readOrder ? ["procurement-po-read"] : [])],
       company: { id: company, code: "TEST", name: "Test Company", currencyCode: "USD" } });
     if (path === "/api/procurement/v1/meta" && method === "GET") return json({ tenantId: "test", legalEntityId: company, schemaReady: true,
       capabilities: { vendorDraft: true, itemDraft: false, requestDraft: false, approvals: false, sourcing: false, contracts: false,
         orders: false, receiving: false, invoiceValidation: false, financeHandoff: false, supplierPortal: false,
         planningDraft: false, configurationDraft: false, contractDraft: false, sourcingDraft: false,
-        invoiceIntake: state.writesEnabled, invoiceReplacementRead: true,
+        invoiceIntake: state.writesEnabled, invoiceReplacementRead: true, principalOrderGovernanceRead: options.readOrder === true,
         invoiceCurrencyCalculationRead: true, invoiceCurrencyCalculationV2: state.writesEnabled } });
     if (path === "/api/procurement/v1/vendors" && method === "GET") return json({ items: [{ id: vendor,
       number: "VEN-001", displayName: "Office Supplier", legalName: "Office Supplier Ltd", countryCode: "ZM",
@@ -91,7 +91,7 @@ async function fixture(page: Page, options: { loseFirst?: boolean; rejectFirst?:
       if (location && location !== branch) return json({ message: "Source invoice is outside this branch." }, 403);
       const allowed = state.writesEnabled && !state.replaced && !all && !options.denyCorrection;
       return json({ ...sourceRecord, allowedActions: allowed ? ["Replace"] : options.denyCorrection ? ["Edit", "Cancel"] : [],
-        ...(allowed ? { replacementContext: { sourceInvoiceId: source, sourceVersion: 4, purchaseOrderId: order } } : {}) });
+        ...(allowed ? { replacementContext: { sourceInvoiceId: source, sourceVersion: 4, purchaseOrderId: order, purchaseOrderNumber: "PO-2026-014" } } : {}) });
     }
     if (path === `${base}/${source}/replacement` && method === "POST") {
       expect(all).toBe(false); expect(location).toBe(branch);
@@ -151,7 +151,7 @@ async function openCorrection(page: Page) {
   await expect(page.getByRole("combobox", { name: "Vendor", exact: true })).toContainText("Office Supplier");
   await expect(page.getByLabel("Currency", { exact: true })).toHaveValue("ZMW");
   await expect(page.getByLabel("Currency", { exact: true })).not.toBeEditable();
-  await expect(page.getByLabel("Original purchase order", { exact: true })).toHaveValue(order);
+  await expect(page.getByLabel("Original purchase order", { exact: true })).toHaveValue("PO-2026-014");
   await expect(page.getByLabel("Original purchase order", { exact: true })).not.toBeEditable();
   await expect(page.getByLabel("Invoice number", { exact: true })).toHaveValue("");
 }
@@ -170,11 +170,15 @@ async function changeScope(page: Page, to: "all" | "other" | "hq") {
 }
 
 test("mock correction reuses the full Bill editor, retains source currency and shows verified links", async ({ page }, info) => {
-  const state = await fixture(page); await openCorrection(page); await enterCorrection(page);
+  const state = await fixture(page, { readOrder: true }); await openCorrection(page); await enterCorrection(page);
+  await expect(page.getByRole("link", { name: "View original purchase order", exact: true })).toHaveAttribute("href", `/procurement/workspace/purchase-orders/${order}?workflow=principal`);
   await expect(page.getByRole("heading", { name: "Item Table" })).toBeVisible();
   await expect(page.getByLabel("Notes", { exact: true })).toBeDisabled();
   await expect(page.getByLabel("Terms and Conditions", { exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Attach Files", exact: true })).toBeDisabled();
+  await page.evaluate(async () => { await document.fonts.ready; window.scrollTo({ top: 0, behavior: "instant" }); });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.screenshot({ path: info.outputPath("correction-editor-viewport.png") });
   await page.screenshot({ path: info.outputPath("correction-editor-desktop.png"), fullPage: true });
   await page.getByRole("button", { name: "Record corrected bill", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Invoice SUPPLIER-CORRECTED-01", exact: true })).toBeVisible();
