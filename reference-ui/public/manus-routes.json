@@ -53,6 +53,10 @@
       "title": "Payables Inbox"
     },
     {
+      "path": "/bills/:id/replace",
+      "title": "Correct Bill"
+    },
+    {
       "path": "/batch-payments",
       "title": "Batch Payments"
     },

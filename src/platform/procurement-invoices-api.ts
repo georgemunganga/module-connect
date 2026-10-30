@@ -30,6 +30,7 @@ export type InvoiceDetail = InvoiceSummary & {
   purchaseOrderId?: string | null; dueDate?: string | null;
   netAmount: number | string; taxAmount: number | string; nextStep: string;
   intakeCrudVersion?: number; allowedActions?: string[];
+  replacementContext?: { sourceInvoiceId: string; sourceVersion: number; purchaseOrderId: string };
   exactAmounts?: { netAmount: string; taxAmount: string; grossAmount: string };
   lines: (InvoiceLineInput & { id: string; lineNumber: number; exactAmounts?: { quantity: string; unitPrice: string; taxAmount: string } })[];
 };
@@ -123,7 +124,7 @@ export async function listInvoiceIntake(legalEntityId: string, page = 1, signal?
 export async function getInvoiceIntake(legalEntityId: string, id: string, signal?: AbortSignal): Promise<InvoiceDetail> {
   if (!guid.test(id)) throw new InvoiceIntakeError(0, "Invoice reference is invalid.");
   const body = await request(legalEntityId, `/${id}`, { signal });
-  if (!object(body) || body.id !== id || !["Received", "Cancelled"].includes(String(body.status)) || !Array.isArray(body.lines))
+  if (!object(body) || body.id !== id || !["Received", "Cancelled"].includes(String(body.status)) || !Array.isArray(body.lines) || !body.lines.every(object))
     throw new InvoiceIntakeError(0, "The ERP returned invalid invoice details.");
   return body as unknown as InvoiceDetail;
 }
@@ -156,15 +157,39 @@ export function invoiceAllows(invoice: InvoiceDetail, action: "Edit" | "Cancel")
     && Number.isSafeInteger(invoice.version) && invoice.version > 0
     && Array.isArray(invoice.allowedActions) && invoice.allowedActions.includes(action);
 }
-export function invoiceEditInput(invoice: InvoiceDetail): InvoiceIntakeInput {
-  if (!invoiceAllows(invoice, "Edit") || !invoice.lines.length || invoice.lines.some(line => !line.exactAmounts
-    || ![line.exactAmounts.quantity, line.exactAmounts.unitPrice, line.exactAmounts.taxAmount].every(value =>
-      typeof value === "string" && /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(value))))
+function invoiceExactLinesAvailable(invoice: InvoiceDetail): boolean {
+  return Array.isArray(invoice.lines) && invoice.lines.length > 0 && invoice.lines.every(line => object(line)
+    && typeof line.description === "string" && line.description.trim().length > 0 && object(line.exactAmounts)
+    && [line.exactAmounts.quantity, line.exactAmounts.unitPrice, line.exactAmounts.taxAmount].every(value =>
+      typeof value === "string" && /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(value)));
+}
+function invoiceExactInput(invoice: InvoiceDetail): InvoiceIntakeInput {
+  if (!invoiceExactLinesAvailable(invoice))
     throw new InvoiceIntakeError(0, "Exact invoice details are unavailable. Refresh the invoice before editing.");
   return { supplierId: invoice.supplierId, purchaseOrderId: invoice.purchaseOrderId,
     invoiceNumber: invoice.invoiceNumber, invoiceDate: invoice.invoiceDate, dueDate: invoice.dueDate, currencyCode: invoice.currencyCode,
     lines: invoice.lines.map(line => ({ description: line.description, ...line.exactAmounts!,
       taxCodeRef: line.taxCodeRef, costCenterRef: line.costCenterRef })) };
+}
+export function invoiceEditInput(invoice: InvoiceDetail): InvoiceIntakeInput {
+  if (!invoiceAllows(invoice, "Edit")) throw new InvoiceIntakeError(0, "This invoice cannot be edited.");
+  return invoiceExactInput(invoice);
+}
+/** An explicit server action and its exact source CAS context are both required.
+ * A client-side role label or a merely Blocked comparison never creates authority. */
+export function invoiceAllowsReplacement(invoice: InvoiceDetail): boolean {
+  const context = invoice.replacementContext;
+  return invoice.status === "Received" && Number.isSafeInteger(invoice.version) && invoice.version > 0
+    && Array.isArray(invoice.allowedActions) && invoice.allowedActions.includes("Replace") && invoiceExactLinesAvailable(invoice)
+    && object(context) && exactKeys(context, ["sourceInvoiceId", "sourceVersion", "purchaseOrderId"])
+    && nonzeroGuid(invoice.id) && nonzeroGuid(invoice.branchRef) && nonzeroGuid(invoice.supplierId)
+    && context.sourceInvoiceId === invoice.id && context.sourceVersion === invoice.version
+    && nonzeroGuid(context.purchaseOrderId)
+    && (!invoice.purchaseOrderId || sameGuid(invoice.purchaseOrderId, context.purchaseOrderId));
+}
+export function invoiceReplacementDraft(invoice: InvoiceDetail): InvoiceIntakeInput {
+  if (!invoiceAllowsReplacement(invoice)) throw new InvoiceIntakeError(0, "A correction is not available for this invoice. Open its saved details.");
+  return { ...invoiceExactInput(invoice), purchaseOrderId: invoice.replacementContext!.purchaseOrderId, invoiceNumber: "" };
 }
 export async function updateInvoiceIntake(company: string, id: string, version: number, draft: InvoiceIntakeInput, reason: string): Promise<InvoiceDetail> {
   if (!guid.test(id) || !Number.isSafeInteger(version) || version < 1 || !reason.trim() || reason.trim().length > 1000)
@@ -301,13 +326,24 @@ export function readInvoiceReplacementResult(value: unknown, sourceInvoiceId: st
 /** Send the journal's original bytes once. Never reconstruct a body or retry a
  * POST automatically after a lost response; recovery uses the original-key GET. */
 export async function createInvoiceReplacement(company: string, sourceInvoiceId: string,
-  commandKey: string, originalBody: string): Promise<InvoiceReplacementResult> {
+  commandKey: string, originalBody: string, scope?: InvoiceReplacementCommandScope): Promise<InvoiceReplacementResult> {
   if (!nonzeroGuid(sourceInvoiceId) || !nonzeroGuid(commandKey))
     throw new InvoiceIntakeError(422, "Keep a valid source invoice and saved replacement reference.");
   const input = readInvoiceReplacementInput(originalBody);
-  const result = readInvoiceReplacementResult(await request(company, `/${sourceInvoiceId}/replacement`, {
+  if (scope && (!validReplacementCommandScope(scope) || !sameGuid(scope.companyId, company)
+    || !sameGuid(scope.sourceInvoiceId, sourceInvoiceId)))
+    throw new InvoiceIntakeError(422, "The correction context changed. Open the source invoice again.");
+  const commandScope = scope ? normalizeReplacementCommandScope(scope) : undefined;
+  let response: unknown;
+  try { response = await request(company, `/${sourceInvoiceId}/replacement`, {
     method: "POST", body: originalBody, headers: { "Idempotency-Key": commandKey },
-  }, false, 201), sourceInvoiceId, commandKey);
+  }, false, 201); }
+  catch (cause) {
+    if (commandScope && cause instanceof InvoiceIntakeError && cause.status === 422 && cause.code === "validation-failed")
+      replacementValidationRejections.set(cause, { scope: commandScope, commandKey, originalBody });
+    throw cause;
+  }
+  const result = readInvoiceReplacementResult(response, sourceInvoiceId, commandKey);
   if (result.invoiceNumber !== input.correctedInvoice.invoiceNumber.trim())
     throw new InvoiceIntakeError(0, "The ERP returned a different invoice number. Keep the original replacement reference for review.");
   return result;
@@ -337,4 +373,28 @@ export async function getInvoiceReplacementHistory(company: string, invoiceId: s
     || !/^[0-9a-f]{64}$/i.test(value.originalResponseSha256) || value.canPostToFinance !== false)
     throw new InvoiceIntakeError(0, "The ERP returned replacement history that could not be verified. Refresh the original invoice.");
   return value as InvoiceReplacementHistory;
+}
+
+export type InvoiceReplacementCommandScope = { tenantId: string; companyId: string; branchId: string;
+  principalId: string; sourceInvoiceId: string };
+const replacementValidationRejections = new WeakMap<InvoiceIntakeError,
+  { scope: InvoiceReplacementCommandScope; commandKey: string; originalBody: string }>();
+export function validReplacementCommandScope(scope: InvoiceReplacementCommandScope): boolean {
+  return object(scope) && Object.keys(scope).sort().join("|") === "branchId|companyId|principalId|sourceInvoiceId|tenantId"
+    && /^[a-zA-Z0-9._-]{1,128}$/.test(scope.tenantId)
+    && [scope.companyId, scope.branchId, scope.principalId, scope.sourceInvoiceId].every(nonzeroGuid);
+}
+export function normalizeReplacementCommandScope(scope: InvoiceReplacementCommandScope): InvoiceReplacementCommandScope {
+  if (!validReplacementCommandScope(scope)) throw new InvoiceIntakeError(422, "Choose a permitted company, branch and source invoice.");
+  return { tenantId: scope.tenantId, companyId: scope.companyId.toLowerCase(), branchId: scope.branchId.toLowerCase(),
+    principalId: scope.principalId.toLowerCase(), sourceInvoiceId: scope.sourceInvoiceId.toLowerCase() };
+}
+/** Live first-POST witness only. GET errors and lookalike error objects cannot
+ * stamp validation-rejection UX state or release a pending command. */
+export function isInvoiceReplacementValidationRejection(cause: unknown, scope: InvoiceReplacementCommandScope,
+  commandKey: string, originalBody: string): boolean {
+  if (!(cause instanceof InvoiceIntakeError) || !validReplacementCommandScope(scope)) return false;
+  const saved = replacementValidationRejections.get(cause);
+  return !!saved && JSON.stringify(saved.scope) === JSON.stringify(normalizeReplacementCommandScope(scope))
+    && saved.commandKey === commandKey && saved.originalBody === originalBody;
 }

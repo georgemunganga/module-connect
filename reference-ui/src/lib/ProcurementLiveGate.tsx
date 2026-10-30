@@ -1,5 +1,6 @@
 import { RequestApprovalJournalBoundary } from "./RequestApprovalJournal";
 import { requestApprovalsAvailable } from "./request-approval-availability";
+import { replacementHistoryRouteAvailable } from "./invoice-replacement-editor";
 import { manualUnitQueueAllRead } from "./manual-unit-review-access";
 import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
@@ -70,13 +71,16 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const configurationSettingsPath = /^\/settings(?:\/|$)/.test(location.pathname);
   const newRecord = /\/new\/?$/.test(location.pathname);
   const editRecord = /\/[^/]+\/edit\/?$/.test(location.pathname);
+  const replacementRecord = /^\/bills\/[^/]+\/replace\/?$/.test(location.pathname);
   // Server admission for All is limited to these reviewed collection reads.
   const requestList = /^\/(?:requests|procurement-requests)\/?$/.test(location.pathname);
   const planList = /^\/plans\/?$/.test(location.pathname);
   const contractList = /^\/contracts\/?$/.test(location.pathname);
   const manualApprovalList = manualUnitQueueAllRead(location.pathname,
     state.readiness?.capabilities.invoiceManualUnitReviewRead === true, state.readiness?.permissions ?? []);
-  const allReadSupported = vendorPath || itemPath || paymentPath
+  const replacementAllRead = replacementHistoryRouteAvailable(location.pathname, state.readiness?.capabilities.invoiceReplacementRead === true)
+    && state.readiness?.permissions.includes("procurement-invoice-read") === true;
+  const allReadSupported = replacementAllRead || vendorPath || itemPath || paymentPath
     || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || manualApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
@@ -89,7 +93,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || requestPath && !permits("procurement-request-read", "procurement-request-create", "procurement-request-edit")
     || contractPath && !permits("procurement-contract-read", "procurement-contract-create", "procurement-contract-edit")
     || planPath && !permits("procurement-plan-read", "procurement-plan-create", "procurement-plan-edit")
-    || invoicePath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
+    || invoicePath && !(replacementRecord ? permission.includes("procurement-invoice-read")
+      : newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
     || paymentPath && !(newRecord ? permission.includes("procurement-payment-create")
       : editRecord ? permission.includes("procurement-payment-edit") : permission.includes("procurement-payment-read"))
     || creditPath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"));
@@ -120,7 +125,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
     || (planPath && state.readiness.capabilities.planningDraft)
-    || (invoicePath && state.readiness.capabilities.invoiceIntake)
+    || (invoicePath && (state.readiness.capabilities.invoiceIntake
+      || replacementHistoryRouteAvailable(location.pathname, state.readiness.capabilities.invoiceReplacementRead)))
     || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders

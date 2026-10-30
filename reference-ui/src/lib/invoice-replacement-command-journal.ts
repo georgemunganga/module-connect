@@ -1,34 +1,26 @@
-import { readInvoiceReplacementInput, readInvoiceReplacementResult,
-  type InvoiceReplacementResult } from "../../../src/platform/procurement-invoices-api";
-import type { InvoiceCaptureScope } from "./invoice-capture-command-journal";
+import { readInvoiceReplacementInput, readInvoiceReplacementResult, isInvoiceReplacementValidationRejection,
+  normalizeReplacementCommandScope, type InvoiceReplacementCommandScope, type InvoiceReplacementResult } from "../../../src/platform/procurement-invoices-api";
 
 /** Exact correction command recovery only; never credentials, auth headers or
  * policy authority. Company, branch, principal and original invoice stay bound.
  * Backend uniqueness/transactions govern concurrent browsers, not this journal.
  *
- * M6E integration hold: before exposing a correction form, provide explicit
- * resolution for a definite original-POST validation rejection (for example422),
- * tied to the current authenticated scope and the exact original key/body. It
- * must be separate from uncertain original-key recovery:403/404, transport and
- * proxy outcomes cannot release a pending command. Do not add a generic reset
- * or silently reuse the shared HTTP-rejection list as permission to discard. */
+ * A known firstPOST validation-failed422 has a separate explicit review path.
+ * 403/404, unknown409, transport and proxy outcomes cannot release a pending
+ * command. No generic reset or shared rejection-list discard is supported. */
 const prefix = "erp.procurement.invoice-replacement.v1:";
-const limit = 256_000;
+const limit = 520_000; // One bounded original command plus an exact local422 marker.
+const pendingLimit = 256_000;
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const tenant = /^[a-zA-Z0-9._-]{1,128}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const nonzeroGuid = (value: unknown): value is string => typeof value === "string" && guid.test(value)
   && value.toLowerCase() !== "00000000-0000-0000-0000-000000000000";
-export type InvoiceReplacementScope = InvoiceCaptureScope & { sourceInvoiceId: string };
+export type InvoiceReplacementScope = InvoiceReplacementCommandScope;
 export type InvoiceReplacementPending = { operation: "InvoiceReplaceV2"; key: string; body: string };
-export type InvoiceReplacementJournalState = { pending: InvoiceReplacementPending | null; blocked: boolean };
+export type InvoiceReplacementJournalState = { pending: InvoiceReplacementPending | null; blocked: boolean; validationRejected?: true };
 function normalized(scope: InvoiceReplacementScope): InvoiceReplacementScope {
-  if (Object.keys(scope).sort().join("|") !== "branchId|companyId|principalId|sourceInvoiceId|tenantId"
-    || !tenant.test(scope.tenantId) || ![scope.companyId, scope.branchId, scope.principalId, scope.sourceInvoiceId].every(nonzeroGuid))
-    throw new Error("Choose a permitted company, branch and source invoice before preparing a correction.");
-  return { tenantId: scope.tenantId, companyId: scope.companyId.toLowerCase(), branchId: scope.branchId.toLowerCase(),
-    principalId: scope.principalId.toLowerCase(), sourceInvoiceId: scope.sourceInvoiceId.toLowerCase() };
+  return normalizeReplacementCommandScope(scope);
 }
 function slot(scope: InvoiceReplacementScope): string {
   const s = normalized(scope);
@@ -43,7 +35,14 @@ function storage(provided?: Storage): Storage | null {
   try { return provided ?? (typeof window === "undefined" ? null : window.localStorage); }
   catch { return null; }
 }
-const bounded = (raw: string): boolean => raw.length <= limit && new TextEncoder().encode(raw).length <= limit;
+const bounded = (raw: string, max = limit): boolean => raw.length <= max && new TextEncoder().encode(raw).length <= max;
+function validRejection(note: unknown, scope: InvoiceReplacementScope, command: InvoiceReplacementPending): boolean {
+  return object(note) && Object.keys(note).sort().join("|") === "body|code|key|kind|scope|status"
+    && note.kind === "OriginalPostValidationRejected" && note.status === 422 && note.code === "validation-failed"
+    && note.key === command.key && note.body === command.body && object(note.scope)
+    && Object.keys(note.scope).sort().join("|") === "branchId|companyId|principalId|sourceInvoiceId|tenantId"
+    && Object.keys(scope).every(key => (note.scope as Record<string, unknown>)[key] === scope[key as keyof InvoiceReplacementScope]);
+}
 export const invoiceReplacementJournal = {
   read(scope: InvoiceReplacementScope, provided?: Storage): InvoiceReplacementJournalState {
     let key: string; let s: InvoiceReplacementScope;
@@ -54,12 +53,12 @@ export const invoiceReplacementJournal = {
       if (raw === null) return { pending: null, blocked: false };
       if (!bounded(raw)) return { pending: null, blocked: true };
       const parsed: unknown = JSON.parse(raw);
-      if (!object(parsed) || Object.keys(parsed).sort().join("|") !== "command|scope|version"
+      if (!object(parsed) || !["command|scope|version", "command|rejection|scope|version"].includes(Object.keys(parsed).sort().join("|"))
         || parsed.version !== 1 || !object(parsed.scope)
         || Object.keys(parsed.scope).sort().join("|") !== "branchId|companyId|principalId|sourceInvoiceId|tenantId"
         || Object.keys(s).some(field => (parsed.scope as Record<string, unknown>)[field] !== s[field as keyof InvoiceReplacementScope])
-        || !valid(parsed.command)) return { pending: null, blocked: true };
-      return { pending: parsed.command, blocked: true };
+        || !valid(parsed.command) || parsed.rejection !== undefined && !validRejection(parsed.rejection, s, parsed.command)) return { pending: null, blocked: true };
+      return { pending: parsed.command, blocked: true, ...(parsed.rejection ? { validationRejected: true as const } : {}) };
     } catch { return { pending: null, blocked: true }; }
   },
   claim(scope: InvoiceReplacementScope, command: InvoiceReplacementPending, provided?: Storage): boolean {
@@ -68,12 +67,41 @@ export const invoiceReplacementJournal = {
     let key: string; let raw: string;
     try { key = slot(scope); raw = JSON.stringify({ version: 1, scope: normalized(scope), command }); }
     catch { return false; }
-    if (!bounded(raw)) return false;
+    if (!bounded(raw, pendingLimit)) return false;
     try { store.setItem(key, raw); return store.getItem(key) === raw
       && this.read(scope, store).pending?.key === command.key; }
     catch { return false; }
   },
-  /** The only release path needs the authenticated original201 receipt. A404,
+  /** This is reported local UX history, NOT authenticated server authority or
+   * proof of no commit after reload. It is stamped only from a live firstPOST
+   * validation-failed422 witness and binds the exact scope/key/body. The server
+   * still validates every later command and enforces source uniqueness. */
+  noteValidationRejected(scope: InvoiceReplacementScope, command: InvoiceReplacementPending,
+    cause: unknown, provided?: Storage): boolean {
+    const store = storage(provided); if (!store || !valid(command)
+      || !isInvoiceReplacementValidationRejection(cause, scope, command.key, command.body)) return false;
+    const saved = this.read(scope, store);
+    if (!saved.pending || saved.pending.key !== command.key || saved.pending.body !== command.body) return false;
+    try {
+      const s = normalized(scope); const raw = JSON.stringify({ version: 1, scope: s, command,
+        rejection: { kind: "OriginalPostValidationRejected", status: 422, code: "validation-failed",
+          scope: s, key: command.key, body: command.body } });
+      if (!bounded(raw)) return false;
+      store.setItem(slot(s), raw); return store.getItem(slot(s)) === raw && this.read(s, store).validationRejected === true;
+    } catch { return false; }
+  },
+  /** Call only after explicit Review entries acknowledgement. A stored local
+   * rejection note is never used to claim backend authority or a successful save. */
+  reviewValidationRejected(scope: InvoiceReplacementScope, command: InvoiceReplacementPending,
+    provided?: Storage, liveCause?: unknown): boolean {
+    const store = storage(provided); if (!store || !valid(command)) return false;
+    const saved = this.read(scope, store);
+    if (!saved.pending || saved.pending.key !== command.key || saved.pending.body !== command.body
+      || !(saved.validationRejected || isInvoiceReplacementValidationRejection(liveCause, scope, command.key, command.body))) return false;
+    try { const key = slot(scope); store.removeItem(key); return store.getItem(key) === null; }
+    catch { return false; }
+  },
+  /** Successful release needs the authenticated original201 receipt. A404,
    * network failure, changed scope or a newly constructed key cannot release it. */
   confirm(scope: InvoiceReplacementScope, command: InvoiceReplacementPending,
     result: InvoiceReplacementResult, provided?: Storage): boolean {

@@ -21,6 +21,13 @@ function fixture(overrides: Record<string, unknown> = {}, flags: Record<string, 
       capabilities: { ...capabilities, ...flags } }));
 }
 describe("Procurement system-user readiness", () => {
+  it.each([undefined, false, true, "true", null])("keeps replacement history optional and independent from current write/calculation capability (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined,
+      fixture({}, { invoiceReplacementRead: flag, invoiceCurrencyCalculationV2: false }));
+    expect(result.capabilities.invoiceReplacementRead).toBe(flag === true);
+    expect(result.capabilities.invoiceCurrencyCalculationV2).toBe(false);
+  });
+
   it.each([undefined, false, true, "true", null])("admits the separate principal order draft only on an exact server true (%s)", async flag => {
     const result = await fetchProcurementReadiness({}, undefined,
       fixture({}, { principalDirectOrderDrafts: flag }));

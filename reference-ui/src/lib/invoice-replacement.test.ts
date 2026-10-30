@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createInvoiceReplacement, getInvoiceReplacementHistory, readInvoiceReplacementInput,
-  recoverInvoiceReplacement, type InvoiceReplacementInput, type InvoiceReplacementResult,
+  recoverInvoiceReplacement, invoiceAllowsReplacement, invoiceReplacementDraft, isInvoiceReplacementValidationRejection,
+  InvoiceIntakeError, getInvoiceIntake, type InvoiceDetail, type InvoiceReplacementInput, type InvoiceReplacementResult,
   type InvoiceReplacementHistory } from "../../../src/platform/procurement-invoices-api";
+import { replacementEditorAvailable, replacementDraftRetainsSource, replacementHistoryRouteAvailable, replacementJournalReadScope } from "./invoice-replacement-editor";
 import { invoiceReplacementJournal, type InvoiceReplacementScope,
   type InvoiceReplacementPending } from "./invoice-replacement-command-journal";
 
@@ -226,5 +228,188 @@ describe("actor/company/branch/source-bound durable replacement journal", () => 
       expect(invoiceReplacementJournal.read(invalid, storage)).toEqual({ pending: null, blocked: true });
       expect(invoiceReplacementJournal.claim(invalid, command, storage)).toBe(false);
     }
+  });
+});
+
+const sourceInvoice: InvoiceDetail = { id: source, supplierId: input.correctedInvoice.supplierId, branchRef: branch,
+  supplierName: "Saved vendor", purchaseOrderId: null, invoiceNumber: "ORIGINAL-01", invoiceDate: "2026-10-30",
+  currencyCode: "ZMW", grossAmount: "5.1234", netAmount: "5.1234", taxAmount: "0", status: "Received",
+  intakeChannel: "Manual", version: 4, createdAt: "2026-10-30T00:00:00Z", nextStep: "Review original comparison",
+  allowedActions: ["Replace"], replacementContext: { sourceInvoiceId: source, sourceVersion: 4,
+    purchaseOrderId: input.correctedInvoice.purchaseOrderId },
+  lines: [{ id: result.linkId, lineNumber: 1, ...input.correctedInvoice.lines[0],
+    exactAmounts: { quantity: "1", unitPrice: "5.1234", taxAmount: "0" } }] };
+describe("server-authorized correction context and exact original fields", () => {
+  it("uses the approved source context PO when the immutable original header has none, with no generated corrected number", () => {
+    expect(invoiceAllowsReplacement(sourceInvoice)).toBe(true);
+    const draft = invoiceReplacementDraft(sourceInvoice);
+    expect(draft).toMatchObject({ supplierId: sourceInvoice.supplierId, currencyCode: "ZMW", invoiceNumber: "",
+      purchaseOrderId: input.correctedInvoice.purchaseOrderId, lines: [{ unitPrice: "5.1234", quantity: "1", taxAmount: "0" }] });
+    expect(sourceInvoice.invoiceNumber).toBe("ORIGINAL-01"); expect(sourceInvoice.status).toBe("Received");
+    expect(replacementDraftRetainsSource(sourceInvoice, draft)).toBe(true);
+  });
+  it.each([
+    { ...sourceInvoice, allowedActions: [] }, { ...sourceInvoice, replacementContext: undefined },
+    { ...sourceInvoice, status: "Cancelled" }, { ...sourceInvoice, branchRef: null },
+    { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, sourceVersion: 3 } },
+    { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, sourceInvoiceId: successor } },
+    { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, purchaseOrderId: zero } },
+    { ...sourceInvoice, replacementContext: { ...sourceInvoice.replacementContext, approved: true } },
+    { ...sourceInvoice, purchaseOrderId: successor },
+  ])("does not infer correction permission from an incomplete or changed record: %j", value => {
+    expect(invoiceAllowsReplacement(value as InvoiceDetail)).toBe(false);
+    expect(() => invoiceReplacementDraft(value as InvoiceDetail)).toThrow();
+  });
+  it("requires exact decimal read aliases instead of converting rounded JavaScript values", () => {
+    const unavailable = { ...sourceInvoice, lines: sourceInvoice.lines.map(line => ({ ...line, exactAmounts: undefined })) };
+    expect(invoiceAllowsReplacement(unavailable)).toBe(false);
+    expect(() => invoiceReplacementDraft(unavailable)).toThrow();
+  });
+  it.each([undefined, null, [], [null], [{}], [{ description: "Goods", exactAmounts: null }]])("gracefully denies malformed source lines before offering correction: %j", lines => {
+    const corrupt = { ...sourceInvoice, lines } as unknown as InvoiceDetail;
+    expect(invoiceAllowsReplacement(corrupt)).toBe(false);
+    expect(() => invoiceReplacementDraft(corrupt)).toThrow();
+  });
+  it("rejects a scoped detail response with null line records instead of rendering an editable fallback", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ ...sourceInvoice, lines: [null] }, 200)));
+    await expect(getInvoiceIntake(company, source)).rejects.toMatchObject({ status: 0 });
+  });
+  it("keeps the action tied to read/capture grants, matching branch and server calculation availability", () => {
+    const permissions = ["procurement-invoice-read", "procurement-invoice-capture"];
+    expect(replacementEditorAvailable(sourceInvoice, branch, permissions, true)).toBe(true);
+    expect(replacementEditorAvailable(sourceInvoice, "", permissions, true)).toBe(false);
+    expect(replacementEditorAvailable(sourceInvoice, successor, permissions, true)).toBe(false);
+    expect(replacementEditorAvailable(sourceInvoice, branch, permissions, false)).toBe(false);
+    for (const partial of [[], [permissions[0]], [permissions[1]]])
+      expect(replacementEditorAvailable(sourceInvoice, branch, partial, true)).toBe(false);
+    expect(replacementDraftRetainsSource(sourceInvoice, { ...invoiceReplacementDraft(sourceInvoice), currencyCode: "USD" })).toBe(false);
+    expect(replacementDraftRetainsSource(sourceInvoice, { ...invoiceReplacementDraft(sourceInvoice), supplierId: successor })).toBe(false);
+    expect(replacementDraftRetainsSource(sourceInvoice, { ...invoiceReplacementDraft(sourceInvoice), purchaseOrderId: successor })).toBe(false);
+  });
+});
+
+describe("explicit review of an original POST validation rejection", () => {
+  async function rejected(status = 422, code = "validation-failed", method: "POST" | "GET" = "POST") {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ code, message: "Review invoice date" }, status)));
+    try {
+      if (method === "POST") await createInvoiceReplacement(company, source, key, command.body, scope);
+      else await recoverInvoiceReplacement(company, source, key);
+    } catch (cause) { return cause; }
+    throw new Error("Expected original rejection");
+  }
+  it("stamps only a known original POST422 and requires explicit review before releasing the exact pending command", async () => {
+    const { storage } = store(); invoiceReplacementJournal.claim(scope, command, storage);
+    const cause = await rejected();
+    expect(isInvoiceReplacementValidationRejection(cause, scope, key, command.body)).toBe(true);
+    expect(invoiceReplacementJournal.noteValidationRejected(scope, command, cause, storage)).toBe(true);
+    expect(invoiceReplacementJournal.read(scope, storage)).toEqual({ pending: command, blocked: true, validationRejected: true });
+    expect(invoiceReplacementJournal.claim(scope, { ...command, key: successor }, storage)).toBe(false);
+    expect(invoiceReplacementJournal.reviewValidationRejected(scope, command, storage)).toBe(true);
+    expect(invoiceReplacementJournal.read(scope, storage)).toEqual({ pending: null, blocked: false });
+  });
+  it("retains a narrowly bound local report across another view without describing it as server authority", async () => {
+    const { storage, values } = store(); invoiceReplacementJournal.claim(scope, command, storage);
+    invoiceReplacementJournal.noteValidationRejected(scope, command, await rejected(), storage);
+    expect(invoiceReplacementJournal.read({ ...scope }, storage).validationRejected).toBe(true);
+    const name = [...values.keys()][0]; const saved = JSON.parse(values.get(name)!);
+    saved.rejection.body = JSON.stringify(input); values.set(name, JSON.stringify(saved));
+    expect(invoiceReplacementJournal.read(scope, storage)).toEqual({ pending: null, blocked: true });
+    expect(invoiceReplacementJournal.reviewValidationRejected(scope, command, storage)).toBe(false);
+  });
+  it.each([[403, "validation-failed"], [404, "validation-failed"], [409, "invoice-calculation-changed"],
+    [422, "another-error"], [503, "validation-failed"]])("never stamps or clears uncertain/unsupported POST%s %s", async (status, code) => {
+    const { storage } = store(); invoiceReplacementJournal.claim(scope, command, storage);
+    const cause = await rejected(Number(status), String(code));
+    expect(invoiceReplacementJournal.noteValidationRejected(scope, command, cause, storage)).toBe(false);
+    expect(invoiceReplacementJournal.reviewValidationRejected(scope, command, storage, cause)).toBe(false);
+    expect(invoiceReplacementJournal.read(scope, storage).pending).toEqual(command);
+  });
+  it("does not accept a GET422 or a fabricated lookalike exception as a first-POST rejection", async () => {
+    const { storage } = store(); invoiceReplacementJournal.claim(scope, command, storage);
+    for (const cause of [await rejected(422, "validation-failed", "GET"), new InvoiceIntakeError(422, "Review fields", "validation-failed")]) {
+      expect(invoiceReplacementJournal.noteValidationRejected(scope, command, cause, storage)).toBe(false);
+      expect(invoiceReplacementJournal.reviewValidationRejected(scope, command, storage, cause)).toBe(false);
+    }
+  });
+  it("binds live rejection to exact actor/company/branch/source/key/body", async () => {
+    const cause = await rejected();
+    for (const other of [{ ...scope, principalId: successor }, { ...scope, companyId: successor },
+      { ...scope, branchId: successor }, { ...scope, sourceInvoiceId: successor }])
+      expect(isInvoiceReplacementValidationRejection(cause, other, key, command.body)).toBe(false);
+    expect(isInvoiceReplacementValidationRejection(cause, scope, successor, command.body)).toBe(false);
+    expect(isInvoiceReplacementValidationRejection(cause, scope, key, JSON.stringify(input))).toBe(false);
+  });
+  it("copies the request scope before awaiting the response", async () => {
+    let deliver!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => new Promise<Response>(resolve => { deliver = resolve; })));
+    const mutable = { ...scope }; const action = createInvoiceReplacement(company, source, key, command.body, mutable).catch(cause => cause);
+    mutable.principalId = successor; deliver(response({ code: "validation-failed" }, 422));
+    const cause = await action;
+    expect(isInvoiceReplacementValidationRejection(cause, scope, key, command.body)).toBe(true);
+    expect(isInvoiceReplacementValidationRejection(cause, mutable, key, command.body)).toBe(false);
+  });
+});
+
+describe("read-only replacement route admission", () => {
+  it("retains only saved detail and original-key recovery routes when new intake is off", () => {
+    for (const path of [`/bills/${source}`, `/bills/${source}/replace`, `/bills/${successor}`]) {
+      expect(replacementHistoryRouteAvailable(path, true)).toBe(true);
+      expect(replacementHistoryRouteAvailable(path, false)).toBe(false);
+    }
+    for (const path of ["/bills", "/bills/new", `/bills/${source}/edit`, "/bills/new/replace", "/payments/new", "/inbox"])
+      expect(replacementHistoryRouteAvailable(path, true)).toBe(false);
+  });
+});
+
+describe("All-branch original-key recovery without new-work authority", () => {
+  it("derives the journal branch only from an authorized source response and keeps header All unchanged", async () => {
+    const { storage } = store(); invoiceReplacementJournal.claim(scope, command, storage);
+    const allWrite = { ...scope, branchId: "" };
+    expect(replacementJournalReadScope(allWrite, true, null)).toEqual(allWrite);
+    expect(invoiceReplacementJournal.read(allWrite, storage).pending).toBeNull();
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ entityId: company, branchScope: "all" }) });
+    const fetcher = vi.fn().mockResolvedValueOnce(response(sourceInvoice, 200)).mockResolvedValueOnce(response(result));
+    vi.stubGlobal("fetch", fetcher);
+    const authorized = await getInvoiceIntake(company, source);
+    const readScope = replacementJournalReadScope(allWrite, true, authorized);
+    expect(readScope.branchId).toBe(branch); expect(allWrite.branchId).toBe("");
+    expect(invoiceReplacementJournal.read(readScope, storage).pending).toEqual(command);
+    expect(replacementEditorAvailable(authorized, allWrite.branchId, ["procurement-invoice-read", "procurement-invoice-capture"], true)).toBe(false);
+    const saved = await recoverInvoiceReplacement(company, source, command.key);
+    expect(invoiceReplacementJournal.confirm(readScope, command, saved, storage)).toBe(true);
+    for (const [, init] of fetcher.mock.calls) {
+      expect(init.method).toBeUndefined(); expect(init.headers.get("X-Shell-Branch-Scope")).toBe("all");
+      expect(init.headers.get("X-Shell-Location")).toBeNull();
+    }
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("never looks up HQ's pending command from another explicit branch or an unverified source", () => {
+    const { storage } = store(); invoiceReplacementJournal.claim(scope, command, storage);
+    const otherWrite = { ...scope, branchId: successor };
+    expect(replacementJournalReadScope(otherWrite, false, sourceInvoice)).toEqual(otherWrite);
+    expect(invoiceReplacementJournal.read(replacementJournalReadScope(otherWrite, false, sourceInvoice), storage).pending).toBeNull();
+    const allWrite = { ...scope, branchId: "" };
+    for (const corrupt of [null, { ...sourceInvoice, id: successor }, { ...sourceInvoice, branchRef: zero }, { ...sourceInvoice, branchRef: null }])
+      expect(replacementJournalReadScope(allWrite, true, corrupt)).toEqual(allWrite);
+    expect(invoiceReplacementJournal.read(scope, storage).pending).toEqual(command);
+  });
+});
+
+describe("late original validation report stays isolated", () => {
+  it("stamps only the original pending command after a context change and requires explicit review there", async () => {
+    const { storage } = store(); const foreign = { ...scope, branchId: successor };
+    const foreignCommand = { ...command, key: source };
+    invoiceReplacementJournal.claim(scope, command, storage); invoiceReplacementJournal.claim(foreign, foreignCommand, storage);
+    let deliver!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => new Promise<Response>(resolve => { deliver = resolve; })));
+    const action = createInvoiceReplacement(company, source, key, command.body, scope).catch(cause => cause);
+    deliver(response({ code: "validation-failed", message: "Review original submission" }, 422));
+    const cause = await action;
+    expect(invoiceReplacementJournal.noteValidationRejected(scope, command, cause, storage)).toBe(true);
+    expect(invoiceReplacementJournal.noteValidationRejected(foreign, foreignCommand, cause, storage)).toBe(false);
+    expect(invoiceReplacementJournal.read(foreign, storage)).toEqual({ pending: foreignCommand, blocked: true });
+    expect(invoiceReplacementJournal.read(scope, storage)).toEqual({ pending: command, blocked: true, validationRejected: true });
+    expect(invoiceReplacementJournal.reviewValidationRejected(scope, command, storage)).toBe(true);
+    expect(invoiceReplacementJournal.read(foreign, storage).pending).toEqual(foreignCommand);
   });
 });
