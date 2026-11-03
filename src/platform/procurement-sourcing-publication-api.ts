@@ -13,7 +13,7 @@ export type PublicationDetail = { id: string; number: string; title: string; met
     estimatedValue: string; allocationState: "Reserved" | "Released" }[];
   publication?: { openingId: string; coreCaseId: string; caseState: string; coreCaseVersion: number;
     policyVersionId: string; policyVersionNumber: number; reviewer: boolean; assignments: PublicationAssignment[] };
-  invitations: { id: string; supplierId: string; status: "ReadyForManualDelivery"; version: number }[] };
+  invitations: { id: string; supplierId: string; status: "ReadyForManualDelivery" | "ManualContactRecorded"; version: number; contactRecorded: boolean }[] };
 export type AssignedReview = { eventId: string; caseId: string; state: "VerifiedAssignedReview" | "Unavailable";
   number?: string; title?: string; assignments?: { id: string; version: number; state: string }[] };
 export type SupplierChoice = { supplierId: string; displayName: string; number: string };
@@ -123,8 +123,11 @@ export async function getPublication(company: string, eventId: string, signal?: 
   });
   const invitations = body.invitations.map(value => {
     if (!object(value) || !id(value.id) || !id(value.supplierId) || !positive(value.version)
-      || value.status !== "ReadyForManualDelivery" || value.contactRecorded !== false) throw invalid();
-    return { id: value.id, supplierId: value.supplierId, status: "ReadyForManualDelivery" as const, version: value.version };
+      || !["ReadyForManualDelivery", "ManualContactRecorded"].includes(String(value.status))) throw invalid();
+    const contactRecorded = value.status === "ManualContactRecorded";
+    if (value.contactRecorded !== contactRecorded || contactRecorded && value.version < 2) throw invalid();
+    return { id: value.id, supplierId: value.supplierId,
+      status: value.status as "ReadyForManualDelivery" | "ManualContactRecorded", version: value.version, contactRecorded };
   });
   return { id: eventId, number: body.number, title: body.title, method: body.method,
     currencyCode: body.currencyCode, status, version: body.version,
