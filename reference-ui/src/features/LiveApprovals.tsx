@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
 import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
+import { PlanReviewQueue } from "./LivePlanReview";
 import { LiveOrderApprovalQueue } from "./LiveOrderApprovalQueue";
 import { LiveGovernedOrderList } from "./LivePrincipalOrderGovernance";
 import { InvoiceUnitReviewQueue } from "./InvoiceUnitReviewTasks";
@@ -34,15 +35,17 @@ export function LiveApprovalQueue() {
     && context.permissions.includes("procurement-po-approve");
   const units = !all && context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
   const manualUnits = context.capabilities.invoiceManualUnitReviewRead && context.permissions.includes("procurement-invoice-unit-review");
-  const available = ([requests && "requests", orders && "orders", governedOrders && "governed", units && "units", manualUnits && "manualUnits"].filter(Boolean) as ("requests" | "orders" | "governed" | "units" | "manualUnits")[]);
-  const [type, setType] = useState<"requests" | "orders" | "governed" | "units" | "manualUnits">(() => available[0] ?? "requests");
+  const plans = context.capabilities.planReviewRead && context.permissions.includes("procurement-plan-review-read");
+  const available = ([requests && "requests", orders && "orders", governedOrders && "governed", units && "units", manualUnits && "manualUnits", plans && "plans"].filter(Boolean) as ("requests" | "orders" | "governed" | "units" | "manualUnits" | "plans")[]);
+  const [type, setType] = useState<"requests" | "orders" | "governed" | "units" | "manualUnits" | "plans">(() => available[0] ?? "requests");
   const selected = available.includes(type) ? type : available[0];
   if (!selected) return <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
-  const queue = selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "governed"
+  const queue = selected === "plans" ? <div className="p-5 sm:p-8"><PageHeader title="Approvals" subtitle="Purchase plans assigned to you." /><PlanReviewQueue /></div> : selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "governed"
     ? <LiveGovernedOrderList task="review" /> : selected === "units" ? <InvoiceUnitReviewQueue />
       : selected === "manualUnits" ? <InvoiceManualUnitReviewQueue /> : <RequestApprovalQueue />;
   if (available.length === 1) return queue;
   return <><div className="flex gap-3 px-5 pt-5 sm:px-8" role="tablist" aria-label="Approval records">
+    {plans && <Button role="tab" aria-selected={selected === "plans"} variant={selected === "plans" ? "primary" : "secondary"} onClick={() => setType("plans")}>Purchase plans</Button>}
     {requests && <Button role="tab" aria-selected={selected === "requests"} variant={selected === "requests" ? "primary" : "secondary"} onClick={() => setType("requests")}>Purchase requests</Button>}
     {orders && <Button role="tab" aria-selected={selected === "orders"} variant={selected === "orders" ? "primary" : "secondary"} onClick={() => setType("orders")}>Purchase orders</Button>}
     {governedOrders && <Button role="tab" aria-selected={selected === "governed"} variant={selected === "governed" ? "primary" : "secondary"} onClick={() => setType("governed")}>Orders from approved requests</Button>}

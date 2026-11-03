@@ -11,3 +11,7 @@ ERP progress log: [docs/collaboration/manus/STATUS.md](https://github.com/george
 ## Frontend delivery: retained payment review, 2026-11-03
 
 [Payment retained-read handoff](reference-ui/docs/PAYMENT_RETAINED_READ_20261103.md) records the frontend integration against merged ERP PR 156 / issue 155, scoped gates, recovery behavior and verification. The authoritative ERP handoff and Root-owned native acceptance/release still apply.
+
+## Frontend source task: purchase plan review, 2026-11-03
+
+[Plan review action map](reference-ui/docs/PLAN_REVIEW_ACTION_MAP_20261103.md) records the existing Plans/Approvals integration for [ERP issue 172](https://github.com/georgemunganga/erp/issues/172) and draft ERP PR 171. Client type/unit checks pass; build, browser and actual Core-cookie acceptance remain pending. Keep this UI undeployed until Root verifies the paired backend migration/native stages. The authoritative ERP handoff remains controlling.

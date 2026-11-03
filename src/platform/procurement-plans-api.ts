@@ -1,10 +1,11 @@
+import { readPlanJson, planAmount } from "../../shared/procurement-plan-json";
 import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 /** Department procurement forecasts. Draft plans never reserve budget or authorize a purchase. */
 export type PlanLineDraft = {
   id?: string | null; catalogItemId?: string | null; description: string;
-  categoryCode?: string | null; unitCode: string; estimatedQuantity: number;
-  estimatedAmount: number; expectedOn?: string | null; fundingSourceRef?: string | null;
+  categoryCode?: string | null; unitCode: string; estimatedQuantity: string;
+  estimatedAmount: string; expectedOn?: string | null; fundingSourceRef?: string | null;
 };
 export type PlanDraft = {
   financialPeriodRef: string; currencyCode: string; fundingSourceRef?: string | null;
@@ -13,10 +14,10 @@ export type PlanDraft = {
 export type PlanSummary = {
   id: string; number: string; financialPeriodRef: string; departmentRef?: string | null;
   currencyCode: string; status: string; revisionNumber: number; version: number;
-  createdAt: string; lineCount: number;
+  createdAt: string; lineCount: number; branchRef?: string | null; allowedActions?: string[];
 };
 export type PlanDetail = Omit<PlanSummary, "lineCount"> & {
-  fundingSourceRef?: string | null; statusReason?: string | null;
+  fundingSourceRef?: string | null; statusReason?: string | null; ownerSubjectId?: string;
   lines: (PlanLineDraft & { id: string; lineNumber: number; status: string; version: number })[];
 };
 export type PlanPage = { items: PlanSummary[]; total: number; page: number; pageSize: number };
@@ -48,7 +49,7 @@ async function call(companyId: string, path: string, init: RequestInit = {}): Pr
           : detail || (response.status === 409 ? "This plan changed. Refresh and compare before saving."
             : "The plan action failed."));
   }
-  try { return await response.json() as unknown; }
+  try { return readPlanJson(await response.text()); }
   catch { throw new PlanApiError(0, "The ERP returned an invalid plan response."); }
 }
 function summary(value: unknown): value is PlanSummary {
@@ -61,8 +62,8 @@ function detail(value: unknown): value is PlanDetail {
   const lines = object(value) ? value.lines : null;
   return summary(value) && Array.isArray(lines)
     && lines.every((line: unknown) => object(line) && guid.test(String(line.id))
-      && typeof line.description === "string" && typeof line.estimatedQuantity === "number"
-      && typeof line.estimatedAmount === "number" && typeof line.status === "string");
+      && typeof line.description === "string" && typeof line.estimatedQuantity === "string"
+      && typeof line.estimatedAmount === "string" && typeof line.status === "string");
 }
 export async function listOwnPlans(companyId: string, page = 1,
   signal?: AbortSignal): Promise<PlanPage> {
@@ -81,14 +82,14 @@ export async function getOwnPlan(companyId: string, id: string,
   return body;
 }
 export async function createOwnPlan(companyId: string, draft: PlanDraft): Promise<PlanDetail> {
-  const body = await call(companyId, "", { method: "POST", body: JSON.stringify(draft) });
+  const body = await call(companyId, "", { method: "POST", body: encodePlanDraft(draft) });
   if (!detail(body)) throw new PlanApiError(0, "The ERP did not confirm the saved plan. Refresh before retrying.");
   return body;
 }
 export async function updateOwnPlan(companyId: string, id: string, version: number,
   draft: PlanDraft): Promise<PlanDetail> {
   if (!guid.test(id)) throw new PlanApiError(0, "The plan reference is invalid.");
-  const body = await call(companyId, `/${id}`, { method: "PUT", body: JSON.stringify({ version, draft }) });
+  const body = await call(companyId, `/${id}`, { method: "PUT", body: `{ "version":${version}, "draft":${encodePlanDraft(draft)} }` });
   if (!detail(body)) throw new PlanApiError(0, "The ERP did not confirm the plan update. Refresh before retrying.");
   return body;
 }
@@ -99,4 +100,19 @@ export async function cancelOwnPlan(companyId: string, id: string, version: numb
   if (!detail(body) || body.status !== "Cancelled")
     throw new PlanApiError(0, "The ERP did not confirm cancellation. Refresh before retrying.");
   return body;
+}
+
+/** Existing decimal JSON-number contract, serialized from validated exact text. */
+export function encodePlanDraft(draft: PlanDraft): string {
+  try {
+  const lines = draft.lines.map(line => {
+    const quantity = planAmount(line.estimatedQuantity, true), amount = planAmount(line.estimatedAmount);
+    const rest = JSON.stringify({ id: line.id ?? null, catalogItemId: line.catalogItemId ?? null,
+      description: line.description, categoryCode: line.categoryCode ?? null, unitCode: line.unitCode,
+      expectedOn: line.expectedOn ?? null, fundingSourceRef: line.fundingSourceRef ?? null });
+    return rest.slice(0, -1) + ',"estimatedQuantity":' + quantity + ',"estimatedAmount":' + amount + '}';
+  });
+  return JSON.stringify({ financialPeriodRef: draft.financialPeriodRef, currencyCode: draft.currencyCode,
+    fundingSourceRef: draft.fundingSourceRef ?? null }).slice(0, -1) + ',"lines":[' + lines.join(',') + ']}';
+  } catch (error) { throw new PlanApiError(422, error instanceof Error ? error.message : 'Review the exact plan amounts.'); }
 }

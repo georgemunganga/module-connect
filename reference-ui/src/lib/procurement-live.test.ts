@@ -21,6 +21,18 @@ function fixture(overrides: Record<string, unknown> = {}, flags: Record<string, 
       capabilities: { ...capabilities, ...flags } }));
 }
 describe("Procurement system-user readiness", () => {
+  it.each([undefined, false, true, "true", 1, null])("keeps plan review capabilities optional and independent from draft CRUD (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { planReviewRead: flag, planReviewWorkflow: flag, planningDraft: true }));
+    expect(result.capabilities.planReviewRead).toBe(flag === true);
+    expect(result.capabilities.planReviewWorkflow).toBe(flag === true);
+    expect(result.capabilities.planningDraft).toBe(true);
+  });
+  it("retains plan review READ when new workflow writes are stopped", async () => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { planReviewRead: true, planReviewWorkflow: false, planningDraft: false }));
+    expect(result.capabilities.planReviewRead).toBe(true);
+    expect(result.capabilities.planReviewWorkflow).toBe(false);
+  });
+
   it.each([undefined, false, true, "true", null])("keeps replacement history optional and independent from current write/calculation capability (%s)", async flag => {
     const result = await fetchProcurementReadiness({}, undefined,
       fixture({}, { invoiceReplacementRead: flag, invoiceCurrencyCalculationV2: false }));
