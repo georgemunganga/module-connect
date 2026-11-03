@@ -190,7 +190,7 @@ test("unconfirmed rfqs create preserves entries and blocks repeat submission", a
   await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeDisabled();
   await expect(page.getByLabel("What are you buying?", { exact: true })).toHaveValue("Unconfirmed quotes");
   await page.getByRole("link", { name: /^Review saved / }).click();
-  await expect(page).toHaveURL(/\/rfqs$/);
+  await expect(page).toHaveURL(/\/rfqs\?source=ad-hoc$/);
   expect(attempts).toBe(1);
 });
 

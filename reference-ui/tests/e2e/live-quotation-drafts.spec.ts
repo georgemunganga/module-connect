@@ -4,7 +4,7 @@ test.setTimeout(60_000);
 const company = "11111111-1111-4111-8111-111111111111", actor = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", branch = "33333333-3333-4333-8333-333333333333", other = "44444444-4444-4444-8444-444444444444";
 const event = "55555555-5555-4555-8555-555555555555", invitation = "66666666-6666-4666-8666-666666666666", line = "77777777-7777-4777-8777-777777777777", bid = "88888888-8888-4888-8888-888888888888", supplier = "99999999-9999-4999-8999-999999999999";
 const path = `/procurement/workspace/rfqs/${event}?source=quotations`;
-type Options = { failDetailOnce?: boolean; failVersionOnce?: boolean; sourceCancelled?: boolean; contacted?: boolean; twoLines?: boolean; seeded?: boolean; readOnly?: boolean; captureOff?: boolean; lost?: boolean; recovery404?: boolean; stale?: boolean; all?: boolean; deny?: boolean; documents?: boolean };
+type Options = { adHocPermissions?: string[]; failDetailOnce?: boolean; failVersionOnce?: boolean; sourceCancelled?: boolean; contacted?: boolean; twoLines?: boolean; seeded?: boolean; readOnly?: boolean; captureOff?: boolean; lost?: boolean; recovery404?: boolean; stale?: boolean; all?: boolean; deny?: boolean; documents?: boolean };
 async function mock(page: Page, options: Options = {}) {
   const calls: { method: string; path: string; body?: any; key?: string }[] = [], receipts = new Map<string, any>();
   let contact = Boolean(options.seeded || options.contacted), exists = Boolean(options.seeded), status = "Draft", version = options.seeded ? 51 : 1;
@@ -24,11 +24,15 @@ async function mock(page: Page, options: Options = {}) {
     if (url.pathname === "/api/hrm/admin/legal-entities") return json({ items: [{ id: company, code: "AMIZO", registeredName: "Amizo Power" }] });
     if (url.pathname === "/api/hrm/admin/locations") return json({ items: [] });
     if (url.pathname === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
-    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: actor, tenantId: "amizo", legalEntityId: company, workerId: null, branch: options.all ? null : { id: req.headers()["x-shell-location"] || branch }, permissions: ["procurement-access", ...(options.deny ? [] : ["procurement-quotation-read", ...(options.readOnly ? [] : ["procurement-sourcing-contact", "procurement-quotation-capture", "procurement-quotation-cancel"])])], company: { id: company, name: "Amizo Power", code: "AMIZO", currencyCode: "ZMW" } });
-    if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities: { vendorDraft: true, itemDraft: true, requestDraft: true, approvals: false, sourcing: false, contracts: false, orders: false, receiving: false, invoiceIntake: false, invoiceValidation: false, financeHandoff: false, supplierPortal: false, planningDraft: true, configurationDraft: true, contractDraft: true, sourcingDraft: false, sourcingSourceDrafts: false, principalSourcingSourceDrafts: false } });
+    if (url.pathname === "/api/procurement/v1/context") return json({ principalId: actor, tenantId: "amizo", legalEntityId: company, workerId: options.adHocPermissions ? actor : null, branch: options.all ? null : { id: req.headers()["x-shell-location"] || branch }, permissions: ["procurement-access", ...(options.adHocPermissions ?? []), ...(options.deny ? [] : ["procurement-quotation-read", ...(options.readOnly ? [] : ["procurement-sourcing-contact", "procurement-quotation-capture", "procurement-quotation-cancel"])])], company: { id: company, name: "Amizo Power", code: "AMIZO", currencyCode: "ZMW" } });
+    if (url.pathname === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true, capabilities: { vendorDraft: true, itemDraft: true, requestDraft: true, approvals: false, sourcing: false, contracts: false, orders: false, receiving: false, invoiceIntake: false, invoiceValidation: false, financeHandoff: false, supplierPortal: false, planningDraft: true, configurationDraft: true, contractDraft: true, sourcingDraft: Boolean(options.adHocPermissions), sourcingSourceDrafts: false, principalSourcingSourceDrafts: false } });
     if (!url.pathname.startsWith("/api/procurement/v1/sourcing")) return json({}, 404);
     calls.push({ method, path: url.pathname, body: method === "POST" ? req.postDataJSON() : undefined, key: req.headers()["idempotency-key"] });
     if (req.headers()["x-shell-location"] === other) return json({}, 404);
+    const adHocId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const adHocRecord = { id: adHocId, number: "RF-ADHOC-1", title: "Ad hoc office request", method: "RFQ", currencyCode: "ZMW", status: "Draft", version: 1, lines: [{ id: line, lineNumber: 1, description: "Ad hoc notebooks", unitCode: "EACH", quantity: 2, status: "Active", version: 1 }] };
+    if (url.pathname === "/api/procurement/v1/sourcing" && method === "GET") return json({ items: [{ ...adHocRecord, lineCount: 1 }], total: 1, page: 1, pageSize: 25 });
+    if (url.pathname === `/api/procurement/v1/sourcing/${adHocId}` && method === "GET") return json(adHocRecord);
     const writable = !options.readOnly && !options.all;
     if (url.pathname.endsWith("/quotation-sources")) return json({ items: [source()], hasMore: false });
     if (url.pathname.includes("/quotation-commands/")) { const receipt = receipts.get(url.pathname.split("/").at(-1)!); return options.recovery404 || !receipt ? json({}, 404) : json(receipt); }
@@ -92,4 +96,29 @@ test("opening the same failed historical version retries the read and clears its
   await page.getByRole("button", { name: "Open version", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Retained version 1", exact: true })).toBeVisible(); await expect(page.getByRole("alert")).toHaveCount(0);
   expect(calls.filter(x => x.path.endsWith(`/versions/1`))).toHaveLength(2); expect(calls.filter(x => x.method === "POST")).toHaveLength(0);
+});
+test("mixed quotation and generic sourcing access keeps ad hoc list, new and edit defaults", async ({ page }) => {
+  const calls = await mock(page, { adHocPermissions: ["procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit"] });
+  await page.goto("/procurement/workspace/rfqs"); await expect(page.getByText("Ad hoc office request", { exact: true })).toBeVisible();
+  expect(calls.some(x => x.path.endsWith("/quotation-sources"))).toBe(false);
+  await page.getByRole("link", { name: "New quote request", exact: true }).first().click(); await expect(page).toHaveURL(/\/rfqs\/new\?source=ad-hoc$/);
+  await expect(page.getByRole("heading", { name: "New quote request", exact: true })).toBeVisible(); await expect(page.getByLabel("What are you buying?", { exact: true })).toHaveValue("");
+  await page.goto("/procurement/workspace/rfqs/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/edit");
+  await expect(page.getByRole("heading", { name: "Edit quote request", exact: true })).toBeVisible(); await expect(page.getByLabel("What are you buying?", { exact: true })).toHaveValue("Ad hoc office request");
+  await page.getByRole("link", { name: "Back to quote requests", exact: true }).click(); await expect(page).toHaveURL(/\/rfqs\/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\?source=ad-hoc$/);
+  await expect(page.getByRole("heading", { name: "Ad hoc office request", exact: true })).toBeVisible(); expect(calls.some(x => x.path.includes("quotation-drafts"))).toBe(false); expect(calls.some(x => x.method !== "GET")).toBe(false);
+});
+test("mixed-role users can switch from explicit quotation work back to ad hoc without governed access", async ({ page }) => {
+  const calls = await mock(page, { adHocPermissions: ["procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit"] });
+  await page.goto("/procurement/workspace/rfqs?source=quotations"); await expect(page.getByText("Office equipment", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "From approved requests", exact: true })).toHaveCount(0);
+  const adHoc = page.getByRole("link", { name: "Ad hoc drafts", exact: true }); await expect(adHoc).toHaveAttribute("href", "/procurement/workspace/rfqs?source=ad-hoc"); await adHoc.click();
+  await expect(page.getByText("Ad hoc office request", { exact: true })).toBeVisible(); await page.getByRole("link", { name: /RF-ADHOC-1/ }).first().click();
+  await expect(page).toHaveURL(/\/rfqs\/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\?source=ad-hoc$/);
+  await page.getByRole("link", { name: "Edit draft", exact: true }).click(); await expect(page).toHaveURL(/\/edit\?source=ad-hoc$/); await expect(page.getByLabel("What are you buying?", { exact: true })).toHaveValue("Ad hoc office request");
+  await page.goto("/procurement/workspace/rfqs?source=ad-hoc"); await page.getByRole("link", { name: "Assigned quotation work", exact: true }).click(); await expect(page).toHaveURL(/source=quotations$/); await expect(page.getByText("Office equipment", { exact: true })).toBeVisible(); expect(calls.some(x => x.method !== "GET")).toBe(false);
+});
+test("quotation read plus generic create keeps the unqualified new editor accessible", async ({ page }) => {
+  const calls = await mock(page, { adHocPermissions: ["procurement-sourcing-create"] }); await page.goto("/procurement/workspace/rfqs/new");
+  await expect(page.getByRole("heading", { name: "New quote request", exact: true })).toBeVisible(); await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeEnabled(); expect(calls.some(x => x.path.includes("quotation"))).toBe(false);
 });
