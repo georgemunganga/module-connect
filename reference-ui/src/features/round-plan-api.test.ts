@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { captureRoundScope, getRoundPlan, getRoundPlanVersion, getRoundPlanHistory, roundCommand, sendRoundPlan, recoverRoundPlan, validateRoundDraft,
+import { captureRoundScope, getRoundPlan, getRoundPlanVersion, getRoundPlanHistory, listRoundPlanSources, searchRoundPeople, roundCommand, sendRoundPlan, recoverRoundPlan, validateRoundDraft,
   type RoundDraft, type RoundIdentity, type RoundLocator } from "../../../src/platform/procurement-round-plan-api";
-import { roundPlanActionAvailable } from "../lib/round-plan-access";
+import { getPublication } from "../../../src/platform/procurement-sourcing-publication-api";
+import { roundPlanActionAvailable, roundPlanRouteSelected } from "../lib/round-plan-access";
 import { roundPlanJournal } from "../lib/round-plan-journal";
 const company = "11111111-1111-4111-8111-111111111111", branch = "22222222-2222-4222-8222-222222222222", principal = "33333333-3333-4333-8333-333333333333";
 const event = "44444444-4444-4444-8444-444444444444", plan = "55555555-5555-4555-8555-555555555555", revision = "66666666-6666-4666-8666-666666666666";
 const logical = "77777777-7777-4777-8777-777777777777", key = "88888888-8888-4888-8888-888888888888", nonce = "99999999-9999-4999-8999-999999999999";
 const empty = (): RoundDraft => ({ requirements: null, proposedPolicyReference: null, disclosureProposal: null, documentRequirements: null, opensAt: null, closesAt: null, technicalReleaseAt: null, commercialReleaseAt: null, criteria: [], participants: [] });
-const record = (enrolled = true) => ({ enrolled, source: { id: event, branchId: branch, number: "RFQ-1", title: "Quoted needs", currencyCode: "ZMW", supplierFacingWorkflowAvailable: false },
+const record = (enrolled = true) => ({ enrolled, allowedActions: enrolled ? ["Revise", "Cancel"] : ["Create"], source: { status: "Draft", version: 7, method: { id: key, revision: 1, code: "RFQ", label: "Request for quotes" }, lines: [{ id: logical, purchaseRequestId: plan, purchaseRequestLineId: revision, description: "Need", unitCode: "each", categoryCode: null, quantity: "1.0000", approvedUnitEstimate: "12.3456", estimatedValue: "12.3456", allocationState: "Reserved" }], id: event, branchId: branch, number: "RFQ-1", title: "Quoted needs", currencyCode: "ZMW", supplierFacingWorkflowAvailable: false },
   plan: enrolled ? { id: plan, version: 3, status: "Draft", makerPrincipalId: principal } : null,
   ...(enrolled ? { revision: { id: revision, version: 3, operation: "Revise", status: "Draft", actorPrincipalId: principal, recordedAt: "2026-11-03T10:00:00Z", reason: null, contentSha256: "a".repeat(64) },
     content: { ...empty(), schemaVersion: 1, companyTimeZoneId: "Africa/Lusaka" }, people: [], contentIsIncompleteProposal: true } : {}), reviewAvailable: false, publicationAvailable: false });
@@ -35,6 +36,12 @@ describe("commercial round incomplete draft contract", () => {
     draft.criteria = fault === "duplicate" ? [row, { ...row, order: 2, code: "OTHER" }] : [row];
     expect(() => roundCommand(event, 7, 3, "Revise", key, draft)).toThrow();
   });
+  it("preserves and compares retained microsecond schedule values without rounding them to milliseconds", () => {
+    const draft = { ...empty(), opensAt: "2026-12-01T09:00:00.123456Z", closesAt: "2026-12-01T09:00:00.123457+00:00", technicalReleaseAt: "2026-12-01T09:00:00.123458Z" };
+    const body = JSON.parse(roundCommand(event, 7, 3, "Revise", key, draft).body);
+    expect(body.draft.opensAt).toBe(draft.opensAt); expect(body.draft.closesAt).toBe(draft.closesAt);
+    expect(() => validateRoundDraft({ ...draft, closesAt: "2026-12-01T09:00:00.123455Z" })).toThrow();
+  });
   it("rejects invalid instants/order and requires a trimmed cancellation reason up to2000", () => {
     const draft = { ...empty(), opensAt: "2026-12-01T10:00:00Z", closesAt: "2026-12-01T09:00:00Z" };
     expect(() => validateRoundDraft(draft)).toThrow();
@@ -49,7 +56,7 @@ describe("retained round scope and history", () => {
     const value = await getRoundPlan(scope(), event); expect(value.enrolled).toBe(false); expect(value.plan).toBeNull(); expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it("reads exact original versions and cursor history, never owner-only M4 detail", async () => {
-    const fetcher = vi.fn(async (url: RequestInfo | URL) => String(url).includes("history") ? json({ items: [{ id: revision, version: 3, operation: "Revise", status: "Draft", actorPrincipalId: principal, recordedAt: "2026-11-03T10:00:00Z", reason: null }], nextVersion: null }) : json(record())); vi.stubGlobal("fetch", fetcher);
+    const fetcher = vi.fn(async (url: RequestInfo | URL) => String(url).includes("history") ? json({ items: [{ id: revision, version: 3, operation: "Revise", status: "Draft", actorPrincipalId: principal, recordedAt: "2026-11-03T10:00:00Z", reason: null }], nextVersion: null }) : json({ ...record(), allowedActions: [] })); vi.stubGlobal("fetch", fetcher);
     const snapshot = await getRoundPlanVersion(scope(), event, 3); expect(snapshot.revision?.id).toBe(revision);
     const history = await getRoundPlanHistory(scope(), event, 2); expect(history.items[0].version).toBe(3);
     expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([`/api/procurement/v1/sourcing/${event}/round-plan/versions/3`, `/api/procurement/v1/sourcing/${event}/round-plan/history?afterVersion=2&limit=25`]);
@@ -62,16 +69,49 @@ describe("retained round scope and history", () => {
   });
   it("keeps Company All retained reads and blocks writes before HTTP", async () => {
     identity.branchId = null; selected = { entityId: company, branchScope: "all" };
-    const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => json(record())); vi.stubGlobal("fetch", fetcher);
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => json({ ...record(), allowedActions: [] })); vi.stubGlobal("fetch", fetcher);
     await getRoundPlan(scope(), event); expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-Shell-Branch-Scope")).toBe("all");
     await expect(sendRoundPlan(scope(), roundCommand(event, 7, null, "Create", key, empty()))).rejects.toThrow("Choose"); expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("loads provisional unenrolled sources and paged Core colleagues through only the scoped round contracts", async () => {
+    const fetcher = vi.fn(async (url: RequestInfo | URL) => String(url).includes("round-plan-sources")
+      ? json({ items: [{ id: event, number: "RFQ-1", title: "Need", currencyCode: "ZMW", branchId: branch, status: "Draft", version: 7, enrollmentCandidate: true, eligibilityIsProvisional: true }], total: 1, page: 1, pageSize: 25 })
+      : json({ items: [{ principalId: principal, displayName: "Current colleague", branchId: branch }], nextCursor: null })); vi.stubGlobal("fetch", fetcher);
+    const sources = await listRoundPlanSources(scope(), 1, "Need"); expect(sources.items[0].eligibilityIsProvisional).toBe(true);
+    const people = await searchRoundPeople(scope(), event, "Current", key); expect(people.items[0].principalId).toBe(principal);
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([`/api/procurement/v1/sourcing/round-plan-sources?page=1&pageSize=25&q=Need`, `/api/procurement/v1/sourcing/${event}/round-plan/people?limit=25&q=Current&after=${key}`]);
+    expect(fetcher.mock.calls.some(([url]) => /configuration|reviewers|worker/.test(String(url)))).toBe(false);
   });
   it("rejects a response when the actor changes while the read is in flight", async () => {
     const captured = scope(); vi.stubGlobal("fetch", vi.fn(async () => { identity = { ...identity, principalId: key }; return json(record()); }));
     await expect(getRoundPlan(captured, event)).rejects.toThrow("account or organisation changed");
   });
 });
+describe("existing M4 compatibility and enrollment barriers", () => {
+  const m4 = () => ({ id: event, number: "RFQ-1", title: "Need", method: "RFQ", currencyCode: "ZMW", status: "Draft", version: 7,
+    originalDraftFingerprint: "a".repeat(64), canPublish: false, financeReservationChanged: false, supplierDeliveryState: "NotStarted", cancellationReason: null,
+    lines: [{ id: logical, purchaseRequestId: plan, purchaseRequestLineId: revision, description: "Need", unitCode: "each", categoryCode: null, quantity: "1.0000", approvedUnitEstimate: "12.3456", estimatedValue: "12.3456", allocationState: "Reserved" }] });
+  it("keeps older M4 DTOs usable without new round metadata or automatic enrollment", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json(m4()))); expect((await getPublication(company, event)).roundPlan).toBeUndefined();
+  });
+  it("preserves explicit unenrolled, active-plan and cancelled-plan barrier hints independently of Round READ", async () => {
+    for (const roundPlan of [{ enrolled: false, status: null, publicationBlocked: false, sourceCancellationBlocked: false },
+      { enrolled: true, status: "Draft", publicationBlocked: true, sourceCancellationBlocked: true },
+      { enrolled: true, status: "Cancelled", publicationBlocked: true, sourceCancellationBlocked: false }]) {
+      vi.stubGlobal("fetch", vi.fn(async () => json({ ...m4(), roundPlan })));
+      expect((await getPublication(company, event)).roundPlan).toEqual(roundPlan);
+    }
+  });
+});
 describe("authoritative action admission", () => {
+  it("limits round-only defaults and All admission to the same explicit route without overriding mixed-role RFQs", () => {
+    const access = { capabilities: { roundPlanRead: true, roundPlanRecord: false }, permissions: ["procurement-round-plan-read"] };
+    expect(roundPlanRouteSelected(null, access)).toBe(true);
+    expect(roundPlanRouteSelected("principal-approved", access)).toBe(false);
+    expect(roundPlanRouteSelected("quotations", access)).toBe(false);
+    expect(roundPlanRouteSelected(null, { ...access, permissions: [...access.permissions, "procurement-sourcing-read"] })).toBe(false);
+    expect(roundPlanRouteSelected("round-plan", { ...access, permissions: [...access.permissions, "procurement-sourcing-read"] })).toBe(true);
+  });
   it("requires READ, technical Record, named action grant, hint and selected current scope independently", () => {
     const captured = scope(), access = { capabilities: { roundPlanRead: true, roundPlanRecord: true }, permissions: ["procurement-round-plan-read", "procurement-round-plan-cancel"] };
     expect(roundPlanActionAvailable(access, captured, ["Cancel"], "Cancel")).toBe(true);

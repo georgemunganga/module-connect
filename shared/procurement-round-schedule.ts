@@ -25,3 +25,8 @@ export function roundScheduleForCommand<T extends Schedule>(original: T, edits: 
   return { ...original, ...schedule };
 }
 export function roundBrowserTimeZone(): string { return Intl.DateTimeFormat().resolvedOptions().timeZone || "your browser's local time"; }
+/** UTC ISO values are already validated; compare retained microseconds without millisecond rounding. */
+export function compareRoundInstants(left: string, right: string): number {
+  const key = (value: string) => value.slice(0, 19) + "." + (/\.(\d{1,6})(?:Z|\+00:00)$/.exec(value)?.[1] ?? "").padEnd(6, "0");
+  const a = key(left), b = key(right); return a === b ? 0 : a < b ? -1 : 1;
+}

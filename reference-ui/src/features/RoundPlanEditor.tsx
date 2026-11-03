@@ -5,7 +5,7 @@ import { RoundPlanDraftFields, emptyRoundDraft } from "./RoundPlanDraftFields";
 import { draftFromRound } from "./RoundPlanEvidence";
 import { roundCommand, sendRoundPlan, recoverRoundPlan, RoundPlanError, type RoundDraft, type RoundRecord, type RoundScope, type RoundReceipt } from "../../../src/platform/procurement-round-plan-api";
 import { roundPlanJournal } from "../lib/round-plan-journal";
-export type RoundPeopleProvider = (search: string, offset: number, signal: AbortSignal) => Promise<{ items: { principalId: string; displayName: string }[]; nextOffset: number | null }>;
+export type RoundPeopleProvider = (search: string, after: string | null, signal: AbortSignal) => Promise<{ items: { principalId: string; displayName: string }[]; nextCursor: string | null }>;
 const explain = (e: unknown) => e instanceof Error ? e.message : "The evaluation plan is unavailable.";
 const trimmed = (text: string | null) => text?.trim() || null;
 function cleanDraft(draft: RoundDraft): RoundDraft {
@@ -35,19 +35,20 @@ export function RoundPlanEditor({ scope, record, eventVersion, operation, people
   const [draft, setDraft] = useState<RoundDraft>(() => operation === "Create" ? emptyRoundDraft() : draftFromRound(record));
   const [scheduleEdits, setScheduleEdits] = useState<RoundScheduleEdits>({});
   const [reason, setReason] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const [search, setSearch] = useState(""), [searchBusy, setSearchBusy] = useState(false), [searchError, setSearchError] = useState(""), [offset, setOffset] = useState(0);
-  const [people, setPeople] = useState<{ principalId: string; displayName: string }[]>([]), [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [search, setSearch] = useState(""), [searchBusy, setSearchBusy] = useState(false), [searchError, setSearchError] = useState(""), [cursor, setCursor] = useState<string | null>(null);
+  const [participantNames, setParticipantNames] = useState(() => (record.people ?? []).map(person => ({ principalId: person.id, displayName: person.displayName })));
+  const [people, setPeople] = useState<{ principalId: string; displayName: string }[]>([]), [nextCursor, setNextCursor] = useState<string | null>(null);
   const journal = roundPlanJournal(scope, record.source.id);
   useEffect(() => {
-    const controller = new AbortController(); setSearchError(""); setSearchBusy(false); setNextOffset(null);
+    const controller = new AbortController(); setSearchError(""); setSearchBusy(false); setNextCursor(null);
     if (!canAct() || operation === "Cancel" || search.trim().length < 2) { setPeople([]); return; }
     const timer = window.setTimeout(() => {
       setSearchBusy(true);
-      peopleProvider(search.trim(), offset, controller.signal).then(page => { if (!controller.signal.aborted && scope.current()) { setPeople(page.items); setNextOffset(page.nextOffset); } })
+      peopleProvider(search.trim(), cursor, controller.signal).then(page => { if (!controller.signal.aborted && scope.current()) { setPeople(page.items); setNextCursor(page.nextCursor); } })
         .catch(e => { if (!controller.signal.aborted && scope.current()) setSearchError(explain(e)); }).finally(() => { if (!controller.signal.aborted && scope.current()) setSearchBusy(false); });
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [search, offset, operation]);
+  }, [search, cursor, operation]);
   const save = async (event: FormEvent) => {
     event.preventDefault(); if (busy || journal.state().blocked || !scope.current() || !canAct()) return;
     let command;
@@ -60,12 +61,16 @@ export function RoundPlanEditor({ scope, record, eventVersion, operation, people
     catch (e) { if (scope.current()) { if (e instanceof RoundPlanError) journal.discardRejectedValidation(locator, e.status); setError(explain(e)); } }
     finally { if (scope.current()) setBusy(false); }
   };
-  const knownPeople = [...people, ...(record.people ?? []).filter(p => !people.some(person => person.principalId === p.id)).map(p => ({ principalId: p.id, displayName: p.displayName }))];
+  const changeDraft = (next: RoundDraft) => {
+    const names = new Map([...participantNames, ...people].map(person => [person.principalId, person]));
+    setParticipantNames([...names.values()].filter(person => next.participants.some(row => row.principalId === person.principalId)));
+    setDraft(next);
+  };
   return <Modal title={operation === "Create" ? "Set up an evaluation plan" : operation === "Cancel" ? "Cancel evaluation plan" : "Revise evaluation plan"} onClose={() => { if (!busy) onClose(); }}>
     <form onSubmit={event => void save(event)} className="space-y-5">
       {error && <p role="alert">{error}</p>}<RoundPlanRecovery scope={scope} eventId={record.source.id} onRecovered={onSaved} />
       {operation === "Cancel" ? <><p className="text-sm">This retains the plan and its saved versions. It does not cancel the RFQ or release its reserved quantities. Use the existing RFQ cancellation after cancelling this plan if the source is no longer needed.</p><Field label="Plan cancellation reason"><Textarea required maxLength={2000} disabled={busy} value={reason} onChange={e => setReason(e.target.value)} /></Field></>
-        : <><RoundPlanDraftFields scheduleEdits={scheduleEdits} onScheduleChange={(field, value) => setScheduleEdits(current => ({ ...current, [field]: value }))} draft={draft} onChange={setDraft} disabled={busy || journal.state().blocked} people={knownPeople} search={search} onSearch={text => { setSearch(text); setOffset(0); setPeople([]); }} searchBusy={searchBusy} searchError={searchError} hasMore={nextOffset !== null} onMore={() => { if (nextOffset !== null) setOffset(nextOffset); }} />
+        : <><RoundPlanDraftFields scheduleEdits={scheduleEdits} onScheduleChange={(field, value) => setScheduleEdits(current => ({ ...current, [field]: value }))} draft={draft} onChange={changeDraft} disabled={busy || journal.state().blocked} people={people} participantNames={participantNames} search={search} onSearch={text => { setSearch(text); setCursor(null); setPeople([]); }} searchBusy={searchBusy} searchError={searchError} hasMore={nextCursor !== null} onMore={() => { if (nextCursor !== null) setCursor(nextCursor); }} />
           {operation === "Create" && <p role="status" className="text-sm">Saving explicitly enrolls this RFQ in evaluation planning. Its existing review and publication actions will be unavailable until the next controlled workflow is connected.</p>}</>}
       <div className="flex flex-wrap gap-3"><Button type="submit" variant={operation === "Cancel" ? "danger" : "primary"} disabled={busy || journal.state().blocked || !canAct() || operation === "Cancel" && (!reason.trim() || reason.trim().length > 2000)}>{busy ? "Saving…" : operation === "Cancel" ? "Cancel evaluation plan" : "Save proposed plan"}</Button><Button variant="secondary" disabled={busy} onClick={onClose}>Back to RFQ</Button></div>
     </form>

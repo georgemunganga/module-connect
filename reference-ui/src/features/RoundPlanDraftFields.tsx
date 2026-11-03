@@ -7,8 +7,9 @@ export const emptyRoundDraft = (): RoundDraft => ({ requirements: null, proposed
   opensAt: null, closesAt: null, technicalReleaseAt: null, commercialReleaseAt: null, criteria: [], participants: [] });
 const optional = (text: string) => text || null;
 export const roundDutyLabel = (duty: string) => ({ Planner: "Planner", Reviewer: "Plan reviewer", OpeningOfficer: "Opening officer", TechnicalEvaluator: "Technical evaluator", CommercialEvaluator: "Commercial evaluator", ConflictReviewer: "Conflict reviewer" }[duty] ?? duty);
-export function RoundPlanDraftFields({ draft, onChange, disabled, people, search, onSearch, searchBusy, searchError, hasMore, onMore, scheduleEdits, onScheduleChange }: {
+export function RoundPlanDraftFields({ draft, onChange, disabled, people, participantNames, search, onSearch, searchBusy, searchError, hasMore, onMore, scheduleEdits, onScheduleChange }: {
   draft: RoundDraft; onChange: (draft: RoundDraft) => void; disabled: boolean;
+  participantNames: { principalId: string; displayName: string }[];
   people: { principalId: string; displayName: string }[]; search: string; onSearch: (text: string) => void;
   scheduleEdits: RoundScheduleEdits; onScheduleChange: (field: RoundScheduleField, value: string) => void;
   searchBusy: boolean; searchError: string; hasMore: boolean; onMore: () => void;
@@ -43,7 +44,7 @@ export function RoundPlanDraftFields({ draft, onChange, disabled, people, search
       {searchBusy && <p role="status">Finding current colleagues…</p>}{searchError && <p role="alert">{searchError}</p>}
       {!!people.length && <div className="overflow-x-auto"><RecordTable><thead><tr><th>Colleague</th><th>Action</th></tr></thead><tbody>{people.map(p => <tr key={p.principalId}><td>{p.displayName}</td><td><Button variant="secondary" disabled={disabled || draft.participants.length >= 100 || draft.participants.some(row => row.principalId === p.principalId && row.duty === "Planner")} onClick={() => field("participants", [...draft.participants, { logicalId: crypto.randomUUID(), order: draft.participants.length + 1, principalId: p.principalId, duty: "Planner", conflictNote: null }])}>Add colleague</Button></td></tr>)}</tbody></RecordTable></div>}
       {hasMore && <Button variant="secondary" disabled={disabled || searchBusy} onClick={onMore}>More colleagues</Button>}
-      {draft.participants.map((p, index) => <div key={p.logicalId} className="space-y-3 rounded-lg border border-border p-4"><p className="text-sm font-medium">{people.find(person => person.principalId === p.principalId)?.displayName ?? p.principalId}</p>
+      {draft.participants.map((p, index) => <div key={p.logicalId} className="space-y-3 rounded-lg border border-border p-4"><p className="text-sm font-medium">{participantNames.find(person => person.principalId === p.principalId)?.displayName ?? p.principalId}</p>
         <Field label={`Colleague ${index + 1} duty`}><Select disabled={disabled} value={p.duty} onChange={e => participant(p.logicalId, { duty: e.target.value as RoundParticipant["duty"] })}>{["Planner", "Reviewer", "OpeningOfficer", "TechnicalEvaluator", "CommercialEvaluator", "ConflictReviewer"].map(duty => <option key={duty} value={duty}>{roundDutyLabel(duty)}</option>)}</Select></Field>
         <Field label="Declared conflict note"><Textarea disabled={disabled} maxLength={2000} value={p.conflictNote ?? ""} onChange={e => participant(p.logicalId, { conflictNote: optional(e.target.value) })} /></Field>
         <Button variant="ghost" disabled={disabled} onClick={() => field("participants", draft.participants.filter(row => row.logicalId !== p.logicalId).map((row, at) => ({ ...row, order: at + 1 })))}>Remove colleague {index + 1}</Button>

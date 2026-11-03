@@ -1,3 +1,4 @@
+import { useRfqRoundPlan } from "./RoundPlanRfq";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, Panel, Textarea } from "../components/ui";
@@ -81,8 +82,10 @@ function PublicationRecord({ id, company, permissions, newWorkEnabled, slot, can
       .catch(cause => { if (!controller.signal.aborted) setLoadError(explain(cause)); });
     return () => controller.abort();
   }, [company, id, revision]);
-  const canSubmit = newWorkEnabled && permissions.includes("procurement-sourcing-submit");
-  const canReview = newWorkEnabled && permissions.includes("procurement-sourcing-publish");
+  const round = useRfqRoundPlan(id, () => setRevision(value => value + 1));
+  const enrolled = record?.roundPlan?.enrolled === true;
+  const canSubmit = !enrolled && newWorkEnabled && permissions.includes("procurement-sourcing-submit");
+  const canReview = !enrolled && newWorkEnabled && permissions.includes("procurement-sourcing-publish");
   const blocked = busy || pending !== null || cancelPending !== null || Boolean(initial.error || cancelInitial.error);
   function store(value: PublicationCommand | null) { writePublicationRecovery(slot, value); if (live.current) setPending(value); }
   async function perform(reference: PublicationCommand, execute: () => Promise<unknown>) {
@@ -114,7 +117,7 @@ function PublicationRecord({ id, company, permissions, newWorkEnabled, slot, can
     if (live.current) setCancelPending(reference);
   }
   async function cancelDraft() {
-    if (!record || record.status !== "Draft" || blocked || running.current) return;
+    if (!record || record.status !== "Draft" || record.roundPlan?.sourceCancellationBlocked || blocked || running.current) return;
     let command: RfqCommand;
     try { command = cancelRfqCommand({ ...record, status: "Draft", cancellationReason: record.cancellationReason ?? null },
       cancelReason, crypto.randomUUID(), "principal"); storeCancellation(command); }
@@ -166,8 +169,10 @@ function PublicationRecord({ id, company, permissions, newWorkEnabled, slot, can
       </dl></DetailSection><DetailSection title="Source"><p className="text-sm text-muted-foreground">Approved request quantities stay reserved during review and after internal publication.</p></DetailSection></div>
       {record.status === "Draft" && permissions.includes("procurement-sourcing-cancel") && <Panel title="Cancel this internal draft"><div className="space-y-3 p-5">
         <Field label="Reason"><Textarea value={cancelReason} maxLength={2000} onChange={event => setCancelReason(event.target.value)} /></Field>
-        <Button variant="danger" disabled={blocked || !cancelReason.trim()} onClick={() => void cancelDraft()}>Cancel draft and release its quantities</Button>
+        <Button variant="danger" disabled={blocked || record.roundPlan?.sourceCancellationBlocked || !cancelReason.trim()} onClick={() => void cancelDraft()}>Cancel draft and release its quantities</Button>
       </div></Panel>}
+      {enrolled && <Panel title="Evaluation planning"><p role="status" className="p-5 text-sm">This RFQ is enrolled in evaluation planning. Review and publication are not available for enrolled plans yet.</p>{record.roundPlan?.sourceCancellationBlocked && <p className="px-5 pb-5 text-sm">Cancel its evaluation plan before cancelling the RFQ and releasing its quantities.</p>}</Panel>}
+      {round.overview}
       {record.status === "Draft" && canSubmit && <Panel title="Bidding preferences · approved suppliers"><div className="space-y-4 p-5">
         <p className="text-sm text-muted-foreground">Select approved suppliers for an independent internal review. This does not contact them.</p>
         <div className="flex flex-wrap items-end gap-3"><Field label="Find an approved supplier" className="min-w-60 flex-1"><Input value={supplierSearch} maxLength={100}
@@ -207,8 +212,8 @@ function PublicationRecord({ id, company, permissions, newWorkEnabled, slot, can
       {record.status === "Published" && <DetailSection title="Shortlisted suppliers"><div className="overflow-x-auto"><RecordTable><thead><tr><th>Supplier ID</th><th>Internal state</th></tr></thead><tbody>{record.invitations.map(invitation =>
         <tr key={invitation.id}><td className="break-all">{invitation.supplierId}</td><td><Badge>{invitation.contactRecorded ? "Contact recorded" : "Ready to contact"}</Badge></td></tr>)}</tbody></RecordTable></div></DetailSection>}
     </div>}
-    activity={<DetailSection title="Verified workflow state"><p className="text-sm">{record.status === "Published" ? "Internal publication approved." : record.status === "PublicationReview" ? "Core publication review is pending." : "No active publication decision."}</p>
+    activity={<div className="space-y-5">{round.history}<DetailSection title="Verified workflow state"><p className="text-sm">{record.status === "Published" ? "Internal publication approved." : record.status === "PublicationReview" ? "Core publication review is pending." : "No active publication decision."}</p>
       {record.publication && <p className="mt-2 break-all text-xs text-muted-foreground">Core case {record.publication.coreCaseId} · Policy version {record.publication.policyVersionNumber}</p>}
-      <p className="mt-2 text-sm text-muted-foreground">Detailed decision comments and supplier messages are not exposed by this view.</p></DetailSection>}
+      <p className="mt-2 text-sm text-muted-foreground">Detailed decision comments and supplier messages are not exposed by this view.</p></DetailSection></div>}
   />;
 }

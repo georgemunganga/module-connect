@@ -2,7 +2,7 @@
 
 [ERP milestone173](https://github.com/georgemunganga/erp/issues/173), [backend draft PR165](https://github.com/georgemunganga/erp/pull/165), parent145. Independent UI branch from canonical main `1e7922ae178351fa006bdf4a9aaeb44bc903f94e`; it does not depend on pending Purchase Plan review PR103. Initial audited B1 backend source: `7ff14298117daf9b19ec5d301139693a19c272e2`.
 
-This is source work in progress. Initial bounded client checks are recorded below; no final build, browser, native acceptance or deployment has run for this change. Root owns the active backend SDK slot and all runtime/database stages. The source API still needs the gaps below resolved before the UI can be bound completely.
+The UI now mounts evaluation planning in the existing RFQ route and detail layout against Root's approved DTO successor contract below. The backend author’s pushed successor pin and its SDK/native acceptance remain pending; the initial `7ff14298` contract pin does not claim those later fields were already published. This PR remains draft and undeployed. No browser/native acceptance or deployment has run for this change. Root owns runtime/database and paired release stages.
 
 ## Original presentation map
 
@@ -29,7 +29,7 @@ All three use Idempotency-Key. Receipt pins actual eventId/planId/revisionId/res
 
 Criteria and participant logical IDs survive revisions; physical revision IDs identify immutable saved versions and are never substituted for child logical IDs. Full-set revise retains all supplied fields and deliberately removes only omitted rows. All score/weight decimal fields are exact quoted18,4 strings; validation and comparison use text/scaled BigInt, never Number. Current and historical response monetary/scalar fields must retain their exact wire values.
 
-## Contract prerequisites reported before guessing
+## Initial contract gaps and approved binding
 
 - RoundSourceView currently omits current event version/status despite mandatory command CAS. Add verified current fields; do not borrow a maker-only M4 loader for a different round handler.
 - Round-only handlers cannot obtain source method/verified retained lines for the existing Items tab through current RoundRead. Expose them through round-scoped source access without globally relaxing M4 maker access. Existing round list includes enrolled records only; unenrolled source discovery needs an explicit contract or an existing maker link.
@@ -37,7 +37,7 @@ Criteria and participant logical IDs survive revisions; physical revision IDs id
 - Current metadata roundPlanRecord also requires manage, although cancel has an independent cancel grant. Need authoritative action admission for valid cancel-only actors without bypassing a false capability.
 - Existing M4 publication detail does not expose enrollment/barrier flags. Surface server enrollment/action availability so the old flow remains working for unenrolled drafts and enrolled barriers are shown honestly, including accounts without round READ.
 
-Backend owner/Root was notified before implementing API-dependent discovery, action hints or source fields. Those gaps are not silently replaced by fake people, first-branch fallback, guessed versions, arbitrary IDs or broad maker access changes. Submit/review/decisions/publication and evaluation execution remain unavailable in B1 draft scope.
+Root approved the following exact successor shapes before these bindings were implemented. No fake people, first-branch fallback, guessed versions, arbitrary IDs or broad maker access changes were used. Submit/review/decisions/publication and evaluation execution remain unavailable in B1 draft scope.
 
 ## Draft checkpoint, before DTO binding
 
@@ -48,8 +48,30 @@ The date controls use shared `Input type="datetime-local"` with millisecond edit
 Bounded verification so far, Node22 / heap512 / nice10 / one worker:
 
 - Initial WIP `tsc --noEmit`: passed before the subsequent lifecycle/date edits. **No final typecheck claim for this checkpoint.**
-- Initial two-file Vitest run: 115 passed, zero failures/skips/todo: `round-plan-api.test.ts`17 and `procurement-live.test.ts`98 (`unit-wip01.json` / `.log`). This preceded the date adaptation.
-- Separate focused date file: `round-plan-schedule.test.ts`3 passed, zero failures/skips/todo (`schedule-unit01.json` / `.log`). Covers actual browser-zone conversion, unchanged microsecond instants, empty values, malformed/impossible local dates and timezone-suffixed local input rejection.
+- Initial two-file Vitest run: 115 passed, zero failures/skips/todo: `round-plan-api.test.ts`17 and `procurement-live.test.ts` 98 (`unit-wip01.json` / `.log`). This preceded the date adaptation.
+- Separate focused date file: `round-plan-schedule.test.ts` 3 passed, zero failures/skips/todo (`schedule-unit01.json` / `.log`). Covers actual browser-zone conversion, unchanged microsecond instants, empty values, malformed/impossible local dates and timezone-suffixed local input rejection.
 - No build, browser, normal-cookie/native UAT or deployment. No hosted CI success claim.
 
 Artifacts remain outside Git under Root's scoped UI evidence directory. The final source binding, final typecheck and affected regressions will follow the actual backend DTO successor and complete route/picker/action integration. Review/native publication remain unavailable, and old M4 behavior is unchanged by these unmounted checkpoint components.
+
+
+## Mounted source binding
+
+Root relayed the approved successor contract while its backend author completed source work. Final comparison with the pushed source pin still applies:
+
+- Round detail adds `source.version/status`, verified `source.method:{id,revision,code,label}`, full retained `source.lines` and top-level `allowedActions`. Exact historical views are read-only. The original Items table uses those verified lines; a different round handler never loads the maker-only M4 detail.
+- `/sourcing/round-plan-sources?page=1&pageSize=25&q=...` supplies scoped never-exposed unenrolled candidates with explicit provisional eligibility. `/sourcing/round-plans` supplies saved plans. The existing RFQ directory/toolbars switch between these views; opening either does not enroll or save anything.
+- `/{id}/round-plan/people?after=<guid>&limit=25&q=...` supplies actual active Core principal IDs/display names/current event branch and `nextCursor`. Only these current picker results are offered for a new selection; separately retained selected-person labels do not become picker candidates. No employee, configuration reviewer or publishing grant is imposed on a planner.
+- Technical `roundPlanRecord` admits manage OR cancel authority with technical readiness and selected branch. Each record's server action hints remain authoritative and current client named grants/scope add restrictions. Read-only/capture-off views keep history and original-key recovery without mounting the editor/people effect.
+- M4 detail's optional `roundPlan:{enrolled,status,publicationBlocked,sourceCancellationBlocked}` is parsed independently of new Round READ. Missing older metadata stays compatible. Only actual enrollment blocks its publication flow; source cancellation uses its separate hint and becomes available to the authorized original maker after coherent plan cancellation. An enrolled plan never silently resumes the old publication path.
+- `source=round-plan` reuses the existing RFQ route. A round-only account defaults there; mixed-role accounts retain their existing RFQ default and explicit links. One shared selection predicate limits Company All admission to the concrete round surface, so this integration does not open an old M4 detail through a first-branch fallback.
+
+Original RFQ Overview, Items, Related, Comments and History remain; the restored card groups, forms, version modal and directory use shared ERP components. Saving a full revision retains all fields and stable logical IDs, with deliberate omitted-child removal. Cancellation retains its full evidence. An unknown result stays journaled and cannot issue another POST automatically; confirmed 400/422 validation rejection alone permits user correction. Stale/unknown/conflicted results keep the original reference.
+
+### Binding checks
+
+The first binding cohort passed 122 tests across `round-plan-api.test.ts` 21, `procurement-live.test.ts` 98 and `round-plan-schedule.test.ts` 3, zero failures/skips/todo (`unit-binding01.json`). A final precision audit added exact UTC ordering at retained microsecond resolution; the affected round/date files were rerun with 25 passes (22 + 3), zero failures/skips/todo (`unit-binding-precision.json`). This is not a claim of a new combined 123-test run. The unchanged readiness 98 result remains separately recorded.
+
+The microsecond boundary test proves that two valid UTC instants 1µs apart are not collapsed by Date.parse's millisecond precision, while untouched original date text is retained. Additional cases cover default-false metadata, exact decimals, full command/CAS shape, stable logical IDs, immutable versions/history, scope changes, Company All, mixed-role route selection, source discovery, cursor people lookup, old M4 DTO compatibility and the three enrollment/cancellation barrier states.
+
+Final frozen-source `tsc --noEmit` passed at heap 512 / nice 10 (`typecheck-binding-frozen.log`). Exact file/report hashes are recorded with the source receipt. Final backend source comparison, controlled build, one-worker mocked browser regressions, actual normal Core-cookie UI/native proof and paired deployment remain pending. No assets manifest exists yet; no signed-in UAT or hosted CI success is claimed.
