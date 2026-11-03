@@ -4,7 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } from "../components/ui";
 import { PlanContextBoundary, usePlanReviewContext } from "../lib/PlanReviewContext";
 import { PlanHistoryPanel, PlanOwnerReviewActions, PlanReviewQueue, PlanRoundDialog, planStatusLabel, PlanReviewRecovery } from "./LivePlanReview";
-import { planDraftFailureBlock } from "../lib/plan-review-access";
+import { hasPendingPlanCommand, planDraftFailureBlock } from "../lib/plan-review-access";
 import { planReviewJournal } from "../lib/plan-review-journal";
 import { sumPlanAmounts } from "../../../shared/procurement-plan-json";
 import { formatBudgetAmount } from "../../../src/platform/procurement-budget-amount";
@@ -73,7 +73,7 @@ function PlanEditorRecord() {
   const { scope } = usePlanReviewContext();
   const [editable, setEditable] = useState(!id);
   const journal = planReviewJournal(scope);
-  const pending = journal.state().pending?.planId === id;
+  const pending = hasPendingPlanCommand(id, journal.state().pending);
   const [draft, setDraft] = useState<PlanDraft>(() => emptyDraft(defaultCurrencyCode));
   const [version, setVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(Boolean(id));

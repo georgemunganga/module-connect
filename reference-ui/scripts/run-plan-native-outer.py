@@ -36,7 +36,7 @@ def main():
     assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo,text=True,timeout=15).strip()==p['harnessSourceCommit']
     for relative,expected in p['sourceFilesSha256'].items():
         target=repo/relative;assert target.resolve().is_relative_to(repo)and target.is_file()and not target.is_symlink()and digest(target)==expected
-    required=['scripts/run-plan-native-outer.py','scripts/run-plan-native.py','scripts/plan_native_contract.py','scripts/cleanup-plan-native-cookies.py','playwright.plan-native.config.ts','tests/normal-cookie/plan-review/input.ts','tests/normal-cookie/plan-review/positive.spec.ts','tests/normal-cookie/plan-review/safety.ts','tests/normal-cookie/plan-review/safe-reporter.ts']
+    required=['scripts/run-plan-native-outer.py','scripts/run-plan-native.py','scripts/plan_native_contract.py','scripts/cleanup-plan-native-cookies.py','playwright.plan-native.config.ts','tests/normal-cookie/plan-review/input.ts','tests/normal-cookie/plan-review/positive.spec.ts','tests/normal-cookie/plan-review/safety.ts','tests/normal-cookie/plan-review/selectors.ts','tests/normal-cookie/plan-review/safe-reporter.ts']
     assert all('reference-ui/'+x in p['sourceFilesSha256']for x in required)
     f=pinned(p['fixture']);manifest=pinned(p['uiManifest']);binding=pinned(p['uiSourceBinding'])
     assert f['purpose']=='PLAN_REVIEW_NATIVE_POSITIVE'and f['rootApprovedFourBusinessCommands']is True and f['normalCoreCookieStates']is True

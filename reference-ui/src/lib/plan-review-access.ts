@@ -1,6 +1,10 @@
 import { PlanApiError } from "../../../src/platform/procurement-plans-api";
 import type { PlanReviewScope } from "../../../src/platform/procurement-plan-review-api";
 type Access = { capabilities: { planReviewWorkflow: boolean }; permissions: readonly string[] };
+/** A new draft has no retained record ID; two absent IDs must never lock its editor. */
+export function hasPendingPlanCommand(planId: string | undefined, pending: { readonly planId: string } | null | undefined): boolean {
+  return Boolean(planId && pending?.planId === planId);
+}
 export function planReviewWritesAvailable(readiness: Access, scope: PlanReviewScope): boolean {
   return readiness.capabilities.planReviewWorkflow && !!scope.identity.branchId
     && !scope.headers["X-Shell-Branch-Scope"] && scope.current();

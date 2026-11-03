@@ -5,6 +5,7 @@ import { chmodSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { readPlanJson, sumPlanAmounts } from "../../../../shared/procurement-plan-json";
 import { nativePlanInput, digest, guid, type ActorName } from "./input";
 import { NativePlanFailure, safeNativeError as safeError, safeNativeStep as safeStep } from "./safety";
+import { currencyTextboxName } from "./selectors";
 const input = nativePlanInput(), fixture = input.fixture, api = "/api/procurement/v1/plans";
 const headers = { "X-Shell-Entity": fixture.companyId, "X-Shell-Location": fixture.branchId };
 const need = (v: unknown, code: string) => { if (!v) throw new NativePlanFailure(code); };
@@ -88,11 +89,20 @@ test("actual Core owner submits, assigned reviewer reviews, independent final ac
   }
   try {
     let { context, page } = await open("owner");
-    report.step = "owner-original-draft-editor"; persist(); await page.goto("/procurement/workspace/plans/new");
-    await page.getByLabel("Financial period", { exact: true }).fill(financialPeriod); await page.getByLabel("Need 1", { exact: true }).fill(description);
-    await page.getByLabel("Quantity", { exact: true }).fill(quantity); await page.getByLabel("Estimated amount", { exact: true }).fill(amount);
-    await expect(page.getByLabel("Currency", { exact: true })).toHaveValue(fixture.currencyCode);
-    await expect(page.getByLabel("Currency", { exact: true })).toHaveJSProperty("readOnly", true);
+    report.step = "owner-open-original-draft-editor"; persist(); await page.goto("/procurement/workspace/plans/new");
+    report.step = "owner-fill-financial-period"; persist(); await page.getByLabel("Financial period", { exact: true }).fill(financialPeriod);
+    report.step = "owner-fill-need-description"; persist(); await page.getByLabel("Need 1", { exact: true }).fill(description);
+    report.step = "owner-fill-quantity"; persist(); await page.getByLabel("Quantity", { exact: true }).fill(quantity);
+    report.step = "owner-fill-estimated-amount"; persist(); await page.getByLabel("Estimated amount", { exact: true }).fill(amount);
+    const currency = page.getByRole("textbox", { name: currencyTextboxName });
+    report.step = "owner-check-draft-field-counts";
+    report.fixedLabelCounts = { financialPeriod: await page.getByLabel("Financial period", { exact: true }).count(),
+      needDescription: await page.getByLabel("Need 1", { exact: true }).count(), quantity: await page.getByLabel("Quantity", { exact: true }).count(),
+      estimatedAmount: await page.getByLabel("Estimated amount", { exact: true }).count(), currencyExact: await page.getByLabel("Currency", { exact: true }).count(),
+      currencyTextboxPrefix: await currency.count() }; persist();
+    report.step = "owner-check-currency-value"; persist(); await expect(currency).toHaveValue(fixture.currencyCode);
+    report.step = "owner-check-currency-readonly"; persist(); await expect(currency).toHaveJSProperty("readOnly", true);
+    report.step = "owner-check-save-draft-enabled"; persist(); await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeEnabled();
     const created = await command(page, "owner", "Create", api, 201, () => page.getByRole("button", { name: "Save draft", exact: true }).click());
     need(guid(created.id) && guid(created.lines?.[0]?.id) && created.branchRef === fixture.branchId && created.currencyCode === fixture.currencyCode
       && sumPlanAmounts([created.lines[0].estimatedAmount]) === sumPlanAmounts([amount]), "CreatedPlanScopeOrExactAmountMismatch");
