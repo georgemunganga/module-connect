@@ -41,7 +41,8 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
   const principalDefault = source === null && (company.capabilities.principalSourcingSourceDrafts
     || company.capabilities.principalSourcingPublicationRead)
     && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts;
-  const quotations = source === "quotations" || source === null && company.permissions.includes("procurement-quotation-read") && !company.permissions.includes("procurement-sourcing-convert") && !company.permissions.includes("procurement-sourcing-submit");
+  const hasAdHocAccess = company.permissions.some(permission => ["procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit"].includes(permission));
+  const quotations = source === "quotations" || source === null && !hasAdHocAccess && company.permissions.includes("procurement-quotation-read") && !company.permissions.includes("procurement-sourcing-convert") && !company.permissions.includes("procurement-sourcing-submit");
   const governed = source === "approved" || source === "principal-approved" || principalDefault;
   const mode: RfqSourceMode = source === "principal-approved" || principalDefault ? "principal" : "worker";
   const key = JSON.stringify([authEpoch, company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
@@ -50,6 +51,7 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
 }
 function SourcingPageContent({ view, governed, quotations, mode, id }: { view: "list" | "editor" | "detail"; governed: boolean; quotations: boolean; mode: RfqSourceMode; id: string }) {
   const { capabilities, permissions } = useCompany();
+  const hasAdHocAccess = permissions.some(permission => ["procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit"].includes(permission));
   const canConvert = permissions.includes("procurement-sourcing-convert");
   const canReadGoverned = canConvert || permissions.includes("procurement-sourcing-cancel")
     || (capabilities.principalSourcingPublication === true || capabilities.principalSourcingPublicationRead === true) && mode === "principal"
@@ -60,10 +62,10 @@ function SourcingPageContent({ view, governed, quotations, mode, id }: { view: "
     || capabilities.principalSourcingPublicationRead;
   return <>
     {view === "list" && permissions.includes("procurement-quotation-read") && <div className="px-5 pt-5 sm:px-8"><Link to="/rfqs?source=quotations"><Button variant={quotations ? "primary" : "secondary"}>Assigned quotation work</Button></Link></div>}
+    {view === "list" && capabilities.sourcingDraft && hasAdHocAccess && <div className="px-5 pt-5 sm:px-8"><Link to="/rfqs?source=ad-hoc"><Button variant={!quotations && !governed ? "primary" : "secondary"}>Ad hoc drafts</Button></Link></div>}
     {view === "list" && anyGoverned && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">
       {(capabilities.principalSourcingSourceDrafts || capabilities.principalSourcingPublicationRead) && <Link to="/rfqs?source=principal-approved"><Button variant={governed && mode === "principal" ? "primary" : "secondary"}>From approved requests</Button></Link>}
       {capabilities.sourcingSourceDrafts && <Link to="/rfqs?source=approved"><Button variant={governed && mode === "worker" ? "primary" : "secondary"}>{capabilities.principalSourcingSourceDrafts ? "Earlier approved request drafts" : "From approved requests"}</Button></Link>}
-      {capabilities.sourcingDraft && <Link to="/rfqs"><Button variant={!governed ? "primary" : "secondary"}>Ad hoc drafts</Button></Link>}
     </div>}
     {quotations ? !permissions.includes("procurement-quotation-read") || view === "editor" ? <div role="alert" className="p-5">This quotation action is not available with your current access.</div> : view === "list" ? <QuotationSourceList /> : <QuotationSourceDetail id={id} /> : governed ? !enabled || !canReadGoverned || view === "editor" && (!canConvert || Boolean(id))
       ? <div className="p-5 sm:p-8" role="alert">This quote action is not available with your current access. <Link to="/rfqs">Back to quote requests</Link></div>
@@ -97,10 +99,10 @@ function LegacySourcingList() {
     subtitle="Prepare a draft for your company. Sending it to vendors opens after approvals and supplier access are ready."
     columns={[{ key: "number", label: "Reference / Description", width: 260 }, { key: "method", label: "Method", width: 95 }, { key: "lines", label: "Lines", width: 75 }, { key: "date", label: "Opens", width: 150 }, { key: "closes", label: "Closes", width: 150 }, { key: "status", label: "Status", width: 110 }]}
     rows={(data?.items ?? []).map(item => ({ id: item.id, number: item.number, title: item.title, status: item.status,
-      path: `/rfqs/${item.id}`, fields: { method: item.method, lines: String(item.lineCount), date: item.opensAt || "", closes: item.closesAt || "" } }))}
+      path: `/rfqs/${item.id}?source=ad-hoc`, fields: { method: item.method, lines: String(item.lineCount), date: item.opensAt || "", closes: item.closesAt || "" } }))}
     loading={loading} error={error} total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25}
     onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
-    action={permissions.includes("procurement-sourcing-create") ? <Link to="/rfqs/new"><Button><Plus size={16} className="mr-2 inline" />New quote request</Button></Link> : undefined}
+    action={permissions.includes("procurement-sourcing-create") ? <Link to="/rfqs/new?source=ad-hoc"><Button><Plus size={16} className="mr-2 inline" />New quote request</Button></Link> : undefined}
     emptyTitle="No quote requests yet" emptyDescription="Start a draft to prepare what you need from suppliers." /></div>;
 }
 
@@ -160,7 +162,7 @@ function LegacySourcingEditor() {
       const saved = id && version !== null
         ? await updateOwnSourcingDraft(legalEntityId, id, version, payload)
         : await createOwnSourcingDraft(legalEntityId, payload);
-      if (isCurrentSave()) navigate(`/rfqs/${saved.id}`);
+      if (isCurrentSave()) navigate(`/rfqs/${saved.id}?source=ad-hoc`);
     } catch (cause) {
       if (isCurrentSave()) {
         setError(message(cause));
@@ -170,13 +172,13 @@ function LegacySourcingEditor() {
     }
     finally { if (isCurrentSave()) setSaving(false); }
   }
-  return <RfqWizardLayout title={id ? "Edit quote request" : "New quote request"} back={id ? `/rfqs/${id}` : "/rfqs"} busy={saving}>
+  return <RfqWizardLayout title={id ? "Edit quote request" : "New quote request"} back={id ? `/rfqs/${id}?source=ad-hoc` : "/rfqs?source=ad-hoc"} busy={saving}>
     <p className="text-sm text-muted-foreground">Save an internal draft. Vendors will not receive it until publication is approved.</p>
     {loading ? <p role="status">Loading quote request…</p> : id && (version === null || loadedContext !== editorContext)
       ? <p role="alert">{error || "This draft is unavailable. Return to the quote request list."}</p>
       : <form className="max-w-6xl space-y-5" onSubmit={save}>
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{error.toLowerCase().includes("refresh") && <span className="block">Your edits are still here. Compare the current draft before retrying.</span>}</p>}
-      {saveBlock && <p role="status" className="rounded-lg border border-border p-3 text-sm">{saveBlock === "stale" ? "The saved quote request changed. Review it before saving again." : "The save result was not confirmed. Review saved quote requests before trying again."} <Link className="text-primary underline" to={id ? `/rfqs/${id}` : "/rfqs"}>Review saved quote request{id ? "" : "s"}</Link></p>}
+      {saveBlock && <p role="status" className="rounded-lg border border-border p-3 text-sm">{saveBlock === "stale" ? "The saved quote request changed. Review it before saving again." : "The save result was not confirmed. Review saved quote requests before trying again."} <Link className="text-primary underline" to={id ? `/rfqs/${id}?source=ad-hoc` : "/rfqs?source=ad-hoc"}>Review saved quote request{id ? "" : "s"}</Link></p>}
       <div id="rfq-stage-0" className="scroll-mt-28"><Panel title="Quote details"><div className="grid gap-4 p-5 sm:grid-cols-2">
         <Field label="What are you buying?" className="sm:col-span-2"><Input required maxLength={300} value={draft.title} onChange={(event) => field("title", event.target.value)} /></Field>
         <Field label="Buying method"><Select value={draft.method} onChange={(event) => field("method", event.target.value)}><option value="RFQ">Request for quotes</option><option value="RFP">Request for proposals</option><option value="ITT">Tender</option></Select></Field>
@@ -195,7 +197,7 @@ function LegacySourcingEditor() {
         </div>)}
         <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add line</Button>
       </div></Panel></div>
-      <div className="sticky bottom-8 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/rfqs/${id}` : "/rfqs"} onClick={event => { if (saving) event.preventDefault(); }} aria-disabled={saving}><Button variant="secondary" disabled={saving}>Cancel</Button></Link></div>
+      <div className="sticky bottom-8 flex flex-wrap gap-3 border-t border-border bg-surface/95 py-4"><Button type="submit" disabled={saving || !!saveBlock}>{saving ? "Saving…" : "Save draft"}</Button><Link to={id ? `/rfqs/${id}?source=ad-hoc` : "/rfqs?source=ad-hoc"} onClick={event => { if (saving) event.preventDefault(); }} aria-disabled={saving}><Button variant="secondary" disabled={saving}>Cancel</Button></Link></div>
     </form>}
   </RfqWizardLayout>;
 }
@@ -222,14 +224,14 @@ function LegacySourcingDetail() {
     if (!permissions.includes("procurement-sourcing-edit")) return;
     if (!record || !reason.trim()) { setError("Give a reason for cancelling this draft."); return; }
     setBusy(true); setError("");
-    try { await cancelOwnSourcingDraft(legalEntityId, record.id, record.version, reason.trim()); navigate("/rfqs"); }
+    try { await cancelOwnSourcingDraft(legalEntityId, record.id, record.version, reason.trim()); navigate("/rfqs?source=ad-hoc"); }
     catch (cause) { setError(message(cause)); }
     finally { setBusy(false); }
   }
   if (loading) return <div role="status" className="p-5 sm:p-8">Loading quote request…</div>;
   if (!record) return <div role="alert" className="p-5 sm:p-8">{error || "Quote request not found."}</div>;
-  return <RfqDetailLayout title={record.title} number={record.number} method={record.method} currency={record.currencyCode} status={record.status} back="/rfqs"
-    actions={<>{permissions.includes("procurement-sourcing-edit") && record.status === "Draft" && <Link to={`/rfqs/${record.id}/edit`}><Button variant="secondary">Edit draft</Button></Link>}<Button variant="secondary" disabled title="Publishing and invitations are not available yet">Publish</Button></>}
+  return <RfqDetailLayout title={record.title} number={record.number} method={record.method} currency={record.currencyCode} status={record.status} back="/rfqs?source=ad-hoc"
+    actions={<>{permissions.includes("procurement-sourcing-edit") && record.status === "Draft" && <Link to={`/rfqs/${record.id}/edit?source=ad-hoc`}><Button variant="secondary">Edit draft</Button></Link>}<Button variant="secondary" disabled title="Publishing and invitations are not available yet">Publish</Button></>}
     itemCount={record.lines.length}
     items={<div className="overflow-x-auto"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Category</th><th>Needed by</th><th>Status</th></tr></thead><tbody>{record.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitCode}</td><td>{line.categoryCode || "—"}</td><td>{line.neededBy || "—"}</td><td>{line.status}</td></tr>)}</tbody></RecordTable></div>}
     overview={<>
