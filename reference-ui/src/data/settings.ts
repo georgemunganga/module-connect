@@ -53,6 +53,13 @@ export const moduleSettings: ModuleSettingsConfig[] = [
     tabs: [tab("preferences", "Preferences")],
   },
   {
+    slug: "purchase-plans",
+    title: "Purchase Plans",
+    group: "Purchases",
+    description: "Choose named forecast reviewers and independent final approvers. Plans do not authorise spending.",
+    tabs: [tab("approvals", "Approvals")],
+  },
+  {
     slug: "purchase-requests",
     title: "Purchase Requests",
     group: "Purchases",
@@ -141,7 +148,7 @@ export const moduleSettings: ModuleSettingsConfig[] = [
 /** Only Procurement-owned settings appear in the Procurement directory. */
 export const procurementModuleGroups = [
   { title: "Suppliers & catalog", slugs: ["vendors", "items"] },
-  { title: "Buying", slugs: ["purchase-requests", "purchase-orders"] },
+  { title: "Buying", slugs: ["purchase-plans", "purchase-requests", "purchase-orders"] },
   { title: "Sourcing & contracts", slugs: ["request-for-quotes", "contracts"] },
   { title: "Receiving & invoice checks", slugs: ["purchase-receives", "inspections", "returns", "bills"] },
   { title: "Payment review", slugs: ["payments-made"] },

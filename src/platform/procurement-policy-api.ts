@@ -42,7 +42,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
 export class PolicyActionError extends Error {
-  constructor(message: string, readonly status: number) { super(message); this.name = "PolicyActionError"; }
+  constructor(message: string, readonly status: number, readonly code?: string) { super(message); this.name = "PolicyActionError"; }
 }
 
 async function call(companyId: string, path: string, init: RequestInit = {}): Promise<unknown> {
@@ -56,14 +56,14 @@ async function call(companyId: string, path: string, init: RequestInit = {}): Pr
       { ...init, headers, credentials: "include", cache: "no-store" });
   } catch { throw new PolicyActionError("Buying rules are unavailable. Your changes were not confirmed.", 0); }
   if (!response.ok) {
-    let message = "";
+    let message = "", code: string | undefined;
     try {
       const body: unknown = await response.json();
-      if (object(body)) message = String(body.message ?? body.detail ?? "");
+      if (object(body)) { message = String(body.message ?? body.detail ?? ""); code = typeof body.code === "string" ? body.code : undefined; }
     } catch { /* Fall back to a safe status message. */ }
     throw new PolicyActionError(response.status === 401 ? "Sign in to ERP to manage buying rules."
       : response.status === 403 ? "You do not have access to buying rules for this company."
-        : message || (response.status === 409 ? "This draft changed. Refresh it before saving." : "The buying rule action failed."), response.status);
+        : message || (response.status === 409 ? "This draft changed. Refresh it before saving." : "The buying rule action failed."), response.status, code);
   }
   try { return await response.json() as unknown; }
   catch { throw new PolicyActionError("ERP returned an invalid buying rule response. Check saved rules before another change.", 0); }
@@ -80,7 +80,7 @@ function validSummary(value: unknown): boolean {
     && typeof value.version === "number" && typeof value.effectiveFrom === "string";
 }
 
-export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "SOURCING" | "RECEIVING" | "MANUAL_PAYMENT_REVIEW"): Promise<PolicyPage> {
+export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "SOURCING" | "RECEIVING" | "MANUAL_PAYMENT_REVIEW" | "PROCUREMENT_PLAN_REVIEW"): Promise<PolicyPage> {
   const body = await call(companyId, `?page=1&pageSize=100${key ? `&key=${key}` : ""}`, { signal });
   if (!object(body) || !Array.isArray(body.items) || !body.items.every(validSummary)
     || typeof body.total !== "number" || typeof body.page !== "number"
@@ -165,7 +165,7 @@ export async function decidePolicy(companyId: string, id: string, version: numbe
     throw new PolicyActionError("ERP did not confirm the policy decision. Check saved rules before retrying.", 0);
   return body;
 }
-export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "MANUAL_PAYMENT_REVIEW"):
+export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "MANUAL_PAYMENT_REVIEW" | "PROCUREMENT_PLAN_REVIEW"):
   Promise<{ status: string; isAuthority: false; policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null }> {
   const body = await call(companyId, `/effective?key=${key}`);
   if (!object(body) || typeof body.status !== "string" || body.isAuthority !== false)
@@ -297,4 +297,38 @@ export async function validateUnitReviewPolicy(company: string, rulesJson: strin
     || body.isValid !== (body.issues.length === 0) || body.reviewConfigurationComplete !== (body.reviewIssues.length === 0))
     throw new PolicyActionError("The saved review rule check could not be confirmed.", 0);
   return body as { isValid: boolean; issues: string[]; reviewConfigurationComplete: boolean; reviewIssues: string[] };
+}
+
+/** Current Plan-stage people only; the server repeats permissions/scope at publication and use. */
+export type PlanPolicyPeoplePage = { items: Array<{ principalId: string; displayName: string }>;
+  purpose: "Review" | "Final"; candidateTotal: number; offset: number; limit: number; isAuthority: false };
+function planPolicyPeople(body: unknown, purpose: "Review" | "Final", offset: number, limit = 25): PlanPolicyPeoplePage {
+  if (!object(body) || body.purpose !== purpose || body.isAuthority !== false || body.offset !== offset || body.limit !== limit
+    || !Number.isSafeInteger(body.candidateTotal) || Number(body.candidateTotal) < 0 || !Array.isArray(body.items) || body.items.length > limit
+    || body.items.length !== Math.max(0, Math.min(limit, Number(body.candidateTotal) - offset)) || !body.items.every((x: unknown) => object(x) && canonicalId(x.principalId) && typeof x.displayName === "string" && x.displayName.trim().length > 0)
+    || new Set(body.items.map((x: any) => x.principalId)).size !== body.items.length)
+    throw new PolicyActionError("Current plan reviewer names could not be verified. Saved selections have not changed.", 0);
+  return body as PlanPolicyPeoplePage;
+}
+export async function lookupPlanPolicyReviewers(company: string, purpose: "Review" | "Final", search: string, offset: number, signal?: AbortSignal): Promise<PlanPolicyPeoplePage> {
+  if (!["Review", "Final"].includes(purpose) || search.trim().length > 100 || !Number.isInteger(offset) || offset < 0 || offset > 100000)
+    throw new PolicyActionError("Choose a plan review stage and a shorter valid name search.", 422);
+  return planPolicyPeople(await call(company, `/lookups/plan-reviewers?${new URLSearchParams({ purpose, search: search.trim(), offset: String(offset), limit: "25" })}`, { signal }), purpose, offset);
+}
+export async function validatePlanReviewPolicy(company: string, rulesJson: string): Promise<PolicyValidation & { isAuthority: false; canPublish: false }> {
+  const body = await call(company, "/validate", { method: "POST", body: JSON.stringify({ rulesJson }) });
+  if (!object(body) || typeof body.isValid !== "boolean" || body.isAuthority !== false || body.canPublish !== false
+    || !Array.isArray(body.issues) || !body.issues.every(x => typeof x === "string"))
+    throw new PolicyActionError("The plan rule check could not be verified. No policy was activated.", 0);
+  return { isValid: body.isValid, issues: body.issues.map(message => ({ path: "", message })), isAuthority: false, canPublish: false };
+}
+
+export async function lookupSelectedPlanPolicyReviewers(company: string, purpose: "Review" | "Final", principalIds: readonly string[], signal?: AbortSignal): Promise<PlanPolicyPeoplePage> {
+  if (!["Review", "Final"].includes(purpose) || !principalIds.length || principalIds.length > 50 || principalIds.some(id => !canonicalId(id)) || new Set(principalIds).size !== principalIds.length)
+    throw new PolicyActionError("Choose up to 50 distinct saved plan reviewers.", 422);
+  const page = planPolicyPeople(await call(company, `/lookups/plan-reviewers?${new URLSearchParams({ purpose, principalIds: principalIds.join(","), search: "", offset: "0", limit: "50" })}`, { signal }), purpose, 0, 50);
+  if (page.candidateTotal !== page.items.length || page.candidateTotal > principalIds.length || page.items.some(item => !principalIds.includes(item.principalId)))
+    throw new PolicyActionError("Saved plan reviewer names could not be verified. Selections have not changed.", 0);
+  // Omitted unavailable people keep their saved ID and a generic unavailable label in the picker.
+  return page;
 }

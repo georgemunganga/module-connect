@@ -13,6 +13,7 @@ import { LiveApprovalSettings } from "./LiveApprovalSettings";
 import { LiveInvoiceMatchingSettings } from "./LiveInvoiceMatchingSettings";
 import { LiveSourcingSettings } from "./LiveSourcingSettings";
 import { LiveReceivingSettings } from "./LiveReceivingSettings";
+import { LivePlanReviewSettings } from "./LivePlanReviewSettings";
 import { LiveManualPaymentSettings } from "./LiveManualPaymentSettings";
 
 const buyingLinks = [
@@ -88,7 +89,9 @@ export function LiveSettingsShell() {
           aria-current={item.slug === tab ? "page" : undefined}
           className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm ${item.slug === tab ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{item.title}</Link>)}
       </nav>
-      {(slug === "purchase-requests" || slug === "purchase-orders") && tab === "approvals"
+      {slug === "purchase-plans" && tab === "approvals"
+        ? <LivePlanReviewSettings />
+        : (slug === "purchase-requests" || slug === "purchase-orders") && tab === "approvals"
         ? <LiveApprovalSettings key={`${readiness.tenantId}:${readiness.legalEntityId}:${selection.branch ?? ""}:${readiness.principalId}:${slug}`}
           initialAction={slug === "purchase-orders" ? "PurchaseOrder.Approve" : "PurchaseRequest.Approve"} />
         : slug === "bills" && tab === "preferences"
