@@ -439,7 +439,7 @@ test("recorded outside contact preserves the published RFQ detail and its tabs",
   await page.goto(`/procurement/workspace/rfqs/${event}?source=principal-approved`);
   await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
   await expect(page.getByText("Contact recorded", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Items (1)", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "History", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Items (1)", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "History", exact: true })).toBeVisible();
   expect(calls.filter(call => call.method !== "GET")).toEqual([]);
 });
