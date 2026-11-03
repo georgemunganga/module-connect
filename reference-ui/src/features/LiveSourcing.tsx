@@ -1,3 +1,4 @@
+import { quotationRouteSelected } from "../lib/sourcing-route-selection";
 import { roundPlanRouteSelected } from "../lib/round-plan-access";
 import { RoundPlanRfqList, RoundPlanRfqDetail } from "./RoundPlanRfq";
 import { QuotationSourceList, QuotationSourceDetail } from "./QuotationDrafts";
@@ -43,9 +44,8 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
   const principalDefault = source === null && (company.capabilities.principalSourcingSourceDrafts
     || company.capabilities.principalSourcingPublicationRead)
     && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts;
-  const hasAdHocAccess = company.permissions.some(permission => ["procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit"].includes(permission));
   const rounds = roundPlanRouteSelected(source, company);
-  const quotations = source === "quotations" || source === null && !hasAdHocAccess && company.permissions.includes("procurement-quotation-read") && !company.permissions.includes("procurement-sourcing-convert") && !company.permissions.includes("procurement-sourcing-submit");
+  const quotations = quotationRouteSelected(source, company.permissions);
   const governed = source === "approved" || source === "principal-approved" || principalDefault;
   const mode: RfqSourceMode = source === "principal-approved" || principalDefault ? "principal" : "worker";
   const key = JSON.stringify([authEpoch, company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",

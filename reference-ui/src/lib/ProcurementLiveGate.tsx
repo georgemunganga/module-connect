@@ -1,3 +1,4 @@
+import { quotationRouteSelected } from "./sourcing-route-selection";
 import { roundPlanRouteSelected } from "./round-plan-access";
 import { RequestApprovalJournalBoundary } from "./RequestApprovalJournal";
 import { requestApprovalsAvailable } from "./request-approval-availability";
@@ -84,7 +85,9 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const roundPlanRead = sourcingPath && !newRecord && !editRecord && state.readiness !== undefined
     && roundPlanRouteSelected(new URLSearchParams(location.search).get("source"), state.readiness) && state.readiness.capabilities.roundPlanRead === true
     && state.readiness.permissions.includes("procurement-round-plan-read");
-  const quotationRead = sourcingPath && !newRecord && !editRecord && state.readiness?.permissions.includes("procurement-quotation-read") === true;
+  const quotationRead = sourcingPath && !newRecord && !editRecord && state.readiness !== undefined
+    && quotationRouteSelected(new URLSearchParams(location.search).get("source"), state.readiness.permissions)
+    && state.readiness.permissions.includes("procurement-quotation-read");
   const allReadSupported = roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
     || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || manualApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {

@@ -1,8 +1,8 @@
 # RFQ evaluation-plan source integration
 
-[ERP milestone173](https://github.com/georgemunganga/erp/issues/173), [backend draft PR165](https://github.com/georgemunganga/erp/pull/165), parent145. Independent UI branch from canonical main `1e7922ae178351fa006bdf4a9aaeb44bc903f94e`; it does not depend on pending Purchase Plan review PR103. Initial audited B1 backend source: `7ff14298117daf9b19ec5d301139693a19c272e2`.
+[ERP milestone173](https://github.com/georgemunganga/erp/issues/173), [backend draft PR165](https://github.com/georgemunganga/erp/pull/165), parent145. Independent UI branch from canonical main `1e7922ae178351fa006bdf4a9aaeb44bc903f94e`; it does not depend on pending Purchase Plan review PR103. Initial audited B1 backend source: `7ff14298117daf9b19ec5d301139693a19c272e2`. Current field-by-field source review: `fcb1ef6b28ad62b632fe5acd458d76b7c0742cd7`.
 
-The UI now mounts evaluation planning in the existing RFQ route and detail layout against Root's approved DTO successor contract below. The backend author’s pushed successor pin and its SDK/native acceptance remain pending; the initial `7ff14298` contract pin does not claim those later fields were already published. This PR remains draft and undeployed. No browser/native acceptance or deployment has run for this change. Root owns runtime/database and paired release stages.
+The UI now mounts evaluation planning in the existing RFQ route and detail layout against Root's approved DTO successor contract below. The pushed successor `fcb1ef6b28ad62b632fe5acd458d76b7c0742cd7` matches the bound DTOs after its explicit-version action fix. Its SDK/native acceptance remains pending; the initial `7ff14298` pin did not include those later fields. This PR remains draft and undeployed. No browser/native acceptance or deployment has run for this change. Root owns runtime/database and paired release stages.
 
 ## Original presentation map
 
@@ -57,7 +57,7 @@ Artifacts remain outside Git under Root's scoped UI evidence directory. The fina
 
 ## Mounted source binding
 
-Root relayed the approved successor contract while its backend author completed source work. Final comparison with the pushed source pin still applies:
+Root relayed the approved successor contract while its backend author completed source work. Field-by-field comparison against pushed successor `fcb1ef6b28ad62b632fe5acd458d76b7c0742cd7` is complete:
 
 - Round detail adds `source.version/status`, verified `source.method:{id,revision,code,label}`, full retained `source.lines` and top-level `allowedActions`. Exact historical views are read-only. The original Items table uses those verified lines; a different round handler never loads the maker-only M4 detail.
 - `/sourcing/round-plan-sources?page=1&pageSize=25&q=...` supplies scoped never-exposed unenrolled candidates with explicit provisional eligibility. `/sourcing/round-plans` supplies saved plans. The existing RFQ directory/toolbars switch between these views; opening either does not enroll or save anything.
@@ -74,4 +74,7 @@ The first binding cohort passed 122 tests across `round-plan-api.test.ts` 21, `p
 
 The microsecond boundary test proves that two valid UTC instants 1µs apart are not collapsed by Date.parse's millisecond precision, while untouched original date text is retained. Additional cases cover default-false metadata, exact decimals, full command/CAS shape, stable logical IDs, immutable versions/history, scope changes, Company All, mixed-role route selection, source discovery, cursor people lookup, old M4 DTO compatibility and the three enrollment/cancellation barrier states.
 
-Final frozen-source `tsc --noEmit` passed at heap 512 / nice 10 (`typecheck-binding-frozen.log`). Exact file/report hashes are recorded with the source receipt. Final backend source comparison, controlled build, one-worker mocked browser regressions, actual normal Core-cookie UI/native proof and paired deployment remain pending. No assets manifest exists yet; no signed-in UAT or hosted CI success is claimed.
+Final frozen-source `tsc --noEmit` passed at heap 512 / nice 10 (`typecheck-binding-frozen.log`). Exact file/report hashes are recorded with the source receipt. Backend SDK/native acceptance, controlled build, one-worker mocked browser regressions, actual normal Core-cookie UI/native proof and paired deployment remain pending. No assets manifest exists yet; no signed-in UAT or hosted CI success is claimed.
+
+
+Source review found and resolved two concrete admission mismatches. Backend predecessor `1dbcb7e0` returned write hints for `/versions/{currentVersion}`; successor `fcb1ef6b` makes every explicit version URL read-only, including the newest history row, matching the immutable UI. The UI also now shares the existing quotation route-selection predicate between rendering and Company All admission. Quotation READ no longer admits an explicit M4/approved/ad-hoc route through the All union. Explicit quotations and the existing quotation-only default remain unchanged; mixed-role generic sourcing defaults are preserved. Nine focused routing checks passed with zero failures/skips (`routing-followup-unit.json`). Final routing `tsc --noEmit` passed (`typecheck-routing-frozen.log`); its commit-bound source receipt records the exact hashes. No additional browser/build/native claim follows from this source review.
