@@ -37,11 +37,14 @@ export function RfqWizardLayout({ title, back, children, footer, approved = fals
   </div>;
 }
 
-export function RfqDetailLayout({ title, number, method, currency, status, back, actions, overview, items, itemCount, related, activity }: {
+export function RfqDetailLayout({ title, number, method, currency, status, back, actions, overview, items, itemCount, related, activity, activeTab, onTabChange, relatedAvailability }: {
   title: string; number: string; method: string; currency: string; status: string; back: string;
+  activeTab?: string; onTabChange?: (tab: string) => void; relatedAvailability?: string;
   actions?: ReactNode; overview: ReactNode; items: ReactNode; itemCount: number; related?: ReactNode; activity?: ReactNode;
 }) {
-  const [active, setActive] = useState("overview");
+  const [internalActive, setInternalActive] = useState("overview");
+  const active = activeTab ?? internalActive;
+  const setActive = onTabChange ?? setInternalActive;
   return <div className="min-h-[calc(100dvh-5rem)] bg-muted/30">
     <header className="sticky top-14 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 py-4 sm:px-8">
       <div className="min-w-0"><Link to={back} className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><ArrowLeft size={13} />Request for Quotes</Link>
@@ -52,7 +55,7 @@ export function RfqDetailLayout({ title, number, method, currency, status, back,
     <div className="mx-auto max-w-7xl space-y-5 p-5 sm:p-8">
       <div hidden={active !== "overview"} inert={active !== "overview" ? true : undefined}>{overview}</div>
       {active === "items" && <DetailSection title="Items / Line Details">{items}</DetailSection>}
-      {active === "related" && <DetailSection title="Related records">{related}<p className="text-sm text-muted-foreground">Related bids, purchase orders and awards are not available yet.</p></DetailSection>}
+      {active === "related" && <DetailSection title="Related records">{related}<p className="text-sm text-muted-foreground">{relatedAvailability ?? "Related bids, purchase orders and awards are not available yet."}</p></DetailSection>}
       {active === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not available for this quote request yet.</p></DetailSection>}
       {active === "history" && <DetailSection title="History">{activity || <p className="text-sm text-muted-foreground">An activity history is not available for this quote request yet.</p>}</DetailSection>}
     </div>
