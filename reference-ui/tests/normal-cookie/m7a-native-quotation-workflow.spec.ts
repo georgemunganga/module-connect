@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { digest, nativeReadInput } from "./m7a-native-read-input";
 const input = nativeReadInput("M7A_NATIVE_WORKFLOW_RESULT"), fixture = input.fixture;
-const need = (value: unknown, code: string) => { if (!value) throw new Error(code); };
+const need = (value: unknown, code: string) => { if (!value) throw Object.assign(new Error(code), { safeCode: code }); };
 const retained = (snapshot: any) => JSON.stringify({ offer: snapshot.header.offer, receivedAt: snapshot.header.receivedAt, lines: snapshot.lines, documentPins: snapshot.documentPins, totals: snapshot.totals });
 const headers = { "X-Shell-Entity": fixture.companyId, "X-Shell-Location": fixture.branchId };
 const sourcePath = `/api/procurement/v1/sourcing/${fixture.eventId}`;
@@ -27,6 +27,7 @@ test("normal-cookie B captures full offer and C revises/cancels through the orig
     const context = await browser.newContext({ baseURL: input.origin, ignoreHTTPSErrors: true, timezoneId: "UTC" }); active = context; activeIndex = actorIndex;
     const user = fixture.users[actorIndex];
     const response = await context.request.post("/api/hrm/auth/login", { data: { email: user.email, password: user.password }, failOnStatusCode: false }); evidence.authenticationCommands.push({ actorIndex, action: "Login", status: response.status() }); need(response.status() === 200, "Native normal login failed");
+    evidence.step = `actor-${actorIndex}-scope`;
     const scope = await get(context, "/api/procurement/v1/context"); need(scope.principalId === user.id && scope.workerId === null && scope.legalEntityId === fixture.companyId && scope.permissions.includes("procurement-quotation-read"), "Workerless native quotation principal not confirmed");
     await context.addInitScript(({ companyId, branchId }) => { if (localStorage.getItem("erp.shell.state.v1") === null) localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: companyId, branch: branchId })); }, { companyId: fixture.companyId, branchId: fixture.branchId });
     await context.route("**/api/**", async route => {
@@ -61,6 +62,7 @@ test("normal-cookie B captures full offer and C revises/cancels through the orig
     const fresh = await get(context, `${sourcePath}/quotation-drafts`);
     need(fresh.items?.length === 0 && fresh.source.lines?.length === 1 && /^2(?:\.0{1,4})?$/.test(fresh.source.lines[0].quantity) && fresh.invitations?.length === 1 && fresh.invitations[0].allowedActions?.includes("RecordOutsideContact"), "Fresh native UI source/invitation required; do not reuse retained drafts");
     const invitation = fresh.invitations[0], contactPath = `${sourcePath}/invitations/${invitation.id}/manual-contact`, createPath = `${sourcePath}/invitations/${invitation.id}/quotation-drafts`;
+    evidence.step = "B-open-source";
     await page.goto(`/procurement/workspace/rfqs/${fixture.eventId}?source=quotations`);
     await page.getByRole("button", { name: "Record outside contact", exact: true }).first().click();
     let dialog = page.getByRole("dialog"); await dialog.getByLabel("Contact reference").fill(`${marker}-outside-contact`); await dialog.getByLabel("Reported contact time (local)").fill(new Date().toISOString().slice(0, 16));
@@ -70,28 +72,36 @@ test("normal-cookie B captures full offer and C revises/cancels through the orig
     await page.getByRole("button", { name: "Create supplier draft", exact: true }).click(); dialog = page.getByRole("dialog");
     await dialog.getByLabel("Supplier quotation reference", { exact: true }).fill(marker); await dialog.getByLabel("Quotation date", { exact: true }).fill("2026-11-03");
     await choose(page, "Validity", "Fixed expiry date"); await dialog.getByLabel("Valid until", { exact: true }).fill("2026-12-03");
-    await dialog.getByLabel("Offered payment code", { exact: true }).fill("SUPPLIER-OFFERED"); await dialog.getByLabel("Offered payment terms", { exact: true }).fill("45 days after delivery"); await dialog.getByLabel("Warranty", { exact: true }).fill("Three years including labor");
-    await dialog.getByLabel("Delivery terms", { exact: true }).fill("Delivered to the agreed site"); await dialog.getByLabel("Delivery date", { exact: true }).fill("2026-11-20"); await dialog.getByLabel("Offer received at (UTC)", { exact: true }).fill(new Date().toISOString());
+    await dialog.getByLabel("Offered payment code", { exact: true }).fill("SUPPLIER-OFFERED"); await dialog.getByRole("textbox", { name: "Offered payment terms", exact: true }).fill("45 days after delivery"); await dialog.getByRole("textbox", { name: "Warranty", exact: true }).fill("Three years including labor");
+    await dialog.getByRole("textbox", { name: "Delivery terms", exact: true }).fill("Delivered to the agreed site"); await dialog.getByLabel("Delivery date", { exact: true }).fill("2026-11-20"); await dialog.getByLabel("Offer received at (UTC)", { exact: true }).fill(new Date().toISOString());
     await dialog.getByLabel("Unit price", { exact: true }).fill("12.3456"); await choose(page, "Discount", "Percent"); await dialog.getByLabel("Discount value", { exact: true }).fill("12.5"); await choose(page, "Quoted tax treatment", "Exclusive");
-    await dialog.getByLabel("Declared quoted tax", { exact: true }).fill("0.01"); await dialog.getByLabel("Delivery amount", { exact: true }).fill("0.12"); await dialog.getByLabel("Offered tax code", { exact: true }).fill("SUPPLIER-TAX"); await dialog.getByLabel("Lead time", { exact: true }).fill("Two weeks"); await dialog.getByLabel("Line notes", { exact: true }).fill("Retain accessories and complete quoted terms");
+    await dialog.getByLabel("Declared quoted tax", { exact: true }).fill("0.01"); await dialog.getByLabel("Delivery amount", { exact: true }).fill("0.12"); await dialog.getByLabel("Offered tax code", { exact: true }).fill("SUPPLIER-TAX"); await dialog.getByLabel("Lead time", { exact: true }).fill("Two weeks"); await dialog.getByRole("textbox", { name: "Line notes", exact: true }).fill("Retain accessories and complete quoted terms");
     const created = await command(page, createPath, "Create", 0, () => dialog.getByRole("button", { name: "Save supplier draft", exact: true }).click(), 201); await expect(dialog).toHaveCount(0);
     const bidId = created.quotationId; need(typeof bidId === "string" && created.version === 1 && created.supplierSubmitted === false, "Native quotation creation result invalid");
+    evidence.step = "B-reload-created-draft";
     await page.reload(); await page.getByRole("button", { name: "View draft and history", exact: true }).first().click(); await expect(page.getByText("Three years including labor", { exact: true })).toBeVisible();
     const v1 = await get(context, `${sourcePath}/quotation-drafts/${bidId}/versions/1`); need(v1.snapshot.header.offer.validity === 1 && v1.snapshot.lines[0].unitPrice === "12.3456" && v1.snapshot.header.offer.paymentTerms.text === "45 days after delivery", "Native full offer did not survive creation/reload"); evidence.snapshotHashes.created = digest(JSON.stringify(v1.snapshot));
     await logout(); ({ context, page } = await login(1));
-    await page.goto(`/procurement/workspace/rfqs/${fixture.eventId}?source=quotations`); await page.getByRole("button", { name: "View draft and history", exact: true }).first().click(); await page.getByRole("button", { name: "Revise draft", exact: true }).click(); dialog = page.getByRole("dialog");
-    await expect(dialog.getByLabel("Offered payment terms", { exact: true })).toHaveValue("45 days after delivery"); await expect(dialog.getByLabel("Unit price", { exact: true })).toHaveValue("12.3456"); await expect(dialog.getByLabel("Warranty", { exact: true })).toHaveValue("Three years including labor");
-    await dialog.getByLabel("Unit price", { exact: true }).fill("15.1234"); await dialog.getByLabel("Reason", { exact: true }).fill("Supplier corrected the quoted unit price");
+    evidence.step = "C-open-retained-draft";
+    await page.goto(`/procurement/workspace/rfqs/${fixture.eventId}?source=quotations`); evidence.step = "C-open-history"; await page.getByRole("button", { name: "View draft and history", exact: true }).first().click(); evidence.step = "C-open-revision-editor"; await page.getByRole("button", { name: "Revise draft", exact: true }).click(); dialog = page.getByRole("dialog");
+    evidence.step = "C-verify-retained-payment";
+    await expect(dialog.getByRole("textbox", { name: "Offered payment terms", exact: true })).toHaveValue("45 days after delivery"); evidence.step = "C-verify-retained-price"; await expect(dialog.getByLabel("Unit price", { exact: true })).toHaveValue("12.3456"); evidence.step = "C-verify-retained-warranty"; await expect(dialog.getByRole("textbox", { name: "Warranty", exact: true })).toHaveValue("Three years including labor");
+    evidence.step = "C-enter-revision";
+    await dialog.getByLabel("Unit price", { exact: true }).fill("15.1234"); await dialog.getByRole("textbox", { name: "Reason", exact: true }).fill("Supplier corrected the quoted unit price");
     const revised = await command(page, `${sourcePath}/quotation-drafts/${bidId}/revise`, "Revise", 1, () => dialog.getByRole("button", { name: "Save supplier draft", exact: true }).click(), 200); await expect(dialog).toHaveCount(0); need(revised.version === 2, "Native revision version invalid");
+    evidence.step = "C-read-revised-snapshot";
     const v2 = await get(context, `${sourcePath}/quotation-drafts/${bidId}/versions/2`); need(v2.snapshot.header.capturedBy === fixture.users[1].id && JSON.stringify(v1.snapshot.header.offer) === JSON.stringify(v2.snapshot.header.offer) && v2.snapshot.lines[0].deliveryAmount === v1.snapshot.lines[0].deliveryAmount && v2.snapshot.lines[0].notes === v1.snapshot.lines[0].notes && v2.snapshot.lines[0].unitPrice === "15.1234" && v2.snapshot.totals.payable === "26.59595", "Different-principal full retained revision was not confirmed"); evidence.snapshotHashes.revised = digest(JSON.stringify(v2.snapshot)); evidence.revisedPayable = v2.snapshot.totals.payable;
+    evidence.step = "C-open-original-history";
     await page.getByLabel("Historical version", { exact: true }).fill("1"); await page.getByRole("button", { name: "Open version", exact: true }).click(); await expect(page.getByRole("heading", { name: "Retained version 1", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Cancel supplier draft", exact: true }).click(); dialog = page.getByRole("dialog"); await dialog.getByLabel("Reason", { exact: true }).fill("Supplier withdrew the retained offer");
+    evidence.step = "C-open-cancellation";
+    await page.getByRole("button", { name: "Cancel supplier draft", exact: true }).click(); dialog = page.getByRole("dialog"); await dialog.getByRole("textbox", { name: "Reason", exact: true }).fill("Supplier withdrew the retained offer");
     const cancelled = await command(page, `${sourcePath}/quotation-drafts/${bidId}/cancel`, "Cancel", 1, () => dialog.getByRole("button", { name: "Confirm cancellation", exact: true }).click(), 200); await expect(dialog).toHaveCount(0); need(cancelled.version === 3 && cancelled.status === "Cancelled", "Native cancellation was not confirmed");
     await page.reload(); await page.getByRole("button", { name: "View draft and history", exact: true }).first().click(); await expect(page.getByRole("heading", { name: "Quotation history", exact: true })).toBeVisible(); await expect(page.getByRole("button", { name: "Create supplier draft", exact: true })).toHaveCount(0); await expect(page.getByRole("button", { name: "Revise draft", exact: true })).toHaveCount(0);
+    evidence.step = "C-read-cancellation-retention";
     const current = await get(context, `${sourcePath}/quotation-drafts/${bidId}`); need(current.status === "Cancelled" && current.version === 3 && current.historyTotal === 3 && retained(v2.snapshot) === retained(current.snapshot), "Native cancellation changed retained terms/evidence or history"); evidence.snapshotHashes.cancelled = digest(JSON.stringify(current.snapshot));
     need(evidence.startedCommands.length === 4 && evidence.commands.length === 4 && new Set(evidence.commands.map((x: any) => x.originalKey)).size === 4 && evidence.unexpectedBusinessWrites === 0 && !evidence.pageErrors, "Native command count, original keys or UI behavior invalid");
     evidence.status = "PASS_NATIVE_QUOTATION_UI_CONTACT_CREATE_REVISE_CANCEL"; evidence.step = "completed";
-  } catch { failed = true; evidence.status = "FAILED_NOT_ACCEPTANCE"; }
+  } catch (error) { const failure = error as Error & { safeCode?: string }; failed = true; evidence.status = "FAILED_NOT_ACCEPTANCE"; evidence.failure = { step: evidence.step, name: failure.name, code: failure.safeCode ?? (/strict mode violation/.test(failure.message) ? "StrictLocator" : /Timeout/.test(failure.message) ? "LocatorTimeout" : "HarnessAssertion"), messageSha256: digest(String(failure.message)) }; }
   finally { try { await logout(); } catch { failed = true; evidence.status = "FAILED_NOT_ACCEPTANCE"; } writeFileSync(input.output, JSON.stringify(evidence, null, 2) + "\n", { mode: 0o600, flag: "wx" }); }
   need(!failed, "Native quotation UI workflow did not pass; inspect the protected receipt");
 });

@@ -62,7 +62,7 @@ test("B and C read native quotation history through the committed original UI wi
         await page.getByRole("button", { name: "View draft and history", exact: true }).first().click();
         await expect(page.getByRole("heading", { name: "Quotation history", exact: true })).toBeVisible();
         await expect(page.getByText(detail.snapshot.totals.payable, { exact: true }).first()).toBeVisible();
-        await page.getByLabel("Historical version", { exact: true }).fill("1"); await page.getByRole("button", { name: "Open version", exact: true }).click();
+        await page.getByRole("textbox", { name: "Historical version", exact: true }).fill("1"); await page.getByRole("button", { name: "Open version", exact: true }).click();
         await expect(page.getByRole("heading", { name: "Retained version 1", exact: true })).toBeVisible(); entry.branchReadVerified = true;
         await page.getByRole("tab", { name: "Related", exact: true }).click(); await expect(page.getByText("Contact recorded", { exact: true }).last()).toBeVisible();
         evidence.step = `actor-${actorIndex}-ui-all`;
@@ -78,7 +78,7 @@ test("B and C read native quotation history through the committed original UI wi
       }
     }
     need(evidence.actors.length === 2 && evidence.businessWritesAttempted === 0, "Native read cohort incomplete"); evidence.status = "PASS_NATIVE_QUOTATION_UI_READ_HISTORY_ONLY"; evidence.step = "completed";
-  } catch { failed = true; evidence.status = "FAILED_NOT_ACCEPTANCE"; }
+  } catch (error) { const failure = error as Error; failed = true; evidence.status = "FAILED_NOT_ACCEPTANCE"; evidence.failure = { step: evidence.step, name: failure.name, code: /strict mode violation/.test(failure.message) ? "StrictLocator" : /Timeout/.test(failure.message) ? "LocatorTimeout" : "HarnessAssertion", messageSha256: digest(String(failure.message)) }; }
   finally { writeFileSync(input.output, JSON.stringify(evidence, null, 2) + "\n", { mode: 0o600, flag: "wx" }); }
   need(!failed, "Native read-only quotation UI journey did not pass; inspect protected receipt");
 });
