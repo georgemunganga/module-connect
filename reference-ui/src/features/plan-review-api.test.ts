@@ -1,3 +1,4 @@
+import { procurementIdentityBranch } from "../../../shared/shell-scope";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { capturePlanReviewScope, getPlanRound, listPlanReviewTasks, planDecisionCommand, planWithdrawCommand,
   recoverPlanReview, sendPlanReview, type PlanReviewIdentity, type PlanReviewLocator, type PlanRound } from "../../../src/platform/procurement-plan-review-api";
@@ -99,8 +100,9 @@ describe("immutable plan review and current CAS", () => {
     vi.stubGlobal("fetch", vi.fn(async () => json(value)));
     await expect(getPlanRound(scope(), submission)).rejects.toThrow();
   });
-  it("permits retained READ under Company All but sends no review command from that scope", async () => {
-    identity.branchId = null; selected = { entityId: company, branchScope: "all" };
+  it("accepts the actual Shell All empty-branch selection for retained READ and sends no review command", async () => {
+    const allSelection = { entityId: company, branch: "", branchScope: "all" };
+    identity.branchId = procurementIdentityBranch(allSelection.branch); selected = allSelection;
     const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => json(round())); vi.stubGlobal("fetch", fetcher);
     await getPlanRound(scope(), submission);
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-Shell-Branch-Scope")).toBe("all");

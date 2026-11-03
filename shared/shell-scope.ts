@@ -31,3 +31,8 @@ export function procurementScopeHeaders(companyId: string, storage?: ScopeStorag
   }
   return headers;
 }
+
+/** The Core shell represents All with an empty branch string; identity scopes use null. */
+export function procurementIdentityBranch(branch: string | undefined): string | null {
+  return branch || null;
+}

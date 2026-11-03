@@ -1,3 +1,4 @@
+import { procurementIdentityBranch } from "../../../shared/shell-scope";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { useErpShell } from "./erpShell";
@@ -15,7 +16,7 @@ export function usePlanReviewContext() {
   const readiness = useLiveReadiness(), shell = useErpShell();
   if (!readiness) throw new Error("Choose an ERP company first.");
   const identity: PlanReviewIdentity = { tenantId: readiness.tenantId, legalEntityId: readiness.legalEntityId,
-    principalId: readiness.principalId, branchId: shell.selection.branch ?? null, authEpoch: shell.authEpoch };
+    principalId: readiness.principalId, branchId: procurementIdentityBranch(shell.selection.branch), authEpoch: shell.authEpoch };
   const current = useRef<PlanReviewIdentity | null>(identity); current.current = identity;
   useEffect(() => { current.current = identity; return () => { current.current = null; }; }, []);
   return { readiness, shell, scope: capturePlanReviewScope(identity, () => current.current), key: JSON.stringify([identity,
