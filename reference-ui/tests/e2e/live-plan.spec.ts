@@ -137,3 +137,24 @@ test("unconfirmed plans create preserves entries and blocks repeat submission", 
   await expect(page).toHaveURL(/\/plans$/);
   expect(attempts).toBe(1);
 });
+
+
+test("unconfirmed draft cancellation blocks another cancel or edit until the saved plan is reviewed", async ({ page }) => {
+  await mockErp(page);
+  await page.goto("/procurement/workspace/plans/new");
+  await expect(page.getByLabel("Currency", { exact: true })).toHaveJSProperty("readOnly", true);
+  await page.getByLabel("Financial period", { exact: true }).fill("Cancellation FY");
+  await page.getByLabel("Need 1", { exact: true }).fill("Desk");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  let attempts = 0;
+  await page.route("**/api/procurement/v1/plans/*/cancel", async route => {
+    attempts++; await route.abort("connectionreset");
+  });
+  await page.getByLabel("Reason", { exact: true }).fill("Review forecast first");
+  await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "cancellation result was not confirmed" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel draft", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Edit draft", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Reload saved plan", exact: true })).toBeVisible();
+  expect(attempts).toBe(1);
+});

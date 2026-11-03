@@ -60,7 +60,7 @@ function PlanReviewQueueRecord({ openSubmission }: { openSubmission?: (id: strin
     </RecordTable></div> : !error && <EmptyState title="No plans waiting for you" description="Your current assigned plan reviews will appear here." />}
     {data?.capped && <p role="status">This task list reached its reviewed limit. Complete current tasks and refresh; it is not a complete count of all company plans.</p>}
     {data && data.total > data.pageSize && <div className="flex gap-3"><Button variant="secondary" disabled={page <= 1} onClick={() => setPage(x => x - 1)}>Previous</Button><span>Page {page}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(x => x + 1)}>Next</Button></div>}
-  </div></Panel>{selected && <PlanRoundDialog submissionId={selected} onClose={() => { setSelected(null); setRevision(x => x + 1); }} />}</>;
+  </div></Panel>{selected && <PlanRoundDialog key={selected} submissionId={selected} onClose={() => { setSelected(null); setRevision(x => x + 1); }} />}</>;
 }
 
 export function PlanHistoryPanel({ planId, openSubmission }: { planId: string; openSubmission: (id: string) => void }) {
@@ -81,7 +81,7 @@ export function PlanHistoryPanel({ planId, openSubmission }: { planId: string; o
   </div></Panel>;
 }
 
-export function PlanOwnerReviewActions({ record, onChanged, openSubmission }: { record: PlanDetail; onChanged: () => void; openSubmission: (id: string) => void }) {
+export function PlanOwnerReviewActions({ record, onChanged, openSubmission, blocked = false }: { record: PlanDetail; onChanged: () => void; openSubmission: (id: string) => void; blocked?: boolean }) {
   const { readiness, scope } = usePlanReviewContext(); const journal = planReviewJournal(scope);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [reason, setReason] = useState(""), [currency, setCurrency] = useState("");
   const allowed = record.allowedActions ?? [];
@@ -89,7 +89,7 @@ export function PlanOwnerReviewActions({ record, onChanged, openSubmission }: { 
   const submit = canPlanReviewAction(readiness, scope, allowed, "Submit", "procurement-plan-submit");
   const claim = ["procurement-plan-edit", "procurement-plan-claim-scope-all"].some(permission => canPlanReviewAction(readiness, scope, allowed, "ClaimScope", permission));
   const perform = async (operation: "Submit" | "ClaimScope") => {
-    if (busy || journal.state().blocked || !(operation === "Submit" ? submit : claim)) return;
+    if (blocked || busy || journal.state().blocked || !(operation === "Submit" ? submit : claim)) return;
     const command: PlanReviewCommand = { key: crypto.randomUUID(), planId: record.id, operation, submissionId: null, assignmentId: null,
       body: operation === "Submit" ? JSON.stringify({ expectedPlanVersion: record.version }) : JSON.stringify({ version: record.version, confirmStoredCurrencyCode: currency.trim(), reason: reason.trim() }) };
     const { body: _, ...locator } = command;
@@ -99,12 +99,12 @@ export function PlanOwnerReviewActions({ record, onChanged, openSubmission }: { 
     catch (e) { if (scope.current()) setError(message(e)); } finally { if (scope.current()) setBusy(false); }
   };
   return <><PlanReviewRecovery onRecovered={() => onChanged()} />{error && <p role="alert">{error}</p>}
-    {submit && <Button className="my-4" disabled={busy || journal.state().blocked} onClick={() => void perform("Submit")}>Send plan for review</Button>}
+    {submit && <Button className="my-4" disabled={blocked || busy || journal.state().blocked} onClick={() => void perform("Submit")}>Send plan for review</Button>}
     {allowed.includes("Withdraw") && canWrite && <p className="mt-4 text-sm">Open the current submitted version in Review history to withdraw it using its current review version.</p>}
     {claim && <Panel title="Assign this legacy plan to the selected branch" className="mt-5"><div className="space-y-3 p-5"><p className="text-sm">The plan's saved currency is {record.currencyCode}. Confirm it without converting or changing the estimates. This assigns the plan to the branch selected in Organisation context.</p>
       <Field label="Confirm saved currency"><Input value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} /></Field>
       <Field label="Branch assignment reason"><Textarea maxLength={1000} value={reason} onChange={e => setReason(e.target.value)} /></Field>
-      <Button disabled={busy || journal.state().blocked || currency.trim() !== record.currencyCode || !reason.trim()} onClick={() => void perform("ClaimScope")}>Assign selected branch</Button>
+      <Button disabled={blocked || busy || journal.state().blocked || currency.trim() !== record.currencyCode || !reason.trim()} onClick={() => void perform("ClaimScope")}>Assign selected branch</Button>
     </div></Panel>}
   </>;
 }

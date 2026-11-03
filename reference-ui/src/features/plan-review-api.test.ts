@@ -2,9 +2,9 @@ import { procurementIdentityBranch } from "../../../shared/shell-scope";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { capturePlanReviewScope, getPlanRound, listPlanReviewTasks, planDecisionCommand, planWithdrawCommand,
   recoverPlanReview, sendPlanReview, type PlanReviewIdentity, type PlanReviewLocator, type PlanRound } from "../../../src/platform/procurement-plan-review-api";
-import { encodePlanDraft, getOwnPlan } from "../../../src/platform/procurement-plans-api";
+import { encodePlanDraft, getOwnPlan, PlanApiError } from "../../../src/platform/procurement-plans-api";
 import { readPlanJson, sumPlanAmounts } from "../../../shared/procurement-plan-json";
-import { canPlanReviewAction } from "../lib/plan-review-access";
+import { canPlanReviewAction, planDraftFailureBlock } from "../lib/plan-review-access";
 import { planReviewJournal } from "../lib/plan-review-journal";
 const company = "11111111-1111-4111-8111-111111111111", branch = "22222222-2222-4222-8222-222222222222";
 const principal = "33333333-3333-4333-8333-333333333333", plan = "44444444-4444-4444-8444-444444444444";
@@ -30,6 +30,14 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 describe("plan exact wire contract", () => {
+  it("blocks another draft mutation after uncertain/stale cancellation but permits correction of validation errors", () => {
+    for (const error of [new TypeError("Response lost"), new PlanApiError(0, "Invalid saved response"), new PlanApiError(503, "Unconfirmed")]) {
+      expect(planDraftFailureBlock(error)).toBe("unknown");
+    }
+    expect(planDraftFailureBlock(new PlanApiError(409, "Changed"))).toBe("stale");
+    expect(planDraftFailureBlock(new PlanApiError(422, "Give a reason"))).toBeNull();
+    expect(planDraftFailureBlock(new PlanApiError(403, "Denied"))).toBeNull();
+  });
   it("preserves numeric18,4 JSON tokens and exact quoted submitted amounts without Number", async () => {
     const raw = '{"estimatedAmount":99999999999999.9999,"estimatedQuantity":0.0001,"version":3,"description":"estimatedAmount:5"}';
     expect(readPlanJson(raw)).toEqual({ estimatedAmount: "99999999999999.9999", estimatedQuantity: "0.0001", version: 3, description: "estimatedAmount:5" });

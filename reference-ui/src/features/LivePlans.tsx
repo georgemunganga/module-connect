@@ -4,13 +4,13 @@ import { Plus, Trash2 } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Panel, Textarea } from "../components/ui";
 import { PlanContextBoundary, usePlanReviewContext } from "../lib/PlanReviewContext";
 import { PlanHistoryPanel, PlanOwnerReviewActions, PlanReviewQueue, PlanRoundDialog, planStatusLabel, PlanReviewRecovery } from "./LivePlanReview";
+import { planDraftFailureBlock } from "../lib/plan-review-access";
 import { planReviewJournal } from "../lib/plan-review-journal";
 import { sumPlanAmounts } from "../../../shared/procurement-plan-json";
 import { formatBudgetAmount } from "../../../src/platform/procurement-budget-amount";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  PlanApiError,
   cancelOwnPlan, createOwnPlan, getOwnPlan, listOwnPlans, updateOwnPlan,
   type PlanDetail, type PlanDraft, type PlanLineDraft, type PlanPage,
 } from "../../../src/platform/procurement-plans-api";
@@ -61,7 +61,7 @@ function PlanListRecord() {
       </RecordTable></div> : <EmptyState title="No purchase plans yet" description="Add a draft forecast for the next financial period." action={newPlan ? <Link to="/plans/new"><Button>New plan</Button></Link> : undefined} />}
       {data && data.total > data.pageSize && <div className="mt-4 flex items-center gap-3 text-sm"><Button variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="secondary" disabled={page * data.pageSize >= data.total} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div></Panel> : <p role="alert">You do not have access to your own plans in this company.</p>}
-    {selectedRound && canReview && <PlanRoundDialog submissionId={selectedRound} onClose={() => setParams(toReview ? { view: "review" } : {})} />}
+    {selectedRound && canReview && <PlanRoundDialog key={selectedRound} submissionId={selectedRound} onClose={() => setParams(toReview ? { view: "review" } : {})} />}
   </div>;
 }
 
@@ -128,8 +128,8 @@ function PlanEditorRecord() {
     } catch (cause) {
       if (isCurrentSave()) {
         setError(errorText(cause));
-        if (cause instanceof PlanApiError && cause.status === 409) setSaveBlock("stale");
-        else if (!(cause instanceof PlanApiError) || cause.status === 0 || cause.status >= 500) setSaveBlock("unknown");
+        const block = planDraftFailureBlock(cause);
+        if (block) setSaveBlock(block);
       }
     }
     finally { if (isCurrentSave()) setSaving(false); }
@@ -146,7 +146,7 @@ function PlanEditorRecord() {
       {saveBlock && <p role="status" className="rounded-lg border border-border p-3 text-sm">{saveBlock === "stale" ? "The saved plan changed. Review it before saving again." : "The save result was not confirmed. Review saved plans before trying again."} <Link className="text-primary underline" to={id ? `/plans/${id}` : "/plans"}>Review saved plan{id ? "" : "s"}</Link></p>}
       <Panel title="Plan details"><div className="grid gap-4 p-5 sm:grid-cols-3">
         <Field label="Financial period"><Input required maxLength={100} placeholder="For example, FY 2027" value={draft.financialPeriodRef} onChange={(event) => field("financialPeriodRef", event.target.value)} /></Field>
-        <Field label="Currency"><Input required maxLength={3} value={draft.currencyCode} onChange={(event) => field("currencyCode", event.target.value.toUpperCase())} /></Field>
+        <Field label="Currency" hint="The company sets the currency for a new plan. Saved plans keep their original currency."><Input readOnly required maxLength={3} value={draft.currencyCode} /></Field>
         <Field label="Funding source reference"><Input maxLength={100} value={draft.fundingSourceRef || ""} onChange={(event) => field("fundingSourceRef", event.target.value || null)} /></Field>
       </div></Panel>
       <Panel title="Planned needs"><div className="space-y-4 p-5">
@@ -179,6 +179,8 @@ function PlanDetailRecord() {
   const [record, setRecord] = useState<PlanDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [cancelBlock, setCancelBlock] = useState<"stale" | "unknown" | null>(null);
+  const pendingReview = planReviewJournal(scope).state().blocked;
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
@@ -191,23 +193,24 @@ function PlanDetailRecord() {
     return () => controller.abort();
   }, [id, legalEntityId, revision]);
   async function cancel() {
-    if (!canChange("Cancel") || busy) return;
+    if (!canChange("Cancel") || busy || cancelBlock || pendingReview || !scope.current()) return;
     if (!record || !reason.trim()) { setError("Give a reason for cancelling this plan."); return; }
     setBusy(true); setError("");
     try { await cancelOwnPlan(legalEntityId, record.id, record.version, reason.trim()); navigate("/plans"); }
-    catch (cause) { setError(errorText(cause)); }
-    finally { setBusy(false); }
+    catch (cause) { if (scope.current()) { setError(errorText(cause)); setCancelBlock(planDraftFailureBlock(cause)); } }
+    finally { if (scope.current()) setBusy(false); }
   }
   return <div className="p-5 sm:p-8">
     {loading ? <p role="status">Loading plan…</p> : record ? <>
-      <PageHeader title={record.financialPeriodRef} subtitle={`${record.number} · Purchase forecast`} actions={canChange("Edit") ? <Link to={`/plans/${record.id}/edit`}><Button>Edit draft</Button></Link> : undefined} />
+      <PageHeader title={record.financialPeriodRef} subtitle={`${record.number} · Purchase forecast`} actions={canChange("Edit") ? <Link to={`/plans/${record.id}/edit`} aria-disabled={busy || !!cancelBlock || pendingReview} onClick={event => { if (busy || cancelBlock || pendingReview) event.preventDefault(); }}><Button disabled={busy || !!cancelBlock || pendingReview}>Edit draft</Button></Link> : undefined} />
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       <Panel title="Forecast"><div className="grid gap-4 p-5 text-sm sm:grid-cols-3"><div><span className="text-muted-foreground">Status</span><div className="mt-1"><Badge>{planStatusLabel(record.status)}</Badge></div></div><div><span className="text-muted-foreground">Currency</span><div className="mt-1">{record.currencyCode}</div></div><div><span className="text-muted-foreground">Estimated total</span><div className="mt-1">{money(sumPlanAmounts(record.lines.filter((line) => line.status === "Active").map(line => line.estimatedAmount)), record.currencyCode)}</div></div>{record.statusReason && <div className="sm:col-span-3"><span className="text-muted-foreground">Reason</span><div>{record.statusReason}</div></div>}</div></Panel>
       <Panel title="Planned needs" className="mt-5"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Need</th><th>Quantity</th><th>Unit</th><th>Estimated amount</th><th>Expected</th><th>Status</th></tr></thead><tbody>{record.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.estimatedQuantity}</td><td>{line.unitCode}</td><td>{money(line.estimatedAmount, record.currencyCode)}</td><td>{line.expectedOn || "—"}</td><td><Badge>{line.status}</Badge></td></tr>)}</tbody></RecordTable></div></Panel>
-      {canChange("Cancel") && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
-      <PlanOwnerReviewActions record={record} onChanged={() => setRevision(x => x + 1)} openSubmission={setSelectedRound} />
+      {canChange("Cancel") && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !!cancelBlock || pendingReview || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
+      {cancelBlock && <p role="status" className="mt-4 text-sm">{cancelBlock === "stale" ? "The saved plan changed. Review it before another cancellation." : "The cancellation result was not confirmed. Review the saved plan before trying again."} <Button variant="secondary" onClick={() => window.location.reload()}>Reload saved plan</Button></p>}
+      <PlanOwnerReviewActions record={record} blocked={busy || !!cancelBlock} onChanged={() => setRevision(x => x + 1)} openSubmission={setSelectedRound} />
       <PlanHistoryPanel key={`${record.id}:${revision}`} planId={record.id} openSubmission={setSelectedRound} />
-      {selectedRound && capabilities.planReviewRead && <PlanRoundDialog submissionId={selectedRound} onClose={() => { setSelectedRound(null); setRevision(x => x + 1); }} />}
+      {selectedRound && capabilities.planReviewRead && <PlanRoundDialog key={selectedRound} submissionId={selectedRound} onClose={() => { setSelectedRound(null); setRevision(x => x + 1); }} />}
     </> : <p role="alert">{error || "Plan not found."}</p>}
     <Link to="/plans" className="mt-5 inline-block text-sm text-primary hover:underline">Back to purchase plans</Link>
   </div>;
