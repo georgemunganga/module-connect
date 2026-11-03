@@ -152,7 +152,7 @@ function PublicationRecord({ id, company, permissions, newWorkEnabled, slot, can
   const assignment = record.publication?.assignments.find(value => value.state === "Pending");
   return <RfqDetailLayout title={record.title} number={record.number} method={record.method} currency={record.currencyCode}
     status={record.status} back="/rfqs?source=principal-approved"
-    actions={<Button variant="secondary" disabled title="Supplier delivery is a later controlled step">Send to suppliers</Button>}
+    actions={<>{permissions.includes("procurement-quotation-read") && (record.status === "Published" || record.status === "Cancelled") && <Link to={`/rfqs/${record.id}?source=quotations`}><Button variant="secondary">Supplier drafts and outside contact</Button></Link>}<Button variant="secondary" disabled title="Supplier delivery is a later controlled step">Send to suppliers</Button></>}
     itemCount={record.lines.length} items={<div className="overflow-x-auto"><RecordTable><thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Approved estimate</th><th>Source balance</th></tr></thead><tbody>{record.lines.map(line =>
       <tr key={line.id}><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitCode}</td><td>{record.currencyCode} {line.approvedUnitEstimate}</td>
         <td>{line.allocationState === "Reserved" ? "Held for this RFQ" : "Released"}</td></tr>)}</tbody></RecordTable></div>}
