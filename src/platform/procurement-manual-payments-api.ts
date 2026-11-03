@@ -30,6 +30,7 @@ export type ManualPaymentDetail = { request: ManualPaymentSummary & { purpose: s
   coreDecisions: { id: string; manualPaymentDecisionId: string; coreApprovalDecisionId: string;
     manualAction: ManualPaymentAction; actorPrincipalId: string; decidedAt: string; coreAction: string }[];
   people: { principalId: string; displayName: string }[];
+  branch?: { id: string; code: string; name: string } | null;
   companyClock: { date: string; timeZoneId: string; observedAtUtc: string } | null;
   sourceInvoice: { invoiceId: string; invoiceNumber: string; supplierId: string;
     displayName: string; currencyCode: string; grossExact: string; invoiceDate: string; branchId: string } | null };
@@ -329,6 +330,9 @@ export async function getManualPayment(scope: ManualPaymentScope, requestId: str
       || typeof body.companyClock.timeZoneId !== "string"
       || !body.companyClock.timeZoneId.trim() || body.companyClock.timeZoneId.length > 100
       || !iso(body.companyClock.observedAtUtc))) throw invalid();
+  if (body.branch !== undefined && body.branch !== null
+    && (!obj(body.branch) || body.branch.id !== requestRow.branchId
+      || typeof body.branch.code !== "string" || typeof body.branch.name !== "string")) throw invalid();
   if (body.sourceInvoice !== undefined && body.sourceInvoice !== null
     && (!obj(body.sourceInvoice) || !id(body.sourceInvoice.invoiceId)
       || body.sourceInvoice.invoiceId !== requestRow.supplierInvoiceId

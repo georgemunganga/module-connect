@@ -22,6 +22,8 @@ import {
 } from "../../../src/platform/procurement-manual-payments-api";
 
 const statuses = Object.keys(statusLabels) as ManualPaymentStatus[];
+const statusLabel = (value: string) => statuses.includes(value as ManualPaymentStatus)
+  ? statusLabels[value as ManualPaymentStatus] : value;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : "Payment information is unavailable. Try again.";
 type PaymentContext = { scope: ManualPaymentScope; readiness: NonNullable<ReturnType<typeof useLiveReadiness>>;
   branchId: string | null; key: string };
@@ -441,7 +443,9 @@ function PaymentDetailRecord() {
           <DetailValue label="Approved amount" value={request.approvedAmountExact ? `${request.currencyCode} ${request.approvedAmountExact}` : undefined} />
           <DetailValue label="Recorded amount" value={request.recordedAmountExact ? `${request.currencyCode} ${request.recordedAmountExact}` : undefined} />
           <DetailValue label="External payment date" value={request.paidOn} /><DetailValue label="External method" value={request.externalMethod} />
-          <DetailValue label="External reference" value={request.externalReference} /><DetailValue label="Branch ID" value={request.branchId} />
+          <DetailValue label="External reference" value={request.externalReference} /><DetailValue label="Branch"
+            value={detail.branch?.name.trim() ? `${detail.branch.name}${detail.branch.code.trim() ? ` (${detail.branch.code})` : ""}`
+              : detail.branch?.code.trim() || "Branch unavailable"} />
           <DetailValue label="Requested by" value={person(request.creatorPrincipalId)} />
           <DetailValue label="Approver" value={person(request.approverPrincipalId)} />
           <DetailValue label="Recorder" value={person(request.recorderPrincipalId)} />
@@ -450,7 +454,7 @@ function PaymentDetailRecord() {
       </DetailSection><div className="space-y-4">
         <DetailSection title="Record Activity"><ActivityTimeline items={detail.transitions.map(value => ({ id: value.id,
           title: value.action === "Record" ? "External payment recorded" : value.action === "Confirm" ? "Manually confirmed" : value.action,
-          detail: value.reason || `${value.fromStatus} → ${value.toStatus}`, date: value.occurredAt }))} /></DetailSection>
+          detail: value.reason || `${statusLabel(value.fromStatus)} → ${statusLabel(value.toStatus)}`, date: value.occurredAt }))} /></DetailSection>
         <DetailSection title="Workflow context"><p className="text-sm">Approval and confirmation are independent Core tasks. Finance still owns payment posting and bank reconciliation.</p>
           <p className="mt-2 text-xs text-muted-foreground">Manual confirmation does not mark the Finance bill paid.</p></DetailSection>
       </div></div>}
@@ -465,7 +469,7 @@ function PaymentDetailRecord() {
     </DetailSection>}
     {tab === "comments" && <DetailSection title="Comments"><p className="text-sm text-muted-foreground">Comments are not available for manual payment requests yet. Reasons appear in History.</p></DetailSection>}
     {tab === "history" && <div className="space-y-4"><DetailSection title="Request history"><ActivityTimeline items={detail.transitions.map(value => ({ id: value.id, title: value.action,
-      detail: value.reason || `${value.fromStatus} → ${value.toStatus}`, date: value.occurredAt }))} /></DetailSection>
+      detail: value.reason || `${statusLabel(value.fromStatus)} → ${statusLabel(value.toStatus)}`, date: value.occurredAt }))} /></DetailSection>
       <DetailSection title="Core review history"><ActivityTimeline items={detail.coreDecisions.map(value => ({ id: value.id,
         title: `${value.manualAction} · ${value.coreAction}`, detail: `Case decision ${value.coreApprovalDecisionId}`, date: value.decidedAt }))} /></DetailSection></div>}
     {action && <Modal title={action === "Record" ? "Record external payment" : `${action} payment request`} onClose={() => { if (!busy) setAction(null); }}>
