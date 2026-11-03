@@ -21,6 +21,14 @@ function fixture(overrides: Record<string, unknown> = {}, flags: Record<string, 
       capabilities: { ...capabilities, ...flags } }));
 }
 describe("Procurement system-user readiness", () => {
+  it.each([undefined, false, true, "true", 1, null])("keeps round planning optional, exact-true and independent of existing M4 availability (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { roundPlanRead: true, roundPlanRecord: flag, principalSourcingPublication: true }));
+    expect(result.capabilities.roundPlanRead).toBe(true); expect(result.capabilities.roundPlanRecord).toBe(flag === true);
+    expect(result.capabilities.principalSourcingPublication).toBe(true);
+    const older = await fetchProcurementReadiness({}, undefined, fixture({}, { roundPlanRead: flag }));
+    expect(older.capabilities.roundPlanRead).toBe(flag === true); expect(older.capabilities.roundPlanRecord).toBe(false);
+  });
+
   it.each([undefined, false, true, "true", null])("keeps replacement history optional and independent from current write/calculation capability (%s)", async flag => {
     const result = await fetchProcurementReadiness({}, undefined,
       fixture({}, { invoiceReplacementRead: flag, invoiceCurrencyCalculationV2: false }));
