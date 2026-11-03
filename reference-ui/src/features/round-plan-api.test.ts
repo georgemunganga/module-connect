@@ -1,3 +1,4 @@
+import { procurementIdentityBranch } from "../../../shared/shell-scope";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureRoundScope, getRoundPlan, getRoundPlanVersion, getRoundPlanHistory, listRoundPlanSources, searchRoundPeople, roundCommand, sendRoundPlan, recoverRoundPlan, validateRoundDraft,
   type RoundDraft, type RoundIdentity, type RoundLocator } from "../../../src/platform/procurement-round-plan-api";
@@ -67,8 +68,9 @@ describe("retained round scope and history", () => {
       vi.stubGlobal("fetch", vi.fn(async () => json(x))); await expect(getRoundPlan(scope(), event)).rejects.toThrow();
     }
   });
-  it("keeps Company All retained reads and blocks writes before HTTP", async () => {
-    identity.branchId = null; selected = { entityId: company, branchScope: "all" };
+  it("accepts the actual Shell All empty-branch shape for retained reads and blocks writes before HTTP", async () => {
+    const allSelection = { entityId: company, branch: "", branchScope: "all" };
+    identity.branchId = procurementIdentityBranch(allSelection.branch); selected = allSelection;
     const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => json({ ...record(), allowedActions: [] })); vi.stubGlobal("fetch", fetcher);
     await getRoundPlan(scope(), event); expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-Shell-Branch-Scope")).toBe("all");
     await expect(sendRoundPlan(scope(), roundCommand(event, 7, null, "Create", key, empty()))).rejects.toThrow("Choose"); expect(fetcher).toHaveBeenCalledTimes(1);
