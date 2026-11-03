@@ -13,7 +13,7 @@ import { planReviewWritesAvailable, canPlanReviewAction } from "../lib/plan-revi
 import { planReviewJournal } from "../lib/plan-review-journal";
 const message = (e: unknown) => e instanceof Error ? e.message : "Plan review is unavailable.";
 export const planStatusLabel = (s: string) => ({ Draft: "Draft", Submitted: "Awaiting review", Reviewed: "Awaiting final approval",
-  Returned: "Changes requested", Approved: "Approved", Rejected: "Rejected", Withdrawn: "Withdrawn", Cancelled: "Cancelled", Pending: "In progress" }[s] ?? s);
+  Returned: "Changes requested", Active: "Approved", Approved: "Approved", Rejected: "Rejected", Withdrawn: "Withdrawn", Cancelled: "Cancelled", Pending: "In progress" }[s] ?? s);
 
 export function PlanReviewRecovery({ onRecovered }: { onRecovered?: (r: PlanReviewReceipt) => void }) {
   const { readiness, scope } = usePlanReviewContext(); const journal = planReviewJournal(scope);
@@ -147,7 +147,7 @@ export function PlanRoundDialog({ submissionId, onClose }: { submissionId: strin
         <p>{formatBudgetAmount(data.submittedSnapshot.estimatedAmount, data.currencyCode)} · {data.submittedSnapshot.fundingSourceRef || "No funding reference"}</p>
       </div></Panel>
       <Panel title="Submitted planned needs"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Need</th><th>Quantity</th><th>Unit</th><th>Estimated amount</th><th>Expected</th></tr></thead><tbody>{data.submittedSnapshot.lines.map(l => <tr key={l.id}><td>{l.description}</td><td>{l.estimatedQuantity}</td><td>{l.unitCode}</td><td>{formatBudgetAmount(l.estimatedAmount, data.currencyCode)}</td><td>{l.expectedOn || "—"}</td></tr>)}</tbody></RecordTable></div></Panel>
-      {data.stages.map(stage => <Panel key={stage.id} title={stage.code === "Final" ? "Final approval" : "Plan review"}><div className="space-y-3 p-5"><Badge>{planStatusLabel(stage.state)}</Badge>
+      {data.stages.map(stage => <Panel key={stage.id} title={stage.code === "Final" ? "Final approval" : "Plan review"}><div className="space-y-3 p-5"><Badge>{stage.state === "Active" ? "In progress" : planStatusLabel(stage.state)}</Badge>
         {stage.assignments.filter(a => a.assigneeSubjectId === scope.identity.principalId).map(a => <div key={a.id} className="flex flex-wrap gap-3">{writable && readiness.permissions.includes(stage.code === "Final" ? "procurement-plan-approve" : "procurement-plan-review") && a.allowedActions.filter((x): x is "Approve" | "Return" | "Reject" => ["Approve", "Return", "Reject"].includes(x)).map(action => <Button key={action} variant={action === "Reject" ? "danger" : "secondary"} disabled={busy || journal.state().blocked} onClick={() => { setReason(""); setIntent({ action, assignmentId: a.id }); }}>{action === "Return" ? "Send back" : action === "Approve" ? stage.code === "Final" ? "Approve plan" : "Mark as reviewed" : "Reject"}</Button>)}</div>)}
       </div></Panel>)}
       {writable && data.allowedActions.includes("Withdraw") && readiness.permissions.includes("procurement-plan-withdraw") && <Button variant="secondary" disabled={busy || journal.state().blocked} onClick={() => { setReason(""); setWithdrawing(true); }}>Withdraw from review</Button>}

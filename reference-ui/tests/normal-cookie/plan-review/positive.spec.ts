@@ -123,7 +123,7 @@ test("actual Core owner submits, assigned reviewer reviews, independent final ac
     await finalDialog.getByRole("button", { name: "Approve plan", exact: true }).click();
     const approved = await command(page, "final", "FinalApprove", `${api}/review-submissions/${submissionId}/assignments/${finalTask.assignmentId}/decisions`, 200,
       () => page.getByRole("dialog", { name: "Approve plan", exact: true }).getByRole("button", { name: "Confirm decision", exact: true }).click());
-    need(guid(approved.decisionId) && approved.status === "Approved" && approved.planId === planId && approved.submissionId === submissionId && approved.caseId === caseId, "FinalApprovalResultMismatch");
+    need(guid(approved.decisionId) && approved.status === "Active" && approved.roundState === "Approved" && approved.planId === planId && approved.submissionId === submissionId && approved.caseId === caseId, "FinalApprovalResultMismatch");
     await close(true); ({ context, page } = await open("owner"));
     report.step = "owner-approved-history-reload"; persist(); await page.goto(`/procurement/workspace/plans/${planId}`); await page.reload();
     await expect(page.getByRole("heading", { name: financialPeriod, exact: true })).toBeVisible(); await expect(page.getByText("Approved", { exact: true }).first()).toBeVisible();
@@ -131,9 +131,10 @@ test("actual Core owner submits, assigned reviewer reviews, independent final ac
     const savedDialog = page.getByRole("dialog", { name: "Submitted purchase plan", exact: true }); await expect(savedDialog.getByRole("cell", { name: description, exact: true })).toBeVisible();
     for (const name of ["Mark as reviewed", "Approve plan", "Withdraw from review"]) await expect(savedDialog.getByRole("button", { name, exact: true })).toHaveCount(0);
     const finalRound = await read(context, `${api}/review-submissions/${submissionId}`), finalHistory = await read(context, `${api}/${planId}/review-history`);
-    need(finalRound.planStatus === "Approved" && finalRound.snapshotSha256 === snapshotHash && finalHistory.rounds?.length === 1
-      && finalHistory.decisions?.length === 2 && report.commands.length === 4 && report.startedCommands.length === 4
+    need(finalRound.planStatus === "Active" && finalRound.state === "Approved" && finalRound.snapshotSha256 === snapshotHash && finalHistory.rounds?.length === 1
+      && finalHistory.rounds[0].state === "Approved" && finalHistory.decisions?.length === 2 && report.commands.length === 4 && report.startedCommands.length === 4
       && new Set(report.commands.slice(1).map((x: any) => x.originalKey)).size === 3 && !violation && report.pageErrors.length === 0, "RetainedHistoryOrCommandBudgetMismatch");
+    report.assertions.planStatus = finalRound.planStatus; report.assertions.roundState = finalRound.state;
     report.assertions.reviewDecisionId = reviewed.decisionId; report.assertions.finalDecisionId = approved.decisionId;
     report.status = "PASS_NATIVE_PLAN_UI_FOUR_COMMANDS_AWAIT_OWNER_RECONCILIATION"; report.step = "completed";
   } catch (error) { report.status = "FAILED_PRESERVE_EXISTING_RECORDS_NO_RETRY"; report.failure = { step: report.step, message: String((error as Error).message) }; }
