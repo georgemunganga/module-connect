@@ -7,6 +7,7 @@ export type PublicationRow = { id: string; number: string; state: "VerifiedRetai
 export type PublicationPage = { items: PublicationRow[]; total: number; page: number; pageSize: number };
 export type PublicationAssignment = { id: string; version: number; state: string; permissionKey: string };
 export type PublicationDetail = { id: string; number: string; title: string; method: string; currencyCode: string;
+  roundPlan?: { enrolled: boolean; status: "Draft" | "Cancelled" | null; publicationBlocked: boolean; sourceCancellationBlocked: boolean };
   status: PublicationStatus; version: number; originalDraftFingerprint: string; cancellationReason?: string | null;
   lines: { id: string; purchaseRequestId: string; purchaseRequestLineId: string; description: string;
     unitCode: string; categoryCode: string | null; quantity: string; approvedUnitEstimate: string;
@@ -93,6 +94,14 @@ export async function getPublication(company: string, eventId: string, signal?: 
     || body.lines.length < 1 || body.lines.length > 200 || body.canPublish !== false
     || body.financeReservationChanged !== false) throw invalid();
   const status = body.status as PublicationStatus;
+  let roundPlan: PublicationDetail["roundPlan"];
+  if (body.roundPlan !== undefined) {
+    const r = body.roundPlan;
+    if (!object(r) || typeof r.enrolled !== "boolean" || typeof r.publicationBlocked !== "boolean" || typeof r.sourceCancellationBlocked !== "boolean"
+      || !(r.status === null || r.status === "Draft" || r.status === "Cancelled") || r.enrolled !== (r.status !== null)
+      || r.publicationBlocked !== r.enrolled || !r.enrolled && r.sourceCancellationBlocked) throw invalid();
+    roundPlan = r as PublicationDetail["roundPlan"];
+  }
   const lines = body.lines.map(value => {
     if (!object(value) || !id(value.id) || !id(value.purchaseRequestId) || !id(value.purchaseRequestLineId)
       || typeof value.description !== "string" || typeof value.unitCode !== "string"
@@ -104,7 +113,7 @@ export async function getPublication(company: string, eventId: string, signal?: 
   if (status === "Draft" || status === "Cancelled") {
     if (body.supplierDeliveryState !== "NotStarted"
       || !(body.cancellationReason === null || typeof body.cancellationReason === "string")) throw invalid();
-    return { id: eventId, number: body.number, title: body.title, method: body.method,
+    return { roundPlan, id: eventId, number: body.number, title: body.title, method: body.method,
       currencyCode: body.currencyCode, status, version: body.version,
       originalDraftFingerprint: body.originalDraftFingerprint, cancellationReason: body.cancellationReason as string | null,
       lines, invitations: [] };
@@ -129,7 +138,7 @@ export async function getPublication(company: string, eventId: string, signal?: 
     return { id: value.id, supplierId: value.supplierId,
       status: value.status as "ReadyForManualDelivery" | "ManualContactRecorded", version: value.version, contactRecorded };
   });
-  return { id: eventId, number: body.number, title: body.title, method: body.method,
+  return { roundPlan, id: eventId, number: body.number, title: body.title, method: body.method,
     currencyCode: body.currencyCode, status, version: body.version,
     originalDraftFingerprint: body.originalDraftFingerprint, lines, invitations,
     publication: { openingId: body.publication.openingId, coreCaseId: body.publication.coreCaseId,
