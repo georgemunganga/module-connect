@@ -18,7 +18,15 @@ def all_cookie_cleanup_confirmed(rows):
 def main():
     assert os.environ.get('PLAN_NATIVE_COOKIE_CLEANUP_REVIEWED_EXECUTION')=='1'
     p=fixture();scope,cgroup=outer_scope(False)
-    assert not(cgroup/'cgroup.procs').read_text().strip(),'Root must kill and verify the owned browser scope empty first'
+    if scope.get('supervisorKind')=='systemd-user-service':
+        proof=protected_json(os.environ['PLAN_NATIVE_SCOPE_EMPTY_PROOF'],os.environ['PLAN_NATIVE_SCOPE_EMPTY_PROOF_SHA256'])
+        assert os.environ['PLAN_NATIVE_SCOPE_EMPTY_PROOF']==scope['scopeEmptyProofPath']
+        assert proof['status']=='PASS_OWNED_SYSTEMD_UNIT_STOPPED_AND_SCOPE_EMPTY'and proof['scopeReceiptSha256']==os.environ['PLAN_NATIVE_OUTER_SCOPE_SHA256']
+        assert proof['fixtureSha256']==os.environ['PLAN_NATIVE_FIXTURE_SHA256']and proof['unitName']==scope['unitName']and proof['cgroupPath']==str(cgroup)
+        assert re.fullmatch(r'[a-f0-9]{32}',proof['actualUnitInvocationIdObserved'])and proof['actualUnitOwnershipMarkerVerified']is True
+    if cgroup.exists():
+        assert not(cgroup/'cgroup.procs').read_text().strip(),'Root must kill and verify the owned browser scope empty first'
+    else:assert scope.get('supervisorKind')=='systemd-user-service','Missing cgroup without systemd empty proof'
     output=private_output(scope['cookieCleanupResultPath'])
     report={'status':'CLEANUP_RUNNING','fixtureSha256':os.environ['PLAN_NATIVE_FIXTURE_SHA256'],
       'outerScopeReceiptSha256':os.environ['PLAN_NATIVE_OUTER_SCOPE_SHA256'],'ownedCgroupObservedEmptyBeforeAuthCleanup':True,
