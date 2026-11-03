@@ -180,6 +180,7 @@ function PlanDetailRecord() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [cancelBlock, setCancelBlock] = useState<"stale" | "unknown" | null>(null);
+  const [, refreshJournal] = useState(0);
   const pendingReview = planReviewJournal(scope).state().blocked;
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -193,7 +194,7 @@ function PlanDetailRecord() {
     return () => controller.abort();
   }, [id, legalEntityId, revision]);
   async function cancel() {
-    if (!canChange("Cancel") || busy || cancelBlock || pendingReview || !scope.current()) return;
+    if (!canChange("Cancel") || busy || cancelBlock || planReviewJournal(scope).state().blocked || !scope.current()) return;
     if (!record || !reason.trim()) { setError("Give a reason for cancelling this plan."); return; }
     setBusy(true); setError("");
     try { await cancelOwnPlan(legalEntityId, record.id, record.version, reason.trim()); navigate("/plans"); }
@@ -208,7 +209,7 @@ function PlanDetailRecord() {
       <Panel title="Planned needs" className="mt-5"><div className="overflow-x-auto p-5"><RecordTable><thead><tr><th>Need</th><th>Quantity</th><th>Unit</th><th>Estimated amount</th><th>Expected</th><th>Status</th></tr></thead><tbody>{record.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.estimatedQuantity}</td><td>{line.unitCode}</td><td>{money(line.estimatedAmount, record.currencyCode)}</td><td>{line.expectedOn || "—"}</td><td><Badge>{line.status}</Badge></td></tr>)}</tbody></RecordTable></div></Panel>
       {canChange("Cancel") && <Panel title="Cancel draft" className="mt-5"><div className="space-y-3 p-5"><Field label="Reason"><Textarea maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="danger" disabled={busy || !!cancelBlock || pendingReview || !reason.trim()} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel draft"}</Button></div></Panel>}
       {cancelBlock && <p role="status" className="mt-4 text-sm">{cancelBlock === "stale" ? "The saved plan changed. Review it before another cancellation." : "The cancellation result was not confirmed. Review the saved plan before trying again."} <Button variant="secondary" onClick={() => window.location.reload()}>Reload saved plan</Button></p>}
-      <PlanOwnerReviewActions record={record} blocked={busy || !!cancelBlock} onChanged={() => setRevision(x => x + 1)} openSubmission={setSelectedRound} />
+      <PlanOwnerReviewActions record={record} blocked={busy || !!cancelBlock} onPendingChanged={() => refreshJournal(x => x + 1)} onChanged={() => setRevision(x => x + 1)} openSubmission={setSelectedRound} />
       <PlanHistoryPanel key={`${record.id}:${revision}`} planId={record.id} openSubmission={setSelectedRound} />
       {selectedRound && capabilities.planReviewRead && <PlanRoundDialog key={selectedRound} submissionId={selectedRound} onClose={() => { setSelectedRound(null); setRevision(x => x + 1); }} />}
     </> : <p role="alert">{error || "Plan not found."}</p>}

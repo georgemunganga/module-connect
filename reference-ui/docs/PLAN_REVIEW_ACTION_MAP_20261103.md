@@ -93,3 +93,5 @@ All paths below use the existing production presentation under `/procurement/wor
 | Organisation → Company All → owner history/current or assigned task/detail/recovery | Finite authorized GETs retain All header and branch scope; no POST or mutation controls. A real account/branch change clears prior record/drawer evidence. |
 
 READ-off, absent optional metadata, revoked current READ, no policy, inactive/unauthorized reviewer, wrong branch, stale CAS, malformed immutable evidence and unavailable store need separate denied/error-state checks with zero unauthorized writes. This is a bounded Plan milestone; parent issue145 remains open.
+
+Cancellation follow-up review also corrected the parent/child journal notification: claiming a Submit/ClaimScope command refreshes the owner's detail action state immediately, and Cancel rechecks the live journal at click time. This prevents a previously rendered Cancel control from using an earlier unblocked journal snapshot while a review response is unresolved.

@@ -81,7 +81,7 @@ export function PlanHistoryPanel({ planId, openSubmission }: { planId: string; o
   </div></Panel>;
 }
 
-export function PlanOwnerReviewActions({ record, onChanged, openSubmission, blocked = false }: { record: PlanDetail; onChanged: () => void; openSubmission: (id: string) => void; blocked?: boolean }) {
+export function PlanOwnerReviewActions({ record, onChanged, openSubmission, blocked = false, onPendingChanged }: { record: PlanDetail; onChanged: () => void; openSubmission: (id: string) => void; blocked?: boolean; onPendingChanged?: () => void }) {
   const { readiness, scope } = usePlanReviewContext(); const journal = planReviewJournal(scope);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [reason, setReason] = useState(""), [currency, setCurrency] = useState("");
   const allowed = record.allowedActions ?? [];
@@ -94,6 +94,7 @@ export function PlanOwnerReviewActions({ record, onChanged, openSubmission, bloc
       body: operation === "Submit" ? JSON.stringify({ expectedPlanVersion: record.version }) : JSON.stringify({ version: record.version, confirmStoredCurrencyCode: currency.trim(), reason: reason.trim() }) };
     const { body: _, ...locator } = command;
     if (!journal.claim(locator)) return;
+    onPendingChanged?.();
     setBusy(true); setError("");
     try { const receipt = await sendPlanReview(scope, command); if (scope.current() && journal.confirm(locator, receipt)) { onChanged(); if (receipt.submissionId) openSubmission(receipt.submissionId); } }
     catch (e) { if (scope.current()) setError(message(e)); } finally { if (scope.current()) setBusy(false); }
