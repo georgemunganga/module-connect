@@ -438,6 +438,7 @@ test("recorded outside contact preserves the published RFQ detail and its tabs",
   const calls = await mock(page, { principal: true, publication: true, seed: true, contacted: true });
   await page.goto(`/procurement/workspace/rfqs/${event}?source=principal-approved`);
   await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Related", exact: true }).click();
   await expect(page.getByText("Contact recorded", { exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Items (1)", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "History", exact: true })).toBeVisible();
