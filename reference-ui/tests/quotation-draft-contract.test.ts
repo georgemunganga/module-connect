@@ -52,3 +52,19 @@ it("rejects binary-number money at write and snapshot boundaries", () => {
 it("requires time-zone evidence for an entered offer receipt time", () => {
   expect(() => quotationCommand(ref(), { ...input(), receivedAt: "2026-11-03T12:00:00" })).toThrow("time zone");
 });
+it.each(["Contact", "Create"] as const)("accepts the original HTTP201 %s result through GET-only recovery", async action => {
+  const reference = ref(action), fetch = respond(result(reference), 201);
+  expect((await recoverQuotation(company, reference)).commandKey).toBe(key);
+  expect(fetch).toHaveBeenCalledTimes(1); expect(fetch.mock.calls[0][1].method).toBe("GET"); expect(fetch.mock.calls[0][1].body).toBeUndefined();
+});
+it.each([[0, "Unspecified"], [1, "Fixed"], [2, "OpenEnded"]] as const)("maps V3 validity %s into the exact %s write enum", (numeric, expected) => {
+  const value = snapshot(); value.header.offer.validity = numeric; value.header.offer.validUntil = numeric === 1 ? "2026-12-03" : null;
+  const retained = retainedQuotation(value); expect(retained.offer.validity).toBe(expected);
+  expect(JSON.parse(quotationCommand(ref("Revise"), { ...input(), ...retained, expectedBidVersion: 2, reason: "Retained terms" }).body).offer.validity).toBe(expected);
+});
+it("drops only the explicitly removed active line while retaining the complete immutable source snapshot", () => {
+  const value = snapshot(); value.lines.push({ ...value.lines[0], id: company, sourcingLineId: company, notes: "Removed offered line" });
+  const original = JSON.stringify(value), retained = retainedQuotation(value);
+  const command = quotationCommand(ref("Revise"), { ...input(), ...retained, lines: retained.lines.filter(x => x.sourcingLineId !== company), expectedBidVersion: 2, reason: "Supplier removed one line" });
+  const body = JSON.parse(command.body); expect(body.lines).toEqual([line()]); expect(body.offer).toEqual(offer()); expect(JSON.stringify(value)).toBe(original);
+});

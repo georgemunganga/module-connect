@@ -43,4 +43,8 @@ VITE_PROCUREMENT_LIVE_MODE=1 npm run build:staged
 ./node_modules/.bin/playwright test --config playwright.quotation.config.ts
 ```
 
-The browser configuration uses one worker and the staged production bundle. It includes the existing 22 RFQ cases and 17 quotation cases, with desktop and 390px mobile screenshots. Earlier failed reports/traces are retained separately in `/home/amizo/quotation-ui-m7a-evidence-20261103/first-browser-pass`: two test-locator failures and the corrected explicit-READ permission-state wording gap. The existing large-bundle Vite warning remains. Hosted CI success and whole-module UAT completion are not claimed.
+The browser configuration uses one worker and the staged production bundle. It includes the existing 22 RFQ cases and 19 quotation cases, with desktop and 390px mobile screenshots. The initial full 39-case run passed before the followup; the followup passed all 19 quotation cases, including failed-detail retry and retrying the same unavailable historical version. Focused adapter/journal checks passed 65 cases (37 quotation and 28 RFQ). Earlier failed reports/traces are retained separately in `/home/amizo/quotation-ui-m7a-evidence-20261103/first-browser-pass`: two test-locator failures and the corrected explicit-READ permission-state wording gap. The existing large-bundle Vite warning remains. Hosted CI success and whole-module UAT completion are not claimed.
+
+## Prepared native journeys
+
+[The native journey instructions](tests/normal-cookie/M7A-NATIVE-QUOTATION-PREPARED.md) describe the retained read/history and fresh B-contact/create → C-revise/cancel tests. Their protected-input configurations and sources are prepared for Root's reviewed private TLS proxy. Native browser execution remains held until Root admits the exact runtime, fixture and UI build; source preparation and static checks are not native acceptance.
