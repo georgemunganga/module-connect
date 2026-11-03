@@ -116,7 +116,7 @@ async function fixture(page: Page, enabled: boolean, options: FixtureOptions = {
     }
     if (path === `/api/procurement/v1/manual-payments/${payment}`) {
       const saved = detail();
-      return json({ ...saved, transitions: options.persisted ? [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", action: "Create", fromStatus: "Draft", toStatus: "Draft", reason: "Retained request created", occurredAt: now }] : [], request: { ...saved.request, status, version,
+      return json({ ...saved, transitions: options.persisted ? [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", action: "Create", fromStatus: "Draft", toStatus: "Draft", reason: "Retained request created", fromVersion: 0, toVersion: 1, actorPrincipalId: requester, occurredAt: now }] : [], request: { ...saved.request, status, version,
         approvedAmountExact: status === "Draft" ? null : "1.0001",
         approvedByPrincipalId: status === "Draft" ? null : approver,
         recordedAmountExact: status === "PaymentRecorded" ? "1.0001" : null,
@@ -458,7 +458,7 @@ for (const readCapability of [undefined, false, "true", 1, null]) {
 test("READ capability without current READ permission denies list detail and original editor URL", async ({ page }) => {
   const writes = await fixture(page, true, { readCapability: true, persisted: true,
     permissions: ["procurement-access", "procurement-payment-create", "procurement-payment-edit"] });
-  for (const path of ["", `/${payment}`, "/new"]) {
+  for (const path of ["", `/${payment}`, "/new", `/${payment}/edit`]) {
     await page.goto(`/procurement/workspace/payments${path}`);
     await expect(page.getByText("You do not have permission to open this Procurement page", { exact: false })).toBeVisible();
     await expect(page.getByRole("button", { name: "Check saved result" })).toHaveCount(0);
@@ -504,4 +504,29 @@ test("lost revise recovers on original edit URL after write permission is revoke
   const calls = expectReadOnlyCalls(page);
   expect(calls.some(call => call.path.endsWith(`/${payment}/commands/${firstKey}`))).toBe(true);
   expect(writes).toHaveLength(1); expect(writes[0].key).toBe(firstKey);
+});
+
+test("read-only empty list keeps the directory and a truthful empty state", async ({ page }) => {
+  const writes = await fixture(page, false, { readCapability: true });
+  await page.goto("/procurement/workspace/payments");
+  await expect(page.getByText("No manual payment requests yet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved manual payment requests will appear here.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "New manual payment request" })).toHaveCount(0);
+  expectReadOnlyCalls(page); expect(writes).toHaveLength(0);
+});
+
+test("read-only detail waits for its GET and retains the shared error and retry state", async ({ page }) => {
+  const writes = await fixture(page, false, { readCapability: true });
+  let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/procurement/v1/manual-payments/${payment}`, async route => {
+    await held;
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "unavailable" }) });
+  });
+  await page.goto(`/procurement/workspace/payments/${payment}`);
+  await expect(page.getByText("Loading payment request…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+  release();
+  await expect(page.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Try again" })).toBeVisible();
+  expectReadOnlyCalls(page); expect(writes).toHaveLength(0);
 });
