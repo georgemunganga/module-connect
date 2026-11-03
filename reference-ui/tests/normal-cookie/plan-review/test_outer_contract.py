@@ -3,6 +3,18 @@ import importlib.util,pathlib,sys,unittest
 scripts=pathlib.Path(__file__).resolve().parents[3]/'scripts';sys.path.insert(0,str(scripts))
 spec=importlib.util.spec_from_file_location('plan_outer',scripts/'run-plan-native-outer.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 class OuterContract(unittest.TestCase):
+    def budget(self):return {'minimumMemoryAvailableBytes':1280*1024**2,'minimumRootFreeBytes':200*1024**2,'memoryMaxBytes':1024*1024**2}
+    def test_approved_1280_floor_admits_a_strict_one_gib_service(self):
+        self.assertTrue(module.resource_budget_accepted(self.budget(),1280*1024**2,200*1024**2))
+    def test_available_memory_and_disk_must_still_meet_the_selected_floors(self):
+        self.assertFalse(module.resource_budget_accepted(self.budget(),1280*1024**2-1,300*1024**2))
+        self.assertFalse(module.resource_budget_accepted(self.budget(),1492*1024**2,200*1024**2-1))
+        stricter=self.budget();stricter['minimumMemoryAvailableBytes']=1536*1024**2
+        self.assertFalse(module.resource_budget_accepted(stricter,1492*1024**2,300*1024**2))
+    def test_lower_floor_or_larger_service_cap_is_rejected(self):
+        for field,value in [('minimumMemoryAvailableBytes',1280*1024**2-1),('memoryMaxBytes',1024*1024**2+1)]:
+            invalid=self.budget();invalid[field]=value
+            self.assertFalse(module.resource_budget_accepted(invalid,2048*1024**2,300*1024**2))
     def test_only_stopped_or_removed_is_eligible_for_separate_identity_and_empty_proof(self):
         self.assertTrue(module.unit_is_stopped({'LoadState':'not-found'}))
         for state in ('inactive','failed'):

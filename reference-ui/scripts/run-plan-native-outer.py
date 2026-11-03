@@ -1,6 +1,6 @@
 """INERT until Root pins/approves actual inputs. One systemd user service; no API/DB setup."""
 import hashlib,json,os,pathlib,re,shutil,signal,subprocess,sys,time
-from plan_native_contract import protected_json,private_output
+from plan_native_contract import protected_json,private_output,resource_budget_accepted
 
 def digest(p):return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
 def ticks(pid):
@@ -63,10 +63,9 @@ def main():
     parent=text.strip();assert parent.startswith('/user.slice/')and parent.endswith('/app.slice')
     cgroup=pathlib.Path('/sys/fs/cgroup'+parent)/p['unitName'];assert not cgroup.exists()
     r=p['resources'];assert 300<=r['runtimeMaxSeconds']<=360 and 90<=r['cleanupMaxSeconds']<=120
-    assert 768*1024**2<=r['memoryMaxBytes']<=1280*1024**2 and 128<=r['tasksMax']<=256
-    assert r['minimumMemoryAvailableBytes']>=1536*1024**2 and r['minimumRootFreeBytes']>=200*1024**2
+    assert 128<=r['tasksMax']<=256
     available=int(next(x.split()[1]for x in pathlib.Path('/proc/meminfo').read_text().splitlines()if x.startswith('MemAvailable:')))*1024
-    assert available>=r['minimumMemoryAvailableBytes']and shutil.disk_usage('/').free>=r['minimumRootFreeBytes']
+    assert resource_budget_accepted(r,available,shutil.disk_usage('/').free)
     tmp=pathlib.Path(p['temporaryDirectory']);assert tmp.parent==pathlib.Path('/dev/shm')and tmp.resolve()==tmp and tmp.is_dir()and tmp.stat().st_mode&0o777==0o700
     assert shutil.disk_usage(tmp).free>=128*1024**2
     outputs={k:private_output(v)for k,v in p['outputs'].items()}

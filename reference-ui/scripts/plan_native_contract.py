@@ -1,5 +1,13 @@
 """Read-only admission contract for a Root-owned native-browser cgroup supervisor."""
 import hashlib,json,os,pathlib,time,urllib.parse
+MINIMUM_MEMORY_AVAILABLE_BYTES=1280*1024**2
+MAXIMUM_BROWSER_CGROUP_BYTES=1024*1024**2
+
+def resource_budget_accepted(resources,available,root_free):
+    return (resources['minimumMemoryAvailableBytes']>=MINIMUM_MEMORY_AVAILABLE_BYTES
+      and resources['minimumRootFreeBytes']>=200*1024**2
+      and 768*1024**2<=resources['memoryMaxBytes']<=MAXIMUM_BROWSER_CGROUP_BYTES
+      and available>=resources['minimumMemoryAvailableBytes']and root_free>=resources['minimumRootFreeBytes'])
 
 def sha(data):return hashlib.sha256(data).hexdigest()
 def protected_json(path,expected):

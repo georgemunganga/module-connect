@@ -1,6 +1,6 @@
 """Root-supervised native Plan runner. Requires outer cgroup kill/empty + all-cookie cleanup proof."""
 import hashlib,json,os,pathlib,subprocess,sys
-from plan_native_contract import fixture,outer_scope,private_output
+from plan_native_contract import fixture,outer_scope,private_output,MINIMUM_MEMORY_AVAILABLE_BYTES
 
 def main():
     assert os.environ.get('PLAN_NATIVE_REVIEWED_EXECUTION')=='1'
@@ -9,7 +9,7 @@ def main():
     result=private_output(os.environ['PLAN_NATIVE_RESULT']);runner=private_output(scope['runnerResultPath'])
     temporary=pathlib.Path(os.environ['TMPDIR']);assert temporary.parent==pathlib.Path('/dev/shm')and temporary.is_dir()and not temporary.is_symlink()and temporary.stat().st_mode&0o777==0o700
     available=int(next(x.split()[1]for x in pathlib.Path('/proc/meminfo').read_text().splitlines()if x.startswith('MemAvailable:')))*1024
-    assert available>=1536*1024**2
+    assert available>=MINIMUM_MEMORY_AVAILABLE_BYTES
     app=pathlib.Path(__file__).resolve().parent.parent;node='/root/.nvm/versions/node/v22.23.3/bin/node'
     env={**os.environ,'NODE_OPTIONS':'--max-old-space-size=512','PLAN_NATIVE_OUTER_SCOPE_ADMITTED':'1'}
     command=['nice','-n','10',node,str(app/'node_modules/@playwright/test/cli.js'),'test','--config',str(app/'playwright.plan-native.config.ts'),'--workers=1','--retries=0']
