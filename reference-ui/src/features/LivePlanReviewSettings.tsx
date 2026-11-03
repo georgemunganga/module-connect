@@ -3,8 +3,9 @@ import { Badge, Button, EmptyState, Field, Input, Panel, Select } from "../compo
 import { RecordTable } from "../components/data/RecordTable";
 import { useErpShell } from "../lib/erpShell";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
-import { claimAuthorityCreateGuard, clearAuthorityCreateGuard, readAuthorityCreateGuard } from "../lib/authority-create-guard";
+import { claimAuthorityCreateGuard, readAuthorityCreateGuard } from "../lib/authority-create-guard";
 import { selectedPolicyInstant, samePolicyInstant, utcPolicyDay, policyInstantIsAfter } from "../lib/policy-effective-instant";
+import { settlePlanPolicyCommand, type PlanPolicyOutcome } from "../lib/plan-review-policy-command";
 import { emptyPlanPolicy, parsePlanPolicy, serializePlanPolicy, type PlanPolicyDraft, type PlanPolicyStage, type PlanStagePurpose } from "../lib/plan-review-policy-editor";
 import { PolicyReviewerPicker, type PolicyPeopleSource } from "./PolicyReviewerPicker";
 import { canRetirePolicyDraft, createPolicy, decidePolicy, getEffectivePolicy, getPolicy, listPolicies,
@@ -38,6 +39,8 @@ function PlanPolicyRecord() {
   const canApprove = canRead && readiness.permissions.includes("procurement-configuration-approve");
   const marker = `procurement.policy.command.pending.v1:${JSON.stringify([readiness.tenantId, company, readiness.principalId, KEY])}`;
   const [guard, setGuard] = useState(() => readAuthorityCreateGuard(marker)), [schemaReady, setSchemaReady] = useState(false);
+  const [needsFreshRead, setNeedsFreshRead] = useState(false), [commandNotice, setCommandNotice] = useState("");
+  const freshReadNeeded = useRef(false), freshReadGeneration = useRef(0);
   const [page, setPage] = useState<PolicyPage | null>(null), [effectiveVersion, setEffectiveVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(true), [working, setWorking] = useState(false), [revision, setRevision] = useState(0), [error, setError] = useState("");
   const [editing, setEditing] = useState<PolicyRecord | "new" | null>(null), [viewing, setViewing] = useState<PolicyRecord | null>(null);
@@ -53,25 +56,35 @@ function PlanPolicyRecord() {
     return () => abort.abort();
   }, [company, canRead]);
   useEffect(() => {
-    if (!canRead) return; const abort = new AbortController(); setLoading(true); setError(""); setPage(null); setEffectiveVersion(null);
-    listPolicies(company, abort.signal, KEY).then(value => { if (!abort.signal.aborted) setPage(value); })
-      .catch(e => { if (!abort.signal.aborted) setError(explain(e)); }).finally(() => { if (!abort.signal.aborted) setLoading(false); });
+    if (!canRead) return; const abort = new AbortController(), generation = freshReadGeneration.current; setLoading(true); setError(""); setPage(null); setEffectiveVersion(null);
+    listPolicies(company, abort.signal, KEY).then(value => { if (!abort.signal.aborted && generation === freshReadGeneration.current) { setPage(value); if (freshReadNeeded.current) setCommandNotice("The earlier command was rejected without saving. Current saved versions were loaded; open the current draft before another change."); freshReadNeeded.current = false; setNeedsFreshRead(false); } })
+      .catch(e => { if (!abort.signal.aborted && generation === freshReadGeneration.current) setError(explain(e)); }).finally(() => { if (!abort.signal.aborted && generation === freshReadGeneration.current) setLoading(false); });
     getEffectivePolicy(company, KEY).then(value => { if (!abort.signal.aborted) setEffectiveVersion(value.policy?.policyVersionNumber ?? null); })
       .catch(() => { if (!abort.signal.aborted) setEffectiveVersion(null); });
     return () => abort.abort();
   }, [company, canRead, revision]);
   const claim = () => {
-    if (!alive.current || busy.current || readAuthorityCreateGuard(marker) !== "clear" || !claimAuthorityCreateGuard(marker)) {
+    if (!alive.current || busy.current || freshReadNeeded.current || readAuthorityCreateGuard(marker) !== "clear" || !claimAuthorityCreateGuard(marker)) {
       setGuard(readAuthorityCreateGuard(marker)); setError("Inspect the last saved result before another policy change."); return false;
     }
-    busy.current = true; setWorking(true); setGuard("pending"); setError(""); return true;
+    busy.current = true; setWorking(true); setGuard("pending"); setError(""); setCommandNotice(""); return true;
   };
-  const settle = (cause?: unknown) => {
-    if (!cause || cause instanceof PolicyActionError && [400, 422].includes(cause.status)) clearAuthorityCreateGuard(marker);
-    busy.current = false; if (alive.current) { setWorking(false); setGuard(readAuthorityCreateGuard(marker)); if (cause) setError(explain(cause)); }
+  const settle = (outcome: PlanPolicyOutcome = { confirmed: true }) => {
+    const result = settlePlanPolicyCommand(marker, outcome);
+    busy.current = false;
+    if (alive.current) {
+      setWorking(false); setGuard(result.guard);
+      if (!outcome.confirmed) setError(explain(outcome.error));
+      if (result.needsFreshRead) {
+        freshReadGeneration.current += 1; freshReadNeeded.current = true; setNeedsFreshRead(true); setPending(null);
+        if (!outcome.confirmed && outcome.error instanceof PolicyActionError && ![400, 422].includes(outcome.error.status)) setEditing(null);
+        setCommandNotice(`${!outcome.confirmed ? explain(outcome.error) + " " : ""}The command was rejected without saving. Saved versions are being checked before another change. If loading fails, refresh saved rules again.`);
+        setRevision(x => x + 1);
+      }
+    }
   };
   async function open(id: string, edit: boolean) {
-    if (busy.current || !canRead || edit && (!canEdit || !schemaReady || guard !== "clear")) return;
+    if (busy.current || !canRead || edit && (!canEdit || !schemaReady || guard !== "clear" || freshReadNeeded.current)) return;
     busy.current = true; setWorking(true); setError("");
     try {
       const record = await getPolicy(company, id); if (!alive.current) return;
@@ -84,7 +97,7 @@ function PlanPolicyRecord() {
     finally { busy.current = false; if (alive.current) setWorking(false); }
   }
   async function save(event: FormEvent) {
-    event.preventDefault(); if (!canEdit || !schemaReady || !editing || busy.current || guard !== "clear") return;
+    event.preventDefault(); if (!canEdit || !schemaReady || !editing || busy.current || guard !== "clear" || freshReadNeeded.current) return;
     let rulesJson: string, from: string | null, to: string | null;
     try {
       rulesJson = serializePlanPolicy(stages); from = selectedPolicyInstant(start, editing === "new" ? null : editing.effectiveFrom);
@@ -104,12 +117,12 @@ function PlanPolicyRecord() {
         throw new PolicyActionError("The saved plan rule was not confirmed. Inspect its saved version before another change.", 0);
       settle(); if (alive.current) { setEditing(null); setRevision(x => x + 1); }
     } catch (e) {
-      if (readAuthorityCreateGuard(marker) === "pending") settle(e);
+      if (readAuthorityCreateGuard(marker) === "pending") settle({ confirmed: false, error: e });
       else { busy.current = false; if (alive.current) { setWorking(false); setError(explain(e)); } }
     }
   }
   async function act(event: FormEvent) {
-    event.preventDefault(); if (!pending || !schemaReady || !reason.trim() || reason.trim().length > 1000 || guard !== "clear"
+    event.preventDefault(); if (!pending || !schemaReady || !reason.trim() || reason.trim().length > 1000 || guard !== "clear" || freshReadNeeded.current
       || (pending.action === "review" || pending.action === "retire" ? !canEdit : !canApprove)) return;
     if (!claim()) return;
     try {
@@ -120,7 +133,7 @@ function PlanPolicyRecord() {
       if (saved.id !== item.id || saved.policyKey !== KEY || saved.version <= item.version || saved.state !== expected)
         throw new PolicyActionError("The policy action was not confirmed. Inspect the saved version before another change.", 0);
       settle(); if (alive.current) { setPending(null); setReason(""); setRevision(x => x + 1); }
-    } catch (e) { settle(e); }
+    } catch (e) { settle({ confirmed: false, error: e }); }
   }
   if (!canRead) return <p role="alert">Plan review settings are unavailable for this company or account.</p>;
   return <div className="space-y-5">
@@ -130,28 +143,29 @@ function PlanPolicyRecord() {
     <Panel title="Purchase plan review rules"><div className="space-y-4 p-5">
       <p className="text-sm">{effectiveVersion === null ? "No single current published version was confirmed." : `Current published version: ${effectiveVersion}.`} Saving or checking a draft does not activate it.</p>
       <div className="flex gap-2"><Button variant="secondary" disabled={working} onClick={() => setRevision(x => x + 1)}>Refresh saved rules</Button>
-        {canEdit && schemaReady && <Button disabled={working || guard !== "clear"} onClick={() => { setStages(emptyPlanPolicy()); setStart(""); setEnd(""); setEditing("new"); setViewing(null); setPending(null); setError(""); }}>Add draft</Button>}</div>
+        {canEdit && schemaReady && <Button disabled={working || guard !== "clear" || needsFreshRead} onClick={() => { setStages(emptyPlanPolicy()); setStart(""); setEnd(""); setEditing("new"); setViewing(null); setPending(null); setError(""); }}>Add draft</Button>}</div>
       {loading ? <p role="status">Loading plan review rules…</p> : page?.items.some(item => item.policyKey === KEY) ? <div className="overflow-x-auto"><RecordTable>
         <thead><tr><th>Version</th><th>From</th><th>Until</th><th>Status</th><th>Actions</th></tr></thead><tbody>{page.items.filter(item => item.policyKey === KEY).map(item => <tr key={item.id}>
           <td>{item.policyVersionNumber}</td><td>{utcPolicyDay(item.effectiveFrom)}</td><td>{utcPolicyDay(item.effectiveTo) || "No end date"}</td><td><Badge>{item.state}</Badge></td><td><div className="flex flex-wrap gap-2">
             <Button variant="secondary" disabled={working} onClick={() => void open(item.id, false)}>View saved version</Button>
-            {canEdit && schemaReady && item.state === "Draft" && <><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => void open(item.id, true)}>Edit draft</Button><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "review" }); setReason(""); setEditing(null); }}>Send for review</Button></>}
-            {canEdit && schemaReady && canRetirePolicyDraft(item) && <Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "retire" }); setReason(""); setEditing(null); }}>Retire unused draft</Button>}
-            {canApprove && schemaReady && item.state === "PendingReview" && <><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "publish" }); setReason(""); setEditing(null); }}>Publish</Button><Button variant="secondary" disabled={working || guard !== "clear"} onClick={() => { setPending({ item, action: "return" }); setReason(""); setEditing(null); }}>Return for changes</Button></>}
+            {canEdit && schemaReady && item.state === "Draft" && <><Button variant="secondary" disabled={working || guard !== "clear" || needsFreshRead} onClick={() => void open(item.id, true)}>Edit draft</Button><Button variant="secondary" disabled={working || guard !== "clear" || needsFreshRead} onClick={() => { setPending({ item, action: "review" }); setReason(""); setEditing(null); }}>Send for review</Button></>}
+            {canEdit && schemaReady && canRetirePolicyDraft(item) && <Button variant="secondary" disabled={working || guard !== "clear" || needsFreshRead} onClick={() => { setPending({ item, action: "retire" }); setReason(""); setEditing(null); }}>Retire unused draft</Button>}
+            {canApprove && schemaReady && item.state === "PendingReview" && <><Button variant="secondary" disabled={working || guard !== "clear" || needsFreshRead} onClick={() => { setPending({ item, action: "publish" }); setReason(""); setEditing(null); }}>Publish</Button><Button variant="secondary" disabled={working || guard !== "clear" || needsFreshRead} onClick={() => { setPending({ item, action: "return" }); setReason(""); setEditing(null); }}>Return for changes</Button></>}
           </div></td></tr>)}</tbody></RecordTable></div> : <EmptyState title="No plan review rules yet" description="Choose named people and explicit decision rules before sending a forecast for review." />}
       {page && page.total > page.items.length && <p className="text-sm">Showing {page.items.length} of {page.total} saved versions.</p>}
     </div></Panel>
+    {commandNotice && <p role="status" className="rounded-lg border border-border p-3 text-sm">{commandNotice}</p>}
     {error && <p role="alert" className="rounded-lg border border-border p-3 text-sm">{error}</p>}
     {guard !== "clear" && <p role="alert" className="rounded-lg border border-border p-3 text-sm">The last policy change was not confirmed, or this browser cannot safely record it. No command will be repeated. Refresh saved rules for inspection and ask Procurement to reconcile the result.</p>}
     {viewing && <Panel title={`Saved plan rule version ${viewing.policyVersionNumber}`}><div className="space-y-4 p-5"><p className="text-sm">Status: {viewing.state}. Effective from {viewing.effectiveFrom}; until {viewing.effectiveTo || "no end date"}.</p>
       {parsePlanPolicy(viewing.rulesJson) ? <PlanPolicyFields company={company} stages={parsePlanPolicy(viewing.rulesJson)!} disabled change={() => {}} /> : <p>This saved format cannot be edited here. Its retained version is unchanged.</p>}
       <Button variant="secondary" onClick={() => setViewing(null)}>Close saved version</Button></div></Panel>}
-    {canEdit && schemaReady && editing && <form onSubmit={event => void save(event)}><Panel title={editing === "new" ? "New plan review rule draft" : `Edit plan review draft ${editing.policyVersionNumber}`}><fieldset className="space-y-5 p-5" disabled={working || guard !== "clear"}>
+    {canEdit && schemaReady && editing && <form onSubmit={event => void save(event)}><Panel title={editing === "new" ? "New plan review rule draft" : `Edit plan review draft ${editing.policyVersionNumber}`}><fieldset className="space-y-5 p-5" disabled={working || guard !== "clear" || needsFreshRead}>
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Starts on (UTC)"><Input required type="date" value={start} onChange={e => setStart(e.target.value)} /></Field><Field label="Ends on (UTC, optional)"><Input type="date" value={end} onChange={e => setEnd(e.target.value)} /></Field></div>
-      <PlanPolicyFields company={company} stages={stages} disabled={working || guard !== "clear"} change={setStages} />
+      <PlanPolicyFields company={company} stages={stages} disabled={working || guard !== "clear" || needsFreshRead} change={setStages} />
       <div className="flex gap-2"><Button type="submit">Save draft</Button><Button variant="secondary" onClick={() => setEditing(null)}>Close editor</Button></div>
     </fieldset></Panel></form>}
-    {pending && <form onSubmit={event => void act(event)}><Panel title={pending.action === "review" ? "Send plan rules for independent review" : pending.action === "publish" ? "Publish plan review rules" : pending.action === "retire" ? "Retire unused plan rule draft" : "Return plan rules for changes"}><fieldset className="space-y-4 p-5" disabled={working || guard !== "clear"}>
+    {pending && <form onSubmit={event => void act(event)}><Panel title={pending.action === "review" ? "Send plan rules for independent review" : pending.action === "publish" ? "Publish plan review rules" : pending.action === "retire" ? "Retire unused plan rule draft" : "Return plan rules for changes"}><fieldset className="space-y-4 p-5" disabled={working || guard !== "clear" || needsFreshRead}>
       <p className="text-sm">Version {pending.item.policyVersionNumber}. ERP rechecks current account permissions, people and scope. Publication requires an independent authorised person.</p>
       <Field label="Reason"><Input required maxLength={1000} value={reason} onChange={e => setReason(e.target.value)} /></Field><div className="flex gap-2"><Button type="submit">Confirm policy action</Button><Button variant="secondary" onClick={() => setPending(null)}>Close action</Button></div>
     </fieldset></Panel></form>}
