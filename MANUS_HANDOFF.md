@@ -20,3 +20,6 @@ The next [B1 build/native UI milestone](reference-ui/docs/RFQ_ROUND_PLAN_NATIVE_
 
 
 B1 private browser continuation has now passed on corrected product `26d4ef19`, preserving the original `8dca4943` All failure and successful version1 Create. Root verified B All/original GET201 and C Revise/Cancel200, privacy404 and retained All/history; final independent owner reconciliation and release remain pending. The [acceptance record](reference-ui/docs/RFQ_ROUND_PLAN_NATIVE_ACCEPTANCE_20261103.md) separates both attempts and their exact hashes. No whole-module or production UAT claim is made.
+
+
+B1 private owner reconciliation and Core fixture cleanup are now complete. Root accepted cumulative owner proof `1785d682717ce40a885810bda03bcf20606136dceba486f5fcade84a44321b6f` and exact role-only restore `fd9c452dfc6f5dc0085258446582bf780136fcf257c753075f73f953ab7561db`; retained graph and original failure remain preserved, API/proxy stopped. Runtime product remains `26d4ef19`. Technical paired release is still pending; this is not whole Procurement module or production UAT.
