@@ -1,6 +1,6 @@
 # Native Plan UI positive journey — source preparation
 
-The separate `playwright.plan-native.config.ts` runs only `tests/normal-cookie/plan-review/positive.spec.ts`. It does not run the existing mocked `tests/e2e/live-plan.spec.ts`. This runner is authored source only: no Node, browser, API, database or build execution has occurred for it.
+The separate `playwright.plan-native.config.ts` runs only `tests/normal-cookie/plan-review/positive.spec.ts`. It does not run the existing mocked `tests/e2e/live-plan.spec.ts`. This runner has passed strict standalone TypeScript checking at source `ee901f2fd00df38266f2f4505714f07ed09df049`; it has not executed a browser, API, database or build journey.
 
 Root must first accept genuine migrations/native admission, create the dedicated private fixture and static/API gateway, approve the resource slot and four business commands, and supply a protected JSON fixture. No data or policy is seeded by this runner. Three independent current Core principals use genuine cookie-only Playwright storage states produced by normal Core login. Worker links are not used for identity or required by the runner. The reviewer must have plan-review-read/review but no plan-read, to prove the owner endpoint403. The final actor needs plan-review-read/approve. This bounded fixture policy has exactly the named reviewer and independent final actor; broader quorum/multiple-approver matrices are separate.
 
@@ -17,7 +17,7 @@ export TMPDIR=/dev/shm/<root-created-mode0700-directory>
 python3 reference-ui/scripts/run-plan-native.py
 ```
 
-The wrapper requires1536 MiB available memory, nice10/512 MiB Node heap, one Playwright worker and zero retries. It performs no fixture/runtime/build setup. Debug/trace/video/screenshots stay off. Config requires the real protected inputs, so do not claim `--list` or type/runtime success by inventing fixture files. A coordinated standalone TypeScript check is still required before actual execution.
+The wrapper requires1536 MiB available memory, nice10/512 MiB Node heap, one Playwright worker and zero retries. It performs no fixture/runtime/build setup. Debug/trace/video/screenshots stay off. Config requires the real protected inputs, so do not claim `--list` or type/runtime success by inventing fixture files. Standalone strict TypeScript passed at the recorded source. Root must still pin actual fixture/runtime/build inputs and approve browser execution.
 
 The actual UI path is owner `/procurement/workspace/plans/new` → current detail/reload → Send plan for review; reviewer `/plans?view=review` → verified task's submissionId → immutable submitted detail → Mark as reviewed; final `/plans?view=review&review={submissionId}` → Approve plan; owner detail/reload/history → Open submitted version. All mutations use existing buttons/dialogs. API reads independently confirm expected policy id/version, submitted hash and approved history. Reviewer explicitly gets403 from owner-only `GET /plans/{id}` while the reviewer UI must make no such request.
 
