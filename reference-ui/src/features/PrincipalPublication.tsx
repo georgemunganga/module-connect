@@ -205,7 +205,7 @@ function PublicationRecord({ id, company, permissions, newWorkEnabled, slot, can
     related={<div className="space-y-5"><DetailSection title="Approved purchase requests"><ul className="space-y-1 text-sm">{[...new Set(record.lines.map(line => line.purchaseRequestId))].map(sourceId =>
       <li key={sourceId}>{permissions.includes("procurement-request-read") ? <Link className="text-primary underline" to={`/requests/${sourceId}`}>{sourceId}</Link> : sourceId}</li>)}</ul></DetailSection>
       {record.status === "Published" && <DetailSection title="Shortlisted suppliers"><div className="overflow-x-auto"><RecordTable><thead><tr><th>Supplier ID</th><th>Internal state</th></tr></thead><tbody>{record.invitations.map(invitation =>
-        <tr key={invitation.id}><td className="break-all">{invitation.supplierId}</td><td><Badge>Ready for manual delivery</Badge></td></tr>)}</tbody></RecordTable></div></DetailSection>}
+        <tr key={invitation.id}><td className="break-all">{invitation.supplierId}</td><td><Badge>{invitation.contactRecorded ? "Contact recorded" : "Ready to contact"}</Badge></td></tr>)}</tbody></RecordTable></div></DetailSection>}
     </div>}
     activity={<DetailSection title="Verified workflow state"><p className="text-sm">{record.status === "Published" ? "Internal publication approved." : record.status === "PublicationReview" ? "Core publication review is pending." : "No active publication decision."}</p>
       {record.publication && <p className="mt-2 break-all text-xs text-muted-foreground">Core case {record.publication.coreCaseId} · Policy version {record.publication.policyVersionNumber}</p>}

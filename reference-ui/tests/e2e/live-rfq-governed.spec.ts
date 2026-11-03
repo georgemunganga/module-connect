@@ -7,10 +7,10 @@ const branch = "33333333-3333-4333-8333-333333333333", otherBranch = "44444444-4
 const event = "55555555-5555-4555-8555-555555555555", lineA = "66666666-6666-4666-8666-666666666666", lineB = "77777777-7777-4777-8777-777777777777";
 const prA = "88888888-8888-4888-8888-888888888888", prB = "99999999-9999-4999-8999-999999999999";
 type Selection = { purchaseRequestId: string; purchaseRequestLineId: string; quantity: string };
-async function mock(page: Page, options: { absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; publicationReadOnly?: boolean; reviewer?: boolean; losePublication?: boolean; stalePolicy?: boolean } = {}) {
+async function mock(page: Page, options: { contacted?: boolean; absent?: boolean; deny?: boolean; loseCreate?: boolean; seed?: boolean; rejectCancelOnce?: boolean; loseCancel?: boolean; cancelRecovery404Once?: boolean; principal?: boolean; principalUnavailable?: boolean; publication?: boolean; publicationReadOnly?: boolean; reviewer?: boolean; losePublication?: boolean; stalePolicy?: boolean } = {}) {
   const calls: { method: string; path: string; body: unknown; key?: string }[] = []; const receipts = new Map<string, unknown>();
   let lost = false, cancelRejected = false, cancelLost = false, cancelRecoveryMissed = false, publicationLost = false,
-    status = options.reviewer ? "PublicationReview" : "Draft", version = options.reviewer ? 2 : 1,
+    status = options.contacted ? "Published" : options.reviewer ? "PublicationReview" : "Draft", version = options.contacted ? 5 : options.reviewer ? 2 : 1,
     selected: Selection[] = [], exists = Boolean(options.seed);
   const sources = [lineA, lineB].map((id, at) => ({ purchaseRequestId: at ? prB : prA, purchaseRequestLineId: id, requestNumber: `PR-${at + 1}`,
     state: "Available", canSelect: true, branchRef: branch, description: at ? "Printer paper" : "Office notebooks", unitCode: "EACH", categoryCode: "OFFICE",
@@ -74,8 +74,9 @@ async function mock(page: Page, options: { absent?: boolean; deny?: boolean; los
         if (url.pathname.endsWith("/principal-publication") && method === "GET") return json({ ...record(),
           status, version, supplierDeliveryState: status === "Draft" ? "NotStarted" : "PerInvitation",
           publication: status === "Draft" ? undefined : publication,
-          invitations: status === "Published" ? [{ id: lineA, supplierId, status: "ReadyForManualDelivery", version: 1,
-            contactRecorded: false }] : [] });
+          invitations: status === "Published" ? [{ id: lineA, supplierId,
+            status: options.contacted ? "ManualContactRecorded" : "ReadyForManualDelivery",
+            version: options.contacted ? 2 : 1, contactRecorded: Boolean(options.contacted) }] : [] });
         if (url.pathname.endsWith("/principal-publication-reviews") && method === "POST") {
           status = "PublicationReview"; version++;
           const saved = { eventId: event, status, version, publicationReviewId: opening, coreCaseId: caseId, coreCaseVersion: 1,
@@ -430,4 +431,16 @@ test("historical GET recovery remains available after new review work is switche
   await expect(page.getByText("Waiting for the assigned independent reviewer.")).toBeVisible();
   expect(calls.filter(call => call.path.endsWith("/principal-publication-reviews") && call.method === "POST")).toHaveLength(1);
   expect(calls.filter(call => call.path.includes("/principal-publication-commands/") && call.method === "GET")).toHaveLength(1);
+});
+
+// UI transport coverage only; native quotation ownership is verified separately.
+test("recorded outside contact preserves the published RFQ detail and its tabs", async ({ page }) => {
+  const calls = await mock(page, { principal: true, publication: true, seed: true, contacted: true });
+  await page.goto(`/procurement/workspace/rfqs/${event}?source=principal-approved`);
+  await expect(page.getByRole("heading", { name: "Office supplies", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Related", exact: true }).click();
+  await expect(page.getByText("Contact recorded", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Items (1)", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "History", exact: true })).toBeVisible();
+  expect(calls.filter(call => call.method !== "GET")).toEqual([]);
 });

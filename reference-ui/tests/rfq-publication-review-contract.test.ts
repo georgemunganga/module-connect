@@ -71,6 +71,22 @@ describe("internal principal RFQ publication", () => {
     respond({ ...reply, coreCaseVersion: 0 });
     await expect(recoverPublicationCommand(company, { action: "decide", key, eventId: event, targetId: assignment })).rejects.toThrow();
   });
+  it.each([
+    ["ReadyForManualDelivery", false, 1, true],
+    ["ManualContactRecorded", true, 2, true],
+    ["ManualContactRecorded", false, 2, false],
+    ["ReadyForManualDelivery", true, 1, false],
+    ["ManualContactRecorded", true, 1, false],
+    ["EmailSent", true, 2, false],
+  ])("validates retained invitation state %s / contacted %s / version %s", async (status, contactRecorded, version, accepted) => {
+    respond({ ...draft, status: "Published", supplierDeliveryState: "PerInvitation",
+      publication: { openingId: source, coreCaseId: caseId, caseState: "Approved", coreCaseVersion: 2,
+        policyVersionId: source, policyVersionNumber: 1, supplierDeliveryState: "PerInvitation",
+        reviewer: false, assignments: [] },
+      invitations: [{ id: line, supplierId: supplier, status, contactRecorded, version }] });
+    if (accepted) expect((await getPublication(company, event)).invitations[0]).toMatchObject({ status, contactRecorded, version });
+    else await expect(getPublication(company, event)).rejects.toThrow();
+  });
   it("locks an uncertain command to its original reference and context", () => {
     const values = new Map<string, string>();
     const storage = { getItem: (name: string) => values.get(name) ?? null,
