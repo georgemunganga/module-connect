@@ -9,7 +9,7 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const planPath = process.env.M7B1_PROXY_PLAN;
 if (process.env.M7B1_REVIEWED_PROXY !== "1" || !planPath || !path.isAbsolute(planPath) || fs.realpathSync(planPath) !== planPath || (fs.statSync(planPath).mode & 0o777) !== 0o600) throw Error("Reviewed protected proxy plan required");
 const plan = JSON.parse(fs.readFileSync(planPath, "utf8"));
-if (plan.uiCommit !== "8dca4943bbe5b5ea4993a7eecb0e7a40fecb53c1" || !/^[a-f0-9]{64}$/.test(plan.apiId) || !/^[a-f0-9]{40}$/.test(plan.backendSourceCommit)
+if (plan.uiCommit !== "26d4ef1924b508a4ca33a184ec21500691003b3f" || !/^[a-f0-9]{64}$/.test(plan.apiId) || !/^[a-f0-9]{40}$/.test(plan.backendSourceCommit)
   || !/^[a-f0-9]{64}$/.test(plan.publishManifestSha256) || !Number.isInteger(plan.apiPid) || !Number.isInteger(plan.apiPort) || plan.apiPort < 1024 || plan.apiPort > 65535
   || typeof plan.privatePgSystemIdentifier !== "string" || !/^\d+$/.test(plan.privatePgSystemIdentifier)
   || fs.readlinkSync("/proc/self/ns/net") !== fs.readlinkSync(`/proc/${plan.apiPid}/ns/net`)) throw Error("Exact private runtime admission required");

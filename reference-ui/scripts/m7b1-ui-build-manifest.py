@@ -2,7 +2,7 @@
 """INERT until Root invokes it after a reviewed successful live build. No runtime/DB/deployment work."""
 import argparse, hashlib, json, os, pathlib, shutil, stat, subprocess
 
-PRODUCT = "8dca4943bbe5b5ea4993a7eecb0e7a40fecb53c1"
+PRODUCT = "26d4ef1924b508a4ca33a184ec21500691003b3f"
 parser = argparse.ArgumentParser()
 parser.add_argument("--checkout", required=True)
 parser.add_argument("--build-receipt", required=True)

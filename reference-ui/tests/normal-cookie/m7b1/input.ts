@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
-export const productCommit = "8dca4943bbe5b5ea4993a7eecb0e7a40fecb53c1";
+export const productCommit = "26d4ef1924b508a4ca33a184ec21500691003b3f";
 export const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const invalid = () => new Error("Protected reviewed M7B1 native inputs required");
 const guid = (x: unknown): x is string => typeof x === "string" && /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/.test(x) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(x);
@@ -20,7 +20,7 @@ function pinned(name: string) {
   const bytes = readFileSync(filename); if (bytes.length > 1048576 || digest(bytes) !== expected) throw invalid();
   try { return { value: JSON.parse(bytes.toString("utf8")), sha256: expected }; } catch { throw invalid(); }
 }
-export type Actor = { id: string; email: string; password: string; displayName: string; workerId: null };
+export type Actor = { id: string; email: string; password: string; displayName?: string; workerId: null };
 export function nativeInput(mode: "fresh" | "retained") {
   if (process.env.M7B1_NATIVE_REVIEWED_EXECUTION !== "1" || process.env.DEBUG || process.env.PWDEBUG || process.env.NODE_DEBUG || process.versions.node.split(".")[0] !== "22") throw invalid();
   if (mode === "fresh" && process.env.M7B1_PREPARED_CLIENT_RECOVERY !== "1") throw invalid();
@@ -36,7 +36,7 @@ export function nativeInput(mode: "fresh" | "retained") {
     || p.genuineUpApplied !== true || p.expectedOwnerErp !== true || p.erpProcurementSchemaUsageVerified !== true || p.finiteProfile !== "107"
     || !sha(p.preparationReceiptSha256) || !sha(p.sourceBusinessBaselineSha256) || ![p.companyId, p.branchId, p.eventId, p.originalMakerPrincipalId].every(guid)
     || typeof p.tenantId !== "string" || !Number.isSafeInteger(p.originalEventVersion) || p.originalEventVersion < 1
-    || !Array.isArray(p.users) || p.users.length !== 2 || p.users[0].id === p.users[1].id || p.users.some((a: Actor) => !guid(a.id) || a.id === p.originalMakerPrincipalId || a.workerId !== null || !a.email || !a.password || !a.displayName)
+    || !Array.isArray(p.users) || p.users.length !== 2 || p.users[0].id === p.users[1].id || p.users.some((a: Actor) => !guid(a.id) || a.id === p.originalMakerPrincipalId || a.workerId !== null || !a.email || !a.password)
     || !commit(expectedBackend) || r.backendSourceCommit !== expectedBackend || !sha(r.publishManifestSha256) || !sha(r.id)
     || !Number.isSafeInteger(r.networkNamespaceOwnerPid) || r.networkNamespaceOwnerPid <= 0 || receipt.backendContainerId !== r.id
     || receipt.uiSourceCommit !== productCommit || build.uiSourceCommit !== productCommit || build.liveMode !== true

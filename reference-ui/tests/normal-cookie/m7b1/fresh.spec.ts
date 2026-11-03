@@ -28,7 +28,7 @@ test("actual workerless B creates and C revises/cancels in the existing RFQ UI",
     need(me.user?.id === user.id && scope.principalId === user.id && scope.workerId === null && scope.tenantId === fixture.tenantId && scope.legalEntityId === fixture.companyId
       && ["procurement-round-plan-read", "procurement-round-plan-manage", "procurement-round-plan-cancel"].every(p => scope.permissions?.includes(p))
       && meta.capabilities?.roundPlanRead === true && meta.capabilities?.roundPlanRecord === true, "CurrentWorkerlessScopeOrCapabilitiesInvalid");
-    await context.addInitScript(({ entityId, branch }) => { if (localStorage.getItem("erp.shell.state.v1") === null) localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })); }, { entityId: fixture.companyId, branch: fixture.branchId });
+    await context.addInitScript(({ entityId, branch, origin }) => { if (location.origin !== origin) return; if (localStorage.getItem("erp.shell.state.v1") === null) localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })); }, { entityId: fixture.companyId, branch: fixture.branchId, origin: input.origin });
     const page = await context.newPage(); page.on("pageerror", () => evidence.pageErrors++);
     await context.route("**/api/**", async route => {
       const request = route.request(), path = new URL(request.url()).pathname;
@@ -73,6 +73,17 @@ test("actual workerless B creates and C revises/cancels in the existing RFQ UI",
     await page.goto("/procurement/workspace/rfqs?source=round-plan"); await page.getByRole("tab", { name: "RFQs ready for planning", exact: true }).click();
     await page.getByRole("link").filter({ hasText: before.source.number }).first().click(); await expect(page.getByRole("heading", { name: before.source.title, exact: true })).toBeVisible();
     evidence.step = "B-open-original-items"; await page.getByRole("tab", { name: `Items (${before.source.lines.length})`, exact: true }).click(); await expect(page.getByRole("cell", { name: before.source.lines[0].description, exact: true })).toBeVisible(); await page.getByRole("tab", { name: "Overview", exact: true }).click();
+    evidence.step = "B-discover-actual-colleague-label";
+    let colleagueName = fixture.users[1].displayName, peopleCursor: string | null = null;
+    for (let pageNumber = 0; !colleagueName && pageNumber < 20; pageNumber++) {
+      const actualPeople = await get(context, base + `/people?limit=25&q=${peopleCursor ? `&after=${peopleCursor}` : ""}`);
+      const actualColleague = actualPeople.items?.find((person: any) => person.principalId === fixture.users[1].id);
+      if (actualColleague) colleagueName = actualColleague.displayName;
+      peopleCursor = actualPeople.nextCursor; evidence.peopleDiscoveryPages = pageNumber + 1;
+      if (!peopleCursor) break;
+    }
+    need(typeof colleagueName === "string" && colleagueName.trim().length >= 2, "CurrentColleagueLabelUnavailable");
+    evidence.colleagueLabelSha256 = digest(colleagueName!);
     await page.getByRole("button", { name: "Set up evaluation plan", exact: true }).click(); let dialog = page.getByRole("dialog", { name: "Set up an evaluation plan", exact: true });
     await dialog.getByRole("textbox", { name: "Requirements", exact: true }).fill(marker); await dialog.getByRole("textbox", { name: "Proposed policy reference", exact: true }).fill("UI native proposal only");
     await dialog.getByRole("textbox", { name: "Proposed disclosure terms", exact: true }).fill("Proposal for internal review; no supplier release"); await dialog.getByRole("textbox", { name: "Proposed document requirements", exact: true }).fill("Proposed supporting-file checklist");
@@ -80,8 +91,8 @@ test("actual workerless B creates and C revises/cancels in the existing RFQ UI",
     await dialog.getByRole("button", { name: "Add criterion", exact: true }).click(); await dialog.getByRole("textbox", { name: "Criterion 1 code", exact: true }).fill("DOC");
     await dialog.getByRole("button", { name: "Add criterion", exact: true }).click(); await dialog.getByRole("textbox", { name: "Criterion 2 code", exact: true }).fill("TECH"); await choose(page, "Stage", "Technical", 1); await choose(page, "Assessment", "Weighted score", 1);
     await dialog.getByRole("textbox", { name: "Proposed weight", exact: true }).fill("12.3456"); await dialog.getByRole("textbox", { name: "Proposed minimum score", exact: true }).fill("0.0001"); await dialog.getByRole("textbox", { name: "Proposed maximum score", exact: true }).fill("10.0001");
-    await dialog.getByRole("textbox", { name: "Find a colleague", exact: true }).fill(fixture.users[1].displayName);
-    const candidate = dialog.getByRole("row").filter({ hasText: fixture.users[1].displayName }); await candidate.getByRole("button", { name: "Add colleague", exact: true }).click();
+    await dialog.getByRole("textbox", { name: "Find a colleague", exact: true }).fill(colleagueName!);
+    const candidate = dialog.getByRole("row").filter({ hasText: colleagueName! }); await candidate.getByRole("button", { name: "Add colleague", exact: true }).click();
     const created = await command(page, "Create", 0, () => dialog.getByRole("button", { name: "Save proposed plan", exact: true }).click()); await expect(dialog).toHaveCount(0);
     evidence.step = "B-reload-created-plan"; await page.reload(); const v1 = await get(context, base + "/versions/1");
     need(v1.plan?.version === 1 && v1.revision?.version === 1 && v1.content?.requirements === marker && v1.content.criteria?.length === 2 && v1.content.criteria[1].weight === "12.3456" && v1.content.participants?.[0]?.principalId === fixture.users[1].id && v1.allowedActions?.length === 0, "CreatedSnapshotOrLatestHistoricalActionsInvalid");

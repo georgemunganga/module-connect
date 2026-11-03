@@ -29,7 +29,7 @@ test("actual B/C retained current/history/All reads and original actor receipts 
           if (Object.keys(request.headers()).some(k => k.startsWith("x-private-") || k.startsWith("x-test-") || ["x-crud-actor", "x-crud-browser-actor"].includes(k))) { evidence.identityAliasAttempted = true; await route.abort("blockedbyclient"); return; }
           await route.continue();
         });
-        await context.addInitScript(({ entityId, branch }) => { if (localStorage.getItem("erp.shell.state.v1") === null) localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })); }, { entityId: fixture.companyId, branch: fixture.branchId });
+        await context.addInitScript(({ entityId, branch, origin }) => { if (location.origin !== origin) return; if (localStorage.getItem("erp.shell.state.v1") === null) localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branch })); }, { entityId: fixture.companyId, branch: fixture.branchId, origin: input.origin });
         const page = await context.newPage(); page.on("pageerror", () => entry.pageErrors++);
         evidence.step = `actor-${actorIndex}-branch-current-history`;
         await page.goto(`/procurement/workspace/rfqs/${fixture.eventId}?source=round-plan`); await page.getByRole("tab", { name: "History", exact: true }).click();
