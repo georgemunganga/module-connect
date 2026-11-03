@@ -1,3 +1,5 @@
+import { quotationRouteSelected } from "./sourcing-route-selection";
+import { roundPlanRouteSelected } from "./round-plan-access";
 import { RequestApprovalJournalBoundary } from "./RequestApprovalJournal";
 import { requestApprovalsAvailable } from "./request-approval-availability";
 import { replacementHistoryRouteAvailable } from "./invoice-replacement-editor";
@@ -83,8 +85,13 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const planReviewRead = state.readiness?.capabilities.planReviewRead === true;
   const planReviewQueue = location.pathname === "/approvals" && planReviewRead
     && state.readiness?.permissions.includes("procurement-plan-review-read") === true;
-  const quotationRead = sourcingPath && !newRecord && !editRecord && state.readiness?.permissions.includes("procurement-quotation-read") === true;
-  const allReadSupported = planReviewQueue || planPath && !newRecord && !editRecord && planReviewRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
+  const roundPlanRead = sourcingPath && !newRecord && !editRecord && state.readiness !== undefined
+    && roundPlanRouteSelected(new URLSearchParams(location.search).get("source"), state.readiness) && state.readiness.capabilities.roundPlanRead === true
+    && state.readiness.permissions.includes("procurement-round-plan-read");
+  const quotationRead = sourcingPath && !newRecord && !editRecord && state.readiness !== undefined
+    && quotationRouteSelected(new URLSearchParams(location.search).get("source"), state.readiness.permissions)
+    && state.readiness.permissions.includes("procurement-quotation-read");
+  const allReadSupported = planReviewQueue || planPath && !newRecord && !editRecord && planReviewRead || roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
     || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || manualApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
@@ -92,7 +99,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   }
   const permission = state.readiness?.permissions ?? [];
   const permits = (read: string, create: string, edit: string) => permission.includes(newRecord ? create : editRecord ? edit : read);
-  const deniedCrud = sourcingPath && new URLSearchParams(location.search).get("source") === "quotations" && !permission.includes("procurement-quotation-read")
+  const deniedCrud = sourcingPath && new URLSearchParams(location.search).get("source") === "round-plan" && !permission.includes("procurement-round-plan-read")
+    || sourcingPath && new URLSearchParams(location.search).get("source") === "quotations" && !permission.includes("procurement-quotation-read")
     || vendorPath && !permits("procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit")
     || itemPath && !(newRecord || editRecord ? permission.includes("procurement-item-manage") : permission.some(value => ["procurement-item-read", "procurement-item-manage"].includes(value)))
     || requestPath && !permits("procurement-request-read", "procurement-request-create", "procurement-request-edit")
@@ -126,7 +134,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))))
     || (approvalPath && state.readiness.capabilities.invoiceManualUnitReviewRead && state.readiness.permissions.some((permission) =>
       ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission)))
-    || (sourcingPath && (quotationRead || state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
+    || (sourcingPath && (roundPlanRead || quotationRead || state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
     || (planPath && (state.readiness.capabilities.planningDraft || !newRecord && !editRecord && planReviewRead))

@@ -1,3 +1,6 @@
+import { quotationRouteSelected } from "../lib/sourcing-route-selection";
+import { roundPlanRouteSelected } from "../lib/round-plan-access";
+import { RoundPlanRfqList, RoundPlanRfqDetail } from "./RoundPlanRfq";
 import { QuotationSourceList, QuotationSourceDetail } from "./QuotationDrafts";
 import { LiveRecordDirectory } from "../components/data/LiveRecordDirectory";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -41,15 +44,15 @@ function ScopedSourcingPage({ view }: { view: "list" | "editor" | "detail" }) {
   const principalDefault = source === null && (company.capabilities.principalSourcingSourceDrafts
     || company.capabilities.principalSourcingPublicationRead)
     && !company.capabilities.sourcingDraft && !company.capabilities.sourcingSourceDrafts;
-  const hasAdHocAccess = company.permissions.some(permission => ["procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit"].includes(permission));
-  const quotations = source === "quotations" || source === null && !hasAdHocAccess && company.permissions.includes("procurement-quotation-read") && !company.permissions.includes("procurement-sourcing-convert") && !company.permissions.includes("procurement-sourcing-submit");
+  const rounds = roundPlanRouteSelected(source, company);
+  const quotations = quotationRouteSelected(source, company.permissions);
   const governed = source === "approved" || source === "principal-approved" || principalDefault;
   const mode: RfqSourceMode = source === "principal-approved" || principalDefault ? "principal" : "worker";
   const key = JSON.stringify([authEpoch, company.tenantId, company.legalEntityId, selection.entityId ?? "", selection.branch ?? "",
-    company.principalId, company.permissions, company.capabilities, governed, quotations, mode, view, id]);
-  return <SourcingPageContent key={key} view={view} governed={governed} quotations={quotations} mode={mode} id={id} />;
+    company.principalId, company.permissions, company.capabilities, selection.branchScope, governed, quotations, rounds, mode, view, id]);
+  return <SourcingPageContent key={key} view={view} governed={governed} quotations={quotations} rounds={rounds} mode={mode} id={id} />;
 }
-function SourcingPageContent({ view, governed, quotations, mode, id }: { view: "list" | "editor" | "detail"; governed: boolean; quotations: boolean; mode: RfqSourceMode; id: string }) {
+function SourcingPageContent({ view, governed, quotations, rounds, mode, id }: { view: "list" | "editor" | "detail"; governed: boolean; quotations: boolean; rounds: boolean; mode: RfqSourceMode; id: string }) {
   const { capabilities, permissions } = useCompany();
   const hasAdHocAccess = permissions.some(permission => ["procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit"].includes(permission));
   const canConvert = permissions.includes("procurement-sourcing-convert");
@@ -61,13 +64,14 @@ function SourcingPageContent({ view, governed, quotations, mode, id }: { view: "
   const anyGoverned = capabilities.sourcingSourceDrafts || capabilities.principalSourcingSourceDrafts
     || capabilities.principalSourcingPublicationRead;
   return <>
+    {view === "list" && capabilities.roundPlanRead && permissions.includes("procurement-round-plan-read") && <div className="px-5 pt-5 sm:px-8"><Link to="/rfqs?source=round-plan"><Button variant={rounds ? "primary" : "secondary"}>Evaluation planning</Button></Link></div>}
     {view === "list" && permissions.includes("procurement-quotation-read") && <div className="px-5 pt-5 sm:px-8"><Link to="/rfqs?source=quotations"><Button variant={quotations ? "primary" : "secondary"}>Assigned quotation work</Button></Link></div>}
-    {view === "list" && capabilities.sourcingDraft && hasAdHocAccess && <div className="px-5 pt-5 sm:px-8"><Link to="/rfqs?source=ad-hoc"><Button variant={!quotations && !governed ? "primary" : "secondary"}>Ad hoc drafts</Button></Link></div>}
+    {view === "list" && capabilities.sourcingDraft && hasAdHocAccess && <div className="px-5 pt-5 sm:px-8"><Link to="/rfqs?source=ad-hoc"><Button variant={!rounds && !quotations && !governed ? "primary" : "secondary"}>Ad hoc drafts</Button></Link></div>}
     {view === "list" && anyGoverned && canReadGoverned && <div className="flex gap-3 px-5 pt-5 sm:px-8" aria-label="Quote request type">
-      {(capabilities.principalSourcingSourceDrafts || capabilities.principalSourcingPublicationRead) && <Link to="/rfqs?source=principal-approved"><Button variant={governed && mode === "principal" ? "primary" : "secondary"}>From approved requests</Button></Link>}
-      {capabilities.sourcingSourceDrafts && <Link to="/rfqs?source=approved"><Button variant={governed && mode === "worker" ? "primary" : "secondary"}>{capabilities.principalSourcingSourceDrafts ? "Earlier approved request drafts" : "From approved requests"}</Button></Link>}
+      {(capabilities.principalSourcingSourceDrafts || capabilities.principalSourcingPublicationRead) && <Link to="/rfqs?source=principal-approved"><Button variant={!rounds && governed && mode === "principal" ? "primary" : "secondary"}>From approved requests</Button></Link>}
+      {capabilities.sourcingSourceDrafts && <Link to="/rfqs?source=approved"><Button variant={!rounds && governed && mode === "worker" ? "primary" : "secondary"}>{capabilities.principalSourcingSourceDrafts ? "Earlier approved request drafts" : "From approved requests"}</Button></Link>}
     </div>}
-    {quotations ? !permissions.includes("procurement-quotation-read") || view === "editor" ? <div role="alert" className="p-5">This quotation action is not available with your current access.</div> : view === "list" ? <QuotationSourceList /> : <QuotationSourceDetail id={id} /> : governed ? !enabled || !canReadGoverned || view === "editor" && (!canConvert || Boolean(id))
+    {rounds ? !capabilities.roundPlanRead || !permissions.includes("procurement-round-plan-read") || view === "editor" ? <p role="alert" className="p-5">This evaluation-planning action is unavailable. Open an existing RFQ to set up its plan.</p> : view === "list" ? <RoundPlanRfqList /> : <RoundPlanRfqDetail id={id} /> : quotations ? !permissions.includes("procurement-quotation-read") || view === "editor" ? <div role="alert" className="p-5">This quotation action is not available with your current access.</div> : view === "list" ? <QuotationSourceList /> : <QuotationSourceDetail id={id} /> : governed ? !enabled || !canReadGoverned || view === "editor" && (!canConvert || Boolean(id))
       ? <div className="p-5 sm:p-8" role="alert">This quote action is not available with your current access. <Link to="/rfqs">Back to quote requests</Link></div>
       : view === "list" ? <GovernedSourcingList mode={mode} /> : view === "editor" ? <GovernedSourcingCreate mode={mode} /> : <GovernedSourcingDetail id={id} mode={mode} />
       : view === "editor" && (!permissions.includes(id ? "procurement-sourcing-edit" : "procurement-sourcing-create"))
