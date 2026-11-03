@@ -1,6 +1,6 @@
 # Purchase plan review integration
 
-Frontend source milestone for [ERP issue 172](https://github.com/georgemunganga/erp/issues/172), [workflow issue 169](https://github.com/georgemunganga/erp/issues/169) and [draft backend PR 171](https://github.com/georgemunganga/erp/pull/171). UI base: `1e7922ae178351fa006bdf4a9aaeb44bc903f94e`; reviewed backend contract: `ba67e5fdfc4c1e63ffad7786efcccc0e001acf1e`.
+Frontend source milestone for [ERP issue 172](https://github.com/georgemunganga/erp/issues/172), [workflow issue 169](https://github.com/georgemunganga/erp/issues/169) and [draft backend PR 171](https://github.com/georgemunganga/erp/pull/171). UI base: `1e7922ae178351fa006bdf4a9aaeb44bc903f94e`; reviewed backend contract: `ad969473e08c917283c0ef84133646c3f8671b36`.
 
 This is frontend source integration, not deployment or native acceptance. The backend contract still needs its genuine migration, SDK and native stages. Keep this UI undeployed until the paired backend is verified. No production plan review policy is created here.
 
@@ -25,7 +25,7 @@ All paths below begin `/api/procurement/v1/plans`. Current server authorization,
 | Submitted round detail | GET `/review-submissions/{submissionId}` | Current owner READ or assigned reviewer READ, as verified by server. Uses `submittedSnapshot` exclusively for submitted lines/money; never falls back to owner-only GET or mutable lines. |
 | Send plan for review | POST `/{id}/review-submissions` `{expectedPlanVersion}` | Workflow, submit grant, server Submit hint; server validates policy/state and pins the immutable snapshot. Original result HTTP 201 retained. |
 | Review / final approve / send back / reject | POST `/review-submissions/{submissionId}/assignments/{assignmentId}/decisions` | Current Review or Final assignment, corresponding review/approve grant and server action hint; `{action,reason,expectedPlanVersion,expectedCaseVersion,expectedAssignmentVersion}`. Return/Reject need a reason. |
-| Withdraw | POST `/review-submissions/{submissionId}/withdrawals` | Owner withdraw grant and server hint; current plan/case CAS and optional reason. Open the current history round first. |
+| Withdraw | POST `/review-submissions/{submissionId}/withdrawals` | Owner withdraw grant and server hint; current plan/case CAS and a required trimmed reason of 1–2,000 characters. Open the current history round first. |
 | Assign legacy branch | POST `/{id}/claim-scope` | Explicit selected branch, edit or claim-scope-all grant, server ClaimScope hint; `{version,confirmStoredCurrencyCode,reason}`. Confirms the stored currency without conversion. |
 | Check previous review action | GET `/commands/{key}` | Current retained READ and original actor/scope. No writer lookups, new key, replay POST or workflow capability needed. Exact original response status is retained. |
 
@@ -45,3 +45,9 @@ Node `v22.23.3`, existing dependency symlink, one worker, `nice -n 10`, `NODE_OP
 - New cases cover missing/nonboolean metadata, independent READ/write-off, exact decimal limits, older draft DTOs, verified reviewer-safe URLs, missing task submission IDs, current CAS versus historical version, invalid snapshot bindings, Company All write denial, current actor changes, permissions/action hints and original201 GET recovery after an unknown POST with no repeated POST.
 
 Logs/report artifacts remain outside Git in the scoped UI evidence directory. Typecheck emits no TRX; Vitest JSON is the machine-readable report. A source/commit binding accompanies the draft PR review. No build manifest exists for this source milestone because build/browser slots have not been authorized. Existing `tests/e2e/live-plan.spec.ts` remains the draft CRUD/stale/denied compatibility journey, unrun for this change. Next stages: controlled live build; one-worker mocked UI regressions including plan-only Approvals/immutable detail/actions/recovery; then genuine backend migration/native acceptance and actual normal Core-cookie UI acceptance. No signed-in UAT, persistence, deployment or hosted CI success is claimed here.
+
+### Independent contract-review followup
+
+The final API contract pin above supersedes the initial `ba67e5fdfc4c1e63ffad7786efcccc0e001acf1e`. It makes legacy scope-claim receipts canonical camel-case and adds narrow Company All review GET admission plus raw-All write denial. Those are backend source corrections, still pending its SDK/native acceptance; no UI fallback to a first branch or Pascal-case receipt was introduced.
+
+Withdrawal now requires a trimmed nonblank reason of at most 2,000 characters in the shared command builder, required field, disabled confirmation and execution guard. The changed plan contract file was rerun: 18 passed, zero failures/skips/todo (`review-followup-unit.json` / `.log`), including whitespace/oversize denial, exact trimmed request/current CAS and camel-case claim POST/original-key GET receipts. Final `tsc --noEmit` passed (`typecheck-review-followup.log`). The earlier full195 result is retained as the initial source cohort; it was not rerun or represented as a new197-case full run. Build/browser/native stages remain pending.

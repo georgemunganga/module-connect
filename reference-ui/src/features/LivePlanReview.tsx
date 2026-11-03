@@ -5,7 +5,7 @@ import { RecordTable } from "../components/data/RecordTable";
 import { ActivityTimeline } from "../components/data/DetailPrimitives";
 import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
 import { formatBudgetAmount } from "../../../src/platform/procurement-budget-amount";
-import { getPlanRound, getPlanReviewHistory, listPlanReviewTasks, recoverPlanReview, sendPlanReview, planDecisionCommand, planWithdrawCommand,
+import { getPlanRound, getPlanReviewHistory, listPlanReviewTasks, recoverPlanReview, sendPlanReview, planDecisionCommand, planWithdrawCommand, validPlanWithdrawalReason,
   type PlanReviewCommand, type PlanReviewReceipt, type PlanRound, type PlanTaskPage, type PlanHistory } from "../../../src/platform/procurement-plan-review-api";
 import type { PlanDetail } from "../../../src/platform/procurement-plans-api";
 import { usePlanReviewContext, PlanContextBoundary } from "../lib/PlanReviewContext";
@@ -123,7 +123,7 @@ export function PlanRoundDialog({ submissionId, onClose }: { submissionId: strin
   }, [key, submissionId, revision]);
   const writable = planReviewWritesAvailable(readiness, scope);
   const execute = async (withdraw: boolean) => {
-    if (!data || busy || !writable || journal.state().blocked) return;
+    if (!data || busy || !writable || journal.state().blocked || withdraw && !validPlanWithdrawalReason(reason)) return;
     const assignment = data.stages.flatMap(s => s.assignments).find(a => a.id === intent?.assignmentId);
     if (withdraw ? !data.allowedActions.includes("Withdraw") || !readiness.permissions.includes("procurement-plan-withdraw")
       : !intent || !assignment || assignment.assigneeSubjectId !== scope.identity.principalId || !assignment.allowedActions.includes(intent.action)) return;
@@ -155,6 +155,6 @@ export function PlanRoundDialog({ submissionId, onClose }: { submissionId: strin
     </div> : null}
     {intent && <ApprovalDecisionDialog recordLabel="plan" action={intent.action} reason={reason} busy={busy} onReason={setReason}
       onConfirm={() => void execute(false)} onCancel={() => setIntent(null)} />}
-    {withdrawing && <Modal title="Withdraw plan from review" onClose={() => { if (!busy) setWithdrawing(false); }}><Field label="Withdrawal reason (optional)"><Textarea maxLength={2000} value={reason} onChange={e => setReason(e.target.value)} /></Field><Button disabled={busy || journal.state().blocked} onClick={() => void execute(true)}>Confirm withdrawal</Button></Modal>}
+    {withdrawing && <Modal title="Withdraw plan from review" onClose={() => { if (!busy) setWithdrawing(false); }}><Field label="Withdrawal reason"><Textarea required maxLength={2000} value={reason} onChange={e => setReason(e.target.value)} /></Field><Button disabled={busy || journal.state().blocked || !validPlanWithdrawalReason(reason)} onClick={() => void execute(true)}>Confirm withdrawal</Button></Modal>}
   </Modal>;
 }

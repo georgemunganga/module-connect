@@ -74,6 +74,21 @@ describe("immutable plan review and current CAS", () => {
     expect(() => planDecisionCommand(stopped, assignment, "Approve", "", key)).toThrow();
     expect(() => planDecisionCommand(round(), assignment, "Return", "", key)).toThrow();
   });
+  it("requires a trimmed withdrawal reason up to 2000 characters before a command can be sent", async () => {
+    const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+    for (const reason of ["", " \t\n ", "x".repeat(2001)]) {
+      expect(() => planWithdrawCommand(round(), reason, key)).toThrow();
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+    const command = planWithdrawCommand(round(), "  Need revised forecasts  ", key);
+    expect(JSON.parse(command.body)).toEqual({ expectedPlanVersion: 8, expectedCaseVersion: 7, reason: "Need revised forecasts" });
+    expect(JSON.parse(planWithdrawCommand(round(), "x".repeat(2000), key).body).reason).toHaveLength(2000);
+    fetcher.mockResolvedValue(json({ planId: plan, planVersion: 9, submissionId: submission, caseId: approvalCase, status: "Draft" }));
+    await sendPlanReview(scope(), command);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toBe(`/api/procurement/v1/plans/review-submissions/${submission}/withdrawals`);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ expectedPlanVersion: 8, expectedCaseVersion: 7, reason: "Need revised forecasts" });
+  });
   it.each(["plan", "company", "branch", "total", "version"])("fails closed on a mismatched immutable snapshot %s", async field => {
     const value = round();
     if (field === "plan") value.submittedSnapshot.planId = key;
@@ -127,6 +142,14 @@ describe("original actor/key recovery and minimal journal", () => {
     expect(fetcher.mock.calls[0][1]?.headers).toBeInstanceOf(Headers);
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Idempotency-Key")).toBe(key);
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).has("X-Idempotency-Key")).toBe(false);
+  });
+  it("accepts the canonical camel-case legacy scope-claim response and its original-key recovery", async () => {
+    const captured = scope(), ref: PlanReviewLocator = { key, operation: "ClaimScope", planId: plan, submissionId: null, assignmentId: null };
+    const fetcher = vi.fn(async () => json({ id: plan, branchRef: branch, currencyCode: "ZMW", version: 4, scopeClaimed: true }));
+    vi.stubGlobal("fetch", fetcher);
+    const saved = await sendPlanReview(captured, { ...ref, body: JSON.stringify({ version: 3, confirmStoredCurrencyCode: "ZMW", reason: "Assign original department forecast" }) });
+    expect(saved).toEqual({ planId: plan, planVersion: 4, httpStatus: 200 });
+    expect(await recoverPlanReview(captured, ref)).toEqual(saved);
   });
   it("leaves another actor or missing result pending; stores no business fields or command body", async () => {
     const store = new Map<string, string>(), captured = scope();

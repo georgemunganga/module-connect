@@ -123,8 +123,11 @@ export function planDecisionCommand(round: PlanRound, assignmentId: string, acti
     body: JSON.stringify({ action, reason: reason.trim() || null, expectedPlanVersion: round.planVersion,
       expectedCaseVersion: round.caseVersion, expectedAssignmentVersion: assignment.version }) };
 }
+export function validPlanWithdrawalReason(reason: string): boolean {
+  return reason.trim().length > 0 && reason.trim().length <= 2000;
+}
 export function planWithdrawCommand(round: PlanRound, reason: string, key: string): PlanReviewCommand {
-  if (!round.allowedActions.includes("Withdraw") || !planGuid(key) || !version(round.planVersion) || !version(round.caseVersion) || reason.trim().length > 2000) throw invalid();
+  if (!round.allowedActions.includes("Withdraw") || !planGuid(key) || !version(round.planVersion) || !version(round.caseVersion) || !validPlanWithdrawalReason(reason)) throw invalid();
   return { key, operation: "Withdraw", planId: round.planId, submissionId: round.submissionId, assignmentId: null,
-    body: JSON.stringify({ expectedPlanVersion: round.planVersion, expectedCaseVersion: round.caseVersion, reason: reason.trim() || null }) };
+    body: JSON.stringify({ expectedPlanVersion: round.planVersion, expectedCaseVersion: round.caseVersion, reason: reason.trim() }) };
 }
