@@ -1,6 +1,6 @@
 """INERT until Root pins/approves actual inputs. One systemd user service; no API/DB setup."""
 import hashlib,json,os,pathlib,re,shutil,signal,subprocess,sys,time
-from plan_native_contract import protected_json,private_output,resource_budget_accepted
+from plan_native_contract import protected_json,private_output,resource_budget_accepted,runtime_budget_accepted
 
 def digest(p):return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
 def ticks(pid):
@@ -62,7 +62,7 @@ def main():
     code,text=systemctl('show','app.slice','--property=ControlGroup','--value');assert code==0
     parent=text.strip();assert parent.startswith('/user.slice/')and parent.endswith('/app.slice')
     cgroup=pathlib.Path('/sys/fs/cgroup'+parent)/p['unitName'];assert not cgroup.exists()
-    r=p['resources'];assert 300<=r['runtimeMaxSeconds']<=360 and 90<=r['cleanupMaxSeconds']<=120
+    r=p['resources'];assert runtime_budget_accepted(r)
     assert 128<=r['tasksMax']<=256
     available=int(next(x.split()[1]for x in pathlib.Path('/proc/meminfo').read_text().splitlines()if x.startswith('MemAvailable:')))*1024
     assert resource_budget_accepted(r,available,shutil.disk_usage('/').free)

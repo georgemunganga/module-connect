@@ -3,6 +3,12 @@ import importlib.util,pathlib,sys,unittest
 scripts=pathlib.Path(__file__).resolve().parents[3]/'scripts';sys.path.insert(0,str(scripts))
 spec=importlib.util.spec_from_file_location('plan_outer',scripts/'run-plan-native-outer.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 class OuterContract(unittest.TestCase):
+    def test_short_reviewed_runtime_with_cleanup_remains_bounded(self):
+        self.assertTrue(module.runtime_budget_accepted({'runtimeMaxSeconds':240,'cleanupMaxSeconds':90}))
+        self.assertTrue(module.runtime_budget_accepted({'runtimeMaxSeconds':360,'cleanupMaxSeconds':120}))
+    def test_runtime_or_cleanup_outside_reviewed_bounds_is_rejected(self):
+        for runtime,cleanup in ((239,90),(361,90),(240,89),(240,121)):
+            self.assertFalse(module.runtime_budget_accepted({'runtimeMaxSeconds':runtime,'cleanupMaxSeconds':cleanup}))
     def budget(self):return {'minimumMemoryAvailableBytes':1152*1024**2,'minimumRootFreeBytes':200*1024**2,'memoryMaxBytes':1024*1024**2}
     def test_approved_1152_floor_admits_a_strict_one_gib_service(self):
         self.assertTrue(module.resource_budget_accepted(self.budget(),1152*1024**2,200*1024**2))

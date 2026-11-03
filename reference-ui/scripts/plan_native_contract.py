@@ -3,6 +3,9 @@ import hashlib,json,os,pathlib,time,urllib.parse
 MINIMUM_MEMORY_AVAILABLE_BYTES=1152*1024**2
 MAXIMUM_BROWSER_CGROUP_BYTES=1024*1024**2
 
+def runtime_budget_accepted(resources):
+    return 240<=resources['runtimeMaxSeconds']<=360 and 90<=resources['cleanupMaxSeconds']<=120
+
 def resource_budget_accepted(resources,available,root_free):
     return (resources['minimumMemoryAvailableBytes']>=MINIMUM_MEMORY_AVAILABLE_BYTES
       and resources['minimumRootFreeBytes']>=200*1024**2
