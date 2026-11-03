@@ -125,6 +125,15 @@ describe("Procurement system-user readiness", () => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { recurringPurchaseDraft: flag }));
     expect(result.capabilities.recurringPurchaseDraft).toBe(flag === true);
   });
+  it.each([undefined, false, true, "true", 1, null])("keeps payment reads optional and independent of writes (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { manualPaymentRead: flag, manualPaymentWorkflow: false }));
+    expect(result.capabilities.manualPaymentRead).toBe(flag === true);
+    expect(result.capabilities.manualPaymentWorkflow).toBe(false);
+  });
+  it("does not infer payment reads from write availability", async () => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { manualPaymentWorkflow: true }));
+    expect(result.capabilities.manualPaymentRead).toBe(false);
+  });
   it.each([undefined, false, true, "true", 1, null])("keeps manual payment workflow off without an explicit server flag (%s)", async flag => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { manualPaymentWorkflow: flag }));
     expect(result.capabilities.manualPaymentWorkflow).toBe(flag === true);

@@ -26,16 +26,20 @@ function detail() { return { request: { ...base, purpose: "Externally reported t
   approvedByPrincipalId: null, recordedByPrincipalId: null, confirmedByPrincipalId: null, closureReason: null },
   transitions: [], coreCases: [], coreDecisions: [] }; }
 
+const paymentCalls = new WeakMap<Page, { path: string; method: string; headers: Record<string, string> }[]>();
 const unmatchedApi = new WeakMap<Page, string[]>();
 test.afterEach(async ({ page }) => { expect(unmatchedApi.get(page) ?? []).toEqual([]); });
 
-async function fixture(page: Page, enabled: boolean, options: {
+type FixtureOptions = {
   principalId?: string; paymentStatus?: string; permissions?: string[]; allBranches?: boolean;
   createOutcome?: "lost" | "validation" | "unknown409" | "auth403" | "wrong-message";
-} = {}) {
+  readCapability?: unknown; workflowEnabled?: boolean; persisted?: boolean; reviseOutcome?: "lost";
+};
+async function fixture(page: Page, enabled: boolean, options: FixtureOptions = {}) {
   const writes: { path: string; body: Record<string, unknown>; key: string | undefined }[] = [];
   let status = options.paymentStatus ?? "Draft", version = status === "Approved" ? 3 : 1;
   const unknown: string[] = []; unmatchedApi.set(page, unknown);
+  const calls: NonNullable<ReturnType<typeof paymentCalls.get>> = []; paymentCalls.set(page, calls);
   const origin = String(test.info().project.use.baseURL);
   await page.route("**/*", route => new URL(route.request().url()).origin === origin
     ? route.continue() : route.abort("blockedbyclient"));
@@ -45,6 +49,7 @@ async function fixture(page: Page, enabled: boolean, options: {
   }, { company, branch, allBranches: options.allBranches ?? false, origin });
   await page.route("**/api/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
+    if (path.startsWith("/api/procurement/v1/manual-payments")) calls.push({ path, method: request.method(), headers: request.headers() });
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/api/core/v1/workspace-context") return json(currentWorkspaceFixture("test", options.principalId ?? requester,
       [{ companyId: company, branchId: branch, code: "TEST", name: "Amizo Power" }]));
@@ -57,8 +62,9 @@ async function fixture(page: Page, enabled: boolean, options: {
       principalId: options.principalId ?? requester, workerId: null, company: { id: company, currencyCode: "ZMW" },
       branch: options.allBranches ? null : { id: branch }, permissions: options.permissions ?? permissions });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company,
-      schemaReady: true, capabilities: Object.fromEntries([...requiredCapabilities, "manualPaymentWorkflow"]
-        .map(name => [name, name === "manualPaymentWorkflow" && enabled])) });
+      schemaReady: true, capabilities: { ...Object.fromEntries(requiredCapabilities.map(name => [name, false])),
+        manualPaymentWorkflow: options.workflowEnabled ?? enabled,
+        manualPaymentRead: Object.hasOwn(options, "readCapability") ? options.readCapability : enabled } });
     if (path === "/api/procurement/v1/manual-payments/lookups/branches")
       return json({ items: [{ id: branch, code: "HQ", name: "Lusaka" }] });
     if (path === "/api/procurement/v1/manual-payments/lookups/invoices") return json({ items: [{ invoiceId: invoice,
@@ -72,7 +78,7 @@ async function fixture(page: Page, enabled: boolean, options: {
       return json({ items: [{ principalId: person[0], displayName: person[1] }], nextCursor: null, hasMore: false });
     }
     if (path === "/api/procurement/v1/manual-payments" && request.method() === "GET")
-      return json({ items: [], total: 0, page: 1, pageSize: 25 });
+      return json({ items: options.persisted ? [{ ...base, status, version }] : [], total: options.persisted ? 1 : 0, page: 1, pageSize: 25 });
     if (path === "/api/procurement/v1/manual-payments" && request.method() === "POST") {
       const body = request.postDataJSON() as Record<string, unknown>;
       writes.push({ path, body, key: request.headers()["idempotency-key"] });
@@ -91,6 +97,16 @@ async function fixture(page: Page, enabled: boolean, options: {
         return json({ id: payment, version: 1, status: "Draft", action: "Create", commandKey: saved.key });
       return json({ code: "payment-not-found", message: "Unavailable" }, 404);
     }
+    if (path === `/api/procurement/v1/manual-payments/${payment}` && request.method() === "PUT" && options.reviseOutcome === "lost") {
+      writes.push({ path, body: request.postDataJSON(), key: request.headers()["idempotency-key"] });
+      return route.abort("failed");
+    }
+    if (path.startsWith(`/api/procurement/v1/manual-payments/${payment}/commands/`) && request.method() === "GET") {
+      const saved = writes[0];
+      if (options.reviseOutcome === "lost" && saved && path.endsWith(`/${saved.key}`))
+        return json({ id: payment, version: 2, status: "Draft", action: "Revise", commandKey: saved.key });
+      return json({ code: "payment-not-found", message: "Unavailable" }, 404);
+    }
     if (path === `/api/procurement/v1/manual-payments/${payment}/record` && request.method() === "POST") {
       const body = request.postDataJSON() as Record<string, unknown>;
       writes.push({ path, body, key: request.headers()["idempotency-key"] });
@@ -100,7 +116,7 @@ async function fixture(page: Page, enabled: boolean, options: {
     }
     if (path === `/api/procurement/v1/manual-payments/${payment}`) {
       const saved = detail();
-      return json({ ...saved, request: { ...saved.request, status, version,
+      return json({ ...saved, transitions: options.persisted ? [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", action: "Create", fromStatus: "Draft", toStatus: "Draft", reason: "Retained request created", occurredAt: now }] : [], request: { ...saved.request, status, version,
         approvedAmountExact: status === "Draft" ? null : "1.0001",
         approvedByPrincipalId: status === "Draft" ? null : approver,
         recordedAmountExact: status === "PaymentRecorded" ? "1.0001" : null,
@@ -383,3 +399,109 @@ for (const createOutcome of ["unknown409", "auth403", "wrong-message"] as const)
     expect(writes).toHaveLength(1);
   });
 }
+
+function expectReadOnlyCalls(page: Page) {
+  const calls = paymentCalls.get(page) ?? [];
+  expect(calls.filter(call => call.path.includes("/lookups/"))).toEqual([]);
+  expect(calls.every(call => call.method === "GET")).toBe(true);
+  return calls;
+}
+
+test("read-only workerless account retains saved list detail and history in Company All", async ({ page }) => {
+  const writes = await fixture(page, false, { readCapability: true, persisted: true, allBranches: true });
+  await page.goto("/procurement/workspace/payments");
+  await expect(page.getByRole("heading", { name: "Payments Made", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "New manual payment request" })).toHaveCount(0);
+  await expect(page.getByText("Northwind Devices", { exact: true })).toBeVisible();
+  await page.getByText("Laptop supplier transfer", { exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toBeVisible();
+  for (const name of ["Edit draft", "Submit for review", "Cancel request"])
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await page.getByRole("tab", { name: "History", exact: true }).click();
+  await expect(page.getByText("Retained request created", { exact: true })).toBeVisible();
+  await expect(page.getByText("Core review history", { exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("read-only-payment-history.png"), fullPage: true });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toBeVisible();
+  const calls = expectReadOnlyCalls(page);
+  expect(calls.some(call => call.path.endsWith("/manual-payments"))).toBe(true);
+  expect(calls.some(call => call.path.endsWith(`/manual-payments/${payment}`))).toBe(true);
+  expect(calls.every(call => call.headers["x-shell-branch-scope"] === "all" && !call.headers["x-shell-location"])).toBe(true);
+  expect(writes).toHaveLength(0);
+});
+
+for (const path of ["new", `${payment}/edit`]) {
+  for (const deniedBy of ["workflow", "permission"] as const) {
+    test(`read-only direct ${path.endsWith("edit") ? "edit" : "new"} blocks writer mounting when ${deniedBy} is absent`, async ({ page }) => {
+      const writes = await fixture(page, deniedBy !== "workflow", { readCapability: true,
+        permissions: deniedBy === "permission" ? ["procurement-access", "procurement-payment-read"] : permissions });
+      await page.goto(`/procurement/workspace/payments/${path}`);
+      await expect(page.getByText("Changes to manual payment requests are not available", { exact: false })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Back to payments", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save as Draft" })).toHaveCount(0);
+      await expect(page.getByRole("combobox", { name: "Transaction branch *" })).toHaveCount(0);
+      expectReadOnlyCalls(page); expect(writes).toHaveLength(0);
+    });
+  }
+}
+
+for (const readCapability of [undefined, false, "true", 1, null]) {
+  test(`payment write capability does not imply missing or invalid READ (${String(readCapability)})`, async ({ page }) => {
+    const writes = await fixture(page, true, { readCapability, persisted: true });
+    await page.goto(`/procurement/workspace/payments/${payment}`);
+    await expect(page.getByText("This workflow is being connected", { exact: false })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toHaveCount(0);
+    expect(paymentCalls.get(page)).toEqual([]); expect(writes).toHaveLength(0);
+  });
+}
+
+test("READ capability without current READ permission denies list detail and original editor URL", async ({ page }) => {
+  const writes = await fixture(page, true, { readCapability: true, persisted: true,
+    permissions: ["procurement-access", "procurement-payment-create", "procurement-payment-edit"] });
+  for (const path of ["", `/${payment}`, "/new"]) {
+    await page.goto(`/procurement/workspace/payments${path}`);
+    await expect(page.getByText("You do not have permission to open this Procurement page", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check saved result" })).toHaveCount(0);
+  }
+  expect(paymentCalls.get(page)).toEqual([]); expect(writes).toHaveLength(0);
+});
+
+test("lost create recovers on original new URL after write flag disappears", async ({ page }) => {
+  const options: FixtureOptions = { createOutcome: "lost", readCapability: true };
+  const writes = await fixture(page, true, options);
+  await preparePaymentDraft(page);
+  await page.getByRole("button", { name: "Save as Draft" }).click();
+  await expect(page.getByRole("button", { name: "Check saved result" })).toBeVisible();
+  expect(writes).toHaveLength(1); const firstKey = writes[0].key;
+  options.workflowEnabled = false; (paymentCalls.get(page) ?? []).splice(0);
+  await page.reload();
+  await expect(page.getByText("Changes to manual payment requests are not available", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check saved result" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save as Draft" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Check saved result" }).click();
+  await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toBeVisible();
+  const calls = expectReadOnlyCalls(page);
+  expect(calls.some(call => call.path.endsWith(`/commands/${firstKey}`))).toBe(true);
+  expect(writes).toHaveLength(1); expect(writes[0].key).toBe(firstKey);
+});
+
+test("lost revise recovers on original edit URL after write permission is revoked", async ({ page }) => {
+  const options: FixtureOptions = { reviseOutcome: "lost", readCapability: true };
+  const writes = await fixture(page, true, options);
+  await page.goto(`/procurement/workspace/payments/${payment}/edit`);
+  await expect(page.getByRole("heading", { name: "Edit Manual Payment Request" })).toBeVisible();
+  await page.getByLabel("Exact amount *").fill("1.1001");
+  await page.getByRole("button", { name: "Save as Draft" }).click();
+  await expect(page.getByRole("button", { name: "Check saved result" })).toBeVisible();
+  expect(writes).toHaveLength(1); const firstKey = writes[0].key;
+  options.permissions = ["procurement-access", "procurement-payment-read"];
+  (paymentCalls.get(page) ?? []).splice(0);
+  await page.reload();
+  await expect(page.getByText("Changes to manual payment requests are not available", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save as Draft" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Check saved result" }).click();
+  await expect(page.getByRole("heading", { name: "Laptop supplier transfer" })).toBeVisible();
+  const calls = expectReadOnlyCalls(page);
+  expect(calls.some(call => call.path.endsWith(`/${payment}/commands/${firstKey}`))).toBe(true);
+  expect(writes).toHaveLength(1); expect(writes[0].key).toBe(firstKey);
+});
