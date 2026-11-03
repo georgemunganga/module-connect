@@ -1,0 +1,49 @@
+{
+  "productCommit": "ed044333bb8f5e264286b4de601a74680dca0f41",
+  "uiBaseCommit": "b91a5db3fa6d88ef7a373dce91acabe88d6852f6",
+  "backendMain": "445699aa00ffc37c5099854c7cb22f6502210c9d",
+  "liveMode": true,
+  "node": "v22.23.3",
+  "files": [
+    {
+      "path": "assets/index-DB7R84CS.css",
+      "bytes": 67182,
+      "sha256": "629043e2102ca9d8aba36b237a2f1d702ff6d42bbae0a6db71cf1a6b3f432aa2"
+    },
+    {
+      "path": "assets/index-DCNZtKnx.js",
+      "bytes": 1614127,
+      "sha256": "fc6807aff7c528cca4b3470cb77841fa6ce9bbaf3c967a69c3c3bf0462bc64b4"
+    },
+    {
+      "path": "favicon.svg",
+      "bytes": 400,
+      "sha256": "1a9d07c4ce8b5ce48f73b849aceaf7dd9f380580212a8b4dfe48e82b681335bf"
+    },
+    {
+      "path": "index.html",
+      "bytes": 2084,
+      "sha256": "7b6645ee23eba486cf90d565b8db95f45fd449e2747ae99e78dc3b4755df15bd"
+    },
+    {
+      "path": "manus-routes.json",
+      "bytes": 10454,
+      "sha256": "60507144c7092a9c064c8a35c8ba6cceb9244427538c2e3a434d2673cd94e17b"
+    }
+  ],
+  "testCommit": "bf3032eedf81d39099d52debe26786b865b3090c",
+  "sourceFiles": [
+    {
+      "path": "reference-ui/src/lib/procurement-live.ts",
+      "sha256": "5410fc0fd312832dad2d5567ab3191f6a8edcbdcaf800f8dd41045c37e289267"
+    },
+    {
+      "path": "reference-ui/src/lib/ProcurementLiveGate.tsx",
+      "sha256": "a6cfc73ff4597b55d3f0efe0c6730bc5a5f79686a50424455ec4af8dfdf03d76"
+    },
+    {
+      "path": "reference-ui/src/features/LivePayments.tsx",
+      "sha256": "d33b85b26c5173248307efb83516028d7f172aa7b557e4091d86641f1217c812"
+    }
+  ]
+}

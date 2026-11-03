@@ -39,7 +39,7 @@ function usePaymentContext(): PaymentContext {
   return { scope: captureManualPaymentScope(identity, () => alive.current ? current.current : null), readiness,
     branchId: identity.branchId,
     key: JSON.stringify([identity.tenantId, identity.legalEntityId, identity.principalId,
-      identity.branchId, identity.authEpoch, readiness.permissions, readiness.capabilities.manualPaymentWorkflow]) };
+      identity.branchId, identity.authEpoch, readiness.permissions, readiness.capabilities.manualPaymentRead, readiness.capabilities.manualPaymentWorkflow]) };
 }
 
 function PaymentBoundary({ children }: { children: ReactNode }) {
@@ -48,10 +48,10 @@ function PaymentBoundary({ children }: { children: ReactNode }) {
     return <div className="p-5 sm:p-8" role="status">Checking the selected company and branch…</div>;
   if (shell.selection.entityId !== readiness.legalEntityId)
     return <div className="p-5 sm:p-8" role="status">Choose your company from Organisation context to open Payments Made.</div>;
-  if (!readiness.capabilities.manualPaymentWorkflow || !readiness.permissions.includes("procurement-payment-read"))
+  if (!readiness.capabilities.manualPaymentRead || !readiness.permissions.includes("procurement-payment-read"))
     return <div className="p-5 sm:p-8" role="alert">Manual payment review is not available for this account and company.</div>;
   return <div key={JSON.stringify([shell.authEpoch, readiness.tenantId, readiness.legalEntityId,
-    shell.selection.branch ?? "", readiness.principalId, readiness.permissions])}>{children}</div>;
+    shell.selection.branch ?? "", readiness.principalId, readiness.permissions, readiness.capabilities.manualPaymentRead, readiness.capabilities.manualPaymentWorkflow])}>{children}</div>;
 }
 
 function RecoveryNotice({ scope, onRecovered, onReviewEntries }: { scope: ManualPaymentScope;
@@ -115,7 +115,7 @@ function PaymentListRecord() {
     return () => controller.abort();
   }, [key, page, revision, search, status, invoiceId]);
   const pageData = data?.key === key ? data.value : null;
-  const canCreate = readiness.permissions.includes("procurement-payment-create")
+  const canCreate = readiness.capabilities.manualPaymentWorkflow && readiness.permissions.includes("procurement-payment-create")
     && !createManualPaymentRecoveryJournal(scope).state().blocked;
   const rows = (pageData?.items ?? []).map(row => ({ id: row.id, number: row.id.slice(0, 8).toUpperCase(),
     title: row.title || row.invoiceNumber, status: statusLabels[row.status], path: `/payments/${row.id}`,
@@ -135,7 +135,8 @@ function PaymentListRecord() {
         ({ value, label: statusLabels[value] })), onStatusChange: value => setStatus(value as ManualPaymentStatus | "") }}
       sortComparators={{ amount: (left, right) => left.fields.currency.localeCompare(right.fields.currency)
         || compareExactDecimal(left.fields.amountValue, right.fields.amountValue) }}
-      emptyTitle="No manual payment requests yet" emptyDescription="Create a request against a supplier bill to begin independent review." />
+      emptyTitle="No manual payment requests yet" emptyDescription={canCreate
+        ? "Create a request against a supplier bill to begin independent review." : "Saved manual payment requests will appear here."} />
   </div>;
 }
 
@@ -147,11 +148,27 @@ type AssigneeRole = "approve" | "record" | "confirm";
 
 export function LivePaymentEditor() {
   const location = useLocation();
-  return <PaymentBoundary><PaymentEditorRecord key={`${location.pathname}${location.search}`} /></PaymentBoundary>;
+  return <PaymentBoundary><PaymentEditorAccess key={`${location.pathname}${location.search}`} /></PaymentBoundary>;
+}
+// Keep receipt recovery on the original editor URL after write access disappears.
+// The writer component (including all lookups) is mounted only while writes are allowed.
+function PaymentEditorAccess() {
+  const { id } = useParams(); const navigate = useNavigate();
+  const { scope, readiness } = usePaymentContext();
+  if (!readiness.capabilities.manualPaymentWorkflow
+    || !readiness.permissions.includes(id ? "procurement-payment-edit" : "procurement-payment-create"))
+    return <div className="p-5 sm:p-8 space-y-4">
+      <RecoveryNotice scope={scope} onRecovered={receipt => navigate(`/payments/${receipt.id}`)} />
+      <p role="alert">Changes to manual payment requests are not available for this account and company. You can still review saved requests.</p>
+      <Link className="text-primary underline" to={id ? `/payments/${id}` : "/payments"}>Back to payments</Link>
+    </div>;
+  return <PaymentEditorRecord />;
 }
 function PaymentEditorRecord() {
   const { id } = useParams(); const navigate = useNavigate(); const [params] = useSearchParams();
   const { scope, readiness, branchId, key } = usePaymentContext();
+  const writeAllowed = readiness.capabilities.manualPaymentWorkflow
+    && readiness.permissions.includes(id ? "procurement-payment-edit" : "procurement-payment-create");
   const selectedInvoiceId = params.get("invoiceId") || "";
   const journal = createManualPaymentRecoveryJournal(scope);
   const [draft, setDraft] = useState<Draft>(() => blank(branchId ?? ""));
@@ -174,6 +191,7 @@ function PaymentEditorRecord() {
   lookup.current = JSON.stringify([key, draft.branchId, invoiceSearch, selectedInvoiceId]);
   const update = (change: Partial<Draft>) => { setDraft(previous => ({ ...previous, ...change })); setDirty(true); };
   useEffect(() => {
+    if (!writeAllowed) return;
     const abort = new AbortController(); setBranchLoading(true); setBranchError(""); setBranchChoices([]);
     lookupManualPaymentBranches(scope, abort.signal)
       .then(value => { if (!abort.signal.aborted && scope.current()) setBranchChoices(value); })
@@ -195,7 +213,7 @@ function PaymentEditorRecord() {
     return () => abort.abort();
   }, [id, key, editorKey]);
   useEffect(() => {
-    if (!draft.branchId || id || branchLoading || !branchChoices.some(row => row.id === draft.branchId)) return;
+    if (!writeAllowed || !draft.branchId || id || branchLoading || !branchChoices.some(row => row.id === draft.branchId)) return;
     const abort = new AbortController();
     const lookupKey = lookup.current;
     lookupManualPaymentInvoices(scope, { branchId: draft.branchId, q: invoiceSearch,
@@ -207,7 +225,7 @@ function PaymentEditorRecord() {
     return () => abort.abort();
   }, [key, draft.branchId, invoiceSearch, selectedInvoiceId, id, branchLoading, branchChoices]);
   useEffect(() => {
-    if (!draft.branchId || branchLoading || !branchChoices.some(row => row.id === draft.branchId)) return;
+    if (!writeAllowed || !draft.branchId || branchLoading || !branchChoices.some(row => row.id === draft.branchId)) return;
     const abort = new AbortController();
     for (const role of ["approve", "record", "confirm"] as const) {
       if (role === "confirm" && !draft.recorderPrincipalId) { setAssignees(previous => ({ ...previous, confirm: [] })); continue; }
@@ -219,7 +237,7 @@ function PaymentEditorRecord() {
     return () => abort.abort();
   }, [key, draft.branchId, draft.recorderPrincipalId, nameSearch.approve, nameSearch.record, nameSearch.confirm, branchLoading, branchChoices]);
   const invoice = invoices.find(value => value.invoiceId === draft.invoiceId);
-  const canSave = readiness.permissions.includes(id ? "procurement-payment-edit" : "procurement-payment-create")
+  const canSave = writeAllowed
     && (!id || record !== null && record.request.id === id && loadedKey === editorKey
       && record.request.status === "Draft" && record.request.creatorPrincipalId === readiness.principalId);
   const close = () => { if (busy || journal.state().blocked) return;
@@ -264,7 +282,7 @@ function PaymentEditorRecord() {
     branchId: record.request.branchId } : null);
   return <TransactionEditorFrame title={`${id ? "Edit" : "New"} Manual Payment Request`} close={close}
     closeDisabled={busy || journal.state().blocked} footer={<>
-      <Button type="button" disabled={busy || stale || journal.state().blocked} onClick={() => void save()}><Save size={14} /> Save as Draft</Button>
+      <Button type="button" disabled={!canSave || busy || stale || journal.state().blocked} onClick={() => void save()}><Save size={14} /> Save as Draft</Button>
       <Button type="button" variant="secondary" disabled={busy || journal.state().blocked} onClick={close}>Cancel</Button>
       <span className="ml-auto text-xs text-muted-foreground">Submit for review from the saved request. Recording happens after approval.</span>
     </>}>
@@ -289,6 +307,7 @@ function PaymentEditorRecord() {
           {invoices.map(row => <option key={row.invoiceId} value={row.invoiceId}>{row.invoiceNumber} · {row.supplierDisplayName}</option>)}</Select>
       </Field>
       {invoiceCursor && !selectedInvoiceId && <Button type="button" variant="secondary" onClick={() => {
+        if (!writeAllowed || !scope.current()) return;
         const lookupKey = lookup.current;
         lookupManualPaymentInvoices(scope, { branchId: draft.branchId, q: invoiceSearch, cursor: invoiceCursor })
           .then(value => { if (scope.current() && lookup.current === lookupKey) {
@@ -370,8 +389,9 @@ function PaymentDetailRecord() {
     return <div className="p-5 sm:p-8" role="status">Loading payment request…</div>;
   if (!detail) return <div className="p-5 sm:p-8" role="alert">{error || "Payment request not found."} <Button variant="secondary" onClick={() => setRevision(value => value + 1)}>Try again</Button></div>;
   const request = detail.request, current = readiness.principalId, permissions = readiness.permissions;
-  const available = manualPaymentVisibleActions(request, current, permissions);
-  const writeBlocked = busy || stale || uncertain || loading || loadedKey !== fetchKey
+  const available = readiness.capabilities.manualPaymentWorkflow
+    ? manualPaymentVisibleActions(request, current, permissions) : [];
+  const writeBlocked = !readiness.capabilities.manualPaymentWorkflow || busy || stale || uncertain || loading || loadedKey !== fetchKey
     || request.id !== id || journal.state().blocked;
   const person = (principalId: string) => detail.people.find(value => value.principalId === principalId)?.displayName ?? principalId;
   const openAction = (next: ManualPaymentAction) => {

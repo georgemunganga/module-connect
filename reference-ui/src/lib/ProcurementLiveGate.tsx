@@ -97,8 +97,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || planPath && !permits("procurement-plan-read", "procurement-plan-create", "procurement-plan-edit")
     || invoicePath && !(replacementRecord ? permission.includes("procurement-invoice-read")
       : newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
-    || paymentPath && !(newRecord ? permission.includes("procurement-payment-create")
-      : editRecord ? permission.includes("procurement-payment-edit") : permission.includes("procurement-payment-read"))
+    || paymentPath && !permission.includes("procurement-payment-read")
     || creditPath && !(newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"));
   if (state.readiness && deniedCrud) {
     const denied = <div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div>;
@@ -129,7 +128,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (planPath && state.readiness.capabilities.planningDraft)
     || (invoicePath && (state.readiness.capabilities.invoiceIntake
       || replacementHistoryRouteAvailable(location.pathname, state.readiness.capabilities.invoiceReplacementRead)))
-    || (paymentPath && state.readiness.capabilities.manualPaymentWorkflow)
+    || (paymentPath && state.readiness.capabilities.manualPaymentRead)
     || (creditPath && state.readiness.capabilities.vendorCreditDraft)
     || (orderPath && (state.readiness.capabilities.orderDraft || state.readiness.capabilities.orders
       || state.readiness.capabilities.principalDirectOrderDrafts || state.readiness.capabilities.principalOrderGovernanceRead))
