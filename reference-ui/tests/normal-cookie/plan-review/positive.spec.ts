@@ -4,16 +4,17 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { readPlanJson, sumPlanAmounts } from "../../../../shared/procurement-plan-json";
 import { nativePlanInput, digest, guid, type ActorName } from "./input";
+import { NativePlanFailure, safeNativeError as safeError, safeNativeStep as safeStep } from "./safety";
 const input = nativePlanInput(), fixture = input.fixture, api = "/api/procurement/v1/plans";
 const headers = { "X-Shell-Entity": fixture.companyId, "X-Shell-Location": fixture.branchId };
-const need = (v: unknown, code: string) => { if (!v) throw new Error(code); };
+const need = (v: unknown, code: string) => { if (!v) throw new NativePlanFailure(code); };
 
 test("actual Core owner submits, assigned reviewer reviews, independent final actor approves", async ({ browser }) => {
   need(test.info().project.use.trace === "off" && test.info().project.use.video === "off" && test.info().project.use.screenshot === "off", "CaptureMustStayOff");
-  const report: any = { schemaVersion: 1, status: "RUNNING_NOT_ACCEPTANCE", testSourceSha256: digest(readFileSync(new URL(import.meta.url))), fixtureSha256: input.fixtureSha256,
+  const report: any = { schemaVersion: 1, status: "RUNNING_NOT_ACCEPTANCE", testSourceSha256: digest(readFileSync(new URL(import.meta.url))), fixtureSha256: input.fixtureSha256, outerScopeReceiptSha256: input.outerScopeReceiptSha256, requiredOuterCleanupProofPath: input.outerCleanupProofPath,
     uiSourceCommit: fixture.uiSourceCommit, backendSourceCommit: fixture.backendSourceCommit, databaseName: fixture.databaseName,
     normalCoreCookieStates: true, mockOrInterceptionUsed: false, identityAliasesUsed: false, startedCommands: [], commands: [],
-    pageErrors: [], authenticationCleanup: [], assertions: {}, nativeOwnerReconciliationRequired: true, nativeAcceptanceClaimed: false };
+    pageErrors: [], usedActorLogoutAttempts: [], allThreeFixtureCookieCleanupRequired: true, ownedBrowserScopeCleanupRequired: true, assertions: {}, nativeOwnerReconciliationRequired: true, nativeAcceptanceClaimed: false };
   const persist = () => { const temporary = input.output + ".writing"; writeFileSync(temporary, JSON.stringify(report, null, 2) + "\n", { mode: 0o600, flag: "wx" }); chmodSync(temporary, 0o600); renameSync(temporary, input.output); };
   writeFileSync(input.output, JSON.stringify(report) + "\n", { mode: 0o600, flag: "wx" });
   let active: BrowserContext | null = null, activeActor: ActorName | null = null, violation: string | null = null;
@@ -31,7 +32,7 @@ test("actual Core owner submits, assigned reviewer reviews, independent final ac
   async function close(logout: boolean) {
     if (!active) return; const c = active, actor = activeActor; active = null; activeActor = null;
     try {
-      if (logout) { const r = await c.request.post("/api/hrm/auth/logout", { maxRetries: 0, failOnStatusCode: false }); report.authenticationCleanup.push({ actor, status: r.status() }); persist(); need([200, 204].includes(r.status()), "NormalLogoutFailed"); }
+      if (logout) { const r = await c.request.post("/api/hrm/auth/logout", { maxRetries: 0, failOnStatusCode: false }); report.usedActorLogoutAttempts.push({ actor, status: r.status() }); persist(); need([200, 204].includes(r.status()), "NormalLogoutFailed"); }
     } finally { await c.close(); }
   }
   async function open(actor: ActorName) {
@@ -39,7 +40,7 @@ test("actual Core owner submits, assigned reviewer reviews, independent final ac
     const context = await browser.newContext({ baseURL: input.origin, storageState: fixture.actors[actor].storageState.path,
       ignoreHTTPSErrors: true, serviceWorkers: "block", timezoneId: "UTC" }); active = context; activeActor = actor;
     // Refuse HAR/mocking/interception registration instead of intercepting or rewriting business traffic.
-    const forbid = async () => { violation = "BusinessRouteInterceptionAttempted"; report.mockOrInterceptionUsed = true; persist(); throw new Error(violation); };
+    const forbid = async () => { violation = "BusinessRouteInterceptionAttempted"; report.mockOrInterceptionUsed = true; persist(); throw new NativePlanFailure(violation); };
     context.route = forbid; context.routeFromHAR = forbid;
     const me = await read(context, "/api/hrm/auth/me"), scope = await read(context, "/api/procurement/v1/context"), meta = await read(context, "/api/procurement/v1/meta");
     need(me.user?.id === fixture.actors[actor].principalId && scope.principalId === fixture.actors[actor].principalId
@@ -53,7 +54,7 @@ test("actual Core owner submits, assigned reviewer reviews, independent final ac
       localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: companyId, branch: branchId }));
     }, { origin: input.origin, companyId: fixture.companyId, branchId: fixture.branchId });
     const page = await context.newPage(); page.route = forbid; page.routeFromHAR = forbid;
-    page.on("pageerror", e => { report.pageErrors.push({ actor, step: report.step, message: e.message }); persist(); });
+    page.on("pageerror", e => { report.pageErrors.push({ actor, step: safeStep(report.step), ...safeError(e) }); persist(); });
     page.on("request", request => {
       const u = new URL(request.url()); if (u.origin !== input.origin || !u.pathname.startsWith("/api/")) return;
       if (Object.keys(request.headers()).some(k => k.startsWith("x-private-") || k.startsWith("x-test-") || ["x-crud-actor", "x-crud-browser-actor"].includes(k))) { violation = "IdentityAliasHeaderObserved"; report.identityAliasesUsed = true; }
@@ -136,8 +137,8 @@ test("actual Core owner submits, assigned reviewer reviews, independent final ac
       && new Set(report.commands.slice(1).map((x: any) => x.originalKey)).size === 3 && !violation && report.pageErrors.length === 0, "RetainedHistoryOrCommandBudgetMismatch");
     report.assertions.planStatus = finalRound.planStatus; report.assertions.roundState = finalRound.state;
     report.assertions.reviewDecisionId = reviewed.decisionId; report.assertions.finalDecisionId = approved.decisionId;
-    report.status = "PASS_NATIVE_PLAN_UI_FOUR_COMMANDS_AWAIT_OWNER_RECONCILIATION"; report.step = "completed";
-  } catch (error) { report.status = "FAILED_PRESERVE_EXISTING_RECORDS_NO_RETRY"; report.failure = { step: report.step, message: String((error as Error).message) }; }
-  finally { try { await close(true); } catch { report.status = "FAILED_AUTH_CLEANUP_REVIEW_REQUIRED"; } persist(); }
-  need(report.status === "PASS_NATIVE_PLAN_UI_FOUR_COMMANDS_AWAIT_OWNER_RECONCILIATION", "NativePlanFlowFailedInspectProtectedReportNoRerun");
+    report.status = "PASS_NATIVE_PLAN_UI_FOUR_COMMANDS_AWAIT_OWNER_AND_OUTER_CLEANUP"; report.step = "completed";
+  } catch (error) { report.status = "FAILED_PRESERVE_EXISTING_RECORDS_NO_RETRY"; report.failure = { step: safeStep(report.step), ...safeError(error) }; }
+  finally { try { await close(true); } catch { report.status = "FAILED_USED_ACTOR_LOGOUT_REVIEW_REQUIRED"; } report.outerCleanupProofRequired = true; persist(); }
+  need(report.status === "PASS_NATIVE_PLAN_UI_FOUR_COMMANDS_AWAIT_OWNER_AND_OUTER_CLEANUP", "NativePlanFlowFailedInspectProtectedReportNoRerun");
 });

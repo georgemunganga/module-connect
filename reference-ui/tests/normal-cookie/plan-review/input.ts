@@ -21,10 +21,21 @@ function protectedJson(filename: string, expected: string) {
   const bytes = readFileSync(filename); if (bytes.length > 1048576 || digest(bytes) !== expected) throw invalid();
   return JSON.parse(bytes.toString("utf8"));
 }
-export function nativePlanInput() {
+function readNativePlanInput() {
   if (process.env.PLAN_NATIVE_REVIEWED_EXECUTION !== "1" || process.env.DEBUG || process.env.PWDEBUG || process.env.NODE_DEBUG || process.versions.node.split(".")[0] !== "22") throw invalid();
+  if (process.env.PLAN_NATIVE_OUTER_SCOPE_ADMITTED !== "1" || !process.env.PLAN_NATIVE_OUTER_SCOPE_SHA256
+    || !sha(process.env.PLAN_NATIVE_OUTER_SCOPE_SHA256)) throw invalid();
   const filename = process.env.PLAN_NATIVE_FIXTURE, expected = process.env.PLAN_NATIVE_FIXTURE_SHA256, output = process.env.PLAN_NATIVE_RESULT;
   if (!filename || !expected || !output) throw invalid();
+  const scopeFile = process.env.PLAN_NATIVE_OUTER_SCOPE_RECEIPT;
+  if (!scopeFile) throw invalid();
+  const scope = protectedJson(scopeFile, process.env.PLAN_NATIVE_OUTER_SCOPE_SHA256!);
+  if (scope.purpose !== "PLAN_NATIVE_ROOT_OWNED_CGROUP_V2" || scope.authorized !== true || scope.fixtureSha256 !== expected
+    || scope.killOwnedScopeOnEveryExit !== true || scope.verifyScopeEmptyAfter !== true || scope.cleanupAllThreeNormalCookies !== true
+    || typeof scope.cgroupPath !== "string" || !scope.cgroupPath.startsWith("/sys/fs/cgroup/")
+    || !path.basename(scope.cgroupPath).startsWith("procurement-plan-native-")
+    || realpathSync(scope.cgroupPath) !== scope.cgroupPath
+    || !readFileSync("/proc/self/cgroup", "utf8").split("\n").includes("0::" + scope.cgroupPath.slice("/sys/fs/cgroup".length))) throw invalid();
   const p = protectedJson(filename, expected) as Fixture, origin = new URL(p.baseURL);
   if (p.schemaVersion !== 1 || p.purpose !== "PLAN_REVIEW_NATIVE_POSITIVE" || origin.protocol !== "https:" || origin.hostname !== "127.0.0.1"
     || !origin.port || origin.pathname !== "/" || origin.search || origin.hash || origin.username || origin.password
@@ -43,5 +54,10 @@ export function nativePlanInput() {
   }
   if (!path.isAbsolute(output) || existsSync(output) || realpathSync(path.dirname(output)) !== path.dirname(output)
     || (statSync(path.dirname(output)).mode & 0o777) !== 0o700) throw invalid();
-  return { fixture: p, origin: origin.origin, output, fixtureSha256: expected };
+  return { fixture: p, origin: origin.origin, output, fixtureSha256: expected, outerScopeReceiptSha256: process.env.PLAN_NATIVE_OUTER_SCOPE_SHA256!, outerCleanupProofPath: scope.outerCleanupProofPath as string };
+}
+
+/** Admission errors must never echo JSON cookie contents or raw transport call logs. */
+export function nativePlanInput() {
+  try { return readNativePlanInput(); } catch { throw invalid(); }
 }
