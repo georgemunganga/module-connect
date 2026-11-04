@@ -5,9 +5,9 @@ const department = "44444444-4444-4444-8444-444444444444";
 const approver = "22222222-2222-4222-8222-222222222222";
 const base = "/api/procurement/v1/configuration/policies";
 const path = "/procurement/workspace/settings/buying-rules";
-async function fixture(page: Page, options: { reader?: boolean; unavailable?: boolean; lost?: boolean } = {}) {
+async function fixture(page: Page, options: { reader?: boolean; unavailable?: boolean; lost?: boolean; allBranches?: boolean } = {}) {
   const creates: any[] = []; const validates: any[] = []; const records: any[] = [];
-  await page.addInitScript(id => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: id })), company);
+  await page.addInitScript(value => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId: value.id, ...(value.all ? { branchScope: "all" } : {}) })), { id: company, all: options.allBranches === true });
   await page.route("**/api/**", async route => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -15,7 +15,7 @@ async function fixture(page: Page, options: { reader?: boolean; unavailable?: bo
     if (p === "/api/hrm/auth/me") return json({ authenticated: true, user: { id: fixturePrincipal, isActive: true, roles: ["procurement_manager"], displayName: "Core manager" } });
     if (p === "/api/hrm/branding") return json({ displayName: "Fixture company" });
     if (p === "/api/procurement/v1/context") return json({ principalId: fixturePrincipal, tenantId: "test", legalEntityId: company, workerId: null,
-      permissions: ["procurement-access", "procurement-configuration-read", ...(options.reader ? [] : ["procurement-configuration-edit"])], company: { id: company, code: "TEST", name: "Fixture company", currencyCode: "ZMW" } });
+      permissions: ["procurement-access", "procurement-configuration-read", ...(options.reader ? [] : ["procurement-configuration-edit"])], company: { id: company, code: "TEST", name: "Fixture company", currencyCode: "ZMW" }, ...(options.allBranches ? { branch: null } : {}) });
     if (p === "/api/procurement/v1/meta") return json({ tenantId: "test", legalEntityId: company, schemaReady: true, capabilities: {
       vendorDraft: false, itemDraft: false, requestDraft: false, approvals: false, sourcing: false, contracts: false, orders: false,
       receiving: false, invoiceValidation: false, financeHandoff: false, supplierPortal: false, configurationDraft: true, planningDraft: false, contractDraft: false, sourcingDraft: false,
@@ -89,4 +89,14 @@ test("reader sees buying rules without draft controls", async ({ page }) => {
   await fixture(page, { reader: true }); await page.goto(path);
   await expect(page.getByRole("heading", { name: "Buying rules", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add buying rule draft", exact: true })).toHaveCount(0);
+});
+
+
+test("company-wide buying rules open without selecting a transaction branch", async ({ page }) => {
+  const api = await fixture(page, { allBranches: true });
+  await start(page);
+  await expect(page.getByLabel("Step name", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose a branch to continue", exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("erp.shell.state.v1")!).branchScope)).toBe("all");
+  expect(api.creates).toEqual([]);
 });

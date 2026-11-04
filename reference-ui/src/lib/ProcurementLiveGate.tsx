@@ -75,7 +75,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const newRecord = /\/new\/?$/.test(location.pathname);
   const editRecord = /\/[^/]+\/edit\/?$/.test(location.pathname);
   const replacementRecord = /^\/bills\/[^/]+\/replace\/?$/.test(location.pathname);
-  // Server admission for All is limited to these reviewed collection reads.
+  // Company masters/settings use company scope; only reviewed collection reads may
+  // browse branch-owned records in All. Transaction forms still require a branch.
   const requestList = /^\/(?:requests|procurement-requests)\/?$/.test(location.pathname);
   const planList = /^\/plans\/?$/.test(location.pathname);
   const contractList = /^\/contracts\/?$/.test(location.pathname);
@@ -94,7 +95,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const quotationRead = sourcingPath && !newRecord && !editRecord && state.readiness !== undefined
     && quotationRouteSelected(new URLSearchParams(location.search).get("source"), state.readiness.permissions)
     && state.readiness.permissions.includes("procurement-quotation-read");
-  const allReadSupported = overviewPath || roundReviewQueue || planReviewQueue || planPath && !newRecord && !editRecord && planReviewRead || roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
+  const allReadSupported = overviewPath || configurationSettingsPath || roundReviewQueue || planReviewQueue || planPath && !newRecord && !editRecord && planReviewRead || roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
     || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || manualApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <ProcurementTransactionBranchSelection />;
