@@ -171,7 +171,7 @@ function PublicationRecord({ id, company, permissions, newWorkEnabled, slot, can
         <Field label="Reason"><Textarea value={cancelReason} maxLength={2000} onChange={event => setCancelReason(event.target.value)} /></Field>
         <Button variant="danger" disabled={blocked || record.roundPlan?.sourceCancellationBlocked || !cancelReason.trim()} onClick={() => void cancelDraft()}>Cancel draft and release its quantities</Button>
       </div></Panel>}
-      {enrolled && <Panel title="Evaluation planning"><p role="status" className="p-5 text-sm">This RFQ is enrolled in evaluation planning. Review and publication are not available for enrolled plans yet.</p>{record.roundPlan?.sourceCancellationBlocked && <p className="px-5 pb-5 text-sm">Cancel its evaluation plan before cancelling the RFQ and releasing its quantities.</p>}</Panel>}
+      {enrolled && <Panel title="Evaluation planning"><p role="status" className="p-5 text-sm">This RFQ is enrolled in evaluation planning. Use its evaluation-plan controls for internal review when available. Supplier publication is not available for enrolled plans.</p>{record.roundPlan?.sourceCancellationBlocked && <p className="px-5 pb-5 text-sm">Cancel its evaluation plan before cancelling the RFQ and releasing its quantities.</p>}</Panel>}
       {round.overview}
       {record.status === "Draft" && canSubmit && <Panel title="Bidding preferences · approved suppliers"><div className="space-y-4 p-5">
         <p className="text-sm text-muted-foreground">Select approved suppliers for an independent internal review. This does not contact them.</p>

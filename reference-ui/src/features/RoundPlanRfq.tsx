@@ -1,3 +1,4 @@
+import { RoundReviewDialog } from "./RoundPlanReview";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui";
@@ -14,11 +15,12 @@ import { getRoundPlan, listRoundPlans, listRoundPlanSources, searchRoundPeople, 
 const explain = (e: unknown) => e instanceof Error ? e.message : "Evaluation planning is unavailable.";
 export function useRfqRoundPlan(eventId: string, onChanged?: () => void) {
   const { scope, readiness, key } = useRoundPlanContext(), enabled = roundPlanReadAvailable(readiness);
+  const [reviewId, setReviewId] = useState<string | null>(null);
   const [revision, setRevision] = useState(0), [state, setState] = useState<{ key: string; data?: RoundRecord; error?: string }>({ key: "" });
   const loadKey = JSON.stringify([key, eventId, revision]);
   useEffect(() => {
     if (!enabled) return; const abort = new AbortController(); setState({ key: loadKey });
-    getRoundPlan(scope, eventId, abort.signal).then(data => { if (!abort.signal.aborted && scope.current()) setState({ key: loadKey, data }); })
+    getRoundPlan(scope, eventId, abort.signal, "review").then(data => { if (!abort.signal.aborted && scope.current()) setState({ key: loadKey, data }); })
       .catch(e => { if (!abort.signal.aborted && scope.current()) setState({ key: loadKey, error: explain(e) }); });
     return () => abort.abort();
   }, [loadKey, enabled]);
@@ -27,7 +29,7 @@ export function useRfqRoundPlan(eventId: string, onChanged?: () => void) {
   const overview = !enabled ? null : data ? <RoundPlanPanel scope={scope} record={data} currentEventVersion={data.source.version} allowedActions={data.allowedActions} access={readiness}
     peopleProvider={(q, after, signal) => searchRoundPeople(scope, eventId, q, after, signal)} onChanged={refresh} />
     : <DetailSection title="Evaluation plan">{error ? <p role="alert">{error}</p> : <p role="status">Loading evaluation plan…</p>}<RoundPlanRecovery scope={scope} eventId={eventId} onRecovered={refresh} /></DetailSection>;
-  const history = enabled && data?.enrolled ? <RoundPlanHistoryPanel key={loadKey} scope={scope} eventId={eventId} /> : null;
+  const history = enabled && data?.enrolled ? <><RoundPlanHistoryPanel key={loadKey} scope={scope} eventId={eventId} onReview={readiness.capabilities.roundPlanReviewRead && readiness.permissions.includes("procurement-round-plan-review") ? setReviewId : undefined} />{reviewId && <RoundReviewDialog key={key + reviewId} eventId={eventId} submissionId={reviewId} onClose={() => setReviewId(null)} onChanged={refresh} />}</> : null;
   return { data, error, enabled, overview, history, refresh };
 }
 export function RoundPlanRfqDetail({ id }: { id: string }) {

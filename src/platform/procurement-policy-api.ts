@@ -80,7 +80,7 @@ function validSummary(value: unknown): boolean {
     && typeof value.version === "number" && typeof value.effectiveFrom === "string";
 }
 
-export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "SOURCING" | "RECEIVING" | "MANUAL_PAYMENT_REVIEW" | "PROCUREMENT_PLAN_REVIEW"): Promise<PolicyPage> {
+export async function listPolicies(companyId: string, signal?: AbortSignal, key?: "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "SOURCING" | "RECEIVING" | "MANUAL_PAYMENT_REVIEW" | "PROCUREMENT_PLAN_REVIEW" | "COMMERCIAL_ROUND_PLAN_REVIEW"): Promise<PolicyPage> {
   const body = await call(companyId, `?page=1&pageSize=100${key ? `&key=${key}` : ""}`, { signal });
   if (!object(body) || !Array.isArray(body.items) || !body.items.every(validSummary)
     || typeof body.total !== "number" || typeof body.page !== "number"
@@ -165,7 +165,7 @@ export async function decidePolicy(companyId: string, id: string, version: numbe
     throw new PolicyActionError("ERP did not confirm the policy decision. Check saved rules before retrying.", 0);
   return body;
 }
-export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "MANUAL_PAYMENT_REVIEW" | "PROCUREMENT_PLAN_REVIEW"):
+export async function getEffectivePolicy(companyId: string, key: "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "SOURCING" | "RECEIVING" | "INVOICE_MATCHING" | "INVOICE_UNIT_REVIEW" | "MANUAL_PAYMENT_REVIEW" | "PROCUREMENT_PLAN_REVIEW" | "COMMERCIAL_ROUND_PLAN_REVIEW"):
   Promise<{ status: string; isAuthority: false; policy: Pick<PolicyRecord, "id" | "policyVersionNumber"> | null }> {
   const body = await call(companyId, `/effective?key=${key}`);
   if (!object(body) || typeof body.status !== "string" || body.isAuthority !== false)
@@ -332,3 +332,28 @@ export async function lookupSelectedPlanPolicyReviewers(company: string, purpose
   // Omitted unavailable people keep their saved ID and a generic unavailable label in the picker.
   return page;
 }
+
+export type RoundPolicyPeoplePage = { items: { principalId: string; displayName: string }[]; total: number; offset: number; limit: number; nextOffset: number | null; purpose: "RoundPlanReview"; unavailablePrincipalIds: string[]; isAuthority: false };
+function roundPolicyPeople(x: unknown, offset: number): RoundPolicyPeoplePage {
+  if (!object(x) || x.purpose !== "RoundPlanReview" || x.isAuthority !== false || x.offset !== offset || x.limit !== 25 || !Number.isSafeInteger(x.total) || Number(x.total) < 0
+    || !Array.isArray(x.items) || x.items.length !== Math.max(0, Math.min(25, Number(x.total) - offset)) || !x.items.every(p => object(p) && canonicalId(p.principalId) && typeof p.displayName === "string" && !!p.displayName.trim() && !("workerId" in p))
+    || new Set(x.items.map((p: any) => p.principalId)).size !== x.items.length || !Array.isArray(x.unavailablePrincipalIds) || !x.unavailablePrincipalIds.every(canonicalId)
+    || new Set(x.unavailablePrincipalIds).size !== x.unavailablePrincipalIds.length
+    || x.nextOffset !== (x.items.length > 0 && offset + x.items.length < Number(x.total) && offset + x.items.length <= 100000 ? offset + x.items.length : null))
+    throw new PolicyActionError("Current evaluation-plan reviewer names could not be confirmed. Saved selections have not changed.", 0);
+  return x as RoundPolicyPeoplePage;
+}
+export async function lookupRoundPolicyReviewers(company: string, search: string, offset: number, signal?: AbortSignal): Promise<RoundPolicyPeoplePage> {
+  if (search.trim().length > 100 || !Number.isSafeInteger(offset) || offset < 0 || offset > 100000) throw new PolicyActionError("Use a shorter reviewer search and a valid page.", 422);
+  const page = roundPolicyPeople(await call(company, `/lookups/round-plan-reviewers?${new URLSearchParams({ search: search.trim(), offset: String(offset), limit: "25" })}`, { signal }), offset);
+  if (page.unavailablePrincipalIds.length) throw new PolicyActionError("Reviewer search could not be confirmed.", 0);
+  return page;
+}
+export async function lookupSelectedRoundPolicyReviewers(company: string, ids: readonly string[], signal?: AbortSignal): Promise<RoundPolicyPeoplePage> {
+  if (!ids.length || ids.length > 25 || !ids.every(canonicalId) || new Set(ids).size !== ids.length) throw new PolicyActionError("Choose up to 25 distinct saved reviewers.", 422);
+  const page = roundPolicyPeople(await call(company, `/lookups/round-plan-reviewers?${new URLSearchParams({ principalIds: ids.join(","), offset: "0", limit: "25" })}`, { signal }), 0);
+  const returned = [...page.items.map(x => x.principalId), ...page.unavailablePrincipalIds];
+  if (page.total !== page.items.length || returned.length !== ids.length || new Set(returned).size !== ids.length || returned.some(id => !ids.includes(id))) throw new PolicyActionError("Saved reviewer names could not be confirmed. Their IDs remain unchanged.", 0);
+  return page;
+}
+export const validateRoundReviewPolicy = validatePlanReviewPolicy;

@@ -14,10 +14,13 @@ export type RoundSource = { id: string; number: string; title: string; currencyC
   method: { id: string; revision: number; code: string; label: string };
   lines: { id: string; purchaseRequestId: string; purchaseRequestLineId: string; description: string; unitCode: string; categoryCode: string | null; quantity: string; approvedUnitEstimate: string; estimatedValue: string; allocationState: string }[];
   supplierFacingWorkflowAvailable: false };
-export type RoundRecord = { allowedActions: string[]; enrolled: boolean; source: RoundSource; plan: { id: string; status: "Draft" | "Cancelled"; version: number; makerPrincipalId: string } | null;
-  revision?: { id: string; version: number; operation: "Create" | "Revise" | "Cancel"; status: "Draft" | "Cancelled"; actorPrincipalId: string; recordedAt: string; reason: string | null; contentSha256: string };
-  content?: RoundContent; people?: { id: string; displayName: string }[]; reviewAvailable: false; publicationAvailable: false; contentIsIncompleteProposal?: true };
-export type RoundHistory = { items: { id: string; version: number; operation: "Create" | "Revise" | "Cancel"; status: "Draft" | "Cancelled"; actorPrincipalId: string; recordedAt: string; reason: string | null }[]; nextVersion: number | null };
+export type RoundPlanState = "Draft" | "InReview" | "Published" | "Rejected" | "Cancelled";
+export type RoundPlanOperation = "Create" | "Revise" | "Cancel" | "Submit" | "Approve" | "Return" | "Reject";
+export type RoundPolicyPin = { policyVersionId: string; policyVersionNumber: number };
+export type RoundRecord = { allowedActions: string[]; enrolled: boolean; source: RoundSource; plan: { id: string; status: RoundPlanState; version: number; makerPrincipalId: string } | null;
+  revision?: { id: string; version: number; operation: RoundPlanOperation; status: RoundPlanState; actorPrincipalId: string; recordedAt: string; reason: string | null; contentSha256: string };
+  content?: RoundContent; people?: { id: string; displayName: string }[]; reviewAvailable: boolean; publicationAvailable: false; contentIsIncompleteProposal?: boolean; applicableReviewPolicy?: RoundPolicyPin | null };
+export type RoundHistory = { items: { id: string; version: number; operation: RoundPlanOperation; status: RoundPlanState; actorPrincipalId: string; recordedAt: string; reason: string | null; submissionId?: string | null; caseId?: string | null; decisionId?: string | null }[]; nextVersion: number | null };
 export type RoundLocator = { eventId: string; key: string; operation: "Create" | "Revise" | "Cancel" };
 export type RoundCommand = RoundLocator & { body: string };
 export type RoundReceipt = { schemaVersion: 1; eventId: string; planId: string; revisionId: string; version: number; status: "Draft" | "Cancelled"; operation: RoundLocator["operation"]; commandKey: string; reviewAvailable: false; publicationAvailable: false; httpStatus: number };
@@ -56,7 +59,7 @@ export function captureRoundScope(identity: RoundIdentity, currentIdentity: () =
   const current = () => { try { return captured === JSON.stringify(currentIdentity()) && JSON.stringify(headers) === JSON.stringify(procurementScopeHeaders(identity.companyId)); } catch { return false; } };
   return { identity: Object.freeze({ ...identity }), headers: Object.freeze(headers), current, assertCurrent() { if (!current()) throw new RoundPlanError(0, "Your account or organisation changed. Open the RFQ again."); } };
 }
-async function roundRequest(scope: RoundScope, path: string, init: RequestInit = {}): Promise<{ body: unknown; status: number }> {
+export async function roundRequest(scope: RoundScope, path: string, init: RequestInit = {}): Promise<{ body: unknown; status: number }> {
   scope.assertCurrent();
   const headers = new Headers(scope.headers); if (init.body) headers.set("Content-Type", "application/json");
   new Headers(init.headers).forEach((v, k) => { if (k.toLowerCase() !== "idempotency-key") throw invalid(); headers.set(k, v); });
@@ -73,35 +76,40 @@ async function roundRequest(scope: RoundScope, path: string, init: RequestInit =
 function request(scope: RoundScope, eventId: string, path: string, init: RequestInit = {}) {
   if (!roundGuid(eventId)) throw invalid(); return roundRequest(scope, `/${eventId}/round-plan${path}`, init);
 }
-function record(x: unknown, eventId: string, scope: RoundScope, resultVersion?: number): RoundRecord {
+function record(x: unknown, eventId: string, scope: RoundScope, resultVersion?: number, protocol: "draft" | "review" = "draft"): RoundRecord {
+  const review = protocol === "review" && object(x) && Object.prototype.hasOwnProperty.call(x, "applicableReviewPolicy");
+  const states = review ? ["Draft", "InReview", "Published", "Rejected", "Cancelled"] : ["Draft", "Cancelled"];
+  const operations = review ? ["Create", "Revise", "Cancel", "Submit", "Approve", "Return", "Reject"] : ["Create", "Revise", "Cancel"];
   if (!object(x) || typeof x.enrolled !== "boolean" || !object(x.source) || x.source.id !== eventId || !roundGuid(x.source.branchId)
     || scope.identity.branchId !== null && x.source.branchId !== scope.identity.branchId || typeof x.source.number !== "string" || typeof x.source.title !== "string"
     || typeof x.source.currencyCode !== "string" || !version(x.source.version) || typeof x.source.status !== "string"
     || !object(x.source.method) || !roundGuid(x.source.method.id) || !version(x.source.method.revision) || typeof x.source.method.code !== "string" || typeof x.source.method.label !== "string"
     || !Array.isArray(x.source.lines) || !x.source.lines.length || x.source.lines.length > 200 || !x.source.lines.every((line: unknown) => object(line) && roundGuid(line.id) && roundGuid(line.purchaseRequestId) && roundGuid(line.purchaseRequestLineId)
       && typeof line.description === "string" && typeof line.unitCode === "string" && [line.quantity, line.approvedUnitEstimate, line.estimatedValue].every(v => typeof v === "string" && /^(?:0|[1-9]\d*)(?:\.\d+)?(?:E[+-]?\d+)?$/.test(v)) && typeof line.allocationState === "string")
-    || !Array.isArray(x.allowedActions) || !x.allowedActions.every((a: unknown) => typeof a === "string")
-    || x.source.supplierFacingWorkflowAvailable !== false || x.reviewAvailable !== false || x.publicationAvailable !== false) throw invalid();
+    || !Array.isArray(x.allowedActions) || !x.allowedActions.every((a: unknown) => typeof a === "string" && (review ? ["Create", "Revise", "Cancel", "Submit"] : ["Create", "Revise", "Cancel"]).includes(a))
+    || x.source.supplierFacingWorkflowAvailable !== false || (review ? typeof x.reviewAvailable !== "boolean" : x.reviewAvailable !== false) || x.publicationAvailable !== false) throw invalid();
+  if (review && !(x.applicableReviewPolicy === null || object(x.applicableReviewPolicy) && roundGuid(x.applicableReviewPolicy.policyVersionId) && version(x.applicableReviewPolicy.policyVersionNumber))) throw invalid();
+  if (review && x.allowedActions.includes("Submit") && !x.applicableReviewPolicy) throw invalid();
   if (!x.enrolled) { if (x.plan !== null || resultVersion !== undefined || x.allowedActions.some((a: string) => a !== "Create")) throw invalid(); return x as RoundRecord; }
-  if (!object(x.plan) || !roundGuid(x.plan.id) || !version(x.plan.version) || !["Draft", "Cancelled"].includes(x.plan.status) || !roundGuid(x.plan.makerPrincipalId)
+  if (!object(x.plan) || !roundGuid(x.plan.id) || !version(x.plan.version) || !states.includes(x.plan.status) || !roundGuid(x.plan.makerPrincipalId)
     || !object(x.revision) || !roundGuid(x.revision.id) || !version(x.revision.version) || x.revision.version > x.plan.version || resultVersion !== undefined && x.revision.version !== resultVersion
-    || !["Create", "Revise", "Cancel"].includes(x.revision.operation) || !["Draft", "Cancelled"].includes(x.revision.status) || !roundGuid(x.revision.actorPrincipalId)
+    || !operations.includes(x.revision.operation) || !states.includes(x.revision.status) || !roundGuid(x.revision.actorPrincipalId)
     || typeof x.revision.recordedAt !== "string" || !instant(x.revision.recordedAt) || !text(x.revision.reason, 2000)
     || !/^[a-f\d]{64}$/.test(x.revision.contentSha256) || !object(x.content) || x.content.schemaVersion !== 1 || typeof x.content.companyTimeZoneId !== "string"
     || resultVersion === undefined && (x.revision.version !== x.plan.version || x.revision.status !== x.plan.status)
-    || x.contentIsIncompleteProposal !== true || !Array.isArray(x.people) || !x.people.every(p => object(p) && roundGuid(p.id) && typeof p.displayName === "string")) throw invalid();
-  if (x.allowedActions.includes("Create") || x.plan.status !== "Draft" && x.allowedActions.length
+    || (review ? x.contentIsIncompleteProposal !== (x.revision.status !== "Published") : x.contentIsIncompleteProposal !== true) || !Array.isArray(x.people) || !x.people.every(p => object(p) && roundGuid(p.id) && typeof p.displayName === "string")) throw invalid();
+  if (x.allowedActions.includes("Create") || x.plan.status !== "Draft" && !(review && x.plan.status === "Rejected" && x.allowedActions.every((a: string) => a === "Cancel")) && x.allowedActions.length
     || resultVersion !== undefined && x.allowedActions.length || scope.headers["X-Shell-Branch-Scope"] && x.allowedActions.length) throw invalid();
   validateRoundDraft(x.content); return x as RoundRecord;
 }
-export async function getRoundPlan(scope: RoundScope, eventId: string, signal?: AbortSignal): Promise<RoundRecord> { const { body } = await request(scope, eventId, "", { signal }); return record(body, eventId, scope); }
-export async function getRoundPlanVersion(scope: RoundScope, eventId: string, resultVersion: number, signal?: AbortSignal): Promise<RoundRecord> {
-  if (!version(resultVersion)) throw invalid(); const { body } = await request(scope, eventId, `/versions/${resultVersion}`, { signal }); return record(body, eventId, scope, resultVersion);
+export async function getRoundPlan(scope: RoundScope, eventId: string, signal?: AbortSignal, protocol: "draft" | "review" = "draft"): Promise<RoundRecord> { const { body } = await request(scope, eventId, "", { signal }); return record(body, eventId, scope, undefined, protocol); }
+export async function getRoundPlanVersion(scope: RoundScope, eventId: string, resultVersion: number, signal?: AbortSignal, protocol: "draft" | "review" = "draft"): Promise<RoundRecord> {
+  if (!version(resultVersion)) throw invalid(); const { body } = await request(scope, eventId, `/versions/${resultVersion}`, { signal }); return record(body, eventId, scope, resultVersion, protocol);
 }
-export async function getRoundPlanHistory(scope: RoundScope, eventId: string, afterVersion = 0, signal?: AbortSignal): Promise<RoundHistory> {
+export async function getRoundPlanHistory(scope: RoundScope, eventId: string, afterVersion = 0, signal?: AbortSignal, protocol: "draft" | "review" = "draft"): Promise<RoundHistory> {
   if (!Number.isSafeInteger(afterVersion) || afterVersion < 0) throw invalid(); const { body: x } = await request(scope, eventId, `/history?afterVersion=${afterVersion}&limit=25`, { signal });
   if (!object(x) || !Array.isArray(x.items) || x.items.length > 25 || !(x.nextVersion === null || version(x.nextVersion))
-    || !x.items.every(r => object(r) && roundGuid(r.id) && version(r.version) && r.version > afterVersion && ["Create", "Revise", "Cancel"].includes(r.operation) && ["Draft", "Cancelled"].includes(r.status) && roundGuid(r.actorPrincipalId) && typeof r.recordedAt === "string" && instant(r.recordedAt) && text(r.reason, 2000))
+    || !x.items.every(r => object(r) && roundGuid(r.id) && version(r.version) && r.version > afterVersion && (protocol === "review" ? ["Create", "Revise", "Cancel", "Submit", "Approve", "Return", "Reject"] : ["Create", "Revise", "Cancel"]).includes(r.operation) && (protocol === "review" ? ["Draft", "InReview", "Published", "Rejected", "Cancelled"] : ["Draft", "Cancelled"]).includes(r.status) && (protocol !== "review" || [r.submissionId, r.caseId, r.decisionId].every(id => id === undefined || id === null || roundGuid(id))) && roundGuid(r.actorPrincipalId) && typeof r.recordedAt === "string" && instant(r.recordedAt) && text(r.reason, 2000))
     || new Set(x.items.map((r: any) => r.id)).size !== x.items.length || !x.items.every((r: any, i: number) => i === 0 || r.version > x.items[i - 1].version)
     || x.nextVersion !== null && x.nextVersion !== x.items.at(-1)?.version) throw invalid();
   return x as RoundHistory;

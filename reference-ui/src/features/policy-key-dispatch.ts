@@ -11,6 +11,7 @@ export function policyLabel(key: string): string {
     case "INVOICE_MATCHING": return "Invoice matching";
     case "INVOICE_UNIT_REVIEW": return "Original invoice unit review";
     case "MANUAL_PAYMENT_REVIEW": return "Manual payment review";
+    case "COMMERCIAL_ROUND_PLAN_REVIEW": return "Evaluation-plan review";
     case "PROCUREMENT_PLAN_REVIEW": return "Purchase plan review";
     default: return key ? `Other policy (${key})` : "Other policy";
   }
@@ -23,6 +24,8 @@ export function ownedPolicySettings(key: string): { path: string; label: string 
       return { path: "/settings/modules/bills/preferences", label: "Invoice check settings" };
     case "INVOICE_UNIT_REVIEW":
       return { path: "/settings/modules/bills/preferences?rule=unit-review", label: "Bill review rules" };
+    case "COMMERCIAL_ROUND_PLAN_REVIEW":
+      return { path: "/settings/modules/request-for-quotes/approvals?rule=round-plan-review", label: "Evaluation-plan review rules" };
     case "PROCUREMENT_PLAN_REVIEW":
       return { path: "/settings/modules/purchase-plans/approvals", label: "Purchase plan review rules" };
     case "MANUAL_PAYMENT_REVIEW":
