@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ArrowRight, Menu, Search, Settings2, X } from "lucide-react";
 import { ErpSidebarHeader, ErpTopBar } from "@amizopower/erp-ui";
-import { Input, PageHeader } from "../components/ui";
+import { Button, Input, PageHeader } from "../components/ui";
 import { BrandMark, useErpShell } from "../lib/erpShell";
 import { canOpenCoreModule } from "../lib/core-workspace-choices";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
@@ -11,6 +11,7 @@ import { LiveConfiguration } from "./LiveConfiguration";
 import { LivePolicies } from "./LivePolicies";
 import { LiveApprovalSettings } from "./LiveApprovalSettings";
 import { LiveInvoiceMatchingSettings } from "./LiveInvoiceMatchingSettings";
+import { LiveRoundPlanReviewSettings } from "./LiveRoundPlanReviewSettings";
 import { LiveSourcingSettings } from "./LiveSourcingSettings";
 import { LiveReceivingSettings } from "./LiveReceivingSettings";
 import { LivePlanReviewSettings } from "./LivePlanReviewSettings";
@@ -97,7 +98,7 @@ export function LiveSettingsShell() {
         : slug === "bills" && tab === "preferences"
           ? <LiveInvoiceMatchingSettings />
         : slug === "request-for-quotes" && tab === "approvals"
-          ? <LiveSourcingSettings />
+          ? <RfqApprovalSettings />
         : slug === "purchase-receives" && tab === "preferences"
           ? <LiveReceivingSettings />
         : slug === "payments-made" && tab === "approvals"
@@ -138,4 +139,9 @@ export function LiveSettingsShell() {
       <main className="min-w-0 flex-1 px-4 py-6 pb-10 sm:px-7 lg:px-10">{content}</main>
     </div>
   </div>;
+}
+
+function RfqApprovalSettings() {
+  const [query, setQuery] = useSearchParams(); const round = query.get("rule") === "round-plan-review";
+  return <div className="space-y-5"><div className="flex gap-3" role="tablist" aria-label="RFQ approval rules"><Button role="tab" aria-selected={!round} variant={!round ? "primary" : "secondary"} onClick={() => setQuery({})}>RFQ publication</Button><Button role="tab" aria-selected={round} variant={round ? "primary" : "secondary"} onClick={() => setQuery({ rule: "round-plan-review" })}>Evaluation-plan review</Button></div>{round ? <LiveRoundPlanReviewSettings /> : <LiveSourcingSettings />}</div>;
 }

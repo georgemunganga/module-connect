@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, PageHeader, Panel } from "../components/ui";
 import { ApprovalDecisionDialog } from "../components/approvals/ApprovalDecisionDialog";
+import { RoundReviewQueue } from "./RoundPlanReview";
 import { PlanReviewQueue } from "./LivePlanReview";
 import { LiveOrderApprovalQueue } from "./LiveOrderApprovalQueue";
 import { LiveGovernedOrderList } from "./LivePrincipalOrderGovernance";
@@ -35,16 +36,18 @@ export function LiveApprovalQueue() {
     && context.permissions.includes("procurement-po-approve");
   const units = !all && context.capabilities.invoiceOriginalUnitReview && context.permissions.includes("procurement-invoice-unit-review");
   const manualUnits = context.capabilities.invoiceManualUnitReviewRead && context.permissions.includes("procurement-invoice-unit-review");
+  const rounds = context.capabilities.roundPlanReviewRead && context.permissions.includes("procurement-round-plan-review");
   const plans = context.capabilities.planReviewRead && context.permissions.includes("procurement-plan-review-read");
-  const available = ([requests && "requests", orders && "orders", governedOrders && "governed", units && "units", manualUnits && "manualUnits", plans && "plans"].filter(Boolean) as ("requests" | "orders" | "governed" | "units" | "manualUnits" | "plans")[]);
-  const [type, setType] = useState<"requests" | "orders" | "governed" | "units" | "manualUnits" | "plans">(() => available[0] ?? "requests");
+  const available = ([requests && "requests", orders && "orders", governedOrders && "governed", units && "units", manualUnits && "manualUnits", plans && "plans", rounds && "rounds"].filter(Boolean) as ("requests" | "orders" | "governed" | "units" | "manualUnits" | "plans" | "rounds")[]);
+  const [type, setType] = useState<"requests" | "orders" | "governed" | "units" | "manualUnits" | "plans" | "rounds">(() => available[0] ?? "requests");
   const selected = available.includes(type) ? type : available[0];
   if (!selected) return <div className="p-5 sm:p-8" role="alert">You do not have access to an available approval queue.</div>;
-  const queue = selected === "plans" ? <div className="p-5 sm:p-8"><PageHeader title="Approvals" subtitle="Purchase plans assigned to you." /><PlanReviewQueue /></div> : selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "governed"
+  const queue = selected === "rounds" ? <div className="p-5 sm:p-8"><PageHeader title="Approvals" subtitle="Evaluation plans assigned to you." /><RoundReviewQueue /></div> : selected === "plans" ? <div className="p-5 sm:p-8"><PageHeader title="Approvals" subtitle="Purchase plans assigned to you." /><PlanReviewQueue /></div> : selected === "orders" ? <LiveOrderApprovalQueue /> : selected === "governed"
     ? <LiveGovernedOrderList task="review" /> : selected === "units" ? <InvoiceUnitReviewQueue />
       : selected === "manualUnits" ? <InvoiceManualUnitReviewQueue /> : <RequestApprovalQueue />;
   if (available.length === 1) return queue;
   return <><div className="flex gap-3 px-5 pt-5 sm:px-8" role="tablist" aria-label="Approval records">
+    {rounds && <Button role="tab" aria-selected={selected === "rounds"} variant={selected === "rounds" ? "primary" : "secondary"} onClick={() => setType("rounds")}>Evaluation plans</Button>}
     {plans && <Button role="tab" aria-selected={selected === "plans"} variant={selected === "plans" ? "primary" : "secondary"} onClick={() => setType("plans")}>Purchase plans</Button>}
     {requests && <Button role="tab" aria-selected={selected === "requests"} variant={selected === "requests" ? "primary" : "secondary"} onClick={() => setType("requests")}>Purchase requests</Button>}
     {orders && <Button role="tab" aria-selected={selected === "orders"} variant={selected === "orders" ? "primary" : "secondary"} onClick={() => setType("orders")}>Purchase orders</Button>}

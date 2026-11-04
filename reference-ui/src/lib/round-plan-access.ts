@@ -13,3 +13,11 @@ export function roundPlanRouteSelected(source: string | null, access: Access): b
   return source === "round-plan" || source === null && roundPlanReadAvailable(access)
     && !access.permissions.some(p => ["procurement-sourcing-read", "procurement-sourcing-create", "procurement-sourcing-edit", "procurement-quotation-read", "procurement-sourcing-convert", "procurement-sourcing-submit", "procurement-sourcing-publish"].includes(p));
 }
+
+export function roundReviewReadAvailable(access: { capabilities: { roundPlanReviewRead: boolean }; permissions: readonly string[] }): boolean {
+  return access.capabilities.roundPlanReviewRead && access.permissions.some(p => p === "procurement-round-plan-submit" || p === "procurement-round-plan-review");
+}
+export function roundReviewActionAvailable(access: { capabilities: { roundPlanReviewRead: boolean; roundPlanReviewWorkflow: boolean }; permissions: readonly string[] }, scope: RoundScope, hints: readonly string[], action: string): boolean {
+  return roundReviewReadAvailable(access) && access.capabilities.roundPlanReviewWorkflow && !!scope.identity.branchId && !scope.headers["X-Shell-Branch-Scope"]
+    && scope.current() && hints.includes(action) && access.permissions.includes(action === "Submit" ? "procurement-round-plan-submit" : "procurement-round-plan-review");
+}
