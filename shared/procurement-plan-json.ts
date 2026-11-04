@@ -2,6 +2,10 @@ import { invoiceDecimal } from "./procurement-decimal";
 
 /** Preserve original decimal wire tokens before JSON.parse can round them. */
 export function readPlanJson(text: string): unknown {
+  return readExactDecimalJson(text, ["estimatedQuantity", "estimatedAmount"]);
+}
+
+export function readExactDecimalJson(text: string, fields: readonly string[]): unknown {
   if (text.length > 2_000_000) throw new Error("Plan response is too large.");
   let output = "", at = 0;
   while (at < text.length) {
@@ -13,7 +17,7 @@ export function readPlanJson(text: string): unknown {
     }
     const token = text.slice(start, at); output += token;
     const key: unknown = JSON.parse(token);
-    if (key !== "estimatedQuantity" && key !== "estimatedAmount") continue;
+    if (typeof key !== "string" || !fields.includes(key)) continue;
     const tail = /^(\s*:\s*)(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/.exec(text.slice(at));
     if (tail) { output += tail[1] + JSON.stringify(invoiceDecimal(tail[2])); at += tail[0].length; }
   }

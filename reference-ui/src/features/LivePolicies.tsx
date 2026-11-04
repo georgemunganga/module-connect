@@ -1,3 +1,5 @@
+import { CoreRequestApprovalSteps, useRequestRoleOptions } from "./CoreRequestApprovalSteps";
+import { emptyRule, toRuleJson, fromRuleJson, type RuleRow } from "../lib/buying-rule-editor";
 import { Link } from "react-router-dom";
 import { isBuyingRulePolicy, ownedPolicySettings, policyLabel } from "./policy-key-dispatch";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -12,88 +14,10 @@ import {
   type PolicyPage, type PolicyRecord, type PolicyIssue, type PolicyPreview,
 } from "../../../src/platform/procurement-policy-api";
 
-type RuleRow = {
-  code: string; priority: number; minimum: string; maximum: string;
-  categoryCodes: string; purchaseType: string; budget: "Required" | "ExceptionReview";
-  method: string; quotes: string; lineManager: boolean; budgetOwner: boolean;
-  procurementManager: boolean;
-};
-const emptyRule = (): RuleRow => ({ code: "DEFAULT", priority: 0, minimum: "", maximum: "",
-  categoryCodes: "", purchaseType: "", budget: "Required", method: "", quotes: "",
-  lineManager: true, budgetOwner: false, procurementManager: false });
-const codes = (value: string) => value.split(",").map((part) => part.trim().toUpperCase()).filter(Boolean);
 const day = (value: string | null) => value?.slice(0, 10) ?? "";
 const utc = (value: string) => `${value}T00:00:00.000Z`;
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Buying rules are unavailable.";
 const tomorrow = () => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-const onlyKeys = (value: Record<string, unknown>, allowed: string[]) =>
-  Object.keys(value).every((name) => allowed.includes(name));
-
-function toRuleJson(key: string, currency: string, rows: RuleRow[]): string {
-  if (!isBuyingRulePolicy(key)) throw new Error("This policy needs its own settings editor.");
-  return JSON.stringify({ schemaVersion: 1,
-    transactionType: key === "PURCHASE_ORDER" ? "PurchaseOrder" : "PurchaseRequest",
-    currencyCode: currency, amountBasis: key === "PURCHASE_ORDER" ? "ApprovedLineBase" : "EstimatedLineBase",
-    rules: rows.map((row) => ({ code: row.code.trim().toUpperCase(), priority: Number(row.priority),
-      when: { minimumAmountInclusive: row.minimum ? Number(row.minimum) : null,
-        maximumAmountExclusive: row.maximum ? Number(row.maximum) : null,
-        categoryCodes: codes(row.categoryCodes), purchaseTypes: row.purchaseType ? [row.purchaseType] : [],
-        branchIds: [] },
-      result: { budgetReservation: row.budget,
-        sourcingMethodCode: row.method.trim().toUpperCase() || null,
-        minimumQuoteCount: row.quotes === "" ? null : Number(row.quotes),
-        approvalStages: [
-          ...(row.lineManager ? [{ code: "NEED", assignee: "LineManager", mode: "One" }] : []),
-          ...(row.budgetOwner ? [{ code: "FUNDING", assignee: "BudgetOwner", mode: "One" }] : []),
-          ...(row.procurementManager ? [{ code: "BUYING", assignee: "ProcurementManager", mode: "One" }] : []),
-        ] },
-    })) }, null, 2);
-}
-
-function fromRuleJson(json: string, key: string, currency: string): RuleRow[] | null {
-  if (!isBuyingRulePolicy(key)) return null;
-  try {
-    const document = JSON.parse(json) as Record<string, unknown>;
-    if (document.schemaVersion !== 1 || !Array.isArray(document.rules)
-      || !onlyKeys(document, ["schemaVersion", "transactionType", "currencyCode", "amountBasis", "rules"])
-      || document.currencyCode !== currency
-      || document.transactionType !== (key === "PURCHASE_ORDER" ? "PurchaseOrder" : "PurchaseRequest")
-      || document.amountBasis !== (key === "PURCHASE_ORDER" ? "ApprovedLineBase" : "EstimatedLineBase")) return null;
-    return document.rules.map((value: unknown) => {
-      if (!value || typeof value !== "object") throw new Error("Unknown rule");
-      const rule = value as Record<string, unknown>;
-      const when = rule.when as Record<string, unknown>;
-      const result = rule.result as Record<string, unknown>;
-      if (!when || !result || !Array.isArray(result.approvalStages)
-        || !onlyKeys(rule, ["code", "priority", "when", "result"])
-        || !onlyKeys(when, ["minimumAmountInclusive", "maximumAmountExclusive", "categoryCodes", "purchaseTypes", "branchIds"])
-        || !onlyKeys(result, ["budgetReservation", "sourcingMethodCode", "minimumQuoteCount", "approvalStages"])
-        || !Array.isArray(when.categoryCodes) || !Array.isArray(when.purchaseTypes)
-        || !Array.isArray(when.branchIds) || when.branchIds.length
-        || when.purchaseTypes.length > 1
-        || (when.purchaseTypes.length === 1 && !["GOODS", "SERVICES", "ASSETS", "SUBSCRIPTIONS"].includes(String(when.purchaseTypes[0])))
-        || !["Required", "ExceptionReview"].includes(String(result.budgetReservation)))
-        throw new Error("This draft uses more detailed conditions.");
-      const stages = result.approvalStages as Array<Record<string, unknown>>;
-      if (stages.some((stage) => !onlyKeys(stage, ["code", "assignee", "mode"])
-        || stage.mode !== "One" || ![
-          ["NEED", "LineManager"], ["FUNDING", "BudgetOwner"], ["BUYING", "ProcurementManager"],
-        ].some(([code, assignee]) => stage.code === code && stage.assignee === assignee)))
-        throw new Error("This draft uses a different approval assignment.");
-      return { code: String(rule.code ?? ""), priority: Number(rule.priority ?? 0),
-        minimum: when.minimumAmountInclusive == null ? "" : String(when.minimumAmountInclusive),
-        maximum: when.maximumAmountExclusive == null ? "" : String(when.maximumAmountExclusive),
-        categoryCodes: when.categoryCodes.join(", "), purchaseType: String(when.purchaseTypes[0] ?? ""),
-        budget: result.budgetReservation === "ExceptionReview" ? "ExceptionReview" : "Required",
-        method: String(result.sourcingMethodCode ?? ""),
-        quotes: result.minimumQuoteCount == null ? "" : String(result.minimumQuoteCount),
-        lineManager: stages.some((stage) => stage.assignee === "LineManager"),
-        budgetOwner: stages.some((stage) => stage.assignee === "BudgetOwner"),
-        procurementManager: stages.some((stage) => stage.assignee === "ProcurementManager"),
-      } satisfies RuleRow;
-    });
-  } catch { return null; }
-}
 
 export function LivePolicies() {
   const readiness = useLiveReadiness(); const { selection } = useErpShell();
@@ -125,11 +49,15 @@ function LivePoliciesRecord() {
   const [sampleAmount, setSampleAmount] = useState("0");
   const [sampleCategory, setSampleCategory] = useState("");
   const [sampleType, setSampleType] = useState("");
+  const [sampleDepartment, setSampleDepartment] = useState("");
+  const [sampleRoles, setSampleRoles] = useState<string[]>([]);
   const [preview, setPreview] = useState<PolicyPreview | null>(null);
   const [key, setKey] = useState("PURCHASE_REQUEST");
+  const [routingSchema, setRoutingSchema] = useState<1 | 2>(2);
   const [start, setStart] = useState(tomorrow);
   const [end, setEnd] = useState("");
   const [rows, setRows] = useState<RuleRow[]>([emptyRule()]);
+  const roleOptions = useRequestRoleOptions(companyId, !!editing && routingSchema === 2 || !!previewing && previewing.policyKey === "PURCHASE_REQUEST");
   const [issues, setIssues] = useState<PolicyIssue[]>([]);
   const [error, setError] = useState("");
   const [listError, setListError] = useState("");
@@ -171,7 +99,7 @@ function LivePoliciesRecord() {
     return () => controller.abort();
   }, [companyId, refresh]);
 
-  const newDraft = () => { if (!canEdit || !canStart()) return; setEditing("new"); setKey("PURCHASE_REQUEST");
+  const newDraft = () => { if (!canEdit || !canStart()) return; setEditing("new"); setKey("PURCHASE_REQUEST"); setRoutingSchema(2);
     setStart(tomorrow()); setEnd(""); setRows([emptyRule()]);
     setIssues([]); setError(""); };
   async function viewSavedPolicy(id: string) {
@@ -197,7 +125,7 @@ function LivePoliciesRecord() {
         return;
       }
       setEditing(record); setKey(record.policyKey); setStart(day(record.effectiveFrom));
-      setEnd(day(record.effectiveTo)); setRows(parsed);
+      setEnd(day(record.effectiveTo)); setRows(parsed); setRoutingSchema(JSON.parse(record.rulesJson).schemaVersion === 2 ? 2 : 1);
     } catch (cause) { if (alive.current) setError(errorText(cause)); }
     finally { busy.current = false; if (alive.current) setSaving(false); }
   }
@@ -214,7 +142,7 @@ function LivePoliciesRecord() {
     setSaving(true); setError(""); setIssues([]);
     let mutationStarted = false;
     try {
-      const rulesJson = toRuleJson(key, currency, rows);
+      const rulesJson = toRuleJson(key, currency, rows, routingSchema);
       const check = await validatePolicy(companyId, rulesJson);
       if (!alive.current || !isCurrentRoute()) return;
       setIssues(check.issues);
@@ -249,7 +177,8 @@ function LivePoliciesRecord() {
     setSaving(true); setError(""); setPreview(null);
     try {
       const result = await previewPolicy(companyId, previewing.id, {
-        currencyCode: currency, lineBaseAmount: Number(sampleAmount),
+        currencyCode: currency, lineBaseAmount: sampleAmount,
+        requesterRoleKeys: sampleRoles, departmentId: sampleDepartment || null,
         categoryCode: sampleCategory.trim().toUpperCase() || null,
         purchaseType: sampleType || null, branchId: null,
       });
@@ -329,6 +258,8 @@ function LivePoliciesRecord() {
       <p className="text-sm text-muted-foreground">See which rule a sample purchase matches. This check does not approve or change a purchase. Branch-specific conditions need a fuller preview.</p>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label={`Sample line amount before adjustments (${currency})`}><Input type="number" min={0} step="0.0001" required value={sampleAmount} onChange={(event) => setSampleAmount(event.target.value)} /></Field>
+        {previewing.policyKey === "PURCHASE_REQUEST" && <Field label="Sample department"><Select value={sampleDepartment} disabled={roleOptions.loading || !!roleOptions.error} onChange={event => setSampleDepartment(event.target.value)}><option value="">No department</option>{roleOptions.departments.map(unit => <option key={unit.id} value={unit.id}>{unit.label}</option>)}</Select></Field>}
+        {previewing.policyKey === "PURCHASE_REQUEST" && <Field label="Sample requester role"><Select value={sampleRoles[0] ?? ""} disabled={roleOptions.loading || !!roleOptions.error} onChange={event => setSampleRoles(event.target.value ? [event.target.value] : [])}><option value="">No requester role</option>{roleOptions.roles.map(role => <option key={role.key} value={role.key}>{role.label}</option>)}</Select>{roleOptions.error && <p role="alert">{roleOptions.error}</p>}</Field>}
         <Field label="Sample category"><Input value={sampleCategory} placeholder="IT" onChange={(event) => setSampleCategory(event.target.value.toUpperCase())} /></Field>
         <Field label="Sample purchase type"><Select value={sampleType} onChange={(event) => setSampleType(event.target.value)}><option value="">Any type</option><option value="GOODS">Goods</option><option value="SERVICES">Services</option><option value="ASSETS">Assets</option><option value="SUBSCRIPTIONS">Subscriptions</option></Select></Field>
       </div>
@@ -351,10 +282,11 @@ function LivePoliciesRecord() {
         <div className="space-y-5 p-5">
           {editing !== "new" && editing.lastReturnReason && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Reviewer asked for changes: {editing.lastReturnReason}</p>}
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Use these rules for"><Select value={key} disabled={editing !== "new"} onChange={(event) => setKey(event.target.value)}><option value="PURCHASE_REQUEST">Purchase requests</option><option value="PURCHASE_ORDER">Purchase orders</option></Select></Field>
+            <Field label="Use these rules for"><Select value={key} disabled={editing !== "new"} onChange={(event) => { setKey(event.target.value); setRoutingSchema(event.target.value === "PURCHASE_REQUEST" ? 2 : 1); }}><option value="PURCHASE_REQUEST">Purchase requests</option><option value="PURCHASE_ORDER">Purchase orders</option></Select></Field>
             <Field label="Start date"><Input type="date" required value={start} onChange={(event) => setStart(event.target.value)} /></Field>
             <Field label="End date (optional)"><Input type="date" min={start} value={end} onChange={(event) => setEnd(event.target.value)} /></Field>
           </div>
+          {key === "PURCHASE_REQUEST" && <Field label="Approval assignment"><Select value={routingSchema} disabled={editing !== "new"} onChange={event => setRoutingSchema(Number(event.target.value) === 2 ? 2 : 1)}><option value={2}>Core people and roles</option><option value={1}>Legacy approver types</option></Select></Field>}
           <p className="text-xs text-muted-foreground">Amounts use {currency} and equal quantity × unit price before discounts, tax and delivery. An empty amount or category means there is no limit for that condition. Higher priority wins where rules overlap.</p>
           {rows.map((row, index) => <section key={index} className="space-y-4 rounded-xl border border-border bg-surface-muted p-4">
             <div className="flex items-center justify-between"><h3 className="font-semibold">Rule {index + 1}</h3>{rows.length > 1 && <Button variant="secondary" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>Remove rule</Button>}</div>
@@ -369,9 +301,11 @@ function LivePoliciesRecord() {
               <Field label="Buying method code (optional)"><Input value={row.method} onChange={(event) => changeRow(index, { method: event.target.value.toUpperCase() })} /></Field>
               <Field label="Quotes needed (optional)"><Input type="number" min={0} max={20} value={row.quotes} onChange={(event) => changeRow(index, { quotes: event.target.value })} /></Field>
             </div>
-            <fieldset><legend className="mb-2 text-sm font-medium">Approvers needed</legend><div className="flex flex-wrap gap-4 text-sm">
-              {([['lineManager', 'Line manager'], ['budgetOwner', 'Budget owner'], ['procurementManager', 'Procurement manager']] as const).map(([field, label]) => <label key={field} className="flex items-center gap-2"><Switch checked={row[field]} onChange={(event) => changeRow(index, { [field]: event.target.checked })} />{label}</label>)}
-            </div></fieldset>
+            {routingSchema === 2 ? <CoreRequestApprovalSteps company={companyId} roleOptions={roleOptions} branchIds={row.branchIds} onBranches={branchIds => changeRow(index, { branchIds })} departmentIds={row.departmentIds} onDepartments={departmentIds => changeRow(index, { departmentIds })} steps={row.coreSteps} requesterRoles={row.requesterRoles}
+              onSteps={coreSteps => changeRow(index, { coreSteps })} onRequesterRoles={requesterRoles => changeRow(index, { requesterRoles })} />
+              : <fieldset><legend className="mb-2 text-sm font-medium">Approvers needed</legend><div className="flex flex-wrap gap-4 text-sm">
+              {([['lineManager', 'Line manager'], ['budgetOwner', 'Budget owner'], ['procurementManager', 'Procurement manager']] as const).map(([field, label]) => <label key={field} className="flex items-center gap-2"><Switch disabled={field === "budgetOwner" && !row.budgetOwner} checked={row[field]} onChange={(event) => changeRow(index, { [field]: event.target.checked })} />{label}</label>)}
+            </div><p className="mt-2 text-sm text-muted-foreground">Line manager uses an HR reporting link. Budget owner assignment is not connected; use explicit Core people and roles for new request workflows.</p></fieldset>}
           </section>)}
           <Button variant="secondary" onClick={() => setRows((current) => [...current, { ...emptyRule(), code: `RULE_${current.length + 1}`, priority: current.length }])}>Add another rule</Button>
           {!!issues.length && <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Check these rule details:</p><ul className="mt-2 list-disc pl-5">{issues.map((issue, index) => <li key={index}>{issue.path}: {issue.message}</li>)}</ul></div>}
