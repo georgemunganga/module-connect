@@ -137,9 +137,7 @@ function RequestListRecord() {
       loading={loading} error={error} total={data?.count ?? 0} page={Math.floor(offset / (data?.limit || 50)) + 1} pageSize={data?.limit || 50}
       onPage={page => setOffset((page - 1) * (data?.limit || 50))} onRefresh={() => setRevision(value => value + 1)}
       contextControls={allBranches ? <p role="status" className="mb-4 text-sm text-muted-foreground">Showing your requests across permitted branches. Choose the branch shown on a request to open or change it.</p> : undefined}
-      action={canCreate ? allBranches
-        ? <Button disabled title="Choose a branch in the top bar to create a request."><Plus size={16} className="mr-2 inline" />New request</Button>
-        : <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined}
+      action={canCreate ? <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined}
       emptyTitle="What do you need to buy?" emptyDescription="Start with a draft request for goods or services." />
     {canCheckPolicy && <Panel title="Buying-rule checks and issues" className="mt-5"><div className="p-5">
       {policyError && <p role="alert" className="mb-3 text-sm text-red-700">{policyError}</p>}

@@ -1,3 +1,4 @@
+import { ProcurementTransactionBranchSelection } from "./ProcurementTransactionBranchSelection";
 import { quotationRouteSelected } from "./sourcing-route-selection";
 import { roundPlanRouteSelected } from "./round-plan-access";
 import { RequestApprovalJournalBoundary } from "./RequestApprovalJournal";
@@ -93,10 +94,10 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const quotationRead = sourcingPath && !newRecord && !editRecord && state.readiness !== undefined
     && quotationRouteSelected(new URLSearchParams(location.search).get("source"), state.readiness.permissions)
     && state.readiness.permissions.includes("procurement-quotation-read");
-  const allReadSupported = roundReviewQueue || planReviewQueue || planPath && !newRecord && !editRecord && planReviewRead || roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
+  const allReadSupported = overviewPath || roundReviewQueue || planReviewQueue || planPath && !newRecord && !editRecord && planReviewRead || roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
     || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || manualApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
-    const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
+    const chooseBranch = <ProcurementTransactionBranchSelection />;
     return blockedShell ? blockedShell(chooseBranch) : chooseBranch;
   }
   const permission = state.readiness?.permissions ?? [];

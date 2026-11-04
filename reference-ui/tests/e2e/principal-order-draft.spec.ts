@@ -134,6 +134,6 @@ test("company All remains a read scope and blocks branch-owned creation", async 
   await page.evaluate(entityId => { localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId, branchScope: "all" }));
     window.dispatchEvent(new StorageEvent("storage", { key: "erp.shell.state.v1" })); }, company);
   await page.evaluate(path => { history.pushState({}, "", path); window.dispatchEvent(new PopStateEvent("popstate")); }, `${root}/new?workflow=principal`);
-  await expect(page.getByText("Choose a permitted branch in Organisation context", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose a branch to continue", exact: true })).toBeVisible();
   expect(evidence.writes).toHaveLength(0);
 });
