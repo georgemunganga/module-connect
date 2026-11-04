@@ -8,9 +8,9 @@ export type PolicyPeopleSource = { key: string; maximum: number;
   selected(company: string, ids: string[], signal: AbortSignal): Promise<PolicyPeoplePage> };
 
 /** Scoped Core reviewer picker. Schema-1 rows retain the linked-worker requirement. */
-export function PolicyReviewerPicker({ company, label, selected, disabled, onChange, schemaVersion = 1, source }: {
+export function PolicyReviewerPicker({ company, label, selected, disabled, onChange, schemaVersion = 1, source, helpText }: {
   company: string; label: string; selected: string[]; disabled?: boolean; onChange: (ids: string[]) => void;
-  schemaVersion?: 1 | 2; source?: PolicyPeopleSource;
+  schemaVersion?: 1 | 2; source?: PolicyPeopleSource; helpText?: string;
 }) {
   const [search, setSearch] = useState(""), [offset, setOffset] = useState(0);
   const [page, setPage] = useState<PolicyPeoplePage | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
@@ -60,6 +60,6 @@ export function PolicyReviewerPicker({ company, label, selected, disabled, onCha
     </div>)}</div>
     <div className="flex gap-2"><Button variant="secondary" disabled={disabled || loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous reviewer names</Button>
       <Button variant="secondary" disabled={disabled || loading || page?.nextOffset == null} onClick={() => setOffset(page!.nextOffset!)}>More reviewer names</Button></div>
-    <p className="text-sm text-muted-foreground">Names only. Selection does not grant permission, an approval limit or authority to publish a request for quotes.</p>
+    <p className="text-sm text-muted-foreground">{helpText ?? "Names only. Selection does not grant permission, an approval limit or authority to publish a request for quotes."}</p>
   </div>;
 }

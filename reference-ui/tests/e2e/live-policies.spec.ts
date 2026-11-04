@@ -99,6 +99,8 @@ test("buying rule draft checks and saves with company currency", async ({ page }
   await page.goto("/procurement/workspace/settings/buying-rules");
   await expect(page.getByRole("heading", { name: "Buying rules", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByLabel("Amount from (ZMW)").fill("5000");
   await page.getByLabel("Quotes needed (optional)").fill("3");
   await page.getByRole("button", { name: "Check and save draft" }).click();
@@ -115,6 +117,8 @@ test("invalid buying rule stays in the editor with a field issue", async ({ page
   await mockErp(page, { invalid: true });
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await expect(page.getByRole("alert")).toContainText("Choose an approver.");
   await expect(page.getByRole("heading", { name: "New buying rule draft" })).toBeVisible();
@@ -124,6 +128,8 @@ test("denied policy edits show an access message", async ({ page }) => {
   await mockErp(page, { denied: true });
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await expect(page.getByRole("alert")).toContainText("do not have access");
 });
@@ -140,6 +146,8 @@ test("draft author can send a checked rule for review without approval", async (
   const state = await mockErp(page);
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await page.getByRole("button", { name: "Send for review" }).first().click();
   await page.getByLabel("What should the reviewer check?").fill("Confirm approvers and budget rules");
@@ -153,6 +161,8 @@ test("sample preview explains controls without approving a purchase", async ({ p
   const state = await mockErp(page);
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await page.getByRole("button", { name: "Try a sample" }).click();
   await page.getByLabel("Sample line amount before adjustments (ZMW)").fill("6000");
@@ -167,6 +177,8 @@ test("reviewer can publish a future policy after review", async ({ page }) => {
   await mockErp(page, { canApprove: true });
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await page.getByRole("button", { name: "Send for review" }).first().click();
   await page.getByLabel("What should the reviewer check?").fill("Check limits");
@@ -182,6 +194,8 @@ test("reviewer can return rules for correction", async ({ page }) => {
   await mockErp(page, { canApprove: true });
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await page.getByRole("button", { name: "Send for review" }).first().click();
   await page.getByLabel("What should the reviewer check?").fill("Check limits");

@@ -1,3 +1,4 @@
+import { invoiceDecimal } from "../../shared/procurement-decimal";
 import { procurementScopeHeaders } from "../../shared/shell-scope";
 
 /** Company-scoped Procurement policy drafts. Validation never activates a policy. */
@@ -25,15 +26,15 @@ export type PolicyPage = {
 };
 export type PolicyIssue = { path: string; message: string };
 export type PolicyValidation = { isValid: boolean; issues: PolicyIssue[] };
-export type PolicyScenario = { currencyCode: string; lineBaseAmount: number;
-  categoryCode: string | null; purchaseType: string | null; branchId: string | null };
+export type PolicyScenario = { currencyCode: string; lineBaseAmount: number | string;
+  categoryCode: string | null; purchaseType: string | null; branchId: string | null; requesterRoleKeys?: string[]; departmentId?: string | null };
 export type PolicyPreview = {
   policyId: string; policyVersionNumber: number; state: string; isAuthority: false;
   coverageIssues: PolicyIssue[];
   decision: { status: string; ruleCode: string | null; priority: number | null;
     budgetReservation: string | null; sourcingMethodCode: string | null;
     minimumQuoteCount: number | null;
-    approvalStages: Array<{ code: string; assignee: string; mode: string }>;
+    approvalStages: Array<{ code: string; assignee: string; mode: string; binding?: { kind: string; key: string } }>;
     issues: PolicyIssue[] };
 };
 
@@ -150,7 +151,8 @@ export async function previewPolicy(companyId: string, id: string,
   scenario: PolicyScenario): Promise<PolicyPreview> {
   if (!guid.test(id)) throw new Error("Choose a valid buying rule.");
   const body = await call(companyId, `/${id}/preview`,
-    { method: "POST", body: JSON.stringify(scenario) });
+    { method: "POST", body: JSON.stringify({ ...scenario, lineBaseAmount: invoiceDecimal(scenario.lineBaseAmount) })
+      .replace(/("lineBaseAmount"\s*:\s*)"([0-9.]+)"/, (_, prefix: string, amount: string) => prefix + invoiceDecimal(amount)) });
   if (!object(body) || body.isAuthority !== false || !Array.isArray(body.coverageIssues)
     || !object(body.decision) || typeof body.decision.status !== "string")
     throw new Error("ERP returned an invalid buying rule preview.");
@@ -357,3 +359,33 @@ export async function lookupSelectedRoundPolicyReviewers(company: string, ids: r
   return page;
 }
 export const validateRoundReviewPolicy = validatePlanReviewPolicy;
+
+export type RequestCoreRole = { key: string; label: string };
+export async function lookupRequestRoles(company: string, signal?: AbortSignal): Promise<RequestCoreRole[]> {
+  const body = await call(company, "/lookups/request-roles", { signal });
+  if (!object(body) || !Array.isArray(body.items) || body.items.length > 500 || body.isAuthority !== false
+    || !body.items.every(row => object(row) && typeof row.key === "string" && /^[a-z][a-z0-9_-]{0,99}$/.test(row.key) && typeof row.label === "string")
+    || new Set(body.items.map(row => (row as RequestCoreRole).key)).size !== body.items.length)
+    throw new PolicyActionError("Core role names could not be verified. Refresh before choosing a role.", 0);
+  return body.items as RequestCoreRole[];
+}
+export async function lookupRequestApprovers(company: string, search: string, offset: number, signal?: AbortSignal,
+  selected?: readonly string[]): Promise<{ items: { principalId: string; displayName: string }[]; nextOffset: number | null }> {
+  const query = selected ? `principalIds=${encodeURIComponent(selected.join(','))}` : `search=${encodeURIComponent(search)}&offset=${offset}&limit=25`;
+  const body = await call(company, `/lookups/request-approvers?${query}`, { signal });
+  if (!object(body) || body.isAuthority !== false || !Array.isArray(body.items)
+    || body.items.length > 50 || !body.items.every(row => object(row) && typeof row.principalId === "string" && guid.test(row.principalId) && typeof row.displayName === "string")
+    || !(body.nextOffset === null || typeof body.nextOffset === "number" && Number.isSafeInteger(body.nextOffset) && body.nextOffset >= 0))
+    throw new PolicyActionError("Approver names could not be verified. Your selections are unchanged.", 0);
+  return body as { items: { principalId: string; displayName: string }[]; nextOffset: number | null };
+}
+
+export type RequestDepartment = { id: string; label: string };
+export async function lookupRequestDepartments(company: string, signal?: AbortSignal): Promise<RequestDepartment[]> {
+  const body = await call(company, "/lookups/request-departments", { signal });
+  if (!object(body) || !Array.isArray(body.items) || body.items.length > 500 || body.isAuthority !== false
+    || !body.items.every(row => object(row) && typeof row.id === "string" && guid.test(row.id) && typeof row.label === "string")
+    || new Set(body.items.map(row => (row as RequestDepartment).id)).size !== body.items.length)
+    throw new PolicyActionError("Core department names could not be verified. Your selections are unchanged.", 0);
+  return body.items as RequestDepartment[];
+}

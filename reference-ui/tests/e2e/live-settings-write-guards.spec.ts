@@ -71,6 +71,8 @@ test("lost policy create response locks a second POST and retains the entered ru
   const state = await fixture(page, ["procurement-configuration-read", "procurement-configuration-edit"], { lostCreate: true });
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByLabel("Rule code").fill("KEEP_ME");
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await expect(page.getByText("A change is unconfirmed or these rules changed.", { exact: false })).toBeVisible();
@@ -86,6 +88,8 @@ test("validation finishing after leaving settings cannot start a policy create",
   const state = await fixture(page, ["procurement-configuration-read", "procurement-configuration-edit"], { pendingValidation: () => pending });
   await page.goto("/procurement/workspace/settings/buying-rules");
   await page.getByRole("button", { name: "Add buying rule draft" }).first().click();
+  await page.getByRole("combobox", { name: "Approval assignment", exact: true }).click();
+  await page.getByRole("option", { name: "Legacy approver types", exact: true }).click();
   await page.getByRole("button", { name: "Check and save draft" }).click();
   await page.getByRole("link", { name: "Close Settings and return home" }).click();
   release();
