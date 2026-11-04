@@ -1,4 +1,6 @@
-# Plan review policy settings — source milestone
+# Plan review policy settings — integration and acceptance limits
+
+Current status,2026-11-04: the Plan transaction browser journey and actual HTTP-created policy fixture passed, as recorded in the [native acceptance record](PLAN_REVIEW_NATIVE_ACCEPTANCE_20261104.md). This does **not** prove the policy configuration editor through a real browser; that separate UI acceptance remains pending. No production policy is created or activated by this milestone.
 
 The existing Settings shell now exposes Purchase Plans → Approvals at `/settings/modules/purchase-plans/approvals`. It retains the existing operational-policy list/editor/action presentation and shared ERP controls. `LivePlanReviewSettings` reuses existing scoped policy create/update/validate/review/publish/return/retire commands; it adds no approval engine or spending authority.
 
