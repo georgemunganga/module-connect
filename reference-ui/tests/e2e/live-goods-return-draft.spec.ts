@@ -111,7 +111,7 @@ test("Company All lists drafts, selects their permitted branch for detail, and b
   await expect(page.getByRole("button",{name:"View return draft"})).toBeVisible();
   await expect(page.getByRole("link",{name:"Add return draft"})).toHaveCount(0);
   await page.goto(path+"/new");
-  await expect(page.getByText(/Choose a permitted branch/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose a branch to continue", exact: true })).toBeVisible();
   await page.goto(path);
   await page.getByRole("button",{name:"View return draft"}).click();
   await expect(page.getByText("PO-RETAINED")).toBeVisible();
