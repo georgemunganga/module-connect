@@ -69,7 +69,7 @@ export function fromRuleJson(json: string, key: string, currency: string): RuleR
       const coreSteps = document.schemaVersion === 2 ? parseCoreSteps(stages) : [];
       const requesterRoles = document.schemaVersion === 2 ? parseRequesterRoles(when.requesterRoleKeys) : [];
       const branchIds = document.schemaVersion === 2 ? parseDepartmentIds(when.branchIds) : [];
-      const departmentIds = document.schemaVersion === 2 ? parseDepartmentIds(when.departmentIds ?? []) : [];
+      const departmentIds = document.schemaVersion === 2 ? parseDepartmentIds(Object.hasOwn(when, "departmentIds") ? when.departmentIds : []) : [];
       if (!coreSteps || !requesterRoles || !departmentIds || !branchIds) throw new Error("This draft has unsupported Core routing fields.");
       if (document.schemaVersion === 1 && stages.some((stage) => !onlyKeys(stage, ["code", "assignee", "mode"])
         || stage.mode !== "One" || ![

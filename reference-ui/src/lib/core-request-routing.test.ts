@@ -32,6 +32,9 @@ describe("Core request routing in the preserved Buying Rules form", () => {
     expect(fromRuleJson(JSON.stringify(root), "PURCHASE_REQUEST", "ZMW")).toBeNull();
     delete root.rules[0].result.approvalStages[0].binding;
     expect(fromRuleJson(JSON.stringify(root), "PURCHASE_REQUEST", "ZMW")).toBeNull();
+    const invalidDepartment = JSON.parse(toRuleJson("PURCHASE_REQUEST", "ZMW", [rule()], 2));
+    invalidDepartment.rules[0].when.departmentIds = null;
+    expect(fromRuleJson(JSON.stringify(invalidDepartment), "PURCHASE_REQUEST", "ZMW")).toBeNull();
   });
   it.each(["", "CEO", " super visor", "supervisor,executive"])("rejects a noncanonical Core role %j", key => {
     expect(parseRequesterRoles([key])).toBeNull();
