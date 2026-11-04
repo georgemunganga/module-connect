@@ -17,7 +17,7 @@ export function claimAuthorityCreateGuard(key: string, storage?: GuardStorage): 
   return readAuthorityCreateGuard(key, storage) === "pending";
 }
 
-/** Only a confirmed response or definitive 400/422 may clear the marker. */
+/** Callers must verify success or their command's definitive no-commit rejection contract before clearing. */
 export function clearAuthorityCreateGuard(key: string, storage?: GuardStorage): boolean {
   try { (storage ?? window.sessionStorage).removeItem(key); } catch { return false; }
   return readAuthorityCreateGuard(key, storage) === "clear";

@@ -337,6 +337,10 @@
       "title": "Customers — Preferences"
     },
     {
+      "path": "/settings/modules/purchase-plans/approvals",
+      "title": "Purchase Plans — Approvals"
+    },
+    {
       "path": "/settings/modules/purchase-requests/preferences",
       "title": "Purchase Requests — Preferences"
     },

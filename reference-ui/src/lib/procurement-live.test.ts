@@ -21,6 +21,25 @@ function fixture(overrides: Record<string, unknown> = {}, flags: Record<string, 
       capabilities: { ...capabilities, ...flags } }));
 }
 describe("Procurement system-user readiness", () => {
+  it("retains independent Plan review and B1 capabilities after integration", async () => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, {
+      planReviewRead: true, planReviewWorkflow: false,
+      roundPlanRead: true, roundPlanRecord: true, planningDraft: true,
+    }));
+    expect(result.capabilities).toMatchObject({ planReviewRead: true, planReviewWorkflow: false,
+      roundPlanRead: true, roundPlanRecord: true, planningDraft: true });
+  });
+  it.each([undefined, false, true, "true", 1, null])("keeps plan review capabilities optional and independent from draft CRUD (%s)", async flag => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { planReviewRead: flag, planReviewWorkflow: flag, planningDraft: true }));
+    expect(result.capabilities.planReviewRead).toBe(flag === true);
+    expect(result.capabilities.planReviewWorkflow).toBe(flag === true);
+    expect(result.capabilities.planningDraft).toBe(true);
+  });
+  it("retains plan review READ when new workflow writes are stopped", async () => {
+    const result = await fetchProcurementReadiness({}, undefined, fixture({}, { planReviewRead: true, planReviewWorkflow: false, planningDraft: false }));
+    expect(result.capabilities.planReviewRead).toBe(true);
+    expect(result.capabilities.planReviewWorkflow).toBe(false);
+  });
   it.each([undefined, false, true, "true", 1, null])("keeps round planning optional, exact-true and independent of existing M4 availability (%s)", async flag => {
     const result = await fetchProcurementReadiness({}, undefined, fixture({}, { roundPlanRead: true, roundPlanRecord: flag, principalSourcingPublication: true }));
     expect(result.capabilities.roundPlanRead).toBe(true); expect(result.capabilities.roundPlanRecord).toBe(flag === true);

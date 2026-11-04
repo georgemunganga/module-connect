@@ -82,13 +82,16 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     state.readiness?.capabilities.invoiceManualUnitReviewRead === true, state.readiness?.permissions ?? []);
   const replacementAllRead = replacementHistoryRouteAvailable(location.pathname, state.readiness?.capabilities.invoiceReplacementRead === true)
     && state.readiness?.permissions.includes("procurement-invoice-read") === true;
+  const planReviewRead = state.readiness?.capabilities.planReviewRead === true;
+  const planReviewQueue = location.pathname === "/approvals" && planReviewRead
+    && state.readiness?.permissions.includes("procurement-plan-review-read") === true;
   const roundPlanRead = sourcingPath && !newRecord && !editRecord && state.readiness !== undefined
     && roundPlanRouteSelected(new URLSearchParams(location.search).get("source"), state.readiness) && state.readiness.capabilities.roundPlanRead === true
     && state.readiness.permissions.includes("procurement-round-plan-read");
   const quotationRead = sourcingPath && !newRecord && !editRecord && state.readiness !== undefined
     && quotationRouteSelected(new URLSearchParams(location.search).get("source"), state.readiness.permissions)
     && state.readiness.permissions.includes("procurement-quotation-read");
-  const allReadSupported = roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
+  const allReadSupported = planReviewQueue || planPath && !newRecord && !editRecord && planReviewRead || roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
     || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || manualApprovalList || principalReceivingCollection || returnCollection;
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <div className="p-5 sm:p-8" role="alert">Choose a permitted branch in Organisation context to open this Procurement workflow.</div>;
@@ -102,7 +105,8 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || itemPath && !(newRecord || editRecord ? permission.includes("procurement-item-manage") : permission.some(value => ["procurement-item-read", "procurement-item-manage"].includes(value)))
     || requestPath && !permits("procurement-request-read", "procurement-request-create", "procurement-request-edit")
     || contractPath && !permits("procurement-contract-read", "procurement-contract-create", "procurement-contract-edit")
-    || planPath && !permits("procurement-plan-read", "procurement-plan-create", "procurement-plan-edit")
+    || planPath && !(newRecord ? permission.includes("procurement-plan-create") : editRecord ? permission.includes("procurement-plan-edit")
+      : permission.includes("procurement-plan-read") || planReviewRead && permission.includes("procurement-plan-review-read"))
     || invoicePath && !(replacementRecord ? permission.includes("procurement-invoice-read")
       : newRecord || editRecord ? permission.includes("procurement-invoice-capture") : permission.includes("procurement-invoice-read"))
     || paymentPath && !permission.includes("procurement-payment-read")
@@ -124,7 +128,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (vendorPath && state.readiness.capabilities.vendorDraft)
     || (itemPath && state.readiness.capabilities.itemDraft)
     || (requestPath && state.readiness.capabilities.requestDraft)
-    || (approvalPath && (requestApprovalsAvailable(state.readiness.capabilities) || state.readiness.capabilities.orders
+    || (approvalPath && (planReviewQueue || requestApprovalsAvailable(state.readiness.capabilities) || state.readiness.capabilities.orders
       || state.readiness.capabilities.principalOrderGovernanceRead
       || state.readiness.capabilities.invoiceOriginalUnitReview && state.readiness.permissions.some((permission) =>
         ["procurement-invoice-unit-review", "procurement-invoice-unit-review-request", "procurement-invoice-unit-review-read"].includes(permission))))
@@ -133,7 +137,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     || (sourcingPath && (roundPlanRead || quotationRead || state.readiness.capabilities.sourcingDraft || state.readiness.capabilities.sourcingSourceDrafts || state.readiness.capabilities.principalSourcingSourceDrafts))
     || (contractPath && state.readiness.capabilities.contractDraft)
     || (recurringPurchasePath && state.readiness.capabilities.recurringPurchaseDraft && state.readiness.permissions.includes("procurement-recurring-read"))
-    || (planPath && state.readiness.capabilities.planningDraft)
+    || (planPath && (state.readiness.capabilities.planningDraft || !newRecord && !editRecord && planReviewRead))
     || (invoicePath && (state.readiness.capabilities.invoiceIntake
       || replacementHistoryRouteAvailable(location.pathname, state.readiness.capabilities.invoiceReplacementRead)))
     || (paymentPath && state.readiness.capabilities.manualPaymentRead)

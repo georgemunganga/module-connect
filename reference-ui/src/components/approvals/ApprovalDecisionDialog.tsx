@@ -5,7 +5,7 @@ import type { ApprovalAction } from "../../../../src/platform/procurement-approv
  * permissions, state/version guards, command recovery and server-owned approval engine. */
 export function ApprovalDecisionDialog({ action, recordLabel, reason, busy, error, locked = false, uncertain = false, canRetrySameCommand = false,
   attestationRequired = false, attested = false, attestationLabel = "I checked the original invoice document and confirm the units shown for its lines.",
-  approvalReasonRequired = false, onAttestation, onReason, onConfirm, onCancel }: { action: ApprovalAction; recordLabel: "request" | "order" | "original invoice units" | "manually entered invoice units"; reason: string; busy: boolean;
+  approvalReasonRequired = false, onAttestation, onReason, onConfirm, onCancel }: { action: ApprovalAction; recordLabel: "plan" | "request" | "order" | "original invoice units" | "manually entered invoice units"; reason: string; busy: boolean;
   error?: string; locked?: boolean; uncertain?: boolean; canRetrySameCommand?: boolean; attestationRequired?: boolean; attested?: boolean;
   attestationLabel?: string; approvalReasonRequired?: boolean; onAttestation?: (checked: boolean) => void;
   onReason: (reason: string) => void; onConfirm: () => void; onCancel: () => void }) {

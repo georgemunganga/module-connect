@@ -16,13 +16,20 @@ export function selectedPolicyInstant(selectedDay: string, original: string | nu
 
 export function samePolicyInstant(left: string | null, right: string | null): boolean {
   if (left === null || right === null) return left === right;
-  const exact = (value: string): bigint | null => {
-    const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
-    if (!match) return null;
-    const second = Date.parse(`${match[1]}${match[3]}`);
-    if (!Number.isFinite(second)) return null;
-    return BigInt(second) * 1_000_000n + BigInt((match[2] ?? "").padEnd(9, "0") || "0");
-  };
-  const a = exact(left), b = exact(right);
+  const a = policyInstantTicks(left), b = policyInstantTicks(right);
   return a !== null && b !== null && a === b;
+}
+
+function policyInstantTicks(value: string): bigint | null {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match) return null;
+  const second = Date.parse(`${match[1]}${match[3]}`);
+  if (!Number.isFinite(second)) return null;
+  return BigInt(second) * 1_000_000n + BigInt((match[2] ?? "").padEnd(9, "0") || "0");
+}
+
+/** Compare retained instants without dropping sub-millisecond database precision. */
+export function policyInstantIsAfter(left: string, right: string): boolean {
+  const a = policyInstantTicks(left), b = policyInstantTicks(right);
+  return a !== null && b !== null && a > b;
 }
