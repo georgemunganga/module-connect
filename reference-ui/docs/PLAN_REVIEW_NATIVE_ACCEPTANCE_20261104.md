@@ -50,7 +50,7 @@ The following are hashes of Root-owned private receipts, not committed personal 
 
 ## Backend successor and remaining release work
 
-The browser pin above is distinct from later backend candidate `c93e8df4f82214b58273bf0c9be58d013aca3331` (tree `adbcb5c396deba114fe57659e04349dc49e129c7`), which adds optional Core projection compatibility. Its genuine SDK receipt passed 551 Host tests, zero failures/skips; 2004 Procurement tests were exactly reused, not rerun. The separate retained/read-negative and current-provider checks belong to that later backend evidence, not to the earlier browser run.
+The browser pin above is distinct from later backend candidate `c93e8df4f82214b58273bf0c9be58d013aca3331` (tree `adbcb5c396deba114fe57659e04349dc49e129c7`), which adds optional Core projection compatibility. Its genuine SDK receipt passed 551 Host tests, zero failures/skips; 2004 Procurement tests were exactly reused, not rerun. The post-primary retention and six native privilege-negative checks exercise the unchanged genuine SQL on retained private native databases; they do not execute the c93 runtime. Current c93 compiled compatibility/technical-provider checks are separate evidence. Neither establishes a c93 browser run. ERP PR171 is now merged at published main `c02f90a33fbce0983a8520d643098c1662a0ded5`, with the exact tested backend tree `adbcb5c396deba114fe57659e04349dc49e129c7`; the paired production upgrade remains pending.
 
 | Later candidate receipt | SHA256 |
 | --- | --- |
