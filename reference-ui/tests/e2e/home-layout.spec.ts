@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const company = "11111111-1111-4111-8111-111111111111";
 const id = "22222222-2222-4222-8222-222222222222";
 const actor = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-async function fixture(page: Page, options: { readOnly?: boolean; requestError?: boolean; approvals?: boolean } = {}) {
+async function fixture(page: Page, options: { readOnly?: boolean; requestError?: boolean; approvals?: boolean; longReference?: boolean } = {}) {
   const calls: string[] = [], writes: string[] = [];
   let denied = false, requestCount = 7;
   await page.addInitScript(entityId => localStorage.setItem("erp.shell.state.v1", JSON.stringify({ entityId })), company);
@@ -22,7 +22,7 @@ async function fixture(page: Page, options: { readOnly?: boolean; requestError?:
       company: { id: company, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: company, schemaReady: true,
       capabilities: Object.fromEntries(["vendorDraft", "itemDraft", "requestDraft", "approvals", "principalApprovals", "sourcing", "contracts", "orders", "orderDraft", "receiving", "invoiceIntake", "invoiceValidation", "financeHandoff", "supplierPortal", "planningDraft", "configurationDraft", "contractDraft", "sourcingDraft"].map(key => [key, ["vendorDraft", "itemDraft", "requestDraft", "orderDraft", "invoiceIntake", "planningDraft", "contractDraft"].includes(key) || key === "principalApprovals" && options.approvals === true])) });
-    if (path === "/api/procurement/v1/requests") return options.requestError ? json({ message: "Unavailable" }, 503) : json({ records: [{ id, number: "PR-REAL-001", purpose: "Saved office equipment", status: "Draft", currencyCode: "ZMW", createdAt: "2026-10-23T00:00:00Z", version: 1, lineCount: 1 }], count: requestCount, offset: 0, limit: 50 });
+    if (path === "/api/procurement/v1/requests") return options.requestError ? json({ message: "Unavailable" }, 503) : json({ records: [{ id, number: options.longReference ? `PR-${"1234567890".repeat(8)}` : "PR-REAL-001", purpose: "Saved office equipment", status: "Draft", currencyCode: "ZMW", createdAt: "2026-10-23T00:00:00Z", version: 1, lineCount: 1 }], count: requestCount, offset: 0, limit: 50 });
     if (path === "/api/procurement/v1/orders") return json({ items: [], total: 4, page: 1, pageSize: 25 });
     if (path === "/api/procurement/v1/plans") return json({ items: [], total: 3, page: 1, pageSize: 25 });
     if (path === "/api/procurement/v1/contracts") return json({ items: [], total: 2, page: 1, pageSize: 25 });
@@ -81,10 +81,16 @@ test("auth invalidation removes prior actor Home data", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("Sign in");
   await expect(page.getByText("Saved office equipment")).toHaveCount(0);expect(state.writes).toEqual([]);
 });
-for (const width of [1440, 390]) test(`original Home arrangement fits viewport ${width}`, async ({ page }, info) => {
-  await page.setViewportSize({ width, height: 1000 });await fixture(page);await page.goto("/procurement/workspace/");
+for (const width of [1440, 1024, 768, 390]) test(`original Home arrangement fits viewport ${width}`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 1000 });await fixture(page, { longReference: true });await page.goto("/procurement/workspace/");
   await expect(page.getByLabel("Vendors: 6")).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  const attention = page.getByRole("heading", { name: "Attention Required", exact: true }).locator("..").locator("..");
+  const spend = page.getByRole("heading", { name: "Spend Summary", exact: true }).locator("..").locator("..");
+  const attentionBox = await attention.boundingBox(), spendBox = await spend.boundingBox();
+  expect(attentionBox!.height).toBeLessThan(spendBox!.height);
+  if (width >= 1024) expect(Math.abs(attentionBox!.y - spendBox!.y)).toBeLessThan(1);
+  await expect(page.getByText(`PR-${"1234567890".repeat(8)}`, { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`home-${width}.png`), fullPage: true });
 });
