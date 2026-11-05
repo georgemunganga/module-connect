@@ -108,16 +108,18 @@ export function Panel({
   action,
   children,
   className = "",
+  density = "comfortable",
 }: {
   title?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  density?: "comfortable" | "compact";
 }) {
   return (
-    <ErpCard className={`shadow-sm ${className}`}>
+    <ErpCard className={`min-w-0 shadow-sm ${className}`}>
       {title && (
-        <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <header className={`flex items-center justify-between gap-3 border-b border-border ${density === "compact" ? "px-4 py-3" : "px-5 py-4"}`}>
           <h2 className="font-semibold text-foreground">{title}</h2>
           {action}
         </header>

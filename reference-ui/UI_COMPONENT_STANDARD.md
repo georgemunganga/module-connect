@@ -22,3 +22,7 @@ Avoid new one-off input or button classes on feature pages. If a workflow needs 
 ## Original screen parity during backend integration
 
 Keep the imported Greenwebb screen organization. Live API integration replaces data loading, state and action handlers; it does not authorize replacing the original screen with a smaller form or plain table. Reuse the original list toolbar, ListTools, StandardDataTable, detail tabs/sections, editor groups and empty states with shared ERP controls/tokens. Missing backend actions stay visible with a truthful availability explanation. Never restore the demo store as the live data source. Filters/exports over one fetched page must explicitly say Current page; do not imply complete server results. Compare original and integrated desktop/mobile layouts, then test real workflows separately.
+
+## Compact overview panels
+
+`Panel` supports opt-in `density="compact"` for overview cards. It reduces header padding while keeping the same ERP type scale and controls; existing pages retain their default spacing. Dashboard grids align cards to their content rather than stretching short or empty panels. Long record references wrap within a zero-minimum-width card; mobile layouts must not hide overflow to mask an oversized child.

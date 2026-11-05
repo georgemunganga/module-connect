@@ -62,8 +62,8 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
     .join(" ");
   return (
     <div>
-      <div className="border-b border-border px-5 pt-7 sm:px-8">
-        <div className="flex items-start justify-between">
+      <div className="border-b border-border px-4 pt-5 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground">
@@ -89,7 +89,7 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
           </Link>}
           </div>
         </div>
-        <div className="mt-6 flex gap-7 text-sm">
+        <div className="mt-4 flex gap-6 text-sm">
           <span className="border-b-2 border-primary pb-3 font-medium text-foreground">
             Dashboard
           </span>
@@ -98,8 +98,8 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
           </Link>
         </div>
       </div>
-      <div className="px-5 py-6 sm:px-8">
-        <div className="mb-5 flex items-center gap-3">
+      <div className="px-4 py-4 sm:px-6">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <CalendarDays size={15} className="text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Date Range:</span>
           <div className="w-36">
@@ -119,9 +119,9 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
             {live ? "Record counts cover all dates" : "Illustrative trend · Live demo totals"}
           </span>
         </div>
-        <div className="flex flex-col gap-5 xl:flex-row">
-          <Panel title="Spend Summary" className="min-w-0 flex-1">
-            <div className="flex flex-wrap justify-between gap-4 px-5 pt-5">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <Panel title="Spend Summary" density="compact">
+            <div className="flex flex-wrap justify-between gap-3 px-4 pt-4">
               <div>
                 <p className="text-xs text-muted-foreground">Total committed spend</p>
                 <p className="mt-1.5 text-2xl font-semibold tracking-tight">
@@ -143,8 +143,8 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
                 </p>
               </div>
             </div>
-            <div className="overflow-x-auto px-3 pb-4 pt-4">
-              {live ? <div className="flex h-[220px] flex-col items-center justify-center gap-3 rounded-lg bg-muted/30 px-5 text-center" role="status">
+            <div className="overflow-x-auto px-3 pb-3 pt-3">
+              {live ? <div className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-lg bg-muted/30 px-4 py-4 text-center" role="status">
                 <ShoppingBag size={28} className="text-muted-foreground" />
                 <p className="text-sm font-medium">Your spending overview will appear here</p>
                 <p className="max-w-sm text-sm text-muted-foreground">Spend reporting is not connected yet. You can still manage your purchasing records below.</p>
@@ -232,8 +232,8 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
               </svg>}
             </div>
           </Panel>
-          <Panel title="Attention Required" className="xl:w-[31%]">
-            <div className="p-5">
+          <Panel title="Attention Required" density="compact">
+            <div className="p-4">
               {live ? <>
                 <p className="mb-4 text-sm text-muted-foreground" role={live.attention.state === "error" ? "alert" : "status"}>
                   {live.attention.state === "ready" ? `${live.attention.count} requests waiting for your decision` : live.attention.state === "unavailable" ? "Approval updates will appear here when available." : metricMessage(live.attention.state)}
@@ -244,7 +244,7 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
                 {live.attention.state === "ready" && <Link to="/approvals" className="text-sm font-medium text-primary">View all approvals →</Link>}
               </> : pending.length ? (
                 <>
-                  <div className="mb-5 flex items-center gap-3 rounded-lg border border-amber-100 bg-amber-50/50 p-4">
+                  <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-100 bg-amber-50/50 p-4">
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-600">
                       <Info size={18} />
                     </span>
@@ -288,14 +288,14 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
                   </Link>
                 </>
               ) : (
-                <p className="py-16 text-center text-sm text-muted-foreground">
+                <p className="py-6 text-center text-sm text-muted-foreground">
                   No attention required.
                 </p>
               )}
             </div>
           </Panel>
         </div>
-        <div className="my-5 grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-5">
+        <div className="my-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {(live ? live.stats.map((stat, index) => ({ ...stat, value: stat.state === "ready" ? stat.count : "—", icon: [FileText, ShoppingBag, Package, Store][index], to: stat.path })) : [
             {
               label: "Orders Issued",
@@ -330,12 +330,12 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
               aria-disabled={live && live.stats.find(item => item.label === stat.label)?.state !== "ready" || undefined}
               tabIndex={live && live.stats.find(item => item.label === stat.label)?.state !== "ready" ? -1 : undefined}
               aria-label={live ? `${stat.label}: ${live.stats.find(item => item.label === stat.label)?.state === "ready" ? stat.value : live.stats.find(item => item.label === stat.label)?.state}` : undefined}
-              className="flex min-w-0 flex-col items-start gap-3 rounded-lg sm:flex-row sm:items-center border border-border bg-card p-4 transition-colors hover:border-blue-200 sm:p-5"
+              className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 sm:items-center sm:p-4"
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/5 text-primary">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/5 text-primary">
                 <stat.icon size={20} />
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">{stat.label}</p>
                 <p className="mt-1 text-xl font-semibold">{stat.value}</p>
                 {live && <p className="mt-1 text-xs text-muted-foreground">{metricMessage(live.stats.find(item => item.label === stat.label)!.state)}</p>}
@@ -343,16 +343,17 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
             </Link>
           ))}
         </div>
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
           <Panel
             title="Payables Summary"
+            density="compact"
             action={
               <Link to="/bills" className="text-xs text-primary">
                 View bills →
               </Link>
             }
           >
-            <div className="flex justify-between gap-3 p-5">
+            <div className="flex flex-wrap justify-between gap-3 p-4">
               <div>
                 <p className="text-xs text-muted-foreground">Outstanding bills</p>
                 <p className="mt-2 text-xl font-semibold">
@@ -372,14 +373,14 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
               {live ? "Payment and outstanding-balance updates are not connected yet." : "Local demo records. Amounts do not represent a real account."}
             </p>
           </Panel>
-          <Panel title="Recent Activity">
+          <Panel title="Recent Activity" density="compact">
             <div className="divide-y divide-slate-100">
               {live ? <>
                 <p className="px-5 py-3 text-xs text-muted-foreground">Saved purchase requests from the current page.</p>
-                {live.recent.rows.map(row => <Link key={row.id} to={row.path} className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-muted/50">
-                  <div className="min-w-0"><p className="break-words text-sm">{row.title}</p><p className="mt-1 text-xs text-muted-foreground">{row.reference}</p></div><Badge>{row.status}</Badge>
+                {live.recent.rows.map(row => <Link key={row.id} to={row.path} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50">
+                  <div className="min-w-0"><p className="break-words text-sm">{row.title}</p><p className="mt-1 break-all text-xs text-muted-foreground">{row.reference}</p></div><Badge>{row.status}</Badge>
                 </Link>)}
-                {!live.recent.rows.length && <p className="px-5 py-10 text-center text-sm text-muted-foreground" role={live.recent.state === "error" ? "alert" : "status"}>{live.recent.state === "ready" ? "No purchase requests to show yet." : metricMessage(live.recent.state)}</p>}
+                {!live.recent.rows.length && <p className="px-4 py-5 text-center text-sm text-muted-foreground" role={live.recent.state === "error" ? "alert" : "status"}>{live.recent.state === "ready" ? "No purchase requests to show yet." : metricMessage(live.recent.state)}</p>}
               </> : records
                 .filter((record) => !["items", "vendors"].includes(record.kind))
                 .slice(0, 3)
@@ -387,7 +388,7 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
                   <Link
                     key={record.id}
                     to={`/${record.kind}/${record.id}/edit`}
-                    className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-muted/50"
+                    className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50"
                   >
                     <div>
                       <p className="text-sm text-foreground">{record.title}</p>
@@ -401,10 +402,10 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
             </div>
           </Panel>
         </div>
-        {live && <section aria-label="My purchasing records" className="mt-5">
+        {live && <section aria-label="My purchasing records" className="mt-4">
           <h2 className="mb-3 text-base font-semibold">My purchasing records</h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{live.personal.map(metric => <Panel key={metric.label} title={metric.label}>
-            <div className="space-y-2 p-5"><p className="text-2xl font-semibold" aria-label={`${metric.label}: ${metric.state === "ready" ? metric.count : metric.state}`}>{metric.state === "ready" ? metric.count : "—"}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{live.personal.map(metric => <Panel key={metric.label} title={metric.label} density="compact">
+            <div className="space-y-1.5 p-4"><p className="text-2xl font-semibold" aria-label={`${metric.label}: ${metric.state === "ready" ? metric.count : metric.state}`}>{metric.state === "ready" ? metric.count : "—"}</p>
               <p className="text-sm text-muted-foreground" role={metric.state === "error" ? "alert" : "status"}>{metricMessage(metric.state)}</p>
               {metric.state === "ready" && <Link to={metric.path} className="text-sm text-primary">Open records</Link>}
             </div></Panel>)}</div>
