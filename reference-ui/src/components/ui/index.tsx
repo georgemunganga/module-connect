@@ -17,6 +17,7 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
+  asChild?: boolean;
 }) {
   const sharedVariant = variant === "primary" ? "default" : variant === "secondary" ? "outline" : variant === "danger" ? "destructive" : "ghost";
   return <ErpButton type="button" variant={sharedVariant} className={className} {...props} />;

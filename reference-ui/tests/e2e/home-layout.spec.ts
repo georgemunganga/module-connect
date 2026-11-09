@@ -40,7 +40,7 @@ test("original Home sections coexist with scoped live counts and saved request l
   for (const title of ["Spend Summary", "Attention Required", "Payables Summary", "Recent Activity"]) await expect(page.getByText(title, { exact: true })).toBeVisible();
   for (const label of ["Purchase orders: 4", "Supplier bills: 9", "Catalog entries: 5", "Vendors: 6", "My purchase requests: 7", "My purchase plans: 3", "My contracts: 2"]) await expect(page.getByLabel(label, { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Saved office equipment/ })).toHaveAttribute("href", `/procurement/workspace/requests/${id}`);
-  await expect(page.getByRole("link", { name: "Create a purchase request" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Request materials or services" })).toBeVisible();
   await expect(page.getByLabel("Dashboard date range")).toBeDisabled();
   await expect(page.getByText("Your spending overview will appear here")).toBeVisible();
   await expect(page.getByText(/Hello, Alex|Meridian Procurement Demo|Local demo records/)).toHaveCount(0);
@@ -50,7 +50,7 @@ test("read-only Home preserves the layout without querying ungranted metrics or 
   const state = await fixture(page, { readOnly: true }); await page.goto("/procurement/workspace/");
   await expect(page.getByLabel("My purchase requests: 7")).toBeVisible();
   await expect(page.getByLabel("Vendors: unavailable")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Create a purchase request" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Request materials or services" })).toHaveCount(0);
   await expect(page.getByLabel("Vendors: unavailable")).toHaveAttribute("aria-disabled", "true");
   for (const resource of ["vendors", "invoices", "catalog", "orders", "plans", "contracts", "approvals"]) expect(state.calls).not.toContain(`/api/procurement/v1/${resource}`);
   expect(state.writes).toEqual([]);
