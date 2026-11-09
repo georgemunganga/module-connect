@@ -137,7 +137,7 @@ function RequestListRecord() {
       loading={loading} error={error} total={data?.count ?? 0} page={Math.floor(offset / (data?.limit || 50)) + 1} pageSize={data?.limit || 50}
       onPage={page => setOffset((page - 1) * (data?.limit || 50))} onRefresh={() => setRevision(value => value + 1)}
       contextControls={allBranches ? <p role="status" className="mb-4 text-sm text-muted-foreground">Showing your requests across permitted branches. Choose the branch shown on a request to open or change it.</p> : undefined}
-      action={canCreate ? <Link to="/requests/new"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined}
+      action={canCreate ? <Link to="/requests/new?entry=department"><Button><Plus size={16} className="mr-2 inline" />New request</Button></Link> : undefined}
       emptyTitle="What do you need to buy?" emptyDescription="Start with a draft request for goods or services." />
     {canCheckPolicy && <Panel title="Buying-rule checks and issues" className="mt-5"><div className="p-5">
       {policyError && <p role="alert" className="mb-3 text-sm text-red-700">{policyError}</p>}
@@ -177,10 +177,13 @@ function RequestListRecord() {
 export function LiveRequestEditor() { return <RequestEditorRecord key={useRequestScopeKey()} />; }
 function RequestEditorRecord() {
   const { id } = useParams();
+  const location = useLocation();
+  const departmental = !id && new URLSearchParams(location.search).get("entry") === "department";
+  const newLine = () => ({ ...emptyLine(), estimatedUnitPrice: departmental ? "" : "0" });
   const navigate = useNavigate();
   const { legalEntityId, defaultCurrencyCode, permissions } = context();
   const canWrite = permissions.includes(id ? "procurement-request-edit" : "procurement-request-create");
-  const [draft, setDraft] = useState<RequestDraft>(() => ({ purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }));
+  const [draft, setDraft] = useState<RequestDraft>(() => ({ purpose: "", currencyCode: defaultCurrencyCode, lines: [newLine()] }));
   const [baseline, setBaseline] = useState(() => JSON.stringify(draft));
   const [discardOpen, setDiscardOpen] = useState(false), [reconcileOpen, setReconcileOpen] = useState(false);
   const returnPath = id ? `/requests/${id}` : "/requests";
@@ -216,7 +219,7 @@ function RequestEditorRecord() {
   useEffect(() => {
     setVersion(null); setLoadedContext(null); setSaving(false); setError("");
     if (!canWrite) { setLoading(false); return; }
-    if (!id) { setLoading(false); const initial = { purpose: "", currencyCode: defaultCurrencyCode, lines: [emptyLine()] }; setDraft(initial); setBaseline(JSON.stringify(initial)); return; }
+    if (!id) { setLoading(false); const initial = { purpose: "", currencyCode: defaultCurrencyCode, lines: [newLine()] }; setDraft(initial); setBaseline(JSON.stringify(initial)); return; }
     const controller = new AbortController();
     setLoading(true); setError("");
     getOwnRequestDraft(legalEntityId, id, controller.signal).then((record) => {
@@ -226,7 +229,7 @@ function RequestEditorRecord() {
     }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(errorText(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [legalEntityId, defaultCurrencyCode, id, canWrite]);
+  }, [legalEntityId, defaultCurrencyCode, id, canWrite, departmental]);
   const field = (key: keyof RequestDraft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   const lineField = (index: number, key: keyof RequestLineDraft, value: string | number | null) => setDraft((current) => ({ ...current, lines: current.lines.map((line, at) => at === index ? { ...line, [key]: value } : line) }));
   function addCatalogPrice(price: PublishedCatalogPrice) {
@@ -268,12 +271,18 @@ function RequestEditorRecord() {
     }
     finally { if (isCurrentSave()) setSaving(false); }
   }
+  const additionalDetails = <>
+    <Field label="Cost centre"><Input value={draft.costCenterRef ?? ""} onChange={(event) => field("costCenterRef", event.target.value)} /></Field>
+    <Field label="Project"><Input value={draft.projectRef ?? ""} onChange={(event) => field("projectRef", event.target.value)} /></Field>
+    <Field label="Funding source"><Input value={draft.fundingSourceRef ?? ""} onChange={(event) => field("fundingSourceRef", event.target.value)} /></Field>
+    <Field label="Note for approver" className="sm:col-span-2"><Textarea rows={3} value={draft.notesToApprover ?? ""} onChange={(event) => field("notesToApprover", event.target.value)} /></Field>
+  </>;
   return <div className="pb-20">
     <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-5 sm:px-8">
-      <h1 className="flex items-center gap-2 text-2xl font-semibold"><FileText size={22} />{id ? "Edit request" : "New request"}</h1>
+      <h1 className="flex items-center gap-2 text-2xl font-semibold"><FileText size={22} />{id ? "Edit request" : departmental ? "Request materials or services" : "New request"}</h1>
       <Button variant="ghost" aria-label="Close request editor" disabled={saving} onClick={leave}><X size={20} /></Button>
     </header>
-    <div className="border-b border-border bg-muted/30 px-5 py-4 sm:px-8"><p className="text-sm">Purchase request · {draft.currencyCode || defaultCurrencyCode}</p><p className="mt-1 text-xs text-muted-foreground">Save a draft for the company shown in the top bar. No budget is reserved yet.</p></div>
+    <div className="border-b border-border bg-muted/30 px-5 py-4 sm:px-8"><p className="text-sm font-medium">{departmental ? "Start with what your department needs" : "Purchase request"} · {draft.currencyCode || defaultCurrencyCode}</p><p className="mt-1 text-sm text-muted-foreground">{departmental ? "Describe the materials or service, quantity, reason and delivery date. This creates an internal request under your signed-in account. Save a draft, then send it for review from the saved request." : "Save a draft for the company shown in the top bar. No budget is reserved yet."}</p>{departmental && <p className="mt-2 text-xs text-muted-foreground">Suppliers, quotations and purchase orders are handled later. Saving a draft does not start purchasing.</p>}</div>
     {!canWrite ? <p role="alert">You do not have access to {id ? "edit this request" : "create a request"}.</p> : loading ? <p role="status">Loading request…</p> : id && (version === null || loadedContext !== editorContext)
       ? <p role="alert">{error || "This draft is unavailable. Return to the list."}</p>
       : <form onSubmit={save}><div className="max-w-6xl space-y-6 px-5 py-6 sm:px-8">
@@ -283,13 +292,10 @@ function RequestEditorRecord() {
         <Field label="What do you need?" className="sm:col-span-2"><Input required maxLength={1000} value={draft.purpose} onChange={(event) => field("purpose", event.target.value)} /></Field>
         <Field label="Needed by"><Input type="date" value={draft.neededBy ?? ""} onChange={(event) => field("neededBy", event.target.value)} /></Field>
         <Field label="Currency"><Input maxLength={3} value={draft.currencyCode ?? ""} onChange={(event) => field("currencyCode", event.target.value.toUpperCase())} /></Field>
-        <Field label="Cost centre"><Input value={draft.costCenterRef ?? ""} onChange={(event) => field("costCenterRef", event.target.value)} /></Field>
-        <Field label="Project"><Input value={draft.projectRef ?? ""} onChange={(event) => field("projectRef", event.target.value)} /></Field>
         <Field label="Delivery address" className="sm:col-span-2"><Input value={draft.deliveryAddressText ?? ""} onChange={(event) => field("deliveryAddressText", event.target.value)} /></Field>
-        <Field label="Funding source"><Input value={draft.fundingSourceRef ?? ""} onChange={(event) => field("fundingSourceRef", event.target.value)} /></Field>
-        <Field label="Note for approver" className="sm:col-span-2"><Textarea rows={3} value={draft.notesToApprover ?? ""} onChange={(event) => field("notesToApprover", event.target.value)} /></Field>
+        {departmental ? <details className="sm:col-span-2 rounded-lg border border-border p-4"><summary className="cursor-pointer text-sm font-medium">More request details (optional)</summary><div className="mt-4 grid gap-4 sm:grid-cols-2">{additionalDetails}</div></details> : additionalDetails}
       </div></section>
-      <section aria-label="What to buy"><h2 className="mb-4 text-base font-semibold">What to buy</h2><div className="space-y-4">
+      <section aria-label="What to buy"><h2 className="mb-4 text-base font-semibold">{departmental ? "What do you need?" : "What to buy"}</h2>{departmental && <p className="mb-4 text-sm text-muted-foreground">Choose an approved item or describe something new. Enter an estimated unit price to save with the current workflow; an unknown estimate must not be entered as zero.</p>}<div className="space-y-4">
         <div className="space-y-3 rounded-lg border border-border p-4">
           <Field label="Search approved items"><Input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search by name or item code" /></Field>
           {catalogLoading ? <p role="status" className="text-sm">Loading approved items…</p>
@@ -317,7 +323,7 @@ function RequestEditorRecord() {
               {line.catalogEntryId && <div className="sm:col-span-3 flex items-center justify-between gap-3 text-sm"><span>From approved catalog · price checked when you send the request</span><Button type="button" variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: current.lines.map((value, at) => at === index ? { ...value, catalogEntryId: null, catalogItemId: null, catalogPublishedVersion: null, preferredSupplierId: null } : value) }))}>Switch to custom item</Button></div>}
             </div></td></tr>,
           ])}</tbody></RecordTable></div>
-        <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}>Add line</Button>
+        <Button variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, newLine()] }))}>Add line</Button>
         <p className="text-right text-sm font-semibold">Estimated amount before discounts, tax and delivery: {draft.currencyCode || defaultCurrencyCode} {total === null ? "Enter valid quantities and prices" : formatRequestBaseAmount(total)}</p>
       </div></section>
       <section className="flex flex-wrap items-center gap-3 border-t border-border pt-5" aria-label="Request attachments"><Button variant="secondary" disabled title="Request file upload is not connected."><Paperclip size={15} /> Attach files</Button><p className="text-sm text-muted-foreground">File upload is not available yet.</p></section>

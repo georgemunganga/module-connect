@@ -81,12 +81,11 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
           {live && <Button variant="secondary" onClick={live.refresh}>Refresh</Button>}
-          {(!live || live.canCreateRequest) && <Link
-            to="/requests/new"
-            className="hidden items-center gap-2 text-xs font-medium text-primary sm:flex"
+          {(!live || live.canCreateRequest) && <Button asChild><Link
+            to="/requests/new?entry=department" aria-label="Request materials or services"
           >
-            Create a purchase request <ArrowUpRight size={14} />
-          </Link>}
+            <span className="sm:hidden" aria-hidden>New request</span><span className="hidden sm:inline" aria-hidden>Request materials or services</span><ArrowUpRight size={14} aria-hidden />
+          </Link></Button>}
           </div>
         </div>
         <div className="mt-4 flex gap-6 text-sm">
