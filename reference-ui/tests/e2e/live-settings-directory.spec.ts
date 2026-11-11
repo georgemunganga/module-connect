@@ -32,8 +32,8 @@ async function fixture(page: Page, options: { coreAdmin?: boolean; configuration
   return { writes };
 }
 
-test("employee gets the Procurement settings directory without duplicate Core cards", async ({ page }) => {
-  const state = await fixture(page);
+test("configuration reader gets the Procurement settings directory without duplicate Core cards", async ({ page }) => {
+  const state = await fixture(page, { configurationRead: true });
   await page.goto("/procurement/workspace/settings");
   await expect(page.getByRole("heading", { level: 1, name: "Procurement settings" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Buying rules" }).first()).toBeVisible();
@@ -43,14 +43,14 @@ test("employee gets the Procurement settings directory without duplicate Core ca
 });
 
 test("authorized Core administrator gets one link to the Core directory", async ({ page }) => {
-  await fixture(page, { coreAdmin: true });
+  await fixture(page, { coreAdmin: true, configurationRead: true });
   await page.goto("/procurement/workspace/settings");
   await expect(page.getByRole("link", { name: "Open ERP Core settings" })).toHaveAttribute("href", "/core/workspace/settings");
   await expect(page.getByRole("heading", { name: "Users & access" })).toHaveCount(0);
 });
 
 test("unsupported Procurement preference remains visible without a local save or API write", async ({ page }) => {
-  const state = await fixture(page);
+  const state = await fixture(page, { configurationRead: true });
   await page.goto("/procurement/workspace/settings/modules/vendors/preferences");
   await expect(page.getByRole("heading", { level: 1, name: "Vendors settings" })).toBeVisible();
   await expect(page.getByText("This setting does not have a live editor yet.", { exact: false })).toBeVisible();
@@ -61,7 +61,7 @@ test("unsupported Procurement preference remains visible without a local save or
 test("an account without configuration read access sees no live editor", async ({ page }) => {
   const state = await fixture(page);
   await page.goto("/procurement/workspace/settings/reference-data");
-  await expect(page.getByRole("heading", { level: 1, name: "Buying settings unavailable" })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
   expect(state.writes).toEqual([]);
 });
 
@@ -72,7 +72,7 @@ test("configuration reader opens live references", async ({ page }) => {
 });
 
 test("settings rail collapses on desktop and mobile navigation opens", async ({ page }) => {
-  await fixture(page);
+  await fixture(page, { configurationRead: true });
   await page.goto("/procurement/workspace/settings");
   await page.locator("aside button").first().click();
   await expect(page.locator("aside")).toHaveClass(/lg:w-16/);

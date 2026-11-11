@@ -1,3 +1,4 @@
+import { canOpenProcurementPage } from "../../lib/procurement-page-access";
 import { RequestApprovalRecoverySlot } from "../../lib/RequestApprovalJournal";
 import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
@@ -31,7 +32,7 @@ import { Modal, Button } from "../ui";
 import { BrandMark, useErpShell } from "../../lib/erpShell";
 import { canOpenCoreModule } from "../../lib/core-workspace-choices";
 import { ErpSidebarHeader, ErpTopBar } from "@amizopower/erp-ui";
-import { isProcurementLiveMode } from "../../lib/ProcurementLiveGate";
+import { useLiveReadiness, isProcurementLiveMode } from "../../lib/ProcurementLiveGate";
 
 const procurement = [
   ["/procurement-requests", "Purchase Requests"],
@@ -49,6 +50,13 @@ const payables = [
 ];
 export function AppShell() {
   const location = useLocation();
+  const readiness = useLiveReadiness();
+  const allowed = (path: string) => !isProcurementLiveMode || canOpenProcurementPage(path, readiness?.permissions ?? []);
+  const buyingLinks = procurement.filter(([to]) => allowed(to) && (to !== "/procurement-requests"
+    || !isProcurementLiveMode || readiness?.permissions.some(action => ["procurement-policy-evaluate", "procurement-request-return", "procurement-po-read", "procurement-sourcing-read"].includes(action))));
+  const payableLinks = payables.filter(([to]) => allowed(to));
+  const quickLinks = [["/requests/new?entry=department", "Purchase Request"], ["/rfqs/new", "Request for Quote"],
+    ["/purchase-orders/new", "Purchase Order"], ["/bills/new", "Bill"], ["/vendors/new", "Vendor"]].filter(([to]) => allowed(to));
   const { records, notify } = useApp();
   const { branding, entities, branches, selection, contextAvailable, verifiedContext, procurementScopeStatus, assignedRoles, coreActions, selectEntity, selectBranch, selectAllBranches } = useErpShell();
   const roleSet = new Set(assignedRoles.map((role) => role.toLowerCase()));
@@ -92,7 +100,7 @@ export function AppShell() {
     label: string,
     icon: React.ReactNode,
     child = false,
-  ) => (
+  ) => allowed(to) ? (
     <NavLink
       key={to}
       to={to}
@@ -105,7 +113,7 @@ export function AppShell() {
       {icon}
       <span className={compact && !child ? "lg:sr-only" : ""}>{label}</span>
     </NavLink>
-  );
+  ) : null;
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <ErpTopBar position="fixed" className="flex h-14 min-w-0 items-center gap-1 px-2 sm:gap-2 sm:px-3">
@@ -208,25 +216,19 @@ export function AppShell() {
         <div className="ml-auto flex items-center gap-2 sm:gap-3 md:ml-2">
           <button type="button" aria-label="Search procurement" className="rounded-md p-1 lg:hidden" onClick={() => setSearchOpen(true)}><Search size={19} /></button>
           <div className="relative">
-            <button
+            {quickLinks.length > 0 && <button
               onClick={() => setQuick(!quick)}
               aria-label="Quick create"
               className="rounded-full border border-primary-foreground/40 bg-primary-foreground/10 p-1.5 text-primary-foreground"
             >
               <Plus size={21} />
-            </button>
-            {quick && (
+            </button>}
+            {quick && quickLinks.length > 0 && (
               <div className="absolute right-0 top-11 w-56 rounded-lg border border-slate-200 bg-white p-2 text-slate-700 shadow-xl">
                 <span className="block px-2 py-2 text-xs font-semibold text-slate-400">
                   QUICK CREATE
                 </span>
-                {[
-                  ["/requests/new", "Purchase Request"],
-                  ["/rfqs/new", "Request for Quote"],
-                  ["/purchase-orders/new", "Purchase Order"],
-                  ["/bills/new", "Bill"],
-                  ["/vendors/new", "Vendor"],
-                ].map(([to, label]) => (
+                {quickLinks.map(([to, label]) => (
                   <Link
                     to={to}
                     key={to}
@@ -257,10 +259,10 @@ export function AppShell() {
             {account && (
               <div className="absolute right-0 top-11 w-60 rounded-lg bg-white p-4 text-slate-700 shadow-xl">
                 <p className="font-semibold">ERP account</p>
-                <a href="/core/workspace/settings/organization" className="mt-3 block text-sm text-blue-500">
+                {(roleSet.has("erp_admin") || roleSet.has("hr_admin")) && <a href="/core/workspace/settings/organization" className="mt-3 block text-sm text-blue-500">
                   Organization profile
-                </a>
-                <Link to="/settings" className="mt-3 block text-sm text-blue-500">Procurement settings</Link>
+                </a>}
+                {allowed("/settings") && <Link to="/settings" className="mt-3 block text-sm text-blue-500">Procurement settings</Link>}
               </div>
             )}
           </div>
@@ -304,7 +306,7 @@ export function AppShell() {
           <div className="h-3" />
           {nav("/items", "Items", <Package size={17} />)}
           {nav("/vendors", "Vendors", <Store size={17} />)}
-          <button
+          {(buyingLinks.length > 0 || allowed("/contracts") || allowed("/plans")) && <button
             onClick={() => { if (compact && window.innerWidth >= 1024) { setCompact(false); setProcOpen(true); } else setProcOpen(!procOpen); }}
             aria-label="Procurement"
             title="Procurement"
@@ -317,13 +319,13 @@ export function AppShell() {
             ) : (
               <ChevronRight size={13} className={`ml-auto ${compact ? "lg:hidden" : ""}`} />
             )}
-          </button>
+          </button>}
           {procOpen && <>
-            {procurement.map(([to, label]) => nav(to, label, null, true))}
+            {buyingLinks.map(([to, label]) => nav(to, label, null, true))}
             {isProcurementLiveMode && nav("/contracts", "Contracts", null, true)}
             {isProcurementLiveMode && nav("/plans", "Purchase Plans", null, true)}
           </>}
-          <button
+          {payableLinks.length > 0 && <button
             onClick={() => { if (compact && window.innerWidth >= 1024) { setCompact(false); setPayOpen(true); } else setPayOpen(!payOpen); }}
             aria-label="Payables"
             title="Payables"
@@ -336,13 +338,13 @@ export function AppShell() {
             ) : (
               <ChevronRight size={13} className={`ml-auto ${compact ? "lg:hidden" : ""}`} />
             )}
-          </button>
-          {payOpen && payables.map(([to, label]) => nav(to, label, null, true))}
+          </button>}
+          {payOpen && payableLinks.map(([to, label]) => nav(to, label, null, true))}
           <div className="h-2" />
           {nav("/budgets", "Budgets", <PieChart size={17} />)}
           {nav("/analytics", "Analytics", <BarChart3 size={17} />)}
         </nav>
-        <div className={`border-t border-rail-active p-3 ${compact ? "lg:px-2" : ""}`}>
+        {allowed("/settings") && <div className={`border-t border-rail-active p-3 ${compact ? "lg:px-2" : ""}`}>
           <Link
             to="/settings"
             title="Settings"
@@ -351,7 +353,7 @@ export function AppShell() {
             <Settings size={16} />
             <span className={compact ? "lg:sr-only" : ""}>Settings</span>
           </Link>
-        </div>
+        </div>}
       </aside>
       <main
         className={`min-w-0 pb-16 pt-14 transition-all ${compact ? "lg:pl-16" : "lg:pl-64"}`}
@@ -373,7 +375,7 @@ export function AppShell() {
       </footer>
       {notifications && (
         <Modal title="Notifications" onClose={() => setNotifications(false)}>
-          {isProcurementLiveMode ? <p className="text-sm text-muted-foreground">Notifications are not available here yet. Check your requests and approvals from the menu.</p> : <div className="space-y-4">
+          {isProcurementLiveMode ? <p className="text-sm text-muted-foreground">Notifications are not available here yet. Use the menu to check the work available to your account.</p> : <div className="space-y-4">
             <div className="rounded-md border border-amber-100 bg-amber-50 p-4">
               <p className="font-medium">Purchase request awaiting review</p>
               <p className="mt-1 text-sm text-slate-500">
@@ -411,7 +413,7 @@ export function AppShell() {
               ["Receive", "/purchase-receives"],
               ["Bill", "/bills"],
               ["Payment", "/payments"],
-            ].map(([label, to], index) => (
+            ].filter(([, to]) => allowed(to)).map(([label, to], index) => (
               <Link
                 key={to}
                 to={to}

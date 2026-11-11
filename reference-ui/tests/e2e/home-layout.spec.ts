@@ -35,7 +35,7 @@ async function fixture(page: Page, options: { readOnly?: boolean; requestError?:
   return { calls, writes, deny: () => { denied = true; }, update: () => { requestCount = 8; } };
 }
 test("original Home sections coexist with scoped live counts and saved request links", async ({ page }) => {
-  const state = await fixture(page); await page.goto("/procurement/workspace/");
+  const state = await fixture(page, { approvals: true }); await page.goto("/procurement/workspace/");
   await expect(page.getByRole("heading", { name: "Welcome", exact: true })).toBeVisible();
   for (const title of ["Spend Summary", "Attention Required", "Payables Summary", "Recent Activity"]) await expect(page.getByText(title, { exact: true })).toBeVisible();
   for (const label of ["Purchase orders: 4", "Supplier bills: 9", "Catalog entries: 5", "Vendors: 6", "My purchase requests: 7", "My purchase plans: 3", "My contracts: 2"]) await expect(page.getByLabel(label, { exact: true })).toBeVisible();
@@ -46,12 +46,12 @@ test("original Home sections coexist with scoped live counts and saved request l
   await expect(page.getByText(/Hello, Alex|Meridian Procurement Demo|Local demo records/)).toHaveCount(0);
   expect(state.writes).toEqual([]);
 });
-test("read-only Home preserves the layout without querying ungranted metrics or showing write shortcuts", async ({ page }) => {
+test("request-only reader hides unrelated panels without querying ungranted metrics or showing write shortcuts", async ({ page }) => {
   const state = await fixture(page, { readOnly: true }); await page.goto("/procurement/workspace/");
   await expect(page.getByLabel("My purchase requests: 7")).toBeVisible();
-  await expect(page.getByLabel("Vendors: unavailable")).toBeVisible();
+  await expect(page.getByLabel("Vendors: unavailable")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Request materials or services" })).toHaveCount(0);
-  await expect(page.getByLabel("Vendors: unavailable")).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText("Spend Summary", { exact: true })).toHaveCount(0);
   for (const resource of ["vendors", "invoices", "catalog", "orders", "plans", "contracts", "approvals"]) expect(state.calls).not.toContain(`/api/procurement/v1/${resource}`);
   expect(state.writes).toEqual([]);
 });
@@ -82,7 +82,7 @@ test("auth invalidation removes prior actor Home data", async ({ page }) => {
   await expect(page.getByText("Saved office equipment")).toHaveCount(0);expect(state.writes).toEqual([]);
 });
 for (const width of [1440, 1024, 768, 390]) test(`original Home arrangement fits viewport ${width}`, async ({ page }, info) => {
-  await page.setViewportSize({ width, height: 1000 });await fixture(page, { longReference: true });await page.goto("/procurement/workspace/");
+  await page.setViewportSize({ width, height: 1000 });await fixture(page, { longReference: true, approvals: true });await page.goto("/procurement/workspace/");
   await expect(page.getByLabel("Vendors: 6")).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

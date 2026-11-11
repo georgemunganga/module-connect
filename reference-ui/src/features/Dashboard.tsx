@@ -17,6 +17,7 @@ export type HomeMetric = { label: string; state: "ready" | "loading" | "error" |
 export type HomeRow = { id: string; title: string; reference: string; status: string; path: string };
 export type LiveDashboardData = {
   companyName: string; canCreateRequest: boolean; refresh: () => void;
+  visibility: { requests: boolean; spend: boolean; payables: boolean; bills: boolean; payments: boolean; attention: boolean };
   stats: HomeMetric[]; personal: HomeMetric[];
   attention: HomeMetric & { rows: HomeRow[] };
   recent: { state: HomeMetric["state"]; rows: HomeRow[] };
@@ -92,13 +93,13 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
           <span className="border-b-2 border-primary pb-3 font-medium text-foreground">
             Dashboard
           </span>
-          <Link to="/requests" className="pb-3 text-muted-foreground">
+          {(!live || live.visibility.requests) && <Link to="/requests" className="pb-3 text-muted-foreground">
             My Requests
-          </Link>
+          </Link>}
         </div>
       </div>
       <div className="px-4 py-4 sm:px-6">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+        {(!live || live.visibility.spend) && <div className="mb-4 flex flex-wrap items-center gap-3">
           <CalendarDays size={15} className="text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Date Range:</span>
           <div className="w-36">
@@ -117,9 +118,9 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
           <span className="ml-auto hidden text-[10px] text-muted-foreground sm:block">
             {live ? "Record counts cover all dates" : "Illustrative trend · Live demo totals"}
           </span>
-        </div>
+        </div>}
         <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Panel title="Spend Summary" density="compact">
+          {(!live || live.visibility.spend) && <Panel title="Spend Summary" density="compact">
             <div className="flex flex-wrap justify-between gap-3 px-4 pt-4">
               <div>
                 <p className="text-xs text-muted-foreground">Total committed spend</p>
@@ -230,8 +231,8 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
                 ))}
               </svg>}
             </div>
-          </Panel>
-          <Panel title="Attention Required" density="compact">
+          </Panel>}
+          {(!live || live.visibility.attention) && <Panel title="Attention Required" density="compact">
             <div className="p-4">
               {live ? <>
                 <p className="mb-4 text-sm text-muted-foreground" role={live.attention.state === "error" ? "alert" : "status"}>
@@ -292,10 +293,10 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
                 </p>
               )}
             </div>
-          </Panel>
+          </Panel>}
         </div>
         <div className="my-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {(live ? live.stats.map((stat, index) => ({ ...stat, value: stat.state === "ready" ? stat.count : "—", icon: [FileText, ShoppingBag, Package, Store][index], to: stat.path })) : [
+          {(live ? live.stats.map(stat => ({ ...stat, value: stat.state === "ready" ? stat.count : "—", icon: stat.path === "/vendors" ? Store : stat.path === "/items" ? Package : stat.path === "/bills" ? ShoppingBag : FileText, to: stat.path })) : [
             {
               label: "Orders Issued",
               value: purchaseOrders.length,
@@ -343,17 +344,17 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
           ))}
         </div>
         <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-          <Panel
+          {(!live || live.visibility.payables) && <Panel
             title="Payables Summary"
             density="compact"
             action={
-              <Link to="/bills" className="text-xs text-primary">
+              (!live || live.visibility.bills) ? <Link to="/bills" className="text-xs text-primary">
                 View bills →
-              </Link>
+              </Link> : undefined
             }
           >
             <div className="flex flex-wrap justify-between gap-3 p-4">
-              <div>
+              {(!live || live.visibility.bills) && <div>
                 <p className="text-xs text-muted-foreground">Outstanding bills</p>
                 <p className="mt-2 text-xl font-semibold">
                   {live ? "—" : money(
@@ -362,17 +363,17 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
                       .reduce((sum, record) => sum + record.amount, 0),
                   )}
                 </p>
-              </div>
-              <div>
+              </div>}
+              {(!live || live.visibility.payments) && <div>
                 <p className="text-xs text-muted-foreground">Recorded payments</p>
                 <p className="mt-2 text-xl font-semibold">{live ? "—" : money(paid)}</p>
-              </div>
+              </div>}
             </div>
             <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
               {live ? "Payment and outstanding-balance updates are not connected yet." : "Local demo records. Amounts do not represent a real account."}
             </p>
-          </Panel>
-          <Panel title="Recent Activity" density="compact">
+          </Panel>}
+          {(!live || live.visibility.requests) && <Panel title="Recent Activity" density="compact">
             <div className="divide-y divide-slate-100">
               {live ? <>
                 <p className="px-5 py-3 text-xs text-muted-foreground">Saved purchase requests from the current page.</p>
@@ -399,7 +400,7 @@ function DashboardLayout({ live, records }: { live?: LiveDashboardData; records:
                   </Link>
                 ))}
             </div>
-          </Panel>
+          </Panel>}
         </div>
         {live && <section aria-label="My purchasing records" className="mt-4">
           <h2 className="mb-3 text-base font-semibold">My purchasing records</h2>

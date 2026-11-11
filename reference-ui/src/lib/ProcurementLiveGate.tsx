@@ -1,3 +1,4 @@
+import { canOpenProcurementPage } from "./procurement-page-access";
 import { ProcurementTransactionBranchSelection } from "./ProcurementTransactionBranchSelection";
 import { quotationRouteSelected } from "./sourcing-route-selection";
 import { roundPlanRouteSelected } from "./round-plan-access";
@@ -97,6 +98,11 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
     && state.readiness.permissions.includes("procurement-quotation-read");
   const allReadSupported = overviewPath || configurationSettingsPath || roundReviewQueue || planReviewQueue || planPath && !newRecord && !editRecord && planReviewRead || roundPlanRead || quotationRead || replacementAllRead || vendorPath || itemPath || paymentPath
     || requestList || planList || contractList || principalOrderList || governedOrderRead || governedApprovalList || manualApprovalList || principalReceivingCollection || returnCollection;
+  // Deny page entry before offering branch selection or mounting business components.
+  if (state.readiness && !canOpenProcurementPage(location.pathname + location.search, state.readiness.permissions)) {
+    const denied = <div className="p-5 sm:p-8" role="alert">You do not have permission to open this Procurement page for the selected company.</div>;
+    return <LiveReadiness.Provider value={state.readiness}>{blockedShell ? blockedShell(denied) : denied}</LiveReadiness.Provider>;
+  }
   if (state.readiness && selection.branchScope === "all" && !allReadSupported) {
     const chooseBranch = <ProcurementTransactionBranchSelection />;
     return blockedShell ? blockedShell(chooseBranch) : chooseBranch;
@@ -124,7 +130,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
       ? <RequestApprovalJournalBoundary readiness={state.readiness} isScopeCurrent={() => currentKey.current === readinessKey}>{blockedShell ? blockedShell(denied) : denied}</RequestApprovalJournalBoundary>
       : denied}</LiveReadiness.Provider>;
   }
-  if (state.readiness && ((overviewPath && [
+  if (state.readiness && ((location.pathname === "/" && permission.includes("procurement-access")) || (overviewPath && [
     ["procurement-request-read", "requestDraft"], ["procurement-po-read", "orderDraft"],
     ["procurement-plan-read", "planningDraft"], ["procurement-contract-read", "contractDraft"],
   ].some(([permission, capability]) => state.readiness!.permissions.includes(permission)

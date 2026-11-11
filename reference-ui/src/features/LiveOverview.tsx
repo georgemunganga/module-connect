@@ -1,3 +1,4 @@
+import { canOpenProcurementPage } from "../lib/procurement-page-access";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Analytics, type AnalyticsRecord } from "./Insights";
@@ -102,8 +103,16 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
     return <Dashboard live={{
       companyName: entities.find(entity => entity.id === legalEntityId)?.name || branding?.displayName || "Your company",
       canCreateRequest: readiness.capabilities.requestDraft && permissions.includes("procurement-request-create"),
+      visibility: {
+        requests: permissions.includes("procurement-request-read"),
+        spend: permissions.some(action => ["procurement-po-read", "procurement-invoice-read"].includes(action)),
+        payables: permissions.some(action => ["procurement-invoice-read", "procurement-payment-read"].includes(action)),
+        bills: permissions.includes("procurement-invoice-read"),
+        payments: permissions.includes("procurement-payment-read"),
+        attention: canOpenProcurementPage("/approvals", permissions),
+      },
       refresh: () => setRevision(value => value + 1),
-      stats: [{ ...metric(1), label: "Purchase orders" }, metric(4), metric(5), metric(6)], personal: metrics.map((_, index) => metric(index)),
+      stats: [{ ...metric(1), label: "Purchase orders" }, metric(4), metric(5), metric(6)].filter(item => canOpenProcurementPage(item.path, permissions)), personal: metrics.map((_, index) => metric(index)).filter(item => canOpenProcurementPage(item.path, permissions)),
       attention: { ...metric(7), rows: approvals?.state === "ready" ? approvals.rows ?? [] : [] },
       recent: { state: requests?.state ?? "loading", rows: requests?.state === "ready" ? requests.rows ?? [] : [] },
     }} />;
@@ -116,7 +125,7 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
       incomplete: metrics.some(metric => values[metric.permission]?.state === "error"),
       refresh: () => setRevision(value => value + 1) }} />
     <div className="mt-5 grid gap-4 sm:grid-cols-2">
-      {metrics.map(metric => {
+      {metrics.filter(metric => canOpenProcurementPage(metric.path, permissions)).map(metric => {
         const value = values[metric.permission] ?? { state: "loading" };
         return <Panel key={metric.permission} title={metric.label}><div className="space-y-3 p-5">
           <p className="text-3xl font-semibold" aria-label={`${metric.label}: ${value.state === "ready" ? value.count : value.state}`}>

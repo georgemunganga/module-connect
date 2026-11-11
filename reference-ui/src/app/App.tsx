@@ -1,3 +1,4 @@
+import { canOpenProcurementPage } from "../lib/procurement-page-access";
 import {
   BrowserRouter,
   Routes,
@@ -79,7 +80,7 @@ function PendingLiveWorkflow() {
   return <div className="p-5 sm:p-8">
     <h1 className="text-2xl font-semibold capitalize">{pageName}</h1>
     <p className="mt-3 max-w-xl text-sm text-muted-foreground">This workflow is being connected to your ERP. Your company and account are ready; no sample transactions are shown here.</p>
-    <div className="mt-5 flex flex-wrap gap-3"><Link className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground" to="/requests">My requests</Link><Link className="rounded-full border px-5 py-2 text-sm" to="/vendors">Vendors</Link></div>
+    <div className="mt-5 flex flex-wrap gap-3">{canOpenProcurementPage("/requests", readiness?.permissions ?? []) && <Link className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground" to="/requests">My requests</Link>}{canOpenProcurementPage("/vendors", readiness?.permissions ?? []) && <Link className="rounded-full border px-5 py-2 text-sm" to="/vendors">Vendors</Link>}</div>
   </div>;
 }
 function RecordRoute({ kind }: { kind: string }) {

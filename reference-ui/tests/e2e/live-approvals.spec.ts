@@ -198,7 +198,7 @@ test("requester starts approvals with the same key after an interrupted response
 test("missing approval-read permission denies the queue without loading records", async ({ page }) => {
   const evidence = await mockErp(page, { read: false });
   await page.goto(`${root}/approvals`);
-  await expect(page.getByRole("alert")).toContainText("You do not have access to the assigned approval queue");
+  await expect(page.getByRole("alert")).toContainText(/You do not have (?:permission to open this Procurement page|access to the assigned approval queue)/);
   expect(evidence.reads()).toBe(0);
 });
 
