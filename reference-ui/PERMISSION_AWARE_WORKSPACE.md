@@ -11,7 +11,9 @@ Change tracking: module-connect issue114. The workspace consumes effective permi
 | Home | Procurement module access; individual panels require their domain permissions |
 | My Requests | Request read; creating/editing/submitting retain their distinct permissions |
 | Approvals | Assigned queue read, approval-opening work, PO approval or the relevant plan/round/invoice task authority |
-| Suppliers and items | Their existing read/create/edit/manage permissions |
+| Suppliers | Existing vendor read/create/edit permissions |
+| Item stewardship | `procurement-item-manage`, matching the existing item-master endpoints |
+| Approved buying catalog inside requests | `procurement-item-read`; this does not open item stewardship |
 | Sourcing and orders | Existing sourcing/quotation/round or PO permissions for the selected operation |
 | Receiving | Receipt viewing for general records; dedicated inspection/acceptance/service-certification authority for their permitted work queues and assigned task URLs |
 | Contracts, plans, recurring purchases | Existing record read/create/edit permissions; plan-review-only entry is retained |
@@ -34,3 +36,9 @@ The existing readiness boundary fences identity/company/branch changes and abort
 ## Verification and release
 
 The permission matrix has unit checks for request-only access, separate read/create/edit rights, configured reviewers, purpose-specific receiving and explicit module grants. Browser cases cover desktop/mobile menus and shortcuts, denied direct URLs without domain requests, configuration visibility, assigned approvals/PO tasks, receiving, and the existing guided request/branch flow. Results and real read-only deployment observations are recorded in the PR/release receipt. Customer identities, credentials and raw screenshots stay in private operational evidence.
+
+## Approved catalog lookup in requests (issue116)
+
+The existing backend requires `procurement-item-read` for approved published catalog prices, while item-master listing/detail and maintenance require `procurement-item-manage`. Request roles can include catalog read without item stewardship. The Items menu/page and Home catalog card follow the actual master permission; hidden Home metrics do not make unused catalog queries. The request editor queries the catalog only when its user holds catalog read; otherwise it keeps manual entry available with a clear explanation. No server authorization or publication criteria are weakened.
+
+Published catalog lookup is not a search of all draft/inactive item masters. Only eligible approved/published entries are returned by the existing server contract. Empty results remain an empty-state message; no item/supplier is automatically activated or priced to populate a search.

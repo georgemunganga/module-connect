@@ -37,7 +37,7 @@ export async function mockErp(page: Page, options: { allBranches?: boolean; deny
     if (path === "/api/hrm/admin/locations") return json({ items: [{ id: branchId, name: "Lusaka", legalEntityId: companyId }] });
     if (path === "/api/hrm/shell/") return json({ assignedLocationIds: [], confined: false });
     if (path === "/api/procurement/v1/context") return json({ principalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", tenantId: "amizo", legalEntityId: companyId, workerId: null,
-      permissions: options.permissions ?? ["procurement-access", "procurement-request-read", "procurement-request-create", "procurement-request-edit", "procurement-request-submit",
+      permissions: options.permissions ?? ["procurement-access", "procurement-item-read", "procurement-request-read", "procurement-request-create", "procurement-request-edit", "procurement-request-submit",
         ...(options.policyReviewer ? ["procurement-policy-evaluate", "procurement-request-return"] : [])],
       company: { id: companyId, code: "AMIZO", name: "Amizo Power", currencyCode: "ZMW" }, branch: options.allBranches && !request.headers()["x-shell-location"] ? null : { id: request.headers()["x-shell-location"] || branchId } });
     if (path === "/api/procurement/v1/meta") return json({ tenantId: "amizo", legalEntityId: companyId, schemaReady: true, capabilities });

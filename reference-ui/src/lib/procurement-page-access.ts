@@ -14,7 +14,7 @@ export function canOpenProcurementPage(url: string, permissions: readonly string
     "procurement-approval-read", "procurement-approval-open", "procurement-po-approve", "procurement-round-plan-review", "procurement-plan-review-read",
     "procurement-invoice-unit-review", "procurement-invoice-unit-review-read", "procurement-invoice-unit-review-request");
   if (/^\/vendors(?:\/|$)/.test(path)) return operation("procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit");
-  if (/^\/items(?:\/|$)/.test(path)) return operation(["procurement-item-read", "procurement-item-manage"], "procurement-item-manage");
+  if (/^\/items(?:\/|$)/.test(path)) return operation("procurement-item-manage", "procurement-item-manage");
   if (/^\/rfqs(?:\/|$)/.test(path)) {
     const source = new URLSearchParams(search).get("source");
     if (source === "round-plan") return operation("procurement-round-plan-read", "procurement-round-plan-manage");

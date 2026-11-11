@@ -112,7 +112,7 @@ export function ProcurementLiveGate({ children, unavailable, scopeUnavailable, b
   const deniedCrud = sourcingPath && new URLSearchParams(location.search).get("source") === "round-plan" && !permission.includes("procurement-round-plan-read")
     || sourcingPath && new URLSearchParams(location.search).get("source") === "quotations" && !permission.includes("procurement-quotation-read")
     || vendorPath && !permits("procurement-vendor-read", "procurement-vendor-create", "procurement-vendor-edit")
-    || itemPath && !(newRecord || editRecord ? permission.includes("procurement-item-manage") : permission.some(value => ["procurement-item-read", "procurement-item-manage"].includes(value)))
+    || itemPath && !permission.includes("procurement-item-manage")
     || requestPath && !permits("procurement-request-read", "procurement-request-create", "procurement-request-edit")
     || contractPath && !permits("procurement-contract-read", "procurement-contract-create", "procurement-contract-edit")
     || planPath && !(newRecord ? permission.includes("procurement-plan-create") : editRecord ? permission.includes("procurement-plan-edit")

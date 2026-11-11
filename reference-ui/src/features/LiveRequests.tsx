@@ -183,6 +183,7 @@ function RequestEditorRecord() {
   const navigate = useNavigate();
   const { legalEntityId, defaultCurrencyCode, permissions } = context();
   const canWrite = permissions.includes(id ? "procurement-request-edit" : "procurement-request-create");
+  const canBrowseCatalog = permissions.includes("procurement-item-read");
   const [draft, setDraft] = useState<RequestDraft>(() => ({ purpose: "", currencyCode: defaultCurrencyCode, lines: [newLine()] }));
   const [baseline, setBaseline] = useState(() => JSON.stringify(draft));
   const [discardOpen, setDiscardOpen] = useState(false), [reconcileOpen, setReconcileOpen] = useState(false);
@@ -207,7 +208,7 @@ function RequestEditorRecord() {
   useEffect(() => {
     const controller = new AbortController();
     setCatalogPrices([]); setCatalogLoading(true); setCatalogError("");
-    if (!canWrite) { setCatalogLoading(false); return () => controller.abort(); }
+    if (!canWrite || !canBrowseCatalog) { setCatalogLoading(false); return () => controller.abort(); }
     const timer = window.setTimeout(() => {
       listPublishedCatalog(legalEntityId, catalogSearch, controller.signal)
         .then((page) => { if (!controller.signal.aborted) setCatalogPrices(page.items); })
@@ -215,7 +216,7 @@ function RequestEditorRecord() {
         .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false); });
     }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [legalEntityId, catalogSearch, canWrite]);
+  }, [legalEntityId, catalogSearch, canWrite, canBrowseCatalog]);
   useEffect(() => {
     setVersion(null); setLoadedContext(null); setSaving(false); setError("");
     if (!canWrite) { setLoading(false); return; }
@@ -297,8 +298,8 @@ function RequestEditorRecord() {
       </div></section>
       <section aria-label="What to buy"><h2 className="mb-4 text-base font-semibold">{departmental ? "What do you need?" : "What to buy"}</h2>{departmental && <p className="mb-4 text-sm text-muted-foreground">Choose an approved item or describe something new. Enter an estimated unit price to save with the current workflow; an unknown estimate must not be entered as zero.</p>}<div className="space-y-4">
         <div className="space-y-3 rounded-lg border border-border p-4">
-          <Field label="Search approved items"><Input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search by name or item code" /></Field>
-          {catalogLoading ? <p role="status" className="text-sm">Loading approved items…</p>
+          <Field label="Search approved items"><Input disabled={!canBrowseCatalog} value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search by name or item code" /></Field>
+          {!canBrowseCatalog ? <p className="text-sm text-muted-foreground">Approved item search is not included in your access. You can describe an item below.</p> : catalogLoading ? <p role="status" className="text-sm">Loading approved items…</p>
             : catalogError ? <p role="alert" className="text-sm text-red-700">{catalogError}</p>
             : catalogPrices.length ? <div className="grid gap-2 sm:grid-cols-2">{catalogPrices.map((price) =>
               <div key={price.entryId} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">

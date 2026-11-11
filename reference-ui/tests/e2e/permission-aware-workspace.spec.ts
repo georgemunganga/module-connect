@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mockErp } from "./request-mock";
-const own=["procurement-access","procurement-request-read","procurement-request-create","procurement-request-edit","procurement-request-submit"];
+const own=["procurement-access","procurement-item-read","procurement-request-read","procurement-request-create","procurement-request-edit","procurement-request-submit"];
 for(const width of [1440,390])test(`request-only workspace hides unrelated menus, cards and shortcuts at ${width}`,async({page})=>{
  await page.setViewportSize({width,height:1000});await mockErp(page,{allBranches:true,permissions:own});
  await page.goto("/procurement/workspace/");await expect(page.getByRole("heading",{name:"Welcome",exact:true})).toBeVisible();
@@ -23,7 +23,7 @@ for(const path of ["/vendors","/items","/approvals","/rfqs","/purchase-orders","
  await expect(page.getByRole("heading",{name:"Choose a branch to continue",exact:true})).toHaveCount(0);expect(business).toEqual([]);
 });
 test("effective grants preserve buyer navigation and read-only quick-create stays empty",async({page})=>{
- await mockErp(page,{permissions:["procurement-access","procurement-request-read","procurement-vendor-read","procurement-item-read","procurement-po-read","procurement-invoice-read","procurement-configuration-read","procurement-approval-read"]});
+ await mockErp(page,{permissions:["procurement-access","procurement-request-read","procurement-vendor-read","procurement-item-read","procurement-item-manage","procurement-po-read","procurement-invoice-read","procurement-configuration-read","procurement-approval-read"]});
  await page.goto('/procurement/workspace/');await expect(page.getByRole('heading',{name:'Welcome',exact:true})).toBeVisible();
  const nav=page.getByRole('navigation',{name:'Main',exact:true});for(const label of ['Vendors','Items','Approvals','Purchase Orders','Bills','Analytics'])await expect(nav.getByRole('link',{name:label,exact:true})).toBeVisible();
  await expect(page.getByRole('link',{name:'Settings',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Quick create',exact:true})).toHaveCount(0);

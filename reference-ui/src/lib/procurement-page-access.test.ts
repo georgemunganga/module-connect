@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { canOpenProcurementPage as can } from "./procurement-page-access";
-const requests = ["procurement-access", "procurement-request-read", "procurement-request-create", "procurement-request-edit", "procurement-request-submit"];
+const requests = ["procurement-access", "procurement-item-read", "procurement-request-read", "procurement-request-create", "procurement-request-edit", "procurement-request-submit"];
 describe("effective Procurement page access", () => {
   it("keeps request-only roles out of unrelated workflows and unknown pages", () => {
     for (const path of ["/", "/requests", "/requests/new?entry=department", "/requests/id/edit"]) expect(can(path,requests),path).toBe(true);
     for (const path of ["/approvals", "/items", "/vendors", "/rfqs", "/purchase-orders", "/purchase-receives", "/bills", "/payments", "/batch-payments", "/budgets", "/analytics", "/settings", "/settings/modules/items/preferences", "/unknown"]) expect(can(path,requests),path).toBe(false);
+  });
+  it("catalog readers cannot enter item stewardship", () => {
+    const grants=["procurement-access","procurement-item-read"];
+    for(const path of ["/items","/items/new","/items/id","/items/id/edit"]) expect(can(path,grants),path).toBe(false);
+    expect(can("/items",["procurement-access","procurement-item-manage"])).toBe(true);
   });
   it("separates read, create and edit and always requires module access", () => {
     expect(can("/vendors",["procurement-access","procurement-vendor-read"])).toBe(true);
@@ -37,6 +42,6 @@ describe("effective Procurement page access", () => {
     expect(can("/purchase-receives/id?purpose=receipts",["procurement-access","procurement-receipt-inspect"])).toBe(false);
   });
   it("retains each explicitly granted module and configuration read surface", () => {
-    for (const [path,permission] of [["/items","procurement-item-read"],["/rfqs","procurement-sourcing-read"],["/purchase-orders","procurement-po-read"],["/purchase-receives","procurement-receipt-view"],["/contracts","procurement-contract-read"],["/plans","procurement-plan-read"],["/recurring-bills","procurement-recurring-read"],["/bills","procurement-invoice-read"],["/payments","procurement-payment-read"],["/budgets","procurement-budget-check"],["/settings","procurement-configuration-read"]]) expect(can(path,["procurement-access",permission]),path).toBe(true);
+    for (const [path,permission] of [["/items","procurement-item-manage"],["/rfqs","procurement-sourcing-read"],["/purchase-orders","procurement-po-read"],["/purchase-receives","procurement-receipt-view"],["/contracts","procurement-contract-read"],["/plans","procurement-plan-read"],["/recurring-bills","procurement-recurring-read"],["/bills","procurement-invoice-read"],["/payments","procurement-payment-read"],["/budgets","procurement-budget-check"],["/settings","procurement-configuration-read"]]) expect(can(path,["procurement-access",permission]),path).toBe(true);
   });
 });

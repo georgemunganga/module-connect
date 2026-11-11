@@ -184,7 +184,7 @@ test("request list denial shows no local demo records", async ({ page }) => {
 });
 
 test("pending live workflows keep the ERP menu without sample transactions", async ({ page }) => {
-  await mockErp(page);
+  await mockErp(page, { permissions: ["procurement-access", "procurement-request-read", "procurement-request-create", "procurement-request-edit", "procurement-request-submit", "procurement-item-read", "procurement-approval-read"] });
   await page.goto("/procurement/workspace/approvals");
   await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
   await expect(page.getByText("This workflow is being connected to your ERP.", { exact: false })).toBeVisible();
