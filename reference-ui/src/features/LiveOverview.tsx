@@ -70,7 +70,7 @@ export function LiveOverview({ analytics = false }: { analytics?: boolean }) {
   useEffect(() => {
     const controller = new AbortController();
     const allowed = new Set(permissions);
-    const available = (metric: Metric) => allowed.has(metric.permission) && (metric.capability === "approvals" ? requestApprovalsAvailable(readiness.capabilities) : readiness.capabilities[metric.capability] === true)
+    const available = (metric: Metric) => canOpenProcurementPage(metric.path, permissions) && allowed.has(metric.permission) && (metric.capability === "approvals" ? requestApprovalsAvailable(readiness.capabilities) : readiness.capabilities[metric.capability] === true)
       && (!selection.entityId || selection.entityId === legalEntityId);
     setResult({ key: contextKey, values: Object.fromEntries(visibleMetrics.map(metric =>
       [metric.permission, { state: available(metric) ? "loading" : "unavailable" }])) });
