@@ -26,3 +26,7 @@ Keep the imported Greenwebb screen organization. Live API integration replaces d
 ## Compact overview panels
 
 `Panel` supports opt-in `density="compact"` for overview cards. It reduces header padding while keeping the same ERP type scale and controls; existing pages retain their default spacing. Dashboard grids align cards to their content rather than stretching short or empty panels. Long record references wrap within a zero-minimum-width card; mobile layouts must not hide overflow to mask an oversized child.
+
+## Permission-aware live presentation
+
+Use `canOpenProcurementPage` from `src/lib/procurement-page-access.ts` for live navigation and page entry. Use current effective server permissions from the scoped readiness provider; do not infer permissions from a role label or department/job title. Hide ungranted menu groups, shortcuts and dashboard panels. Keep the original layout and availability messages for authorized capabilities that are not yet connected. Direct forbidden URLs must fail before branch prompts or business-data components mount. Feature actions and all server/record-scope checks remain authoritative. See `PERMISSION_AWARE_WORKSPACE.md` for the presentation matrix and preserved narrow task roles.
