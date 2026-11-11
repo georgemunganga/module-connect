@@ -20,7 +20,7 @@ export type RequestDraft = {
   lines: RequestLineDraft[];
 };
 export type RequestSummary = { id: string; number: string; purpose: string; status: string;
-  currencyCode: string; neededBy?: string | null; createdAt: string; version: number; lineCount: number };
+  currencyCode: string; neededBy?: string | null; createdAt: string; version: number; lineCount: number; branchRef?: string | null };
 export type RequestLineDetail = Omit<RequestLineDraft, "requestedQuantity" | "estimatedUnitPrice" | "discountPercent"> & {
   id: string; lineNumber: number; approvalStatus: string; requestedQuantity: number; estimatedUnitPrice: number;
   discountPercent?: number | null;
@@ -83,7 +83,9 @@ async function request<T>(companyId: string, path: string, init: RequestInit = {
 function validSummary(value: unknown): value is RequestSummary {
   return object(value) && guid.test(String(value.id)) && typeof value.number === "string"
     && typeof value.purpose === "string" && typeof value.status === "string"
-    && typeof value.version === "number" && typeof value.currencyCode === "string";
+    && typeof value.version === "number" && typeof value.currencyCode === "string"
+    && (value.branchRef === undefined || value.branchRef === null
+      || typeof value.branchRef === "string" && guid.test(value.branchRef));
 }
 function validDetail(value: unknown): value is RequestDetail {
   const rows = object(value) ? value.lines : null;

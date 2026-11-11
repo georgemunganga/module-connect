@@ -9,6 +9,7 @@ import { useErpShell } from "../lib/erpShell";
 import { invoiceDecimal } from "./invoice-values";
 import { ItemApiError, catalogPriceCanEdit, catalogPriceEditDraft, updateCatalogPrice, type CatalogPriceEdit } from "../../../src/platform/procurement-items-api";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
+import { useScopedCsvExport } from "../lib/useScopedCsvExport";
 import {
   activateItem, addCatalogPrice, createItemDraft, deactivateItem, getItemDraft,
   listCatalogPrices, listItemDrafts, publishCatalogPrice, updateItemDraft, withdrawCatalogPrice,
@@ -38,12 +39,15 @@ export function LiveItemList() {
     return <p role="status">Checking the selected company…</p>;
   const canManage = readiness.permissions.includes("procurement-item-manage");
   return canManage ? <ManagedItemList key={[authEpoch, readiness.tenantId, readiness.legalEntityId,
-    selection.branch ?? "", readiness.principalId, readiness.permissions.slice().sort().join("|")].join(":")} />
+    selection.entityId ?? "", selection.branch ?? "", selection.branchScope ?? "", readiness.principalId,
+    readiness.permissions.slice().sort().join("|")].join(":")} />
     : <LivePublishedCatalog />;
 }
 
 function ManagedItemList() {
+  const readiness = useLiveReadiness();
   const company = companyId();
+  const { selection, authEpoch } = useErpShell();
   const canManage = true;
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -51,6 +55,11 @@ function ManagedItemList() {
   const [data, setData] = useState<ItemPage | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const scopeKey = [authEpoch, readiness?.tenantId, company, readiness?.principalId, selection.entityId,
+    selection.branch, selection.branchScope, readiness?.permissions.slice().sort().join("|")].join(":");
+  const csv = useScopedCsvExport("items", company, scopeKey,
+    readiness?.capabilities.itemDraft === true && ["procurement-access", "procurement-item-manage", "procurement-item-export"]
+      .every(action => readiness?.permissions.includes(action) === true), { search });
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(""); setData(null);
@@ -71,6 +80,7 @@ function ManagedItemList() {
       total={data?.total ?? 0} page={page} pageSize={data?.pageSize || 25} loading={loading} error={error}
       search={search} onSearch={value => { setPage(1); setSearch(value); }}
       onPage={setPage} onRefresh={() => setRevision(value => value + 1)}
+      exportCsv={csv}
       action={canManage ? <Link to="/items/new"><Button><Plus size={16} className="mr-2 inline" />Add item</Button></Link> : undefined}
       emptyTitle="Add your first item" emptyDescription="Create a draft item before making it available for buying." />
   </div>;

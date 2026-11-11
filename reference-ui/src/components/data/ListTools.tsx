@@ -50,6 +50,8 @@ export function ListTools({
   unavailableImportReason,
   unavailableAllExportReason,
   unavailableExportReason,
+  unavailableViewExportReason,
+  unavailableSelectedExportReason,
   viewExportLabel = "Export Current View",
   selectedCount = 0,
   onPreferences,
@@ -83,6 +85,8 @@ export function ListTools({
   unavailableImportReason?: string;
   unavailableAllExportReason?: string;
   unavailableExportReason?: string;
+  unavailableViewExportReason?: string;
+  unavailableSelectedExportReason?: string;
   viewExportLabel?: string;
   selectedCount?: number;
   onPreferences?: () => void;
@@ -239,26 +243,32 @@ export function ListTools({
                     Export all unavailable: {unavailableAllExportReason}
                   </div> : <button
                     role="menuitem"
-                    className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
+                    className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => exportAction("all")}
                   >
                     Export {entity}
                   </button>}
                   <button
                     role="menuitem"
-                    className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
+                    disabled={Boolean(unavailableViewExportReason)}
+                    className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => exportAction("view")}
                   >
                     {viewExportLabel}
                   </button>
-                  {selectedCount > 0 && (
-                    <button
-                      role="menuitem"
-                      className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50"
-                      onClick={() => exportAction("selected")}
-                    >
-                      Export Selected ({selectedCount})
-                    </button>
+                  {unavailableViewExportReason && <p className="px-3 py-1 text-xs text-slate-500" role="note">{unavailableViewExportReason}</p>}
+                  {(selectedCount > 0 || unavailableSelectedExportReason) && (
+                    <>
+                      <button
+                        role="menuitem"
+                        disabled={Boolean(unavailableSelectedExportReason)}
+                        className="block w-full rounded px-3 py-2 text-left text-xs text-slate-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => exportAction("selected")}
+                      >
+                        Export Selected{selectedCount ? ` (${selectedCount})` : ""}
+                      </button>
+                      {unavailableSelectedExportReason && <p className="px-3 py-1 text-xs text-slate-500" role="note">{unavailableSelectedExportReason}</p>}
+                    </>
                   )}
                 </div>
               )}
