@@ -1,4 +1,7 @@
 import { flushSync } from "react-dom";
+import { kuubuProductMode, productWorkspaceBridge } from "../../../shared/product-workspace-session";
+import { kuubuBranding, kuubuMarkUri } from "../../../shared/kuubu-branding";
+import { AUTH_CONTEXT_EVENT } from "./auth-context-invalidation";
 import { fetchVerifiedOrganisationContext, type VerifiedOrganisationContext } from "./verified-organisation-context";
 import { observeAuthContext } from "./auth-context-invalidation";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useRef, type ReactNode } from "react";
@@ -63,6 +66,7 @@ function readSelection(): ShellSelection {
 }
 
 function accessToken(): string | null {
+  if (kuubuProductMode) return null;
   try {
     const session = JSON.parse(localStorage.getItem(SESSION_KEY) || "null") as { accessToken?: string; expiresAt?: number } | null;
     return session?.accessToken && (!session.expiresAt || session.expiresAt > Date.now()) ? session.accessToken : null;
@@ -97,11 +101,33 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   const verifiedContext = verifiedSelection?.key === verifiedKey ? verifiedSelection.value : null;
 
   useEffect(()=>observeAuthContext(window,()=>{
+    productWorkspaceBridge.clear();
     authGeneration.current+=1;
     flushSync(()=>{setAuthEpoch(authGeneration.current);setAssignedRoles([]);setCoreActions([]);setEntities([]);setBranches([]);setContextAvailable(false);setLookupFinished(false);setOrganisationAccess("checking");setLookupDenied(false);setSelectorDenied(false);setVerifiedSelection(null);});
   }),[]);
 
+  useEffect(() => {
+    if (!kuubuProductMode) return;
+    let pending: AbortController | null = null;
+    const check = async () => {
+      if (document.hidden || pending) return;
+      const request = new AbortController(); pending = request;
+      const timeout = window.setTimeout(() => request.abort(), 5000);
+      try {
+        if (await productWorkspaceBridge.changed(request.signal)) window.dispatchEvent(new Event(AUTH_CONTEXT_EVENT));
+      } finally { window.clearTimeout(timeout); if (pending === request) pending = null; }
+    };
+    window.addEventListener("focus", check); document.addEventListener("visibilitychange", check);
+    const interval = window.setInterval(check, 30000);
+    return () => { pending?.abort(); window.clearInterval(interval); window.removeEventListener("focus", check); document.removeEventListener("visibilitychange", check); };
+  }, []);
+
   useLayoutEffect(() => {
+    if (kuubuProductMode) {
+      applyBranding(kuubuBranding); setBranding(kuubuBranding as Branding);
+      document.documentElement.dataset.kuubuProduct = "true";
+      return;
+    }
     const cached = readBrandingCache();
     if (cached && typeof cached.displayName === "string") {
       applyBranding(cached);
@@ -126,6 +152,7 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (kuubuProductMode) { document.getElementById("erp-global-preloader")?.remove(); return; }
     const controller = new AbortController();
     let active = true;
     const startedAt = Date.now();
@@ -194,7 +221,9 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
         }); } catch { throw new ShellLookupError(503); }
         if (!current()) return;
         if (core.ok) {
-          const choices = parseCoreWorkspaceChoices(await core.json(), String(user.id ?? ""));
+          const body: unknown = await core.json();
+          const choices = parseCoreWorkspaceChoices(body, String(user.id ?? ""));
+          if (kuubuProductMode) productWorkspaceBridge.acceptContext(body);
           if (!current()) return;
           setCoreActions(choices.coreActions);
           setEntities(choices.companies.map(company => ({ id: company.id,
@@ -337,6 +366,10 @@ export function useErpShell() {
 
 export function BrandMark({ onDark = false, showName = true }: { onDark?: boolean; showName?: boolean }) {
   const { branding } = useErpShell();
+  if (kuubuProductMode) return <>
+    <img src={kuubuMarkUri} alt="" className="size-8 shrink-0" />
+    {showName && <span className="text-2xl font-bold tracking-tight">kuubu<span className="text-[#69c829]">.</span></span>}
+  </>;
   const logo = onDark
     ? branding?.logoLightDataUri || branding?.logoDarkDataUri
     : branding?.logoDarkDataUri || branding?.logoLightDataUri;

@@ -14,7 +14,9 @@
     "test:e2e": "playwright test",
     "test:e2e:release": "VITE_PROCUREMENT_LIVE_MODE=1 npm run build:staged && playwright test --config playwright.release.config.ts"
   },
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "dependencies": {
     "@amizopower/erp-ui": "https://codeload.github.com/georgemunganga/erp-ui/tar.gz/9b77383480882b67549f803b7ad1f2408df5c737",
     "lucide-react": "0.468.0",
@@ -25,6 +27,7 @@
   "devDependencies": {
     "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "4.1.14",
+    "@types/node": "24.0.0",
     "@types/react": "19.1.16",
     "@types/react-dom": "19.1.9",
     "@vitejs/plugin-react": "5.0.4",

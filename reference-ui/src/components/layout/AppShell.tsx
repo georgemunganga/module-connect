@@ -1,4 +1,5 @@
 import { canOpenProcurementPage } from "../../lib/procurement-page-access";
+import { kuubuCompaniesHref, kuubuProductMode } from "../../../../shared/product-workspace-session";
 import { RequestApprovalRecoverySlot } from "../../lib/RequestApprovalJournal";
 import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
@@ -124,11 +125,12 @@ export function AppShell() {
         >
           <Menu size={22} />
         </button>
-        <a href="/" aria-label="ERP home" className="flex shrink-0 items-center rounded-md px-1.5 py-1 hover:bg-primary-foreground/10 sm:px-2"><BrandMark onDark showName={false} /></a>
+        <a href={kuubuProductMode ? kuubuCompaniesHref : "/"} aria-label={kuubuProductMode ? "Kuubu companies" : "ERP home"} className="flex shrink-0 items-center rounded-md px-1.5 py-1 hover:bg-primary-foreground/10 sm:px-2"><BrandMark onDark showName={false} /></a>
         <div className="relative shrink-0">
           <button type="button" aria-label="Switch ERP module" aria-expanded={modulesOpen} onClick={() => { setModulesOpen(!modulesOpen); setContextOpen(false); }} className="flex h-9 items-center gap-1 rounded-md px-2 text-sm font-semibold hover:bg-primary-foreground/10 sm:gap-1.5 sm:px-3"><LayoutGrid size={16} /><span className="hidden sm:inline">Procurement</span><ChevronDown size={14} /></button>
           {modulesOpen && <div className="absolute left-0 top-11 z-50 w-56 rounded-lg border border-border bg-surface p-2 text-foreground shadow-xl">
             <p className="px-2 py-1 text-[11px] font-semibold uppercase text-muted-foreground">My modules</p>
+            {kuubuProductMode && <a href={kuubuCompaniesHref} className="block rounded px-2 py-2 text-sm hover:bg-secondary">Companies &amp; subscribed modules</a>}
             {canOpenHrm && <a href="/hrm" className="block rounded px-2 py-2 text-sm hover:bg-secondary">Human resources</a>}
             <Link to="/" onClick={() => setModulesOpen(false)} aria-current="page" className="block rounded bg-primary-soft px-2 py-2 text-sm font-medium text-primary">Procurement</Link>
             {canOpenCore && <a href="/core" className="block rounded px-2 py-2 text-sm hover:bg-secondary">ERP Core</a>}

@@ -11,6 +11,7 @@ import { useLocation } from "react-router-dom";
 import { useErpShell } from "./erpShell";
 import { Button } from "../components/ui";
 import { organisationRecovery } from "./organisation-access";
+import { kuubuProductMode } from "../../../shared/product-workspace-session";
 import { fetchProcurementReadiness, ProcurementLiveError, type ProcurementReadiness } from "./procurement-live";
 
 const liveMode = import.meta.env.VITE_PROCUREMENT_LIVE_MODE === "1";
@@ -188,7 +189,7 @@ export function ProcurementScopeSelectionState() {
   return <div className="p-5 sm:p-8"><h1 className="text-2xl font-semibold">{recovery.heading}</h1>
     <p className="mt-3 text-sm text-muted-foreground" role={recovery.resolving ? "status" : "alert"}>{recovery.message}</p>
     {recovery.retry ? <div className="mt-5 flex flex-wrap items-center gap-4">
-      {recovery.signInHref ? <a href={recovery.signInHref} className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4">Sign in</a> : null}
+      {recovery.signInHref ? <a href={recovery.signInHref} className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4">{kuubuProductMode ? "Return to Kuubu" : "Sign in"}</a> : null}
       <Button variant="secondary" onClick={retryOrganisationLookup}>Try again</Button>
     </div> : null}</div>;
 }
