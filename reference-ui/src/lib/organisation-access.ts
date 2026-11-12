@@ -1,3 +1,4 @@
+import { kuubuCompaniesHref, kuubuProductMode, productWorkspaceBridge } from "../../../shared/product-workspace-session";
 export type OrganisationAccess = "checking" | "authenticated" | "anonymous" | "forbidden" | "unavailable";
 export type ProcurementScopeStatus = "ready" | "resolving" | "selection-required";
 
@@ -7,6 +8,10 @@ export class ShellLookupError extends Error {
 
 /** A missing session is different from an authenticated account lacking permission. */
 export async function fetchShellIdentity(signal: AbortSignal, fetcher: typeof fetch = fetch) {
+  if (kuubuProductMode) {
+    try { return await productWorkspaceBridge.load(signal, fetcher); }
+    catch (error) { throw new ShellLookupError(typeof error === "object" && error !== null && "status" in error && typeof error.status === "number" ? error.status : 503); }
+  }
   const response = await fetcher("/api/hrm/auth/me", {
     credentials: "include", cache: "no-store", signal,
   });
@@ -29,16 +34,17 @@ export function organisationAccessFailure(error: unknown): OrganisationAccess {
 
 export function organisationRecovery(access: OrganisationAccess, scope: ProcurementScopeStatus, scopeMessage: string) {
   if (access === "anonymous") return {
-    heading: "Sign in to Procurement", message: "Sign in to your ERP account to choose a company and branch.",
-    signInHref: "/sign-in", retry: true, resolving: false,
+    heading: kuubuProductMode ? "Return to Kuubu" : "Sign in to Procurement",
+    message: kuubuProductMode ? "Open your company and Procurement from your Kuubu account." : "Sign in to your ERP account to choose a company and branch.",
+    signInHref: kuubuProductMode ? kuubuCompaniesHref : "/sign-in", retry: true, resolving: false,
   };
   if (access === "forbidden") return {
     heading: "Organisation access unavailable", message: "Your account cannot open company and branch choices. Ask your administrator to check your access.",
-    signInHref: null, retry: true, resolving: false,
+    signInHref: kuubuProductMode ? kuubuCompaniesHref : null, retry: true, resolving: false,
   };
   if (access === "unavailable") return {
     heading: "Unable to load your organisation", message: "Your company and branch choices could not be loaded. Try again.",
-    signInHref: null, retry: true, resolving: false,
+    signInHref: kuubuProductMode ? kuubuCompaniesHref : null, retry: true, resolving: false,
   };
   if (scope === "ready") return null;
   return {

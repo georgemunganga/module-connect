@@ -1,3 +1,4 @@
+import { productWorkspaceHeaders } from "../../../shared/product-workspace-session";
 /** A display-only projection of the selected, server-verified Procurement context. */
 export type VerifiedOrganisationContext = {
   company: { id: string; code: string; name: string };
@@ -31,7 +32,7 @@ export function verifiedOrganisationContext(value: unknown, selection: Selection
 export async function fetchVerifiedOrganisationContext(selection: Selection, signal: AbortSignal,
   fetcher: typeof fetch = fetch, token?: string | null): Promise<VerifiedOrganisationContext> {
   if (selection.entityId && !guid(selection.entityId) || selection.branch && !guid(selection.branch)) invalid();
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = selection.entityId ? productWorkspaceHeaders(selection.entityId) : {};
   if (token) headers.Authorization = `Bearer ${token}`;
   if (selection.entityId) headers["X-Shell-Entity"] = selection.entityId;
   if (selection.branch) headers["X-Shell-Location"] = selection.branch;

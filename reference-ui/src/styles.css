@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @import "../../src/theme/tokens.css";
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 400; font-display: swap; src: url("/fonts/poppins/poppins-400.ttf") format("truetype"); }
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 500; font-display: swap; src: url("/fonts/poppins/poppins-500.ttf") format("truetype"); }
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 600; font-display: swap; src: url("/fonts/poppins/poppins-600.ttf") format("truetype"); }
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 700; font-display: swap; src: url("/fonts/poppins/poppins-700.ttf") format("truetype"); }
+:root[data-kuubu-product="true"] { --background: #fcfdf9; --foreground: #004b3b; --primary-soft: #eff6e9; --surface-muted: #f4f7ef; }
 @source "../node_modules/@amizopower/erp-ui/dist";
 @theme inline {
   --color-blue-50: var(--primary-soft);

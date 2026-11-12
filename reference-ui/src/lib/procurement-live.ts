@@ -1,3 +1,4 @@
+import { kuubuProductMode, productWorkspaceBridge, productWorkspaceHeaders } from "../../../shared/product-workspace-session";
 export type ShellSelection = { entityId?: string; branch?: string; branchScope?: "all" };
 
 export type ProcurementCapability =
@@ -41,7 +42,7 @@ export class ProcurementLiveError extends Error {
 function scopeHeaders(selection: ShellSelection): HeadersInit {
   if (selection.entityId && !guid.test(selection.entityId) || selection.branch && !guid.test(selection.branch))
     throw new ProcurementLiveError("invalid-scope");
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = selection.entityId ? productWorkspaceHeaders(selection.entityId) : {};
   if (selection.entityId && guid.test(selection.entityId)) headers["X-Shell-Entity"] = selection.entityId;
   if (selection.branch && guid.test(selection.branch)) headers["X-Shell-Location"] = selection.branch;
   return headers;
@@ -61,6 +62,7 @@ export async function fetchProcurementReadiness(
   const contextHeaders = selection.branchScope === "all"
     ? { ...headers, "X-Shell-Branch-Scope": "all" } : headers;
   const common: RequestInit = { credentials: "include", cache: "no-store", signal };
+  if (!kuubuProductMode) {
   let auth: Response;
   try { auth = await fetcher("/api/hrm/auth/me", common); }
   catch { throw new ProcurementLiveError("unavailable"); }
@@ -73,6 +75,7 @@ export async function fetchProcurementReadiness(
   if (!authBody.authenticated) throw new ProcurementLiveError("sign-in");
   if (!object(authBody.user) || authBody.user.isActive !== true)
     throw new ProcurementLiveError("access");
+  }
 
   const scoped: RequestInit = { ...common, headers: contextHeaders };
   let contextResponse: Response;
@@ -93,6 +96,8 @@ export async function fetchProcurementReadiness(
     || !Array.isArray(context.permissions) || !context.permissions.every(permission => typeof permission === "string")
     || !context.permissions.includes("procurement-access"))
     throw new ProcurementLiveError("invalid-response");
+
+  if (kuubuProductMode) productWorkspaceBridge.assertOwner(String(context.legalEntityId), String(context.principalId));
 
   let effectiveBranchId: string | null | undefined;
   if (Object.prototype.hasOwnProperty.call(context, "branch")) {
