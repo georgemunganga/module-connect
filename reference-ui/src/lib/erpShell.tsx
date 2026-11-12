@@ -8,7 +8,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useStat
 import { applyBranding, readBrandingCache, saveBrandingCache } from "../../../shared/branding";
 import { ERP_SHELL_STORAGE_KEY } from "../../../shared/shell-scope";
 import { canonicalScopeId, resolveLegacyBranchSelection } from "./legacy-branch-selection";
-import { configuredDefaultBranch, parseCoreWorkspaceChoices } from "./core-workspace-choices";
+import { configuredDefaultBranch, parseCoreWorkspaceChoices, productHandoffSelection } from "./core-workspace-choices";
 import { fetchShellIdentity, organisationAccessFailure, ShellLookupError, type OrganisationAccess } from "./organisation-access";
 
 type Branding = {
@@ -232,7 +232,12 @@ export function ErpShellProvider({ children }: { children: ReactNode }) {
             name: branch.name, legalEntityId: branch.legalEntityId, type: branch.type })));
           setLookupDenied(false); setSelectorDenied(false); setContextAvailable(true);
           const saved = readSelection();
-          if (!saved.entityId || !saved.branch && saved.branchScope !== "all") {
+          const handoff = kuubuProductMode ? productHandoffSelection(choices, saved) : null;
+          if (handoff) {
+            const next: ShellSelection = { ...saved, ...handoff };
+            try { localStorage.setItem(SHELL_KEY, JSON.stringify(next)); setStorageFailure(null); setSelection(next); }
+            catch { setStorageFailure(JSON.stringify([epoch, saved.entityId ?? "", saved.branch ?? "", saved.branchScope ?? ""])); }
+          } else if (!saved.entityId || !saved.branch && saved.branchScope !== "all") {
             const preferred = saved.entityId
               ? choices.companies.find(company => company.id === saved.entityId)
               : choices.companies.find(company => company.isDefault);

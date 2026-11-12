@@ -9,6 +9,17 @@ export type CoreWorkspaceChoices = {
   branches: { id: string; code: string; name: string; legalEntityId: string; type?: string | null }[];
 };
 
+/** A deliberate Kuubu handoff replaces an old browser preference with the one
+ * company already selected on the server; it never discovers another company. */
+export function productHandoffSelection(choices: CoreWorkspaceChoices, current: { entityId?: string }) {
+  if (choices.companies.length !== 1 || !canonicalScopeId(choices.companies[0].id))
+    throw new Error("Return to Kuubu and select your company again.");
+  const company = choices.companies[0];
+  if (current.entityId === company.id) return null;
+  const branch = configuredDefaultBranch(choices.branches, company.id);
+  return { entityId: company.id, branch: branch ?? "", branchScope: branch ? undefined : "all" as const };
+}
+
 /** Uses only branches already admitted by the current Core workspace response. */
 export function configuredDefaultBranch(branches: readonly { id: string; legalEntityId: string; type?: string | null }[], companyId: string): string | null {
   const permitted = branches.filter(branch => branch.legalEntityId === companyId);
