@@ -42,6 +42,29 @@ test("guided entry remains denied without create permission", async ({ page }) =
  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
 });
 
+test("department entry searches saved values and accepts a new free-text need", async ({ page }) => {
+ await mockErp(page);
+ await page.goto("/procurement/workspace/requests/new?entry=department");
+ const item = page.getByLabel("Item or service 1", { exact: true });
+ await item.fill("Water");
+ await page.getByRole("option", { name: /Water dispenser/ }).click();
+ await expect(item).toHaveValue("Water dispenser");
+ await expect(page.getByLabel("Unit", { exact: true })).toHaveValue("each");
+ await expect(page.getByLabel("Category (optional)", { exact: true })).toHaveValue("ASSETS");
+ await expect(page.getByLabel("Type (optional)", { exact: true })).toHaveValue("Goods");
+ await expect(page.getByText(/not approved for buying/)).toBeVisible();
+ await page.getByLabel("Item or service 1", { exact: true }).fill("Custom site material");
+ await page.getByLabel("Quantity", { exact: true }).fill("1");
+ await page.getByLabel("Unit", { exact: true }).fill("box");
+ await page.getByLabel("Estimated unit price", { exact: true }).fill("1");
+ const saved = page.waitForRequest(request => new URL(request.url()).pathname === "/api/procurement/v1/requests" && request.method() === "POST");
+ await page.getByRole("button", { name: "Save draft", exact: true }).click();
+ const payload = (await saved).postDataJSON();
+ expect(payload.lines[0].description).toBe("Custom site material");
+ expect(payload.lines[0].catalogItemId).toBeNull();
+ expect(payload.lines[0].catalogEntryId).toBeNull();
+});
+
 for (const width of [390, 1440]) test(`guided entry fits viewport ${width}`, async ({ page }) => {
  await page.setViewportSize({ width, height: 1000 });await mockErp(page);
  await page.goto("/procurement/workspace/requests/new?entry=department");

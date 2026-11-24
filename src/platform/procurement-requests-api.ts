@@ -33,6 +33,9 @@ export type RequestDetail = RequestSummary & Omit<RequestDraft, "lines"> & {
   lines: RequestLineDetail[];
 };
 export type RequestPage = { records: RequestSummary[]; count: number; limit: number; offset: number };
+export type RequestCategoryLookup = { code: string; name: string };
+export type RequestItemLookup = { code: string; name: string; kind: string; categoryCode: string;
+  unitCode: string; status: string; isPurchasable: boolean };
 export type OwnBudgetStatus = { requestId: string; requestVersion: number;
   status: "Pending" | "Available" | "Insufficient" | "NotConfigured" | "PartiallyAvailable";
   checkedAt?: string | null; reservationConfirmed: boolean };
@@ -167,6 +170,26 @@ export async function getOwnRequestDraft(companyId: string, id: string, signal?:
   const body: unknown = await request(companyId, `/${id}`, { signal });
   if (!validDetail(body) || body.id !== id) throw new RequestApiError(0, "The ERP returned invalid request details.");
   return body;
+}
+export async function searchRequestCategories(companyId: string, search: string, signal?: AbortSignal): Promise<RequestCategoryLookup[]> {
+  const query = new URLSearchParams({ limit: "20" });
+  if (search.trim()) query.set("search", search.trim());
+  const body: unknown = await request(companyId, `/lookups/categories?${query}`, { signal });
+  if (!object(body) || !Array.isArray(body.items) || !body.items.every((row: unknown) => object(row)
+    && typeof row.code === "string" && typeof row.name === "string"))
+    throw new RequestApiError(0, "The ERP returned invalid category matches.");
+  return body.items as RequestCategoryLookup[];
+}
+export async function searchRequestItems(companyId: string, search: string, signal?: AbortSignal): Promise<RequestItemLookup[]> {
+  const query = new URLSearchParams({ limit: "20" });
+  if (search.trim()) query.set("search", search.trim());
+  const body: unknown = await request(companyId, `/lookups/items?${query}`, { signal });
+  if (!object(body) || !Array.isArray(body.items) || !body.items.every((row: unknown) => object(row)
+    && typeof row.code === "string" && typeof row.name === "string" && typeof row.kind === "string"
+    && typeof row.categoryCode === "string" && typeof row.unitCode === "string"
+    && typeof row.status === "string" && typeof row.isPurchasable === "boolean"))
+    throw new RequestApiError(0, "The ERP returned invalid item matches.");
+  return body.items as RequestItemLookup[];
 }
 export async function getRequestForReview(companyId: string, id: string, signal?: AbortSignal): Promise<RequestDetail> {
   if (!guid.test(id)) throw new RequestApiError(0, "The request reference is invalid.");
