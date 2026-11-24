@@ -8,10 +8,15 @@ test("department entry saves one existing request and keeps optional details", a
  await page.goto("/procurement/workspace/requests/new?entry=department");
  await expect(page.getByRole("heading", { name: "Request materials or services", exact: true })).toBeVisible();
  await expect(page.getByText("Start with what your department needs", { exact: false })).toBeVisible();
+ await expect(page.getByRole("heading", { name: "Describe the items or services", exact: true })).toBeVisible();
+ await expect(page.getByText("Find a pre-approved catalog item (optional)", { exact: true })).toBeVisible();
  await expect(page.getByLabel("Estimated unit price", { exact: true })).toHaveValue("");
  await page.getByLabel("What do you need?", { exact: true }).fill("Safety helmets for site workers");
  await page.getByLabel("Item or service 1").fill("Yellow safety helmet");
  await page.getByLabel("Quantity", { exact: true }).fill("20");
+ await page.getByLabel("Unit", { exact: true }).fill("each");
+ await page.getByLabel("Category (optional)", { exact: true }).fill("Safety PPE materials");
+ await page.getByLabel("Type (optional)", { exact: true }).fill("Goods");
  await page.getByRole("button", { name: "Save draft", exact: true }).click();
  expect(writes).toEqual([]); // An unknown estimate is never silently changed to zero.
  await page.getByText("More request details (optional)", { exact: true }).click();
@@ -22,6 +27,9 @@ test("department entry saves one existing request and keeps optional details", a
  const payload = (await saved).postDataJSON();
  expect(payload.purpose).toBe("Safety helmets for site workers");
  expect(payload.costCenterRef).toBe("Engineering");
+ expect(payload.lines[0].description).toBe("Yellow safety helmet");
+ expect(payload.lines[0].categoryCode).toBe("Safety PPE materials");
+ expect(payload.lines[0].catalogEntryId).toBeNull();
  expect(payload.lines[0].estimatedUnitPrice).toBe("12.50");
  await expect(page.getByRole("heading", { name: "Safety helmets for site workers", exact: true })).toBeVisible();
  expect(writes).toEqual(["/api/procurement/v1/requests"]);
@@ -37,7 +45,7 @@ test("guided entry remains denied without create permission", async ({ page }) =
 for (const width of [390, 1440]) test(`guided entry fits viewport ${width}`, async ({ page }) => {
  await page.setViewportSize({ width, height: 1000 });await mockErp(page);
  await page.goto("/procurement/workspace/requests/new?entry=department");
- await expect(page.getByLabel("What do you need?", { exact: true })).toBeVisible();
+ await expect(page.getByRole("heading", { name: "Describe the items or services", exact: true })).toBeVisible();
  await expect(page.getByLabel("Cost centre", { exact: true })).toBeHidden();
  await page.getByText("More request details (optional)", { exact: true }).click();
  await expect(page.getByLabel("Cost centre", { exact: true })).toBeVisible();
