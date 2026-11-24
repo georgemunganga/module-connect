@@ -47,6 +47,12 @@ export async function mockErp(page: Page, options: { allBranches?: boolean; deny
       unitCode: "each", estimatedUnitPrice: 250, exactEstimatedUnitPrice: options.missingCatalogExact ? undefined : "250", currencyCode: "ZMW",
       supplierName: "Office Supply", publishedVersion: 1,
     }], total: 1, page: 1, pageSize: 25 });
+    if (path === "/api/procurement/v1/requests/lookups/items") return json({ items: [
+      { code: "IMPORTED-01", name: "Water dispenser", kind: "Goods", categoryCode: "ASSETS", unitCode: "each", status: "Inactive", isPurchasable: false },
+    ].filter(item => !new URL(request.url()).searchParams.get("search") || item.name.toLowerCase().includes(new URL(request.url()).searchParams.get("search")!.toLowerCase())) });
+    if (path === "/api/procurement/v1/requests/lookups/categories") return json({ items: [
+      { code: "ASSETS", name: "Assets" },
+    ].filter(category => !new URL(request.url()).searchParams.get("search") || category.name.toLowerCase().includes(new URL(request.url()).searchParams.get("search")!.toLowerCase()) || category.code.toLowerCase().includes(new URL(request.url()).searchParams.get("search")!.toLowerCase())) });
     if (path === "/api/procurement/v1/requests/policy-queue")
       return json({ records: record?.status === "Submitted" && !policyChecked ? [{
         id: requestId, number: record.number, purpose: record.purpose,

@@ -1,5 +1,5 @@
 import { useRequestApprovalOperation } from "../lib/RequestApprovalJournal";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, FileText, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { Badge, Button, Field, Input, Panel, Textarea, Modal } from "../components/ui";
@@ -10,12 +10,12 @@ import { RequestApprovalPanel } from "./LiveApprovals";
 import { RecordTable } from "../components/data/RecordTable";
 import { useLiveReadiness } from "../lib/ProcurementLiveGate";
 import {
-  RequestApiError, readExactRequestDraft,
+  RequestApiError, readExactRequestDraft, searchRequestCategories, searchRequestItems,
   createOwnRequestDraft, getOwnRequestDraft, getRequestForReview, getRequestApprovalReadiness, listOwnRequestDrafts,
   checkRequestPolicy, getOwnRequestBudgetStatus, getOwnRequestPolicyStatus, returnRequestForChanges,
   listRequestsWaitingForPolicy, updateOwnRequestDraft, withdrawOwnRequestDraft, submitOwnRequest,
   type ApprovalReadinessStatus, type OwnBudgetStatus, type OwnPolicyStatus, type PolicyQueuePage,
-  type RequestDetail, type RequestDraft, type RequestLineDraft, type RequestPage,
+  type RequestCategoryLookup, type RequestDetail, type RequestDraft, type RequestItemLookup, type RequestLineDraft, type RequestPage,
 } from "../../../src/platform/procurement-requests-api";
 import { requestBaseAmount, formatRequestBaseAmount } from "./request-draft-values";
 import { listPublishedCatalog, type PublishedCatalogPrice } from "../../../src/platform/procurement-catalog-api";
@@ -41,6 +41,65 @@ function context() {
   const readiness = useLiveReadiness();
   if (!readiness) throw new Error("Requests require ERP company context.");
   return readiness;
+}
+
+type LookupOption = { key: string; value: string; label: string; detail?: string; item?: RequestItemLookup };
+function SearchableEntry({ id, label, value, placeholder, search, onChange, onChoose, onFreeText, fieldClassName = "", required = false, readOnly = false }: {
+  id: string; label: string; value: string; placeholder: string;
+  search: (term: string, signal: AbortSignal) => Promise<LookupOption[]>;
+  onChange: (value: string) => void; onChoose: (option: LookupOption) => void; onFreeText?: (value: string) => void; fieldClassName?: string;
+  required?: boolean; readOnly?: boolean;
+}) {
+  const [open, setOpen] = useState(false), [options, setOptions] = useState<LookupOption[]>([]);
+  const [loading, setLoading] = useState(false), [failure, setFailure] = useState("");
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoading(true); setFailure("");
+      search(value, controller.signal).then(rows => {
+        if (!controller.signal.aborted) { setOptions(rows); setActive(0); }
+      }).catch(error => { if (!controller.signal.aborted) setFailure(errorText(error)); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, value.trim() ? 180 : 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [open, value, search]);
+  const canUseFreeText = Boolean(value.trim()) && !options.some(option => option.value.toLocaleLowerCase() === value.trim().toLocaleLowerCase());
+  const optionCount = options.length + (canUseFreeText && onFreeText ? 1 : 0);
+  const chooseIndex = (index: number) => {
+    if (index < options.length) onChoose(options[index]);
+    else if (onFreeText) onFreeText(value.trim());
+    setOpen(false);
+  };
+  const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); setActive(current => Math.min(Math.max(optionCount - 1, 0), current + 1)); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setOpen(true); setActive(current => Math.max(0, current - 1)); }
+    else if (event.key === "Enter" && open && optionCount > 0) { event.preventDefault(); chooseIndex(Math.min(active, optionCount - 1)); }
+    else if (event.key === "Escape") setOpen(false);
+  };
+  return <div className="relative">
+    <Field label={label} className={fieldClassName}><Input role="combobox" aria-autocomplete="list" aria-expanded={open}
+      aria-controls={`${id}-options`} aria-label={label} autoComplete="off" required={required} readOnly={readOnly} value={value}
+      placeholder={placeholder} onFocus={() => { if (!readOnly) setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+      onKeyDown={keyDown} onChange={event => { setOpen(true); onChange(event.target.value); }} /></Field>
+    {open && <div id={`${id}-options`} role="listbox" aria-label={`${label} suggestions`}
+      className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg">
+      {loading && <p role="status" className="px-3 py-2 text-sm text-muted-foreground">Searching…</p>}
+      {failure && <p role="alert" className="px-3 py-2 text-sm text-destructive">{failure}</p>}
+      {!loading && !failure && options.map((option, index) => <button key={option.key} type="button" role="option"
+        aria-selected={active === index} className={`block w-full rounded-sm px-3 py-2 text-left hover:bg-accent ${active === index ? "bg-accent" : ""}`}
+        onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => chooseIndex(index)}>
+        <span className="block text-sm font-medium">{option.label}</span>{option.detail && <span className="block text-xs text-muted-foreground">{option.detail}</span>}
+      </button>)}
+      {!loading && !failure && !options.length && !canUseFreeText && <p className="px-3 py-2 text-sm text-muted-foreground">No matching saved values.</p>}
+      {!loading && !failure && canUseFreeText && onFreeText && <button type="button" role="option" aria-selected={active === options.length}
+        className={`block w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${active === options.length ? "bg-accent" : ""}`}
+        onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(options.length)} onClick={() => chooseIndex(options.length)}>
+        Use “{value.trim()}” as a new value
+      </button>}
+    </div>}
+  </div>;
 }
 
 function useRequestScopeKey() {
@@ -205,6 +264,16 @@ function RequestEditorRecord() {
   const [catalogPrices, setCatalogPrices] = useState<PublishedCatalogPrice[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
+  const searchItems = useCallback((term: string, signal: AbortSignal) => canWrite
+    ? searchRequestItems(legalEntityId, term, signal).then(rows => rows.map((item): LookupOption => ({
+      key: item.code, value: item.name, label: item.name,
+      detail: `${item.code} · ${item.categoryCode} · ${item.unitCode} · ${item.status}${item.isPurchasable ? " · available to buy" : " · not approved for buying"}`,
+      item,
+    }))) : Promise.resolve([]), [legalEntityId, canWrite]);
+  const searchCategories = useCallback((term: string, signal: AbortSignal) => canWrite
+    ? searchRequestCategories(legalEntityId, term, signal).then(rows => rows.map((category): LookupOption => ({
+      key: category.code, value: category.code, label: category.name, detail: category.code,
+    }))) : Promise.resolve([]), [legalEntityId, canWrite]);
   useEffect(() => {
     const controller = new AbortController();
     setCatalogPrices([]); setCatalogLoading(true); setCatalogError("");
@@ -296,7 +365,7 @@ function RequestEditorRecord() {
         <Field label="Delivery address" className="sm:col-span-2"><Input value={draft.deliveryAddressText ?? ""} onChange={(event) => field("deliveryAddressText", event.target.value)} /></Field>
         {departmental ? <details className="sm:col-span-2 rounded-lg border border-border p-4"><summary className="cursor-pointer text-sm font-medium">More request details (optional)</summary><div className="mt-4 grid gap-4 sm:grid-cols-2">{additionalDetails}</div></details> : additionalDetails}
       </div></section>
-      <section aria-label="What to buy"><h2 className="mb-4 text-base font-semibold">{departmental ? "Describe the items or services" : "What to buy"}</h2>{departmental && <p className="mb-4 text-sm text-muted-foreground">Add any new need directly in the lines below. The catalog is optional and only fills in details for items already approved for buying. Enter a reasonable estimated unit price for review; this does not approve the purchase.</p>}<div className={departmental ? "flex flex-col gap-4" : "space-y-4"}>
+      <section aria-label="What to buy"><h2 className="mb-4 text-base font-semibold">{departmental ? "Describe the items or services" : "What to buy"}</h2>{departmental && <p className="mb-4 text-sm text-muted-foreground">Type to find an item or category already in the company records, or keep typing to add a new one. Selecting an item from the records fills its details but does not make it approved for buying. Published supplier prices are optional catalog suggestions. Enter an estimated unit price for review.</p>}<div className={departmental ? "flex flex-col gap-4" : "space-y-4"}>
         <div className={`space-y-3 rounded-lg border border-border p-4 ${departmental ? "order-last" : ""}`}>
           <p className="text-sm font-medium">Find a pre-approved catalog item <span className="font-normal text-muted-foreground">(optional)</span></p>
           <Field label="Search catalog"><Input disabled={!canBrowseCatalog} value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Type an item name or code" /></Field>
@@ -312,14 +381,30 @@ function RequestEditorRecord() {
           <thead><tr><th>Item or service</th><th>Quantity</th><th>Unit</th><th>Estimated unit price</th><th aria-label="Actions" /></tr></thead>
           <tbody>{draft.lines.flatMap((line, index) => [
             <tr key={`${line.id ?? index}-main`}>
-              <td><Field label={`Item or service ${index + 1}`} hint="Enter a catalog item or describe a new need." className="relative [&>span:first-child]:sr-only"><Input required readOnly={Boolean(line.catalogEntryId)} maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} placeholder="e.g. 2.5 mm red electrical cable" /></Field></td>
+              <td>{departmental ? <SearchableEntry id={`request-item-${index}`} label={`Item or service ${index + 1}`}
+                fieldClassName="relative [&>span:first-child]:sr-only" required readOnly={Boolean(line.catalogEntryId)} value={line.description} placeholder="Type an item or service name"
+                search={searchItems} onChange={value => lineField(index, "description", value)} onFreeText={() => undefined}
+                onChoose={option => {
+                  if (!option.item) return;
+                  const item = option.item;
+                  setDraft(current => ({ ...current, lines: current.lines.map((value, at) => at === index ? {
+                    ...value, description: item.name, unitCode: item.unitCode, categoryCode: item.categoryCode,
+                    purchaseType: item.kind, catalogItemId: null, catalogEntryId: null,
+                    catalogPublishedVersion: null, preferredSupplierId: null,
+                  } : value) }));
+                }} />
+                : <Field label={`Item or service ${index + 1}`} className="relative [&>span:first-child]:sr-only"><Input required readOnly={Boolean(line.catalogEntryId)} maxLength={1000} value={line.description} onChange={(event) => lineField(index, "description", event.target.value)} /></Field>}</td>
               <td><Field label="Quantity" className="relative [&>span:first-child]:sr-only"><Input required inputMode="decimal" value={line.requestedQuantity} onChange={(event) => lineField(index, "requestedQuantity", event.target.value)} /></Field></td>
               <td><Field label="Unit" className="relative [&>span:first-child]:sr-only"><Input required readOnly={Boolean(line.catalogEntryId)} value={line.unitCode} onChange={(event) => lineField(index, "unitCode", event.target.value)} placeholder="each, box, metre…" /></Field></td>
               <td><Field label="Estimated unit price" hint="Estimate needed for review; this does not approve the purchase." className="relative [&>span:first-child]:sr-only"><Input required readOnly={Boolean(line.catalogEntryId)} inputMode="decimal" value={line.estimatedUnitPrice} onChange={(event) => lineField(index, "estimatedUnitPrice", event.target.value)} placeholder="Enter estimate" /></Field></td>
               <td>{draft.lines.length > 1 && <Button variant="ghost" aria-label={`Remove line ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((_, at) => at !== index) }))}><Trash2 size={16} /></Button>}</td>
             </tr>,
             <tr key={`${line.id ?? index}-details`}><td colSpan={5}><div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Category (optional)"><Input readOnly={Boolean(line.catalogEntryId)} value={line.categoryCode ?? ""} onChange={(event) => lineField(index, "categoryCode", event.target.value)} placeholder="e.g. Electrical Items" /></Field>
+              {departmental ? <SearchableEntry id={`request-category-${index}`} label="Category (optional)"
+                readOnly={Boolean(line.catalogEntryId)} value={line.categoryCode ?? ""} placeholder="Type a category or choose a match" search={searchCategories}
+                onChange={value => lineField(index, "categoryCode", value)} onFreeText={() => undefined}
+                onChoose={option => lineField(index, "categoryCode", option.value)} />
+                : <Field label="Category"><Input readOnly={Boolean(line.catalogEntryId)} value={line.categoryCode ?? ""} onChange={(event) => lineField(index, "categoryCode", event.target.value)} /></Field>}
               <Field label="Type (optional)"><Input readOnly={Boolean(line.catalogEntryId)} value={line.purchaseType ?? ""} onChange={(event) => lineField(index, "purchaseType", event.target.value)} placeholder="Goods or service" /></Field>
               <Field label="Needed by"><Input type="date" value={line.neededBy ?? ""} onChange={(event) => lineField(index, "neededBy", event.target.value)} /></Field>
               {line.catalogEntryId && <div className="sm:col-span-3 flex items-center justify-between gap-3 text-sm"><span>From approved catalog · price checked when you send the request</span><Button type="button" variant="secondary" onClick={() => setDraft((current) => ({ ...current, lines: current.lines.map((value, at) => at === index ? { ...value, catalogEntryId: null, catalogItemId: null, catalogPublishedVersion: null, preferredSupplierId: null } : value) }))}>Switch to custom item</Button></div>}
