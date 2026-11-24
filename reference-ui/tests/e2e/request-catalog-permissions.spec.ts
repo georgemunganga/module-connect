@@ -4,7 +4,7 @@ const own=["procurement-access","procurement-request-read","procurement-request-
 test("requester can search and select approved catalog without item stewardship",async({page})=>{
  await mockErp(page,{permissions:[...own,"procurement-item-read"]});
  await page.goto('/procurement/workspace/requests/new?entry=department');
- await page.getByLabel('Search approved items',{exact:true}).fill('chair');
+ await page.getByLabel('Search catalog',{exact:true}).fill('chair');
  await expect(page.getByRole('button',{name:'Use item',exact:true})).toBeVisible();await page.getByRole('button',{name:'Use item',exact:true}).click();
  await expect(page.getByLabel('Item or service 1')).toHaveValue('Office chair');
  await expect(page.getByLabel('Estimated unit price',{exact:true})).toHaveValue('250');
@@ -13,7 +13,7 @@ test("requester can search and select approved catalog without item stewardship"
 test("requester without catalog lookup gets manual entry and makes no catalog request",async({page})=>{
  await mockErp(page,{permissions:own});const calls:string[]=[];page.on('request',r=>{if(new URL(r.url()).pathname==='/api/procurement/v1/catalog')calls.push(r.url());});
  await page.goto('/procurement/workspace/requests/new?entry=department');
- await expect(page.getByLabel('Search approved items',{exact:true})).toBeDisabled();await expect(page.getByText('Approved item search is not included in your access. You can describe an item below.')).toBeVisible();
+ await expect(page.getByLabel('Search catalog',{exact:true})).toBeDisabled();await expect(page.getByText('Catalog search is not included in your access. You can still describe any item above.')).toBeVisible();
  await expect(page.getByLabel('Item or service 1')).toBeEditable();expect(calls).toEqual([]);
 });
 test("catalog-read alone does not query a hidden Home catalog card",async({page})=>{
